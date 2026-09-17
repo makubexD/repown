@@ -1,0 +1,130 @@
+# CI for gid.
+#
+# WHY IT RUNS ON LINUX AND MACOS AS WELL AS WINDOWS. Every line of this tool was
+# written and verified on one Windows machine, and it is full of things that are
+# quietly platform-specific: path separators, the `.exe` suffix when locating
+# Git Credential Manager, `process.platform` branches in the config-directory
+# lookup, and line endings in a file that `sh` has to execute. A test suite that
+# only ever runs where it was written cannot see any of that.
+#
+# WHY THE PACKAGE IS INSTALLED, NOT JUST BUILT. `npm test` never touches the
+# `bin` wiring, so a broken entry point -- the single thing that would make an
+# install useless -- passes every test. The last job packs the tarball, installs
+# it globally the way a user would, and runs the binary.
+#
+# No services, no secrets, no network beyond the registry: the tests drive real
+# git against sandboxes under the runner's temp directory, with GIT_CONFIG_GLOBAL
+# and GIT_CONFIG_SYSTEM pointed at empty files so the runner's own configuration
+# cannot influence a result.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux and Windows across both supported Node versions, because those
+        # are where this actually runs. macOS gets one job rather than a full
+        # row: on a private repository its minutes bill at 10x, and what it adds
+        # over Linux is a different filesystem and path case-sensitivity, which
+        # one configuration exercises just as well as four.
+        os: [ubuntu-latest, windows-latest]
+        node: ['20', '24']
+        include:
+          - os: macos-latest
+            node: '24'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # The suite shells out to git constantly, so its version is worth having
+      # in the log when a failure turns out to be version-dependent.
+      - name: Versions
+        run: |
+          node --version
+          npm --version
+          git --version
+
+      - run: npm ci
+
+      - name: Typecheck and build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+  install:
+    name: install the package the way a user would
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      # `npm pack` runs prepare, so this is the exact tarball a publish would
+      # produce -- including whether `files` actually ships dist/.
+      - name: Pack
+        run: |
+          npm pack
+          ls -l gid-*.tgz
+
+      - name: Install it globally and run it
+        run: |
+          npm install -g ./gid-*.tgz
+          gid --version
+          gid --help
+
+      # A CLI that pins identity per clone must say so plainly when there is no
+      # clone, rather than crashing or reporting something misleading.
+      - name: It reports honestly outside a repository
+        run: |
+          mkdir -p /tmp/not-a-repo && cd /tmp/not-a-repo
+          if gid; then echo "expected a non-zero exit outside a repository"; exit 1; fi
+          gid 2>&1 | grep -q 'Not a git repository'
+
+      - name: It pins a real clone end to end
+        run: |
+          export GID_CONFIG_DIR="$RUNNER_TEMP/gid-config"
+          git init -q -b main "$RUNNER_TEMP/demo"
+          cd "$RUNNER_TEMP/demo"
+          git remote add origin https://github.com/octocat/hello-world.git
+
+          gid accounts add octocat --name 'Octo Cat' --email octocat@users.noreply.github.com
+          gid use octocat
+          gid guard on
+
+          test "$(git config --local --get user.name)" = 'Octo Cat'
+          test "$(git config --local --get credential.https://github.com.username)" = 'octocat'
+          test -f .git/hooks/pre-push
+
+          # The hook is executed by `sh`, which rejects a CRLF script with
+          # "bad interpreter" -- a failure that only ever appears at push time.
+          ! grep -q $'\r' .git/hooks/pre-push
+
+          gid off
+          test -z "$(git config --local --get user.name)"

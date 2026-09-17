@@ -51,7 +51,8 @@ and `gh api` keep working. It simply stops being involved in push and pull.
 
 ## Install
 
-Needs Node 20+ and git. Windows, macOS and Linux.
+Needs Node 20+ and git. Windows, macOS and Linux. (Developing it needs Node
+22.6+ — see below.)
 
 Not on npm yet, so install from the repository:
 
@@ -271,6 +272,14 @@ npm install
 npm test          # node's own test runner, no framework
 npm run build
 ```
+
+**Running it needs Node 20. Developing it needs Node 22.6+.** Those are
+genuinely different requirements and CI checks both. The tests import `src/*.ts`
+directly, which needs type stripping, and `npm test` passes a glob to
+`node --test`, which Node 20 does not expand — it reports
+`Could not find 'test/*.test.ts'`. Neither applies to the published package,
+which is compiled JavaScript, so `engines` stays at `>=20` and the CI install
+job proves that on Node 20 rather than assuming it.
 
 Zero runtime dependencies, by choice: this tool reads credentials configuration,
 and the smallest possible supply chain is part of that job.

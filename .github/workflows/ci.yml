@@ -44,8 +44,15 @@ jobs:
         # row: on a private repository its minutes bill at 10x, and what it adds
         # over Linux is a different filesystem and path case-sensitivity, which
         # one configuration exercises just as well as four.
+        # 22, not 20. The SOURCE needs a newer Node than the shipped package
+        # does, and the two requirements are genuinely different:
+        #   - running the tests needs glob support in `node --test`, and type
+        #     stripping to import .ts directly. Node 20 has neither.
+        #   - running the PACKAGE needs neither, because it ships compiled JS.
+        # So `engines` stays at >=20, and the install job below proves that claim
+        # on Node 20 rather than leaving it as an assertion.
         os: [ubuntu-latest, windows-latest]
-        node: ['20', '24']
+        node: ['22', '24']
         include:
           - os: macos-latest
             node: '24'
@@ -73,12 +80,17 @@ jobs:
       - name: Test
         run: npm test
 
+  # Deliberately on the OLDEST Node the package claims to support. `engines` says
+  # >=20, and this is what makes that a tested fact rather than a hopeful number:
+  # the tarball is built by the test job's Node, then installed and driven here.
   install:
-    name: install the package the way a user would
+    name: install on the oldest supported Node (20)
     runs-on: ubuntu-latest
     needs: test
     steps:
       - uses: actions/checkout@v4
+
+      # Build with a Node new enough to run the toolchain...
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -93,8 +105,15 @@ jobs:
           npm pack
           ls -l gid-*.tgz
 
+      # ...then switch to the oldest supported Node, so everything below runs
+      # against the version a user on the stated minimum would actually have.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Install it globally and run it
         run: |
+          node --version
           npm install -g ./gid-*.tgz
           gid --version
           gid --help

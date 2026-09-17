@@ -156,11 +156,24 @@ async function checkCommits(input: CheckInput, expected: string): Promise<Refusa
  * otherwise be refused for carrying their addresses -- but defaulting to an
  * exemption is how the previous design left five of six branches unguarded, so
  * an unset key means no exemption at all.
+ *
+ * BOTH RANGES EXCLUDE WHAT THE REMOTE ALREADY HAS. The question this guard asks
+ * is which addresses THIS push makes permanent -- and a commit already on a
+ * remote-tracking ref made its own permanent when it was first published.
+ * Pushing it onto a second branch publishes nothing new. Without the exclusion
+ * a fork that merges upstream into its release branch is refused for every
+ * upstream commit in the merge, one step after pushing those very commits to
+ * its own mirror branch: a false positive on its most routine operation.
+ *
+ * The cost is bounded, and worth naming rather than hiding. A STALE
+ * remote-tracking ref -- a branch deleted or force-pushed on the server -- can
+ * exclude a commit that is no longer really published. `git fetch --prune`
+ * corrects it, and the new-branch path has always carried the same exposure.
  */
 async function checkRange(input: CheckInput, ref: PushRef, expected: string): Promise<Refusal[]> {
   const range = ref.remoteSha === ZERO
     ? [ref.localSha, '--not', '--remotes=' + input.remote]
-    : [ref.remoteSha + '..' + ref.localSha];
+    : [ref.remoteSha + '..' + ref.localSha, '--not', '--remotes=' + input.remote];
 
   const commits = await input.git.identitiesIn(range);
   const foreign = commits.filter((commit) =>

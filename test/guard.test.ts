@@ -138,6 +138,68 @@ describe('guard check', () => {
   });
 });
 
+// The EXISTING-BRANCH path -- `remoteSha..localSha`, which is what every routine
+// push takes. The matrix above never exercised it: all five scenarios push a NEW
+// branch, where remoteSha is zero, and that path alone had the exclusion.
+//
+// The shape that exposed the gap is a fork sync. `master` fast-forwards to
+// upstream and is pushed; `master` is then merged into the release branch and
+// that is pushed too. The second push carries every upstream commit a second
+// time, and was refused for authorship the FIRST push had published one step
+// earlier -- a false positive on the most routine thing the tool does.
+describe('guard check, pushing to a branch the remote already has', () => {
+  let box: Sandbox;
+  let git: Git;
+  let base: string;
+
+  before(() => {
+    box = sandbox();
+    git = new Git(box.dir);
+    box.git('config', '--local', 'user.name', 'Pinned');
+    box.git('config', '--local', 'user.email', OURS);
+    box.git('config', '--local', 'credential.https://github.com.username', 'pinned-account');
+    box.git('config', '--local', 'remote.origin.url', ORIGIN);
+    box.git('commit', '--allow-empty', '-m', 'base');
+    base = box.git('rev-parse', 'HEAD');
+    box.git('update-ref', 'refs/remotes/origin/release', base);
+  });
+  after(() => box.dispose());
+
+  /** A commit object with the given author and parents, built without moving HEAD. */
+  const commitAs = (email: string, message: string, parents: readonly string[]): string => {
+    const tree = box.git('rev-parse', 'HEAD^{tree}');
+    return box.git(
+      '-c', 'user.name=Author', '-c', `user.email=${email}`,
+      'commit-tree', tree, ...parents.flatMap((parent) => ['-p', parent]), '-m', message,
+    );
+  };
+
+  /** remoteSha is a real commit here, not zero: the branch exists on the remote. */
+  const pushExisting = (sha: string) => check({
+    git, remote: 'origin', url: ORIGIN,
+    stdin: `refs/heads/release ${sha} refs/heads/release ${base}
+`,
+  });
+
+  test('a commit the remote already carries is not published again, so it is allowed', async () => {
+    const upstream = commitAs(THEIRS, 'upstream work', [base]);
+    box.git('update-ref', 'refs/remotes/origin/mirror', upstream);   // already pushed
+
+    const merge = commitAs(OURS, 'Merge mirror into release', [base, upstream]);
+    assert.deepEqual(await pushExisting(merge), [],
+      'its address became permanent when the mirror branch was pushed, not now');
+  });
+
+  test('a foreign commit on NO remote is still refused -- scenario B must not weaken', async () => {
+    const stray = commitAs(THEIRS, 'never pushed anywhere', [base]);
+    const merge = commitAs(OURS, 'Merge stray into release', [base, stray]);
+
+    const refusals = await pushExisting(merge);
+    assert.equal(refusals.length, 1);
+    assert.ok(refusals[0]!.detail.some((row) => row.includes(stray.slice(0, 9))),
+              'the refusal must still name the unpublished commit');
+  });
+});
 describe('push ref parsing', () => {
   test('reads the four fields git sends on stdin', () => {
     const refs = parsePushRefs('refs/heads/a 1111 refs/heads/b 2222\n\nrefs/heads/c 3333 refs/heads/d 4444\n');

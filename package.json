@@ -1,0 +1,35 @@
+{
+  "name": "gid",
+  "version": "0.1.0",
+  "description": "Pin a git clone to one account, and refuse to push commits that carry another identity.",
+  "type": "module",
+  "bin": {
+    "gid": "dist/cli.js"
+  },
+  "main": "dist/cli.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "test": "node --test \"test/*.test.ts\"",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "git",
+    "identity",
+    "credential",
+    "pre-push",
+    "multi-account"
+  ],
+  "license": "MIT",
+  "private": true,
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

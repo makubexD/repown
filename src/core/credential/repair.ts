@@ -44,7 +44,7 @@ export async function planRepair(git: Git): Promise<RemovalOutcome[]> {
   for (const scope of SCOPES) {
     for (const host of HOSTS) {
       const key = 'credential.' + host + '.helper';
-      const values = await git.getAllConfig(key, scope);
+      const values = await git.getAllConfigRaw(key, scope);
       if (values.length > 0) found.push({ scope, key, values, removed: false });
     }
   }

@@ -100,6 +100,26 @@ export class Git {
     return lines(await this.exec(this.scoped(scope, ['--get-all', key])));
   }
 
+  /**
+   * Every value of a multi-valued key, INCLUDING empty ones.
+   *
+   * `getAllConfig` drops blanks, which is right for a list of owners or branches
+   * and wrong here. An empty `credential.<url>.helper` is not noise: it is the
+   * list reset that discards every helper configured before it, and so it is the
+   * single most important line to show someone asking why their credentials
+   * stopped working. Filtering it out made `gid fix` preview two values while
+   * removing four, and hid the one the explanation is actually about.
+   */
+  async getAllConfigRaw(key: string, scope?: ConfigScope): Promise<string[]> {
+    const result = await this.exec(this.scoped(scope, ['--get-all', key]));
+    if (!succeeded(result)) return [];
+    const split = result.stdout.split(/\r?\n/);
+    // git terminates the last value with a newline, so a trailing empty element
+    // is an artefact of splitting -- unlike any earlier one, which is a value.
+    if (split[split.length - 1] === '') split.pop();
+    return split;
+  }
+
   async setConfig(key: string, value: string, scope: ConfigScope = 'local'): Promise<boolean> {
     return succeeded(await this.exec(this.scoped(scope, [key, value])));
   }

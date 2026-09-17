@@ -74,3 +74,31 @@ describe('Git', () => {
     assert.equal(await new Git(box.dir + '/../').isRepo(), false);
   });
 });
+
+describe('empty config values', () => {
+  let box: Sandbox;
+  before(() => { box = sandbox(); });
+  after(() => box.dispose());
+
+  test('an EMPTY helper value is preserved, because it is the list reset', async () => {
+    // This is exactly what `gh auth setup-git` writes. Dropping the blank made
+    // `gid fix` preview half of what it was about to remove, and hid the line
+    // that explains why credentials broke.
+    box.writeGlobalConfig([
+      '[credential "https://github.com"]',
+      '\thelper = ',
+      '\thelper = !gh auth git-credential',
+      '',
+    ].join('\n'));
+
+    const git = new Git(box.dir);
+    const raw = await git.getAllConfigRaw('credential.https://github.com.helper', 'global');
+    assert.equal(raw.length, 2, 'both values must survive');
+    assert.equal(raw[0], '', 'the list reset is the first value');
+    assert.match(raw[1]!, /gh auth git-credential/);
+
+    // The filtering reader still drops it -- that is its job elsewhere.
+    const filtered = await git.getAllConfig('credential.https://github.com.helper', 'global');
+    assert.equal(filtered.length, 1);
+  });
+});

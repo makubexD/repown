@@ -53,15 +53,18 @@ and `gh api` keep working. It simply stops being involved in push and pull.
 
 Needs Node 20+ and git. Windows, macOS and Linux.
 
-```
-npm install -g gid
-```
-
-From a clone:
+Not on npm yet, so install from the repository:
 
 ```
-git clone <this repo> && cd gid && npm install && npm run build && npm link
+git clone https://github.com/makubexD/gid.git
+cd gid && npm install && npm run build && npm link
 ```
+
+`npm link` puts `gid` on your PATH. To remove it again: `npm unlink -g gid`.
+
+Once published, this becomes `npm install -g gid`. The package is written
+publish-ready, and deliberately not published until the command surface has
+settled.
 
 ## Use
 

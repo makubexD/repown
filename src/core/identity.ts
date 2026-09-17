@@ -89,9 +89,7 @@ export async function pinIdentity(
     [USE_CONFIG_ONLY_KEY, 'true'],
     ...credentialKeys.map((key): [string, string] => [key, values.account]),
   ];
-  return Promise.all(writes.map(async ([key, value]) => ({
-    key, value, written: await git.setConfig(key, value, scope),
-  })));
+  return writeAll(writes, (key, value) => git.setConfig(key, value, scope));
 }
 
 export async function clearIdentity(
@@ -100,7 +98,32 @@ export async function clearIdentity(
   scope: ConfigScope = 'local',
 ): Promise<PinOutcome[]> {
   const keys = [NAME_KEY, EMAIL_KEY, USE_CONFIG_ONLY_KEY, ...credentialKeys];
-  return Promise.all(keys.map(async (key) => ({
-    key, value: '', written: await git.unsetConfig(key, scope),
-  })));
+  return writeAll(keys.map((key): [string, string] => [key, '']),
+                  (key) => git.unsetConfig(key, scope));
+}
+
+/**
+ * ONE AT A TIME, NEVER Promise.all.
+ *
+ * `git config --local` writes through a `.lock` file in the config's own
+ * directory, so concurrent invocations race for it and the losers fail --
+ * quietly, because each is a separate process exiting non-zero rather than
+ * throwing. Running these four in parallel dropped exactly one key per
+ * repository across a twenty-repository rollout, most often `user.name`, and
+ * every command still reported success because the write results were
+ * discarded.
+ *
+ * Which is the failure this whole tool exists to prevent: a repository that
+ * reports itself configured while its commits carry the machine's identity. So
+ * the outcomes are returned, and callers are expected to look at them.
+ */
+async function writeAll(
+  entries: ReadonlyArray<[string, string]>,
+  write: (key: string, value: string) => Promise<boolean>,
+): Promise<PinOutcome[]> {
+  const outcomes: PinOutcome[] = [];
+  for (const [key, value] of entries) {
+    outcomes.push({ key, value, written: await write(key, value) });
+  }
+  return outcomes;
 }

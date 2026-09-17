@@ -167,18 +167,40 @@ It also refuses:
 - **itself being unrunnable.** If `gid` cannot be found, the hook refuses rather
   than exiting 0. A hook that cannot run its check is not a check.
 
-### Mirror branches
-
-A fork whose `master` only ever fast-forwards to upstream commits will carry
-other people's addresses legitimately. Exempt exactly that branch:
+### Two repo-local keys it reads
 
 ```
-git config --local gid.mirrorBranch master
+git config --local gid.mirrorBranch master        # a branch that mirrors someone else
+git config --local --add gid.allowOwner An-Org    # another owner you may push to
 ```
 
-Unset means **no exemption**, which is the safe default: an exemption that
-applies by default is how guards end up covering one branch and missing the five
-that carry the actual work.
+**`gid.mirrorBranch`** — a fork whose `master` only ever fast-forwards to
+upstream commits carries other people's addresses legitimately. This exempts
+exactly that branch. Unset means **no exemption**, which is the safe default: an
+exemption that applies by default is how guards end up covering one branch and
+missing the ones that carry the actual work.
+
+**`gid.allowOwner`** — repeatable. An organisation is never an account name, so
+without this the destination check refuses every push to every organisation
+repository, which is most repositories in most jobs. Listing one owner does not
+open the door to any other. `gid` prints the exact command when it sees an owner
+it does not recognise.
+
+Organisation membership could have been resolved from the host API instead. It
+deliberately is not: that would put a network call and an auth dependency in the
+pre-push path, where a rate limit or an offline laptop becomes a failed push.
+
+### When the guard is the wrong tool
+
+It refuses **any** foreign author in a push. That is right for a repository where
+every commit should be yours, and wrong for a shared one, where pushing a branch
+containing a colleague's commit is ordinary work.
+
+So on a team repository: `gid use` it, and leave the guard off. You still get an
+explicit identity that cannot drift with your global config, and the credential
+pin that makes multi-account work. The control that fits a shared repository is a
+server-side ruleset on author addresses, which the host enforces on receive and
+`--no-verify` cannot bypass.
 
 ## Auditing what you already have
 

@@ -21,6 +21,7 @@ import { inspectRepo, inspectAuth, type RepoState } from '../core/inspect.ts';
 import { pinIdentity } from '../core/identity.ts';
 import { lookupAccount, saveAccount, type Account } from '../core/registry.ts';
 import { ghSwitch } from '../core/credential/gh.ts';
+import { allowedOwners } from '../core/guard/check.ts';
 import { ask, interactive } from '../ui/prompt.ts';
 import { flagString, flagBool, gitFor, type Args } from '../cli.ts';
 import * as out from '../ui/format.ts';
@@ -44,7 +45,14 @@ export default {
     const values = await resolveAccount(account, repo, args);
     if (!values) return 1;
 
-    await pinIdentity(git, { ...values, account }, repo.credentialKeys);
+    const outcomes = await pinIdentity(git, { ...values, account }, repo.credentialKeys);
+    const failed = outcomes.filter((outcome) => !outcome.written);
+    if (failed.length > 0) {
+      out.fail('use', 'could not write ' + failed.length + ' of ' + outcomes.length + ' keys.');
+      for (const outcome of failed) out.detail(outcome.key);
+      out.detail('this clone is NOT pinned -- nothing here reports success it did not have.');
+      return 1;
+    }
     out.pass('identity', values.name + ' <' + values.email + '>  push-as:' + account);
 
     if (flagBool(args, 'gh')) await switchCli(account);
@@ -110,7 +118,12 @@ async function reportConcerns(account: string, repo: RepoState): Promise<void> {
     out.detail('selection is left to whatever already serves this host.');
   }
   if (repo.owner && repo.owner.toLowerCase() !== account.toLowerCase()) {
-    out.warn('origin', 'origin belongs to "' + repo.owner + '", not "' + account + '".');
+    const allowed = await allowedOwners(repo.git, account);
+    if (!allowed.includes(repo.owner.toLowerCase())) {
+      out.warn('origin', 'origin belongs to "' + repo.owner + '", not "' + account + '".');
+      out.detail('normal for an organisation repository. To stop the guard refusing it:');
+      out.detail('  git config --local --add gid.allowOwner ' + repo.owner);
+    }
   }
 
   const auth = await inspectAuth(repo.git, repo.originUrl ?? undefined);

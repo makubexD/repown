@@ -22,6 +22,7 @@ import { readIdentity } from '../identity.ts';
 
 const ZERO = '0'.repeat(40);
 const MIRROR_KEY = 'gid.mirrorBranch';
+const ALLOW_OWNER_KEY = 'gid.allowOwner';
 
 /** Variables that override the identity the guard just validated, or bypass the check gh performs. */
 const HOSTILE = [
@@ -77,7 +78,8 @@ export async function check(input: CheckInput): Promise<Refusal[]> {
   }
 
   const owner = url ? provider.ownerOf(url) : null;
-  const destination = checkDestination(url, owner, identity.account);
+  const allowed = await allowedOwners(git, identity.account);
+  const destination = checkDestination(url, owner, allowed);
   const commits = await checkCommits(input, identity.email);
   return [...destination, ...commits];
 }
@@ -93,6 +95,25 @@ function checkEnvironment(): Refusal[] {
 }
 
 /**
+ * Owners this clone may legitimately push to: the pinned account, plus anything
+ * listed in gid.allowOwner.
+ *
+ * THE LIST EXISTS BECAUSE ORGANISATIONS ARE NOT ACCOUNTS. A repository owned by
+ * an organisation you belong to has an owner that is not, and never will be,
+ * your account name -- so comparing the two refuses every push to every org
+ * repository, which is most working repositories in most jobs.
+ *
+ * Organisation membership could be resolved from the host API instead. It is
+ * not, deliberately: that would put a network call and an auth dependency in the
+ * pre-push path, where a rate limit or an offline laptop would turn into a
+ * failed push. An explicit local list is offline, instant, and readable.
+ */
+export async function allowedOwners(git: Git, account: string | null): Promise<string[]> {
+  const extra = await git.getAllConfig(ALLOW_OWNER_KEY);
+  return [...(account ? [account] : []), ...extra].map((owner) => owner.toLowerCase());
+}
+
+/**
  * The destination actually being pushed to, parsed as a URL.
  *
  * NOT a substring match on the whole remote string, which is what this replaced:
@@ -102,13 +123,18 @@ function checkEnvironment(): Refusal[] {
 function checkDestination(
   url: ReturnType<typeof parseGitUrl>,
   owner: string | null,
-  account: string | null,
+  allowed: readonly string[],
 ): Refusal[] {
-  if (!url || !owner || !account) return [];
-  if (owner.toLowerCase() === account.toLowerCase()) return [];
+  if (!url || !owner || allowed.length === 0) return [];
+  if (allowed.includes(owner.toLowerCase())) return [];
   return [{
-    reason: 'This push goes to "' + owner + '", but this clone is pinned to "' + account + '".',
-    detail: ['destination: ' + url.raw, 'push to your own remote, or re-pin: gid use ' + owner],
+    reason: 'This push goes to "' + owner + '", which this clone is not pinned to.',
+    detail: [
+      'destination: ' + url.raw,
+      'allowed here: ' + allowed.join(', '),
+      'if that owner is legitimate -- an organisation you belong to, say:',
+      '  git config --local --add ' + ALLOW_OWNER_KEY + ' ' + owner,
+    ],
   }];
 }
 

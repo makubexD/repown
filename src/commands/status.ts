@@ -11,6 +11,7 @@
 
 import { inspectRepo, inspectAuth, activeAccountLabel, type RepoState, type AuthState } from '../core/inspect.ts';
 import { isPinned } from '../core/identity.ts';
+import { allowedOwners } from '../core/guard/check.ts';
 import { gitFor, type Args } from '../cli.ts';
 import * as out from '../ui/format.ts';
 
@@ -30,7 +31,7 @@ export default {
 
     summary(repo, auth);
     const problems = collectProblems(repo, auth);
-    reportWarnings(repo, auth);
+    await reportWarnings(repo, auth);
 
     if (problems.length === 0) {
       out.pass('identity', 'this clone is pinned, and its credential mechanism honours it');
@@ -85,11 +86,16 @@ function collectProblems(repo: RepoState, auth: AuthState): Problem[] {
   return problems;
 }
 
-function reportWarnings(repo: RepoState, auth: AuthState): void {
+async function reportWarnings(repo: RepoState, auth: AuthState): Promise<void> {
   const account = repo.identity.account;
 
-  if (repo.owner && account && repo.owner.toLowerCase() !== account.toLowerCase()) {
-    out.warn('origin', 'origin belongs to "' + repo.owner + '" but this clone pushes as "' + account + '".');
+  // An organisation is never an account name, so a bare owner-vs-account
+  // comparison warns on every org repository -- which is most of them at work.
+  const allowed = await allowedOwners(repo.git, account);
+  if (repo.owner && allowed.length > 0 && !allowed.includes(repo.owner.toLowerCase())) {
+    out.warn('origin', 'origin belongs to "' + repo.owner + '", which is not an owner this clone pushes to.');
+    out.detail('if that is an organisation you belong to:');
+    out.detail('  git config --local --add gid.allowOwner ' + repo.owner);
   }
   guardWarning(repo);
 

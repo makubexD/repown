@@ -173,3 +173,68 @@ describe('hook body', () => {
     assert.ok(body.includes("'\\''"), 'the quote must be escaped for sh');
   });
 });
+
+describe('pinning writes every key', () => {
+  test('all four keys land -- they are written one at a time, never concurrently', async () => {
+    const box = sandbox();
+    try {
+      const git = new Git(box.dir);
+      const { pinIdentity, readIdentity } = await import('../src/core/identity.ts');
+      const key = 'credential.https://github.com.username';
+
+      const outcomes = await pinIdentity(
+        git, { name: 'A Name', email: 'a@example.invalid', account: 'anaccount' }, [key]);
+
+      assert.equal(outcomes.length, 4);
+      assert.deepEqual(outcomes.filter((o) => !o.written), [],
+        'git config writes through a .lock file; run in parallel they race and lose');
+
+      const identity = await readIdentity(git, key);
+      assert.equal(identity.name, 'A Name');
+      assert.equal(identity.email, 'a@example.invalid');
+      assert.equal(identity.account, 'anaccount');
+      assert.equal(identity.useConfigOnly, 'true');
+    } finally {
+      box.dispose();
+    }
+  });
+});
+
+describe('organisation repositories', () => {
+  test('an org owner is refused by default, and allowed once listed', async () => {
+    const box = sandbox();
+    try {
+      const git = new Git(box.dir);
+      box.git('config', '--local', 'user.name', 'Dev');
+      box.git('config', '--local', 'user.email', OURS);
+      box.git('config', '--local', 'credential.https://github.com.username', 'a-person');
+      box.git('commit', '--allow-empty', '-m', 'base');
+      const sha = box.git('rev-parse', 'HEAD');
+      const orgUrl = 'https://github.com/An-Org/service.git';
+      const push = () => check({
+        git, remote: 'origin', url: orgUrl,
+        stdin: `refs/heads/work ${sha} refs/heads/work ${ZERO}\n`,
+      });
+
+      // An organisation is never an account name, so without the allow-list
+      // every push to every org repository would be refused.
+      const before = await push();
+      assert.equal(before.length, 1);
+      assert.match(before[0]!.reason, /goes to "An-Org"/);
+      assert.ok(before[0]!.detail.some((d) => d.includes('gid.allowOwner')),
+                'the refusal must name the way out');
+
+      box.git('config', '--local', '--add', 'gid.allowOwner', 'An-Org');
+      assert.deepEqual(await push(), [], 'a listed owner is legitimate');
+
+      // ...and listing one owner does not open the door to any other.
+      const elsewhere = await check({
+        git, remote: 'origin', url: 'https://github.com/Other-Org/service.git',
+        stdin: `refs/heads/work ${sha} refs/heads/work ${ZERO}\n`,
+      });
+      assert.equal(elsewhere.length, 1);
+    } finally {
+      box.dispose();
+    }
+  });
+});

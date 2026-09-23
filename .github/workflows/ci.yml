@@ -41,9 +41,8 @@ jobs:
       matrix:
         # Linux and Windows across both supported Node versions, because those
         # are where this actually runs. macOS gets one job rather than a full
-        # row: on a private repository its minutes bill at 10x, and what it adds
-        # over Linux is a different filesystem and path case-sensitivity, which
-        # one configuration exercises just as well as four.
+        # row: what it adds over Linux is a different filesystem and path
+        # case-sensitivity, which one configuration exercises just as well as four.
         # 22, not 20. The SOURCE needs a newer Node than the shipped package
         # does, and the two requirements are genuinely different:
         #   - running the tests needs glob support in `node --test`, and type

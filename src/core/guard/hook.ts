@@ -32,19 +32,22 @@ const POWERSHELL_MARKER = 'fork-identity-guard';
 
 export type GuardState = 'off' | 'foreign' | 'legacy' | 'on';
 
-/**
- * A marker counts only as the header comment this tool writes -- `# <marker>:` -- so a
- * hook that merely MENTIONS one (a chained hook's comment, say) stays foreign and is
- * never overwritten or deleted. The PowerShell format predates that header.
- */
-function hasHeader(body: string, marker: string): boolean {
-  return body.split('\n').some((line) => line.startsWith('# ' + marker + ':'));
-}
+/** How far into a hook the PowerShell guard's marker may sit; it predates the header. */
+const POWERSHELL_MARKER_LINES = 5;
 
+/**
+ * A marker counts only where this tool writes it: the header comment on the line right
+ * after the shebang, `# <marker>:`. A hook that merely MENTIONS one, or that has this
+ * tool's body pasted below lines of its own, is someone else's -- and a hook classified
+ * as ours or legacy gets overwritten by `guard on` and deleted by `guard off`.
+ */
 function classify(body: string): GuardState {
-  if (hasHeader(body, MARKER)) return 'on';
-  if (hasHeader(body, GID_MARKER) || body.includes(POWERSHELL_MARKER)) return 'legacy';
-  return 'foreign';
+  const lines = body.split('\n');
+  const header = lines[1] ?? '';
+  if (header.startsWith('# ' + MARKER + ':')) return 'on';
+  if (header.startsWith('# ' + GID_MARKER + ':')) return 'legacy';
+  const top = lines.slice(0, POWERSHELL_MARKER_LINES);
+  return top.some((line) => line.includes(POWERSHELL_MARKER)) ? 'legacy' : 'foreign';
 }
 
 /** This CLI's own entry point, as the hook will invoke it. */

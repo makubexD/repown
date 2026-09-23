@@ -48,7 +48,7 @@ repown guard on        # refuse any push that carries another identity
 | `includeIf "gitdir:~/work/"` in global config | yes, by folder | only if you also add the credential key per folder | no | Depends on where a repo happens to be cloned; a clone anywhere else inherits the default |
 | SSH host aliases (`git@github-work:...`) | no | yes | no | Every remote URL has to be rewritten, and keys managed per account |
 | `gh auth switch` | no | while gh is the helper, only the *active* account | no | Machine-wide: it breaks the other account's repos ([§1](docs/DECISIONS.md#1-git-credentials-come-from-the-credential-manager-gh-is-for-the-cli)) |
-| **repown** | yes, per clone | yes, per clone (GitHub) | yes, every commit in the push | Run once per clone; credential pinning is GitHub-only today ([Hosts](#hosts)) |
+| **repown** | yes, per clone | yes, per clone (GitHub) | yes, once `repown guard on`: every commit the push would publish | `use` and `guard on` once per clone; credential pinning is GitHub-only today ([Hosts](#hosts)) |
 
 repown doesn't replace these tools. It writes plain repo-local git config, uses the
 credential manager you already have, and leaves `gh` in charge of the GitHub CLI.
@@ -64,8 +64,8 @@ cd repown && npm install && npm run build && npm link
 ```
 
 `npm link` puts `repown` on your PATH, and `npm unlink -g repown` removes it. The
-package is kept unpublished until its command surface has settled; after that it
-will install with `npm install -g repown`.
+package is marked `private` and kept off npm until its command surface has
+settled.
 
 ## Quickstart
 
@@ -97,7 +97,8 @@ and records them for every other clone. Without a terminal it can't ask, so
 record the account up front:
 `repown accounts add octocat --name "Octo Cat" --email octocat@users.noreply.github.com`.
 
-`repown use` writes four repo-local keys and nothing else:
+`repown use` writes these repo-local keys and nothing else (the credential key only
+where the host's credentials can be pinned, which today means GitHub):
 
 | Key | What it decides |
 | --- | --- |
@@ -144,20 +145,24 @@ $ repown scan ~/code ~/work
     repo             owner          host    identity     guard   identities in history
     --------------------------------------------------------------------
     personal-project octocat        github  INHERITED    off     work.example=122
-    work-service     acme           github  INHERITED    off     work.example=13655 +12 more
     the-fork         octocat        github  pinned       on      octocat.example=8  (excl. mirror)
+    work-service     acme           github  INHERITED    off     work.example=13655 +12 more
 
   repositories     3
   not pinned       2
   not guarded      2
+
+  The identity column is a FACT, not a verdict: a shared repository
+  legitimately carries many addresses. What is worth acting on is a
+  repository you own whose history carries an address that is not yours.
+
+  Pin one:  cd <repo> && repown use <account> && repown guard on
 ```
 
 With no directory it scans the current one, looking 3 levels deep (`--depth`).
 It shows domains and counts rather than addresses, because this output gets pasted
-into chats; `--emails` shows the exact addresses. A shared repository legitimately
-has many identities. The row worth acting on is a repository you own whose history
-carries an address that isn't yours. The guard stops new ones; it cannot rewrite
-history.
+into chats; `--emails` shows the exact addresses. The guard stops new wrong
+addresses; it cannot rewrite history.
 
 ## Commands
 
@@ -291,16 +296,21 @@ repown was called `gid`, and the rename was a clean break
 ([§10](docs/DECISIONS.md#10-named-repown-formerly-gid-as-a-clean-break)). Your pins
 keep working, because they are plain git config. What to redo:
 
-1. Install repown (see [Install](#install)), then `npm unlink -g gid`.
+1. Install repown (see [Install](#install)). Keep gid installed for now.
 2. In each guarded clone, run `repown guard on`. It replaces the old gid hook.
+   `repown scan ~/code` finds the ones left: their guard column reads `legacy`.
 3. If `repown` warns about `gid.*` keys, run
    `git config --local --rename-section gid repown` in that clone.
-4. Copy `accounts.json` from the old registry folder (`%APPDATA%\gid` or
-   `~/.config/gid`) to the new one (`%APPDATA%\repown` or `~/.config/repown`),
-   or record the accounts again with `repown accounts add`.
+4. Copy `accounts.json` from the old registry folder to the new one, or record
+   the accounts again with `repown accounts add`. The old folder is wherever
+   `GID_CONFIG_DIR` pointed, otherwise `%APPDATA%\gid` on Windows and
+   `$XDG_CONFIG_HOME/gid` (default `~/.config/gid`) elsewhere. The new one follows
+   the same rules with `REPOWN_CONFIG_DIR` and `repown`.
+5. Only now remove gid (`npm unlink -g gid`, or `npm uninstall -g gid` if it was
+   installed from a package).
 
-`repown scan ~/code` shows which clones still need step 2: their guard column reads
-`legacy`.
+Do step 2 before step 5. An old hook whose gid is gone falls back to whatever
+`gid` is on PATH, and an unrelated program has that name (GNU idutils).
 
 ## Development
 

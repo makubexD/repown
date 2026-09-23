@@ -4,7 +4,7 @@
 // (CLI-14); the CI `install` job only smoke-tests a handful of commands after
 // a global install.
 
-import { test, describe, before, after } from 'node:test';
+import { test, describe, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
@@ -250,19 +250,34 @@ describe('guard check (the hook contract every installed hook already calls)', (
 
 describe('status after the rename from gid', () => {
   let box: Sandbox;
-  before(() => { box = sandbox(); });
-  after(() => box.dispose());
+  beforeEach(() => { box = sandbox(); });
+  afterEach(() => box.dispose());
 
-  test('old gid.* keys are reported as ignored, with the command that moves them', () => {
+  test('old gid.* keys are reported as ignored -- each key once -- with the command that moves them', () => {
     box.git('config', '--local', '--add', 'gid.allowOwner', 'An-Org');
+    box.git('config', '--local', '--add', 'gid.allowOwner', 'Other-Org');
     const run = repown([], { cwd: box.dir });
-    assert.match(run.stderr, /gid\.\* keys .*ignored/);
+    assert.match(run.stderr, /gid\.\* keys from before the rename are ignored: gid\.allowowner\n/);
     assert.match(run.stderr, /git config --local --rename-section gid repown/);
   });
 
-  test('the new keys are named repown.* in every hint', () => {
-    box.git('config', '--local', '--remove-section', 'gid');
-    const run = repown(['guard', 'on', '--help'], { cwd: box.dir });
+  test('with no gid.* keys there is no rename warning at all', () => {
+    const run = repown([], { cwd: box.dir });
+    assert.doesNotMatch(run.stderr, /rename/);
+  });
+
+  test('the organisation hint names repown.allowOwner, not the old key', () => {
+    box.git('remote', 'add', 'origin', 'https://github.com/An-Org/project.git');
+    box.git('config', '--local', 'credential.https://github.com.username', 'octocat');
+    const run = repown([], { cwd: box.dir });
+    assert.match(run.stderr, /git config --local --add repown\.allowOwner An-Org/);
     assert.doesNotMatch(run.stdout + run.stderr, /\bgid\b/);
+  });
+});
+
+describe('help shows an optional positional as optional', () => {
+  test('`help scan` renders its directories as [<dir>...], not <dir>...', () => {
+    const run = repown(['help', 'scan']);
+    assert.match(run.stdout, /repown scan \[<dir>\.\.\.\]/);
   });
 });

@@ -23,7 +23,9 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - **Strip-only TypeScript:** no enums, namespaces or parameter properties. Relative imports
   end in `.ts`.
 - **Zero runtime dependencies.**
-- **No names or email addresses in the repo.** Use `octocat` and `*.example.invalid`.
+- **No names or email addresses in the repo.** Use `octocat` and `*.example.invalid`. The
+  one exception is the owner's GitHub handle, which a public repo's URL, package.json
+  and LICENSE can't avoid.
 - **`src/core/exec.ts` is the only place that spawns processes.** It never writes to the
   console (`git credential fill` prints live passwords), and a non-zero exit resolves rather
   than rejects (`git config --get` exits 1 for "not set"). Always `shell: false`.
@@ -60,5 +62,6 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - `test/cli.test.ts` spawns the real entry point. Keep `guard check --remote --url` working,
   because every installed hook calls exactly that.
 - `test/docs.test.ts` checks the README against `repown --help` and `repown help <group>`.
-  Adding or renaming a command or action means updating README.md, or this test fails;
-  the README must not show hidden aliases (`guard enable`).
+  It fails when a command is missing from README.md, or when the README shows a command
+  or action (hidden aliases like `guard enable` included) that help doesn't advertise.
+  It does not notice an undocumented new *action*; check that by hand.

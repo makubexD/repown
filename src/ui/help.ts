@@ -76,7 +76,8 @@ function positionalUsage(command: Command): string {
   const spec = command.positionals;
   if (!spec || spec.max === 0) return '';
   const label = spec.label ?? '<arg>';
-  return spec.max === Infinity ? label + '...' : label;
+  const shown = spec.max === Infinity ? label + '...' : label;
+  return spec.min === 0 ? '[' + shown + ']' : shown;
 }
 
 function optionUsageToken(option: OptionSpec): string {

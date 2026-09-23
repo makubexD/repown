@@ -19,12 +19,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false   # the render step needs no token, so none is left in .git/config
 
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
 
-      - uses: charmbracelet/vhs-action@v2
+      # Third-party, so pinned to a commit (v2 when pinned) rather than a movable tag.
+      - uses: charmbracelet/vhs-action@f6d7db07a432fcd3b06772628d36a57f96d95dcf
         with:
           path: demo/demo.tape
 

@@ -37,4 +37,4 @@ Type "repown" Enter
 Sleep 3500ms
 
 Hide
-Type "cd / && rm -rf /c/repown-demo /tmp/repown-demo" Enter
+Type 'export PATH="$ORIGINAL_PATH"; cd / && rm -rf "$DEMO_ROOT"' Enter

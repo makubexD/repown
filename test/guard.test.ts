@@ -288,6 +288,24 @@ describe('upgrading from gid', () => {
     assert.ok(removed.ok && removed.value);
   });
 
+  test('an old gid hook checked out with CRLF line endings is still legacy', async () => {
+    writeHook(OLD_GID_HOOK.replace(/\n/g, '\r\n'));
+    assert.equal(await guardState(git), 'legacy');
+  });
+
+  test('our header pasted BELOW someone else\'s lines is theirs, not ours', async () => {
+    const combined = '#!/bin/sh\n./my-own-check.sh || exit 1\n' + hookBody('a', 'b');
+    writeHook(combined);
+    assert.equal(await guardState(git), 'foreign');
+    assert.equal((await installGuard(git)).ok, false);
+    assert.equal(readFileSync(hook(), 'utf8'), combined);
+  });
+
+  test('the PowerShell marker deep inside a foreign hook does not make it legacy', async () => {
+    writeHook('#!/bin/sh\n' + 'true\n'.repeat(10) + '# replaced fork-identity-guard long ago\nexit 0\n');
+    assert.equal(await guardState(git), 'foreign');
+  });
+
   test('a hook that merely MENTIONS a marker in passing stays foreign and untouched', async () => {
     const chained = '#!/bin/sh\n# runs after my own checks; see gid-identity-guard and ' + MARKER + '\nexit 0\n';
     writeHook(chained);

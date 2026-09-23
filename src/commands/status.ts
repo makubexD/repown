@@ -122,8 +122,8 @@ async function reportWarnings(repo: RepoState, auth: AuthState): Promise<void> {
 async function renamedKeysWarning(git: Git): Promise<void> {
   const leftovers = await git.configOrigins('^gid\\.', 'local');
   if (leftovers.length === 0) return;
-  out.warn('config', 'gid.* keys from before the rename are ignored: ' +
-    leftovers.map((entry) => entry.key).join(', '));
+  const keys = new Set(leftovers.map((entry) => entry.key));
+  out.warn('config', 'gid.* keys from before the rename are ignored: ' + [...keys].join(', '));
   out.detail('move them: git config --local --rename-section gid repown');
 }
 

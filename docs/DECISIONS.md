@@ -234,8 +234,8 @@ cost, not an oversight — and the reason `repown scan` prints domains and count
 rather than addresses by default.
 
 For GitHub, `repown use` suggests the account's noreply address
-(`<login>@users.noreply.github.com`). It is publishable by design and still links
-the commit to the account.
+(`<id>+<login>@users.noreply.github.com`, built from the account's numeric id). It is
+publishable by design and still links the commit to the account.
 
 ---
 
@@ -288,7 +288,7 @@ the pre-push hook needed only `sh` and `pwsh`, both guaranteed on a Windows git
 machine.
 
 The counter-argument that carried: an npm package (installed from the repository
-today, with `npm install -g` once published) is a far better answer to "available
+while it stays unpublished) is a far better answer to "available
 on every machine, in every project" than a shell module, and the hook's new
 dependency mostly dissolves under npm distribution — a machine that installed the
 tool has Node by construction. The hook runs the Node executable and CLI path
@@ -355,6 +355,8 @@ in fact perfectly safe.
 | gh active as another account | — | **warn** | Affects `gh pr create`, never the push |
 | gh could not be queried | — | **warn** | Unknown, and said so rather than skipped |
 | A foreign pre-push hook is installed | — | **warn** | Someone else's hook; left alone |
+| A hook from an earlier version (gid, PowerShell) | — | **warn** | It runs old code, or refuses once that is uninstalled; `guard on` replaces it |
+| `gid.*` keys left from before the rename | — | **warn** | Ignored, yet they look configured (§10) |
 
 The rule this encodes: **a check that was skipped must never look like one that
 passed.** Every "unknown" above is printed, never omitted.
@@ -391,9 +393,16 @@ There is one exception. A hook written by `gid guard on` is classified **legacy*
 not foreign, so `repown guard on` replaces it and `repown guard off` removes it.
 Otherwise every clone set up under the old name would have a hook that the tool
 refuses to touch, running old code or, once gid is uninstalled, refusing every push
-with a fix naming a command that no longer exists. Markers count only as the
-`# <marker>:` header line, so a foreign hook that merely mentions one is still left
-alone.
+with a fix naming a command that no longer exists. That hook's fallback is also why
+the upgrade order matters: once gid is gone it runs whatever `gid` is on PATH,
+and GNU idutils ships one. So the README says to replace the hooks *before*
+uninstalling gid.
+
+A marker counts only as the `# <marker>:` header on the line after the shebang,
+exactly where this tool writes it. A foreign hook that merely mentions a marker,
+or that has this tool's body pasted below lines of its own, is left alone. The
+PowerShell guard predates that header, so its marker is accepted anywhere in the
+first five lines, and no further down.
 
 ## Residual risks, stated plainly
 

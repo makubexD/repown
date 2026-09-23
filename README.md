@@ -34,7 +34,9 @@ git pull                    # in a work repo
 That is not a bad token. `gh auth git-credential` looks the token up by **host**
 and serves only the **active** account; asked for any other it returns nothing
 and exits 1, even though that account's token is sitting in the same keyring.
-So while gh is the helper, every switch guarantees a prompt on the other side.
+So while gh is the helper, every switch guarantees a prompt on the other side —
+and for an account gated behind SSO, with no traditional password, there is
+nothing to type.
 
 Git Credential Manager already does the right thing: one credential per account,
 keyed `git:https://<user>@github.com`, chosen per repository from

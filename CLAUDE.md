@@ -59,5 +59,6 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - Guard tests build foreign-authored commits with `git commit-tree`, which doesn't move HEAD.
 - `test/cli.test.ts` spawns the real entry point. Keep `guard check --remote --url` working,
   because every installed hook calls exactly that.
-- `test/docs.test.ts` checks the README against `gid --help`. Adding or renaming a command
-  means updating README.md, or this test fails.
+- `test/docs.test.ts` checks the README against `gid --help` and `gid help <group>`.
+  Adding or renaming a command or action means updating README.md, or this test fails;
+  the README must not show hidden aliases (`guard enable`).

@@ -331,6 +331,7 @@ passed.** Every "unknown" above is printed, never omitted.
 | **A host-side ruleset restricting author and committer emails** | The only control `git push --no-verify` cannot bypass, since the host enforces it on receive. | A settings change per repository rather than per machine. Worth doing if `--no-verify` becomes a habit. |
 | **A `pre-commit` hook** | Would catch a wrong-author commit as it is made. | Skipped by `commit --no-verify`, and by merge, rebase, cherry-pick and revert — partial cover for a risk the range check already covers completely. |
 | **Rewriting existing history** | Commits already carrying the wrong address. | Destructive, and only the owner can weigh it. `gid scan` reports them; nothing rewrites them. |
+| **Proactive SSO-authorization-state detection** | The incident behind `SPEC.md`: a credential that is valid but not yet SSO-authorized for an organisation looks identical to "fine" until the push/fetch that actually needs that org's resources fails — with no password to fall back on. | Measured directly, not assumed: `gh auth status --json hosts` (checked against gh v2.89.0's real output, and against `cli/cli`'s `pkg/cmd/auth/status/status.go` source on `trunk`) has exactly three `state` values — `success`, `timeout`, `error` — and `error` is set only when a call to resolve the token's login name fails, a general identity check that is never scoped to one organisation. SAML/SSO enforcement is enforced per-organisation on resource access, so nothing short of a request against that specific org's resources can observe it — the same rate-limit/auth dependency §3 already rejected for `gid.allowOwner`. Git Credential Manager's `diagnose` subcommand writes free-form logs for a human to read, not a field `gid` could parse. The signal exists only at the moment `git push`/`git fetch` actually hits the protected resource, and only in that command's own error text — reactive, not something a `doctor`-style check can see in advance. See `SPEC-sso-credential-visibility.md` for the full research record. |
 
 ## Residual risks, stated plainly
 
@@ -344,3 +345,6 @@ passed.** Every "unknown" above is printed, never omitted.
 - Commits already made with the wrong author must be rewritten by hand.
 - Credential pinning on a host with no provider is not done, and `gid` says so
   rather than implying otherwise.
+- A credential that is valid but not SSO-authorized for an organisation looks
+  identical to "fine" in `gid doctor`/`gid` right up until a push or fetch
+  against that org's resources fails. Nothing pre-flights this.

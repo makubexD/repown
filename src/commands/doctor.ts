@@ -12,12 +12,13 @@
 // is to stop gh being the helper.
 
 import { inspectRepo, inspectAuth, activeAccountLabel, storedAccountsLabel, type AuthState } from '../core/inspect.ts';
-import { gitFor, type Args } from '../cli.ts';
+import { gitFor, type Args } from '../ui/args.ts';
+import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
 export default {
   summary: 'what serves credentials on this machine, and to whom',
-  usage: 'gid doctor',
+  examples: ['gid doctor'],
 
   async run(args: Args): Promise<number> {
     const git = gitFor(args);
@@ -34,9 +35,9 @@ export default {
 
     if (auth.ghIsHelper) return diagnoseGhHelper(auth);
     if (!auth.helperIsGcm) return diagnoseUnknownHelper(auth);
-    return diagnoseHealthy(auth);
+    return diagnoseHealthy(auth, repo.provider.label);
   },
-};
+} satisfies Command;
 
 function ghAccountsLabel(auth: AuthState): string {
   if (!auth.ghPresent) return 'not installed';
@@ -77,7 +78,7 @@ function diagnoseUnknownHelper(auth: AuthState): number {
   return 0;
 }
 
-function diagnoseHealthy(auth: AuthState): number {
+function diagnoseHealthy(auth: AuthState, providerLabel: string): number {
   out.line('  Credentials come from Git Credential Manager, which stores one per');
   out.line('  account and picks per repository from credential.<url>.username. No');
   out.line('  switching is needed for git, and `gh auth switch` affects the CLI only.');
@@ -86,5 +87,21 @@ function diagnoseHealthy(auth: AuthState): number {
     out.warn('store', 'no accounts stored yet -- the first push will sign in once.');
     out.line();
   }
+  ssoNote(providerLabel);
   return 0;
+}
+
+// Not a check -- gid cannot see this coming (docs/DECISIONS.md, "Deliberately
+// not done"). A credential that is otherwise healthy still fails the moment
+// it touches an org it is not SSO-authorized for, and that failure looks
+// identical to a bad token. Printed unconditionally so it is there before it
+// is needed. The exact fix command is gh-specific, so it only names `gh` for
+// a GitHub origin -- gh does not manage auth for any other host.
+function ssoNote(providerLabel: string): void {
+  out.line('  If a push or fetch still fails right after this, the credential may');
+  out.line('  be valid but not yet SSO-authorized for that organisation. Re-authorize it:');
+  out.line(providerLabel === 'GitHub'
+    ? '  gh auth refresh -h <host>, or via the org\'s SSO settings.'
+    : "  check your git host's SSO / conditional-access settings.");
+  out.line();
 }

@@ -72,15 +72,15 @@ export function dim(text: string): string {
 
 /**
  * A reader closing early (`repown help | head -3`) delivers EPIPE on the next
- * write. That is the reader's choice, not a fault in repown, so it is treated as
- * an ordinary end of output rather than left to surface as an unhandled
- * 'error' event and crash with a stack trace.
+ * write. That is the reader's choice, not a fault in repown, so the write is
+ * dropped rather than left to crash with a stack trace -- and NOTHING ELSE
+ * changes. In particular the exit code stands: `git push 2>&1 | true` closes the
+ * hook's stderr, and turning that into exit 0 published the commit it refused.
  */
 export function ignoreBrokenPipe(): void {
   for (const stream of [process.stdout, process.stderr]) {
     stream.on('error', (error: NodeJS.ErrnoException) => {
-      if (error.code !== 'EPIPE') throw error;
-      process.exit(0);
+      if (error.code !== 'EPIPE' && error.code !== 'ERR_STREAM_DESTROYED') throw error;
     });
   }
 }

@@ -6,7 +6,8 @@
 
 import { test, describe, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { readFileSync, existsSync, mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -245,6 +246,22 @@ describe('guard check (the hook contract every installed hook already calls)', (
     const run = repown(['guard', 'check', '--remote', 'origin', '--url', ORIGIN], { cwd: box.dir, input: stdin });
     assert.equal(run.status, 1);
     assert.match(run.stderr, /not authored as/);
+  });
+
+  // `git push 2>&1 | true`: git hands the hook its own stderr, and a reader that
+  // stops early turns the refusal's first write into EPIPE. That must never
+  // become exit 0 -- the hook's exit code is the only thing git obeys.
+  test('a refusal still exits non-zero when nobody is reading its output', async () => {
+    const tree = box.git('rev-parse', 'HEAD^{tree}');
+    const sha = box.git('-c', 'user.email=someone@example.invalid',
+      'commit-tree', tree, '-p', box.git('rev-parse', 'HEAD'), '-m', 'foreign');
+    const child = spawn(process.execPath, [CLI, 'guard', 'check', '--remote', 'origin', '--url', ORIGIN],
+      { cwd: box.dir, stdio: ['pipe', 'pipe', 'pipe'] });
+    child.stdout.destroy();
+    child.stderr.destroy();
+    child.stdin.end(`refs/heads/main ${sha} refs/heads/main ${'0'.repeat(40)}\n`);
+    const [code] = await once(child, 'exit') as [number | null];
+    assert.notEqual(code, 0);
   });
 });
 

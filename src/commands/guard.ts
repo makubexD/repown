@@ -1,29 +1,14 @@
 // The pre-push guard: turning it on, off, and running the check itself.
 //
-// `guard check` is what the hook invokes. It reads the pushed ref lines from
-// stdin and exits non-zero to stop the push.
+// `guard check` is what the installed hook invokes, with the exact syntax baked
+// into every hook already on disk (src/core/guard/hook.ts) -- `--remote` and
+// `--url` on this action are a frozen contract, not just today's flags.
 
 import { installGuard, uninstallGuard, guardState } from '../core/guard/hook.ts';
 import { check, type Refusal } from '../core/guard/check.ts';
-import { flagString, gitFor, type Args } from '../cli.ts';
+import { flagString, gitFor, type Args } from '../ui/args.ts';
+import type { Command, CommandGroup } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
-
-export default {
-  summary: 'check every push before it leaves (gid guard on | off | check)',
-  usage: 'gid guard on | off | status | check',
-
-  async run(args: Args): Promise<number> {
-    const action = args.positional[0] ?? 'status';
-    if (action === 'on' || action === 'enable') return enable(args);
-    if (action === 'off' || action === 'disable') return disable(args);
-    if (action === 'check') return runCheck(args);
-    if (action === 'status') return status(args);
-
-    out.fail('guard', 'Unknown action: ' + action);
-    out.detail('known: on, off, status, check');
-    return 2;
-  },
-};
 
 async function status(args: Args): Promise<number> {
   out.field('push guard', await guardState(gitFor(args)));
@@ -84,3 +69,36 @@ async function readStdin(): Promise<string> {
   for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
   return Buffer.concat(chunks).toString('utf8');
 }
+
+const onAction: Command = {
+  summary: 'install the pre-push hook',
+  examples: ['gid guard on'],
+  run: enable,
+};
+
+const offAction: Command = {
+  summary: 'remove the pre-push hook',
+  examples: ['gid guard off'],
+  run: disable,
+};
+
+const statusAction: Command = {
+  summary: 'show whether the guard is installed',
+  run: status,
+};
+
+const checkAction: Command = {
+  summary: 'run the check the installed hook calls (not for direct use)',
+  options: [
+    { name: 'remote', kind: 'string', default: 'origin', help: 'the remote name being pushed to' },
+    { name: 'url', kind: 'string', default: '', help: 'the remote URL being pushed to' },
+  ],
+  run: runCheck,
+};
+
+export default {
+  summary: 'check every push before it leaves (gid guard on | off | check)',
+  defaultAction: 'status',
+  actions: { on: onAction, off: offAction, status: statusAction, check: checkAction },
+  aliases: { enable: 'on', disable: 'off' },
+} satisfies CommandGroup;

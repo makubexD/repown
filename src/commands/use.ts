@@ -23,21 +23,22 @@ import { lookupAccount, saveAccount, type Account } from '../core/registry.ts';
 import { ghSwitch } from '../core/credential/gh.ts';
 import { allowedOwners } from '../core/guard/check.ts';
 import { ask, interactive } from '../ui/prompt.ts';
-import { flagString, flagBool, gitFor, type Args } from '../cli.ts';
+import { flagString, flagBool, gitFor, type Args } from '../ui/args.ts';
+import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
 export default {
   summary: 'pin this clone to an account (gid use <account>)',
-  usage: 'gid use <account> [--gh] [--name <n>] [--email <e>]',
+  positionals: { min: 1, max: 1, label: '<account>' },
+  options: [
+    { name: 'gh', kind: 'boolean', help: "also switch the GitHub CLI's active account to match" },
+    { name: 'name', kind: 'string', help: 'the commit author name (skips the registry and the prompt)' },
+    { name: 'email', kind: 'string', help: 'the commit author email (skips the registry and the prompt)' },
+  ],
+  examples: ['gid use octocat', 'gid use octocat --gh'],
 
   async run(args: Args): Promise<number> {
-    const account = args.positional[0];
-    if (!account) {
-      out.fail('use', 'Which account? Usage: gid use <account>');
-      out.detail('recorded accounts: gid accounts');
-      return 2;
-    }
-
+    const account = args.positional[0]!;
     const git = gitFor(args);
     const repo = await inspectRepo(git);
     if (!repo.isRepo) { out.fail('use', 'Not a git repository: ' + git.cwd); return 1; }
@@ -59,7 +60,7 @@ export default {
     await reportConcerns(account, repo);
     return 0;
   },
-};
+} satisfies Command;
 
 /** Registry first, then the host, then ask. The registry is why this is usually instant. */
 async function resolveAccount(

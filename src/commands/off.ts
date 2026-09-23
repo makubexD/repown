@@ -7,12 +7,13 @@
 
 import { inspectRepo } from '../core/inspect.ts';
 import { clearIdentity } from '../core/identity.ts';
-import { gitFor, type Args } from '../cli.ts';
+import { gitFor, type Args } from '../ui/args.ts';
+import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
 export default {
   summary: 'unpin this clone (leaves global config alone)',
-  usage: 'gid off',
+  examples: ['gid off'],
 
   async run(args: Args): Promise<number> {
     const git = gitFor(args);
@@ -38,7 +39,7 @@ export default {
     }
     return 0;
   },
-};
+} satisfies Command;
 
 function describe(name: string | null, email: string | null): string {
   if (!name && !email) return 'nothing set anywhere -- git will refuse to commit';

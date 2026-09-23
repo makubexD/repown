@@ -18,10 +18,11 @@
 
 import { readdir } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { Git } from '../core/git.ts';
 import { inspectRepo, type RepoState } from '../core/inspect.ts';
-import { flagBool, flagString, type Args } from '../cli.ts';
+import { flagBool, flagString, type Args } from '../ui/args.ts';
+import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
 interface Found {
@@ -42,13 +43,24 @@ interface Row {
 
 export default {
   summary: 'audit every clone under a directory',
-  usage: 'gid scan <dir>... [--emails] [--depth <n>]',
+  positionals: { min: 0, max: Infinity, label: '<dir>' },
+  options: [
+    { name: 'emails', kind: 'boolean', help: 'show exact addresses instead of domains and counts' },
+    { name: 'depth', kind: 'string', default: '3', help: 'how many directories deep to look for a clone' },
+  ],
+  examples: ['gid scan', 'gid scan ~/code ~/work --emails'],
 
   async run(args: Args): Promise<number> {
-    const roots = args.positional.length > 0 ? args.positional : [process.cwd()];
-    const depth = Number(flagString(args, 'depth') ?? '3');
-    const showEmails = flagBool(args, 'emails');
+    const roots = args.positional.length > 0 ? args.positional : [flagString(args, 'cwd') ?? process.cwd()];
+    const depth = parseDepth(flagString(args, 'depth')!);
+    if (depth === null) {
+      out.fail('scan', `invalid --depth '${flagString(args, 'depth')}': expected a whole number >= 0`);
+      return 2;
+    }
+    const badRoot = roots.map(invalidRoot).find((problem) => problem !== null);
+    if (badRoot) { out.fail('scan', badRoot); return 2; }
 
+    const showEmails = flagBool(args, 'emails');
     const found = (await Promise.all(roots.map((root) => discover(root, root, depth)))).flat();
     if (found.length === 0) {
       out.warn('scan', 'no git repositories found under: ' + roots.join(', '));
@@ -60,7 +72,17 @@ export default {
     render(rows);
     return summarise(rows);
   },
-};
+} satisfies Command;
+
+function parseDepth(raw: string): number | null {
+  return /^\d+$/.test(raw) ? Number(raw) : null;
+}
+
+function invalidRoot(root: string): string | null {
+  if (!existsSync(root)) return 'no such directory: ' + root;
+  if (!statSync(root).isDirectory()) return 'not a directory: ' + root;
+  return null;
+}
 
 async function discover(root: string, path: string, depth: number): Promise<Found[]> {
   if (depth < 0 || !existsSync(path)) return [];

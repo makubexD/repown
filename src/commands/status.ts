@@ -12,12 +12,12 @@
 import { inspectRepo, inspectAuth, activeAccountLabel, type RepoState, type AuthState } from '../core/inspect.ts';
 import { isPinned } from '../core/identity.ts';
 import { allowedOwners } from '../core/guard/check.ts';
-import { gitFor, type Args } from '../cli.ts';
+import { gitFor, type Args } from '../ui/args.ts';
+import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
 export default {
   summary: 'the state of this repository and this machine (the default)',
-  usage: 'gid [status]',
 
   async run(args: Args): Promise<number> {
     const git = gitFor(args);
@@ -41,7 +41,7 @@ export default {
     for (const problem of problems) { out.fail('identity', problem.what); out.detail('fix: ' + problem.fix); }
     return 1;
   },
-};
+} satisfies Command;
 
 function summary(repo: RepoState, auth: AuthState): void {
   const id = repo.identity;

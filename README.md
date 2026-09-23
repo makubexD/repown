@@ -132,6 +132,16 @@ Three separate things decide who you are, and they fail differently. All three
 are printed, because the one that is invisible is the one that catches people
 out.
 
+### Help, and exit codes
+
+`gid --help` lists every command; `gid <command> --help` (or `gid help
+<command>`) shows one command's own options, and for `guard` and `accounts`,
+its actions — `gid guard on --help` goes one level deeper. Asking for help
+never changes anything, no matter what the command itself would otherwise do.
+
+Every command exits `0` on success, `1` on a failure or a refusal, and `2` on
+a usage error — a missing account, an unknown option, or the like.
+
 ## The guard
 
 ```

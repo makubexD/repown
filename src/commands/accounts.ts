@@ -6,24 +6,9 @@
 import { loadRegistry, saveAccount, removeAccount, registryPath, type Account } from '../core/registry.ts';
 import { providers } from '../core/hosts/index.ts';
 import { ask } from '../ui/prompt.ts';
-import { flagString, type Args } from '../cli.ts';
+import { flagString, type Args } from '../ui/args.ts';
+import type { Command, CommandGroup } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
-
-export default {
-  summary: 'list or record the accounts this machine knows',
-  usage: 'gid accounts [add <account> [--name <n>] [--email <e>] [--host <id>]] [rm <account>]',
-
-  async run(args: Args): Promise<number> {
-    const action = args.positional[0] ?? 'list';
-    if (action === 'add') return add(args);
-    if (action === 'rm' || action === 'remove') return remove(args);
-    if (action === 'list') return list();
-
-    out.fail('accounts', 'Unknown action: ' + action);
-    out.detail('known: list, add, rm');
-    return 2;
-  },
-};
 
 async function list(): Promise<number> {
   const registry = await loadRegistry();
@@ -53,12 +38,7 @@ function hostSuffix(entry: Account): string {
 }
 
 async function add(args: Args): Promise<number> {
-  const account = args.positional[1];
-  if (!account) {
-    out.fail('accounts', 'Which account? Usage: gid accounts add <account>');
-    return 2;
-  }
-
+  const account = args.positional[0]!;
   const hostId = flagString(args, 'host') ?? 'github';
   const suggested = await suggestProfile(hostId, account);
 
@@ -93,11 +73,7 @@ async function askFor(label: string, suggestion?: string): Promise<string | null
 }
 
 async function remove(args: Args): Promise<number> {
-  const account = args.positional[1];
-  if (!account) {
-    out.fail('accounts', 'Which account? Usage: gid accounts rm <account>');
-    return 2;
-  }
+  const account = args.positional[0]!;
   const removed = await removeAccount(account);
   if (!removed.ok) { out.fail('accounts', removed.error); return 1; }
   if (!removed.value) { out.warn('accounts', account + ' was not recorded.'); return 0; }
@@ -109,3 +85,38 @@ async function remove(args: Args): Promise<number> {
   out.line();
   return 0;
 }
+
+const listAction: Command = {
+  summary: 'list the accounts this machine knows',
+  run: () => list(),
+};
+
+const addAction: Command = {
+  summary: 'record an account (asks for name/email once, then remembers)',
+  positionals: { min: 1, max: 1, label: '<account>' },
+  options: [
+    { name: 'name', kind: 'string', help: 'the commit author name' },
+    { name: 'email', kind: 'string', help: 'the commit author email' },
+    {
+      name: 'host', kind: 'string', default: 'github',
+      choices: providers().map((provider) => provider.id),
+      help: 'which host this account belongs to',
+    },
+  ],
+  examples: ['gid accounts add octocat'],
+  run: add,
+};
+
+const rmAction: Command = {
+  summary: 'forget a recorded account (clones already pinned to it are unaffected)',
+  positionals: { min: 1, max: 1, label: '<account>' },
+  examples: ['gid accounts rm octocat'],
+  run: remove,
+};
+
+export default {
+  summary: 'list or record the accounts this machine knows',
+  defaultAction: 'list',
+  actions: { list: listAction, add: addAction, rm: rmAction },
+  aliases: { remove: 'rm' },
+} satisfies CommandGroup;

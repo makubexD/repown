@@ -8,12 +8,17 @@
 import { inspectAuth } from '../core/inspect.ts';
 import { planRepair, repair, describeValue, type RemovalOutcome } from '../core/credential/repair.ts';
 import { confirm, interactive } from '../ui/prompt.ts';
-import { flagBool, gitFor, type Args } from '../cli.ts';
+import { flagBool, gitFor, type Args } from '../ui/args.ts';
+import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
 export default {
   summary: 'undo `gh auth setup-git` so per-repo account pins work again',
-  usage: 'gid fix [--yes] [--dry-run]',
+  options: [
+    { name: 'yes', kind: 'boolean', help: 'remove the entries without asking to confirm' },
+    { name: 'dry-run', kind: 'boolean', help: 'show what would be removed and stop there' },
+  ],
+  examples: ['gid fix', 'gid fix --dry-run'],
 
   async run(args: Args): Promise<number> {
     const git = gitFor(args);
@@ -38,7 +43,7 @@ export default {
 
     return apply(await repair(git), git);
   },
-};
+} satisfies Command;
 
 function preview(planned: readonly RemovalOutcome[]): void {
   out.line();

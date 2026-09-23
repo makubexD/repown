@@ -351,11 +351,12 @@ in fact perfectly safe.
 | --- | --- | --- | --- |
 | A commit in the pushed range has a foreign author | **refuse** | not its job | Irreversible once published |
 | No identity pinned in this clone | **refuse** | **fail** | The next commit inherits the machine's identity |
-| `GH_TOKEN` / `GIT_AUTHOR_EMAIL` set | **refuse** | — | Silently outranks the config just validated |
+| `GH_TOKEN`, `GITHUB_TOKEN`, `GIT_AUTHOR_EMAIL` or `GIT_COMMITTER_EMAIL` set | **refuse** | — | Silently outranks the config just validated |
 | Push destination is not this account's | **refuse** | **warn** | Wrong repository entirely; `repown` only warns because an organisation owner may simply need `repown.allowOwner` |
 | gh is the git credential helper | — | **fail** | Cannot forge a commit; it only breaks authentication |
 | gh active as another account | — | **warn** | Affects `gh pr create`, never the push |
 | gh could not be queried | — | **warn** | Unknown, and said so rather than skipped |
+| No pre-push hook installed (guard off) | — | **warn** | Nothing checks the push |
 | A foreign pre-push hook is installed | — | **warn** | Someone else's hook; left alone |
 
 The rule this encodes: **a check that was skipped must never look like one that
@@ -381,13 +382,16 @@ passed.** Every "unknown" above is printed, never omitted.
 any account, host or sign-in method, can be returned to without switching anything.
 The name is also free on npm, which a shorter one often isn't.
 
-A pre-push hook is repown's only if its `# repown-identity-guard:` header sits on
-the line right after the shebang, exactly where `guard on` writes it. Every other
+A pre-push hook is repown's only if its second line starts with
+`# repown-identity-guard:`, exactly where `guard on` writes it (right after the
+shebang). Every other
 hook is **foreign**, and `guard on` and `guard off` leave it alone. That includes a
 hook that merely mentions the marker, one with repown's body pasted below lines of
 its own, and hooks left by other identity tools, even ones that look similar.
 Overwriting or deleting a hook we can't prove we wrote could silently remove
 someone else's check.
+
+---
 
 ## Residual risks, stated plainly
 

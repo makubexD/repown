@@ -28,8 +28,8 @@ export const MARKER = 'repown-identity-guard';
 export type GuardState = 'off' | 'foreign' | 'on';
 
 /**
- * A marker counts only where this tool writes it: the header comment on the line right
- * after the shebang, `# <marker>:`. A hook that merely MENTIONS it, or that has this
+ * A marker counts only where this tool writes it: line 2 (right after the shebang)
+ * starts with `# <marker>:`. A hook that merely MENTIONS it, or that has this
  * tool's body pasted below lines of its own, is someone else's -- and a hook classified
  * as ours gets overwritten by `guard on` and deleted by `guard off`.
  */

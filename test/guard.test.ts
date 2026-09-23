@@ -1,5 +1,5 @@
 // The scenario matrix. Every one of these passed against the PowerShell guard
-// this replaces; the rewrite is not trusted until they pass again.
+// this replaced; the rewrite is not trusted until they pass again.
 //
 // Commits are made with `git commit-tree`, which writes a commit object WITHOUT
 // moving HEAD or touching the working tree. That is what makes it safe to build

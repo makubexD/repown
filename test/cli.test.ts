@@ -7,7 +7,7 @@
 import { test, describe, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -258,6 +258,15 @@ describe('status in a clone pushing to an organisation', () => {
     box.git('config', '--local', 'credential.https://github.com.username', 'octocat');
     const run = repown([], { cwd: box.dir });
     assert.match(run.stderr, /git config --local --add repown\.allowOwner An-Org/);
+  });
+
+  test('a hook repown did not write is reported with what to do about it', () => {
+    mkdirSync(join(box.dir, '.git', 'hooks'), { recursive: true });
+    writeFileSync(join(box.dir, '.git', 'hooks', 'pre-push'), '#!/bin/sh\nexit 0\n');
+    const run = repown([], { cwd: box.dir });
+    assert.match(run.stdout, /push guard\s+foreign/);
+    assert.match(run.stderr, /repown did not write/);
+    assert.match(run.stderr, /delete \.git\/hooks\/pre-push, then run: repown guard on/);
   });
 });
 

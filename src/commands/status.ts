@@ -118,5 +118,6 @@ function guardWarning(repo: RepoState): void {
     out.warn('guard', 'off -- pushes are not checked. Enable it: repown guard on');
   } else {
     out.warn('guard', 'a pre-push hook repown did not write is installed; it was left alone.');
+    out.detail('read it first; if it is safe to drop, delete .git/hooks/pre-push, then run: repown guard on');
   }
 }

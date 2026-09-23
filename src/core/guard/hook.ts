@@ -17,7 +17,7 @@
 // was checked out.
 
 import { readFile, writeFile, mkdir, rm, chmod } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Git } from '../git.ts';
@@ -44,35 +44,54 @@ export function entryPoint(): string {
   return join(dirname(here), '..', '..', 'cli' + here.slice(here.lastIndexOf('.')));
 }
 
+/** This clone's own hooks directory, and the one git actually runs hooks from. */
+interface HookDirs {
+  readonly own: string;
+  readonly effective: string;
+}
+
+/** git may answer relative to the directory it ran in; both are made absolute against it. */
+async function hookDirs(git: Git): Promise<HookDirs | null> {
+  const [common, hooks] = await Promise.all([git.commonDir(), git.hooksDir()]);
+  if (!common || !hooks) return null;
+  return { own: join(resolve(git.cwd, common), 'hooks'), effective: resolve(git.cwd, hooks) };
+}
+
 /** The pre-push hook git will actually RUN -- through core.hooksPath if that is set. */
 export async function hookPath(git: Git): Promise<string | null> {
-  const hooks = await git.hooksDir();
-  return hooks ? join(resolve(hooks), 'pre-push') : null;
+  const dirs = await hookDirs(git);
+  return dirs ? join(dirs.effective, 'pre-push') : null;
 }
 
 /**
  * core.hooksPath pointing anywhere but this clone's own hooks directory: a
  * directory another tool manages, or one shared by every repository on the
- * machine. repown never writes there -- a hook in a shared directory would run,
- * and refuse, in clones that were never pinned.
+ * machine. repown never writes or deletes there -- a hook in a shared directory
+ * would run, and refuse, in clones that were never pinned.
  */
-async function redirectedHooks(git: Git): Promise<string | null> {
-  const [common, hooks] = await Promise.all([git.commonDir(), git.hooksDir()]);
-  if (!common || !hooks) return null;
-  return samePath(join(common, 'hooks'), hooks) ? null : resolve(hooks);
+function isRedirected(dirs: HookDirs): boolean {
+  return !samePath(dirs.own, dirs.effective);
 }
 
+/** Compared as real paths, so a symlinked .git/hooks and Windows 8.3 names match. */
 function samePath(a: string, b: string): boolean {
-  const norm = (path: string): string => resolve(path).toLowerCase();
-  return process.platform === 'win32' || process.platform === 'darwin'
-    ? norm(a) === norm(b)
-    : resolve(a) === resolve(b);
+  const real = (path: string): string => {
+    try { return realpathSync.native(path); } catch { return resolve(path); }
+  };
+  const [x, y] = [real(a), real(b)];
+  const folded = process.platform === 'win32' || process.platform === 'darwin';
+  return folded ? x.toLowerCase() === y.toLowerCase() : x === y;
+}
+
+function redirectMessage(dirs: HookDirs): string {
+  return 'core.hooksPath makes git run hooks from ' + dirs.effective + ', a directory repown ' +
+         'does not own -- leaving it alone. Unset core.hooksPath, or have that tool\'s ' +
+         'pre-push hook run: repown guard check --remote "$1" --url "$2"';
 }
 
 export async function guardState(git: Git): Promise<GuardState> {
   const path = await hookPath(git);
-  if (!path || !existsSync(path)) return 'off';
-  return classify(await readFile(path, 'utf8').catch(() => ''));
+  return path ? stateOf(path) : 'off';
 }
 
 /**
@@ -130,11 +149,21 @@ export interface InstallOutcome {
   readonly path: string;
 }
 
+const NO_GIT_DIR = 'could not locate the git directory for this repository';
+
+async function stateOf(path: string): Promise<GuardState> {
+  if (!existsSync(path)) return 'off';
+  return classify(await readFile(path, 'utf8').catch(() => ''));
+}
+
 export async function installGuard(git: Git): Promise<Result<InstallOutcome>> {
-  const path = await hookPath(git);
-  if (!path) return err('could not locate the git directory for this repository');
-  const refusal = await whyNotInstall(git, path);
-  if (refusal) return err(refusal);
+  const dirs = await hookDirs(git);
+  if (!dirs) return err(NO_GIT_DIR);
+  if (isRedirected(dirs)) return err(redirectMessage(dirs));
+  const path = join(dirs.effective, 'pre-push');
+  if (await stateOf(path) === 'foreign') {
+    return err('a pre-push hook this tool did not write already exists at ' + path + ' -- leaving it alone');
+  }
 
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, hookBody(entryPoint(), process.execPath), 'utf8');
@@ -142,24 +171,21 @@ export async function installGuard(git: Git): Promise<Result<InstallOutcome>> {
   return ok({ path });
 }
 
-async function whyNotInstall(git: Git, path: string): Promise<string | null> {
-  const redirected = await redirectedHooks(git);
-  if (redirected) {
-    return 'core.hooksPath makes git run hooks from ' + redirected + ', a directory repown ' +
-           'does not own -- leaving it alone. Unset core.hooksPath, or have that tool\'s ' +
-           'pre-push hook run: repown guard check --remote "$1" --url "$2"';
-  }
-  if (await guardState(git) === 'foreign') {
-    return 'a pre-push hook this tool did not write already exists at ' + path + ' -- leaving it alone';
-  }
-  return null;
+/**
+ * Deletes only a hook repown can prove it wrote, and only from this clone's own
+ * hooks directory. With core.hooksPath set, a repown hook left in .git/hooks is
+ * still removed -- it would come back to life the moment the key is unset.
+ */
+export async function uninstallGuard(git: Git): Promise<Result<boolean>> {
+  const dirs = await hookDirs(git);
+  if (!dirs) return err(NO_GIT_DIR);
+  const removed = await removeIfOurs(join(dirs.own, 'pre-push'));
+  if (!removed.ok || removed.value || !isRedirected(dirs)) return removed;
+  return existsSync(join(dirs.effective, 'pre-push')) ? err(redirectMessage(dirs)) : ok(false);
 }
 
-export async function uninstallGuard(git: Git): Promise<Result<boolean>> {
-  const path = await hookPath(git);
-  if (!path) return err('could not locate the git directory for this repository');
-  const state = await guardState(git);
-
+async function removeIfOurs(path: string): Promise<Result<boolean>> {
+  const state = await stateOf(path);
   if (state === 'off') return ok(false);
   if (state === 'foreign') {
     return err('the pre-push hook at ' + path + ' was not written by this tool -- leaving it alone');

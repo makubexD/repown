@@ -233,6 +233,18 @@ describe('guard check, pushing to a branch the remote already has', () => {
     });
     assert.equal(refusals.length, 1);
     assert.match(refusals[0]!.reason, /not authored as/);
+    assert.ok(refusals[0]!.detail.some((row) => row.includes('git fetch')),
+              'a wider range than usual was checked, and the refusal says how to narrow it');
+  });
+
+  test('a remote tip this clone HAS keeps the narrow range: only the new commits count', async () => {
+    const earlier = commitAs(THEIRS, 'pushed long ago, tracking ref since pruned', [base]);
+    const ours = commitAs(OURS, 'the only new commit', [earlier]);
+    const refusals = await check({
+      git, remote: 'origin', url: ORIGIN,
+      stdin: `refs/heads/release ${ours} refs/heads/release ${earlier}\n`,
+    });
+    assert.deepEqual(refusals, [], 'the remote already has `earlier`: it says so in remoteSha');
   });
 
   test('commits that cannot be read are REFUSED, never passed as clean', async () => {
@@ -378,6 +390,23 @@ describe('only a hook repown wrote is repown\'s', () => {
     assert.match(installed.ok ? '' : installed.error, /core\.hooksPath/);
     assert.equal(existsSync(hook()), false, 'nothing written to .git/hooks');
     assert.equal(existsSync(join(shared, 'pre-push')), false, 'nothing written to the shared directory');
+  });
+
+  test('with core.hooksPath set, `guard off` never deletes from the redirected directory', async () => {
+    const shared = join(box.dir, 'shared-hooks');
+    mkdirSync(shared, { recursive: true });
+    writeFileSync(join(shared, 'pre-push'), hookBody('a', 'b'));
+    box.git('config', '--local', 'core.hooksPath', shared);
+    assert.equal((await uninstallGuard(git)).ok, false);
+    assert.equal(existsSync(join(shared, 'pre-push')), true, 'a directory repown does not own is left alone');
+  });
+
+  test('with core.hooksPath set, `guard off` still removes repown\'s own leftover in .git/hooks', async () => {
+    writeHook(hookBody('a', 'b'));
+    box.git('config', '--local', 'core.hooksPath', join(box.dir, 'elsewhere'));
+    const removed = await uninstallGuard(git);
+    assert.ok(removed.ok && removed.value, 'it would come back the moment core.hooksPath is unset');
+    assert.equal(existsSync(hook()), false);
   });
 
   test('our own hook checked out with CRLF line endings is still ours', async () => {

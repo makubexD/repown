@@ -202,7 +202,10 @@ The exemption is narrower than skipping the branch. On the mirror branch, a comm
 already on **any** remote-tracking ref, upstream's included, doesn't count, because
 it's public already. A commit on no remote was made here, and it's still checked.
 Skipping the branch outright let `git push origin feature:master` publish anything.
-So fetch upstream before pushing the mirror.
+So fetch upstream before pushing the mirror. The known gap is a **private**
+remote: a commit only a private remote carries isn't public, yet on the mirror
+branch it doesn't count. Naming the upstream remote in its own key would close
+that gap, but at the cost of one more setting for a case no user has.
 
 ---
 
@@ -402,9 +405,14 @@ The hook that counts is the one git will **run**. `core.hooksPath`, which husky,
 git-secrets and corporate tooling set, moves that out of `.git/hooks`. A repown
 hook left in `.git/hooks` would then read `on` while every push goes unchecked. So
 the state is read from `git rev-parse --git-path hooks`. When that is anywhere
-else, `guard on` refuses: the directory belongs to another tool, or to every
-repository on the machine, where a pinned-identity hook would refuse pushes in
-clones that were never pinned.
+else, neither `guard on` nor `guard off` touches it. The directory belongs to
+another tool, or to every repository on the machine, and a pinned-identity hook
+there would refuse pushes in clones that were never pinned. `guard off` still
+removes a repown hook in `.git/hooks`, which would otherwise come back the moment
+`core.hooksPath` is unset. The paths are compared as real paths, so a
+symlinked `.git/hooks` is not mistaken for a redirect. They are read without
+`--path-format`, because that needs git 2.31. Older git echoes an unknown flag
+back and exits 0, which would make a path nobody runs hooks from look installed.
 
 ---
 

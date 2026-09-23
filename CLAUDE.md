@@ -49,7 +49,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   (index.ts). `generic` stays last.
 - The hook (`src/core/guard/hook.ts`) is LF-only. It calls the installed CLI's absolute path,
   falls back to PATH, and refuses if neither runs. Its location is where git runs hooks
-  (`rev-parse --git-path hooks`, which honours `core.hooksPath`), never a hardcoded `.git/hooks`. `check.ts` inspects the author and
+  (`rev-parse --git-path hooks`, which honours `core.hooksPath`), never a hardcoded `.git/hooks`.
+  Don't add `--path-format`: git before 2.31 echoes it back and exits 0. `check.ts` inspects the author and
   committer of every commit in the pushed range read from stdin (excluding what the remote
   already has), not the current config.
 - `src/ui/format.ts`: payload (`pass`/`line`/`field`) goes to stdout; `warn`/`fail`/`detail`

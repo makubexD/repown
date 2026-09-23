@@ -220,9 +220,10 @@ It ignores credential problems, because a failed authentication publishes
 nothing; `repown` and `repown doctor` warn about those instead
 ([§8](docs/DECISIONS.md#8-what-refuses-and-what-only-warns)). If a `pre-push` hook
 that repown didn't write already exists, `repown guard on` and `repown guard off` leave it
-alone. The same goes when `core.hooksPath` sends git to another hooks directory
-(husky sets it, for example). The guard reports what git will actually run, and
-`repown guard on` refuses to write into a directory it doesn't own. To guard such a
+alone. `core.hooksPath` (husky sets it, for example) can send git to another hooks
+directory. repown then reports the hook git will actually run, and
+`repown guard on` / `repown guard off` never write to or delete from that directory.
+`repown guard off` still removes a repown hook left in `.git/hooks`. To guard such a
 clone, have that tool's `pre-push` hook run
 `repown guard check --remote "$1" --url "$2"`.
 
@@ -235,7 +236,8 @@ git config --local --add repown.allowOwner An-Org    # another owner you may pus
 
 Unset `repown.mirrorBranch` means no exemption. On the mirror branch, commits
 already on any remote (fetched from upstream, say) don't count, but a commit made
-here and on no remote is still refused. An organisation is never an account
+here and on no remote is still refused. "Any remote" includes private ones, so a
+clone with a private remote shouldn't set a mirror branch. An organisation is never an account
 name, so organisation repositories need `repown.allowOwner`; `repown use` prints the
 exact command when it sees an unknown owner.
 

@@ -73,16 +73,18 @@ export class Git {
    * path that cannot be written to. `--git-common-dir` is the only right answer.
    */
   async commonDir(): Promise<string | null> {
-    // Absolute, and spelled by git the same way hooksDir() is, so the two compare.
-    return output(await this.exec(['rev-parse', '--path-format=absolute', '--git-common-dir']));
+    return output(await this.exec(['rev-parse', '--git-common-dir']));
   }
 
   /**
    * The directory git will actually run hooks from: `core.hooksPath` when it is
-   * set (husky and friends set it), otherwise the common dir's `hooks`.
+   * set (husky and friends set it), otherwise the common dir's `hooks`. May be
+   * relative to `cwd`, like commonDir(). NOT `--path-format=absolute`: that needs
+   * git 2.31, and older git echoes the unknown flag back and exits 0, which
+   * would turn the answer into a path nobody runs hooks from.
    */
   async hooksDir(): Promise<string | null> {
-    return output(await this.exec(['rev-parse', '--path-format=absolute', '--git-path', 'hooks']));
+    return output(await this.exec(['rev-parse', '--git-path', 'hooks']));
   }
 
   /** null when HEAD is detached, which callers must handle rather than assume. */

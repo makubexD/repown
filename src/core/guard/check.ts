@@ -145,7 +145,7 @@ async function checkCommits(input: CheckInput, expected: string): Promise<Refusa
   for (const ref of parsePushRefs(input.stdin)) {
     if (ref.localSha === ZERO) continue;              // a deletion publishes nothing
     const exclude = mirror && ref.remoteRef === 'refs/heads/' + mirror
-      ? ['--not', '--remotes']                          // public on ANY remote: upstream's
+      ? ['--not', '--remotes']                          // mirror: on any remote, upstream included
       : ['--not', '--remotes=' + input.remote];
     refusals.push(...await checkRange(input, { ref, exclude }, expected));
   }
@@ -182,10 +182,12 @@ interface Pushed {
  * remote-tracking ref -- a branch deleted or force-pushed on the server -- can
  * exclude a commit that is no longer really published. `git fetch --prune`
  * corrects it, and the new-branch path has always carried the same exposure.
+ * The mirror's wider exclusion adds one more: a commit that only a PRIVATE
+ * remote carries (a work remote, say) is not public, yet does not count there.
  */
-
 async function checkRange(input: CheckInput, { ref, exclude }: Pushed, expected: string): Promise<Refusal[]> {
-  const commits = await input.git.identitiesIn(await rangeFor(input.git, ref, exclude));
+  const range = await rangeFor(input.git, ref, exclude);
+  const commits = await input.git.identitiesIn(range);
   if (!commits.ok) {
     return [{
       reason: 'The guard could not read the commits bound for ' + ref.remoteRef +
@@ -195,7 +197,12 @@ async function checkRange(input: CheckInput, { ref, exclude }: Pushed, expected:
   }
   const foreign = commits.value.filter((commit) =>
     !matches(commit.authorEmail, expected) || !matches(commit.committerEmail, expected));
-  return foreign.length === 0 ? [] : [foreignRefusal(ref, foreign, expected)];
+  if (foreign.length === 0) return [];
+  const refusal = foreignRefusal(ref, foreign, expected);
+  // The remote's tip was not here, so every commit it lacks locally was checked;
+  // some of those may well be on the remote already.
+  const widened = ref.remoteSha !== ZERO && range[0] === ref.localSha;
+  return [widened ? { ...refusal, detail: [...refusal.detail, 'if they are already on the remote: git fetch, then push again'] } : refusal];
 }
 
 /**

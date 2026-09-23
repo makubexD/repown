@@ -18,7 +18,7 @@
 
 import { readFile, writeFile, mkdir, rm, chmod } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, dirname, isAbsolute } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Git } from '../git.ts';
 import { ok, err, type Result } from '../result.ts';
@@ -44,14 +44,29 @@ export function entryPoint(): string {
   return join(dirname(here), '..', '..', 'cli' + here.slice(here.lastIndexOf('.')));
 }
 
-function absoluteCommonDir(common: string, cwd: string): string {
-  return isAbsolute(common) ? common : join(cwd, common);
+/** The pre-push hook git will actually RUN -- through core.hooksPath if that is set. */
+export async function hookPath(git: Git): Promise<string | null> {
+  const hooks = await git.hooksDir();
+  return hooks ? join(resolve(hooks), 'pre-push') : null;
 }
 
-export async function hookPath(git: Git): Promise<string | null> {
-  const common = await git.commonDir();
-  if (!common) return null;
-  return join(absoluteCommonDir(common, git.cwd), 'hooks', 'pre-push');
+/**
+ * core.hooksPath pointing anywhere but this clone's own hooks directory: a
+ * directory another tool manages, or one shared by every repository on the
+ * machine. repown never writes there -- a hook in a shared directory would run,
+ * and refuse, in clones that were never pinned.
+ */
+async function redirectedHooks(git: Git): Promise<string | null> {
+  const [common, hooks] = await Promise.all([git.commonDir(), git.hooksDir()]);
+  if (!common || !hooks) return null;
+  return samePath(join(common, 'hooks'), hooks) ? null : resolve(hooks);
+}
+
+function samePath(a: string, b: string): boolean {
+  const norm = (path: string): string => resolve(path).toLowerCase();
+  return process.platform === 'win32' || process.platform === 'darwin'
+    ? norm(a) === norm(b)
+    : resolve(a) === resolve(b);
 }
 
 export async function guardState(git: Git): Promise<GuardState> {
@@ -118,16 +133,26 @@ export interface InstallOutcome {
 export async function installGuard(git: Git): Promise<Result<InstallOutcome>> {
   const path = await hookPath(git);
   if (!path) return err('could not locate the git directory for this repository');
-
-  if (await guardState(git) === 'foreign') {
-    return err('a pre-push hook this tool did not write already exists at ' + path +
-               ' -- leaving it alone');
-  }
+  const refusal = await whyNotInstall(git, path);
+  if (refusal) return err(refusal);
 
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, hookBody(entryPoint(), process.execPath), 'utf8');
   await chmod(path, 0o755).catch(() => { /* Windows filesystems carry no mode */ });
   return ok({ path });
+}
+
+async function whyNotInstall(git: Git, path: string): Promise<string | null> {
+  const redirected = await redirectedHooks(git);
+  if (redirected) {
+    return 'core.hooksPath makes git run hooks from ' + redirected + ', a directory repown ' +
+           'does not own -- leaving it alone. Unset core.hooksPath, or have that tool\'s ' +
+           'pre-push hook run: repown guard check --remote "$1" --url "$2"';
+  }
+  if (await guardState(git) === 'foreign') {
+    return 'a pre-push hook this tool did not write already exists at ' + path + ' -- leaving it alone';
+  }
+  return null;
 }
 
 export async function uninstallGuard(git: Git): Promise<Result<boolean>> {

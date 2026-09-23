@@ -13,7 +13,7 @@ import { sandbox, type Sandbox } from './helpers.ts';
 import { Git } from '../src/core/git.ts';
 import { check, parsePushRefs } from '../src/core/guard/check.ts';
 import { hookBody, MARKER, guardState, installGuard, uninstallGuard } from '../src/core/guard/hook.ts';
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join, delimiter } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -359,6 +359,25 @@ describe('only a hook repown wrote is repown\'s', () => {
     writeHook(OTHER_GUARD_HOOK);
     assert.equal((await uninstallGuard(git)).ok, false);
     assert.equal(readFileSync(hook(), 'utf8'), OTHER_GUARD_HOOK);
+  });
+
+  // core.hooksPath (husky, git-secrets, corporate tooling) makes git run hooks
+  // from another directory. A hook in .git/hooks is then never run, so reporting
+  // it as 'on' is a skipped check that looks like a passed one.
+  test('with core.hooksPath elsewhere, our hook in .git/hooks is not reported as on', async () => {
+    writeHook(hookBody('a', 'b'));
+    box.git('config', '--local', 'core.hooksPath', join(box.dir, 'elsewhere'));
+    assert.equal(await guardState(git), 'off');
+  });
+
+  test('with core.hooksPath set, `guard on` refuses rather than write where git does not look', async () => {
+    const shared = join(box.dir, 'shared-hooks');
+    box.git('config', '--local', 'core.hooksPath', shared);
+    const installed = await installGuard(git);
+    assert.equal(installed.ok, false);
+    assert.match(installed.ok ? '' : installed.error, /core\.hooksPath/);
+    assert.equal(existsSync(hook()), false, 'nothing written to .git/hooks');
+    assert.equal(existsSync(join(shared, 'pre-push')), false, 'nothing written to the shared directory');
   });
 
   test('our own hook checked out with CRLF line endings is still ours', async () => {

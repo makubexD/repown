@@ -398,6 +398,14 @@ its own, and hooks left by other identity tools, even ones that look similar.
 Overwriting or deleting a hook we can't prove we wrote could silently remove
 someone else's check.
 
+The hook that counts is the one git will **run**. `core.hooksPath`, which husky,
+git-secrets and corporate tooling set, moves that out of `.git/hooks`. A repown
+hook left in `.git/hooks` would then read `on` while every push goes unchecked. So
+the state is read from `git rev-parse --git-path hooks`. When that is anywhere
+else, `guard on` refuses: the directory belongs to another tool, or to every
+repository on the machine, where a pinned-identity hook would refuse pushes in
+clones that were never pinned.
+
 ---
 
 ## Residual risks, stated plainly

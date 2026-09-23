@@ -220,7 +220,11 @@ It ignores credential problems, because a failed authentication publishes
 nothing; `repown` and `repown doctor` warn about those instead
 ([§8](docs/DECISIONS.md#8-what-refuses-and-what-only-warns)). If a `pre-push` hook
 that repown didn't write already exists, `repown guard on` and `repown guard off` leave it
-alone.
+alone. The same goes when `core.hooksPath` sends git to another hooks directory
+(husky sets it, for example). The guard reports what git will actually run, and
+`repown guard on` refuses to write into a directory it doesn't own. To guard such a
+clone, have that tool's `pre-push` hook run
+`repown guard check --remote "$1" --url "$2"`.
 
 Two repo-local keys adjust it:
 

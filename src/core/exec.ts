@@ -48,8 +48,13 @@ export function run(
       env: options.env ?? process.env,
       shell: false,
       windowsHide: true,
-      timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     });
+
+    // Our own timer, NOT spawn's `timeout` option. Node clears that one only on
+    // 'exit', which a spawn that fails (ENOENT) never emits -- so every probe for
+    // a binary that is not on PATH held the process open for the full 30 s after
+    // the command had already printed its answer.
+    const timer = setTimeout(() => child.kill(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
     let stdout = '';
     let stderr = '';
@@ -59,9 +64,11 @@ export function run(
     child.stderr.on('data', (chunk: string) => { stderr += chunk; });
 
     child.on('error', (error: NodeJS.ErrnoException) => {
+      clearTimeout(timer);
       resolve({ code: -1, stdout, stderr, spawnError: error });
     });
     child.on('close', (code) => {
+      clearTimeout(timer);
       resolve({ code: code ?? -1, stdout, stderr });
     });
 

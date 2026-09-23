@@ -1,16 +1,24 @@
 # repown
 
+[![CI](https://github.com/makubexD/repown/actions/workflows/ci.yml/badge.svg)](https://github.com/makubexD/repown/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Node >= 20](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)
+![Status: pre-1.0](https://img.shields.io/badge/status-pre--1.0-orange.svg)
+
 **Use several git accounts on one machine, and move between their repositories
-with no switch command.** Each clone commits and pushes as its own account, so
-you can go from a work repo to a personal one to a client one and every push is
-authenticated as the right account. A push carrying the wrong identity is refused
-before it leaves.
+with no switch command.** Each repo owns its identity (that's the name: *repo
+own*), so you can go from a work repo to a personal one to a client one, on
+different hosts or sign-in methods, and every commit and push goes out as the
+right account. A push carrying the wrong identity is refused before it leaves.
 
 ```
-repown doctor             # once per machine: is git's credential helper ready?
-repown use octocat        # once per clone: this clone is octocat's
-repown guard on           # refuse any push that carries another identity
+repown doctor          # once per machine: is git's credential helper ready?
+repown use octocat     # once per clone: this clone is octocat's
+repown guard on        # refuse any push that carries another identity
 ```
+
+> **Status:** pre-1.0. The commands may still change, and it isn't on npm yet.
+> Formerly named `gid`; see [Upgrading from gid](#upgrading-from-gid).
 
 ## The problem
 
@@ -31,6 +39,19 @@ repown guard on           # refuse any push that carries another identity
   `gh` stays your account store for `gh pr create` and `gh api`.
 - **Guard every push:** `repown guard on` installs a `pre-push` hook that checks the
   commits themselves, not just today's config.
+
+## Compared with the alternatives
+
+| Approach | Right commit identity | Right push credential | Checked before push | Catch |
+| --- | --- | --- | --- | --- |
+| `git config user.email` by hand in each repo | yes, if you never forget | no | no | Forgetting once publishes the wrong address permanently |
+| `includeIf "gitdir:~/work/"` in global config | yes, by folder | only if you also add the credential key per folder | no | Depends on where a repo happens to be cloned; a clone anywhere else inherits the default |
+| SSH host aliases (`git@github-work:...`) | no | yes | no | Every remote URL has to be rewritten, and keys managed per account |
+| `gh auth switch` | no | while gh is the helper, only the *active* account | no | Machine-wide: it breaks the other account's repos ([§1](docs/DECISIONS.md#1-git-credentials-come-from-the-credential-manager-gh-is-for-the-cli)) |
+| **repown** | yes, per clone | yes, per clone (GitHub) | yes, every commit in the push | Run once per clone; credential pinning is GitHub-only today ([Hosts](#hosts)) |
+
+repown doesn't replace these tools. It writes plain repo-local git config, uses the
+credential manager you already have, and leaves `gh` in charge of the GitHub CLI.
 
 ## Install
 
@@ -234,6 +255,53 @@ everywhere. Credential pinning is claimed only where it was measured.
 On Linux and macOS the registry is `$XDG_CONFIG_HOME/repown` (default
 `~/.config/repown`). `REPOWN_CONFIG_DIR` overrides it everywhere.
 
+## FAQ
+
+**A push asked me for a password.** Run `repown doctor`. Usually `gh auth setup-git`
+made gh the credential helper, which serves only gh's *active* account; `repown fix`
+hands the host back to the credential manager (it shows the undo first). If
+`repown use` said "No stored credential yet", that first push signs in once and is
+remembered from then on.
+
+**The guard refused a push, but the commit is mine.** The guard compares each commit's
+author *and* committer address with the clone's pinned email. A commit made before
+`repown use`, or by an IDE with its own identity, carries the old address. For the
+last commit, `git commit --amend --reset-author --no-edit` re-stamps it. For a few
+commits, rebase onto the last good one with
+`--exec "git commit --amend --reset-author --no-edit"`. If a foreign commit is
+legitimate (a colleague's), this is a shared repo and the guard shouldn't be on
+([The guard](#the-guard)).
+
+**Pushes to my organisation's repo are refused.** An organisation is never an
+account name. `repown use` and `repown` print the exact
+`git config --local --add repown.allowOwner <org>` to run.
+
+**My organisation uses SSO and the push failed with an authorization error.** A
+credential can be valid and still not authorized for an SSO organisation. Nothing
+can see that in advance ([residual risks](docs/DECISIONS.md#residual-risks-stated-plainly)).
+Authorize that credential for the organisation on GitHub, then push again.
+
+**Does it work with Azure DevOps or another host?** Commit identity and the guard
+work on every host. Choosing the push credential per clone is GitHub-only for now.
+Elsewhere it's left to whatever already serves that host ([Hosts](#hosts)).
+
+### Upgrading from gid
+
+repown was called `gid`, and the rename was a clean break
+([§10](docs/DECISIONS.md#10-named-repown-formerly-gid-as-a-clean-break)). Your pins
+keep working, because they are plain git config. What to redo:
+
+1. Install repown (see [Install](#install)), then `npm unlink -g gid`.
+2. In each guarded clone, run `repown guard on`. It replaces the old gid hook.
+3. If `repown` warns about `gid.*` keys, run
+   `git config --local --rename-section gid repown` in that clone.
+4. Copy `accounts.json` from the old registry folder (`%APPDATA%\gid` or
+   `~/.config/gid`) to the new one (`%APPDATA%\repown` or `~/.config/repown`),
+   or record the accounts again with `repown accounts add`.
+
+`repown scan ~/code` shows which clones still need step 2: their guard column reads
+`legacy`.
+
 ## Development
 
 ```
@@ -247,3 +315,7 @@ Developing needs Node 22.6+, even though running needs only 20
 dependencies, by choice. [CLAUDE.md](CLAUDE.md) has the contributor rules;
 [docs/DECISIONS.md](docs/DECISIONS.md) explains why every non-obvious choice was
 made.
+
+## License
+
+[MIT](LICENSE)

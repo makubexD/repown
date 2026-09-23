@@ -97,7 +97,7 @@ const checkAction: Command = {
 };
 
 export default {
-  summary: 'check every push before it leaves (gid guard on | off | check)',
+  summary: 'check every push before it leaves (gid guard on | off | status)',
   defaultAction: 'status',
   actions: { on: onAction, off: offAction, status: statusAction, check: checkAction },
   aliases: { enable: 'on', disable: 'off' },

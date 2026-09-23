@@ -47,6 +47,12 @@ describe('gid --version / --help', () => {
       assert.match(run.stdout, new RegExp('\\b' + name + '\\b'));
     }
   });
+
+  test('the guard summary advertises the user actions, not the hook\'s', () => {
+    const line = gid(['--help']).stdout.split('\n').find((text) => text.trim().startsWith('guard'));
+    assert.match(line ?? '', /on \| off \| status/);
+    assert.doesNotMatch(line ?? '', /\bcheck\)/);
+  });
 });
 
 describe('help is side-effect free', () => {

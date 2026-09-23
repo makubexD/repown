@@ -202,6 +202,31 @@ describe('guard check, pushing to a branch the remote already has', () => {
     assert.ok(refusals[0]!.detail.some((row) => row.includes(stray.slice(0, 9))),
               'the refusal must still name the unpublished commit');
   });
+
+  // A force-push over a tip someone else pushed, without fetching first: git
+  // sends that tip as remoteSha, and `remoteSha..localSha` names a commit this
+  // clone does not have. `git log` fails -- and an empty answer read as "no
+  // foreign commits" let the push through unchecked.
+  test('a remote tip this clone never fetched does not hide a foreign commit', async () => {
+    const stray = commitAs(THEIRS, 'never pushed anywhere', [base]);
+    const unfetched = 'b'.repeat(40);
+    const refusals = await check({
+      git, remote: 'origin', url: ORIGIN,
+      stdin: `refs/heads/release ${stray} refs/heads/release ${unfetched}\n`,
+    });
+    assert.equal(refusals.length, 1);
+    assert.match(refusals[0]!.reason, /not authored as/);
+  });
+
+  test('commits that cannot be read are REFUSED, never passed as clean', async () => {
+    const missing = 'c'.repeat(40);
+    const refusals = await check({
+      git, remote: 'origin', url: ORIGIN,
+      stdin: `refs/heads/release ${missing} refs/heads/release ${ZERO}\n`,
+    });
+    assert.equal(refusals.length, 1);
+    assert.match(refusals[0]!.reason, /could not read/);
+  });
 });
 describe('push ref parsing', () => {
   test('reads the four fields git sends on stdin', () => {

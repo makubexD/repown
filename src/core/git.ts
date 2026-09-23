@@ -15,6 +15,7 @@
 // itself. See the note in exec.ts.
 
 import { run, succeeded, output, lines, type ExecResult } from './exec.ts';
+import { ok, err, type Result } from './result.ts';
 
 export type ConfigScope = 'local' | 'global' | 'system';
 
@@ -170,11 +171,17 @@ export class Git {
    * Author and committer of every commit in `range`, which is passed to git as
    * separate arguments so a caller can use `<sha> --not --remotes=origin`.
    */
-  async identitiesIn(range: readonly string[]): Promise<CommitIdentity[]> {
+  async identitiesIn(range: readonly string[]): Promise<Result<CommitIdentity[]>> {
     const format = ['%H', '%s', '%an', '%ae', '%cn', '%ce'].join(UNIT) + RECORD;
     const result = await this.exec(['log', `--format=${format}`, ...range]);
-    if (!succeeded(result)) return [];
-    return result.stdout.split(RECORD).flatMap(parseIdentityRecord);
+    // An empty list would read as "no foreign commits": a failure must stay one.
+    if (!succeeded(result)) return err(result.stderr.trim() || 'git log failed');
+    return ok(result.stdout.split(RECORD).flatMap(parseIdentityRecord));
+  }
+
+  /** Whether this clone has the commit at all -- a remote tip it never fetched is absent. */
+  async hasCommit(sha: string): Promise<boolean> {
+    return succeeded(await this.exec(['cat-file', '-e', sha + '^{commit}']));
   }
 
   /**

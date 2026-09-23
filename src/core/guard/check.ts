@@ -15,7 +15,7 @@
 // which is exactly the set of commits about to be published. The previous design
 // read that and threw it away.
 
-import type { Git } from '../git.ts';
+import type { Git, CommitIdentity } from '../git.ts';
 import { parseGitUrl } from '../url.ts';
 import { providerFor } from '../hosts/index.ts';
 import { readIdentity } from '../identity.ts';
@@ -171,24 +171,41 @@ async function checkCommits(input: CheckInput, expected: string): Promise<Refusa
  * corrects it, and the new-branch path has always carried the same exposure.
  */
 async function checkRange(input: CheckInput, ref: PushRef, expected: string): Promise<Refusal[]> {
-  const range = ref.remoteSha === ZERO
-    ? [ref.localSha, '--not', '--remotes=' + input.remote]
-    : [ref.remoteSha + '..' + ref.localSha, '--not', '--remotes=' + input.remote];
-
-  const commits = await input.git.identitiesIn(range);
-  const foreign = commits.filter((commit) =>
+  const commits = await input.git.identitiesIn(await rangeFor(input, ref));
+  if (!commits.ok) {
+    return [{
+      reason: 'The guard could not read the commits bound for ' + ref.remoteRef +
+              ', so it cannot tell whether they are yours. Refusing rather than passing unchecked.',
+      detail: ['git said: ' + commits.error, 'try: git fetch, then push again'],
+    }];
+  }
+  const foreign = commits.value.filter((commit) =>
     !matches(commit.authorEmail, expected) || !matches(commit.committerEmail, expected));
-  if (foreign.length === 0) return [];
+  return foreign.length === 0 ? [] : [foreignRefusal(ref, foreign, expected)];
+}
 
+/**
+ * `remoteSha..localSha` needs remoteSha to exist HERE. A tip someone else pushed,
+ * never fetched, does not -- a force-push over it is the routine case -- so the
+ * push is checked as if the branch were new: everything the remote's
+ * tracking refs do not already carry.
+ */
+async function rangeFor(input: CheckInput, ref: PushRef): Promise<string[]> {
+  const exclude = ['--not', '--remotes=' + input.remote];
+  const known = ref.remoteSha !== ZERO && await input.git.hasCommit(ref.remoteSha);
+  return known ? [ref.remoteSha + '..' + ref.localSha, ...exclude] : [ref.localSha, ...exclude];
+}
+
+function foreignRefusal(ref: PushRef, foreign: readonly CommitIdentity[], expected: string): Refusal {
   const shown = foreign.slice(0, 10).map((commit) =>
     '  ' + commit.sha.slice(0, 9) + '  ' + commit.authorEmail + '  ' + commit.subject);
   const more = foreign.length > shown.length ? ['  ... and ' + (foreign.length - shown.length) + ' more'] : [];
 
-  return [{
+  return {
     reason: foreign.length + ' commit(s) bound for ' + ref.remoteRef +
             ' were not authored as ' + expected + '.',
     detail: [...shown, ...more, '', 'These addresses become permanent once pushed.'],
-  }];
+  };
 }
 
 function matches(actual: string, expected: string): boolean {

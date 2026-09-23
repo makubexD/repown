@@ -351,6 +351,7 @@ in fact perfectly safe.
 | --- | --- | --- | --- |
 | A commit in the pushed range has a foreign author | **refuse** | not its job | Irreversible once published |
 | No identity pinned in this clone | **refuse** | **fail** | The next commit inherits the machine's identity |
+| The pushed commits cannot be read | **refuse** | — | An empty answer would read as "nothing foreign"; a remote tip this clone never fetched is checked as a new branch instead |
 | `GH_TOKEN`, `GITHUB_TOKEN`, `GIT_AUTHOR_EMAIL` or `GIT_COMMITTER_EMAIL` set | **refuse** | — | Silently outranks the config just validated |
 | Push destination is not this account's | **refuse** | **warn** | Wrong repository entirely; `repown` only warns because an organisation owner may simply need `repown.allowOwner` |
 | gh is the git credential helper | — | **fail** | Cannot forge a commit; it only breaks authentication |

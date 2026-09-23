@@ -209,6 +209,9 @@ It also refuses:
 - `GH_TOKEN` / `GITHUB_TOKEN`, or `GIT_AUTHOR_EMAIL` / `GIT_COMMITTER_EMAIL`,
   because each silently outranks the identity it just checked;
 - a clone with no pinned identity;
+- commits it can't read. When the remote's branch tip was never fetched (a
+  force-push over someone else's push, say), it checks every commit the remote
+  doesn't already have instead;
 - **itself being unrunnable.** If `repown` can't be found, the hook refuses rather
   than passing. A `repown` found on PATH is trusted only if `repown --version` says
   it is repown ([§3](docs/DECISIONS.md#3-the-hook-calls-the-installed-cli-and-refuses-when-it-cannot)).

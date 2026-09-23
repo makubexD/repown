@@ -58,7 +58,9 @@ describe('Git', () => {
     box.git('-c', 'user.email=other@example.invalid',
             'commit', '--allow-empty', '-m', 'second');
 
-    const found = await git.identitiesIn(['HEAD']);
+    const result = await git.identitiesIn(['HEAD']);
+    assert.ok(result.ok);
+    const found = result.value;
     assert.equal(found.length, 2);
     assert.equal(found[0]?.subject, 'second');
     assert.equal(found[0]?.authorEmail, 'other@example.invalid');

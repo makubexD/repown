@@ -144,9 +144,9 @@ $ repown scan ~/code ~/work
 
     repo             owner          host    identity     guard   identities in history
     --------------------------------------------------------------------
-    personal-project octocat        github  INHERITED    off     work.example=122
-    the-fork         octocat        github  pinned       on      octocat.example=8  (excl. mirror)
-    work-service     acme           github  INHERITED    off     work.example=13655 +12 more
+    personal-project octocat        github  INHERITED    off     work.example.invalid=122
+    the-fork         octocat        github  pinned       on      users.noreply.github.com=8  (excl. mirror)
+    work-service     acme           github  INHERITED    off     work.example.invalid=13655 +12 more
 
   repositories     3
   not pinned       2

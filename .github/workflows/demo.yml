@@ -33,10 +33,11 @@ jobs:
 
       - name: Render
         run: |
-          printf 'Output control.gif\nType "echo hello"\nEnter\nSleep 1s\n' > control.tape
-          vhs control.tape; ls -la control.gif || echo "CONTROL: no gif"
-          printf 'Output control2.gif\nSet Shell "bash"\nHide\nType "cd /"\nEnter\nShow\nType "echo hello"\nEnter\nSleep 1s\nHide\nType "true"\nEnter\n' > control2.tape
-          vhs control2.tape; ls -la control2.gif || echo "CONTROL2 (cd + trailing Hide): no gif"
+          # The action installs a nightly ffmpeg, with which vhs renders nothing and
+          # reports nothing. Ubuntu's own ffmpeg goes first on PATH instead.
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          export PATH="/usr/bin:$PATH"
+          ffmpeg -hide_banner -version | head -1
           vhs demo/demo.tape
           test -s demo/demo.gif
 

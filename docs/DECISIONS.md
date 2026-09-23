@@ -153,7 +153,10 @@ unguarded — but it cost two extra states:
 Calling an installed CLI removes both. There is only ever one implementation and
 it is current by construction. The absolute path is baked into the hook at
 install time, with a `PATH` lookup as a fallback, so neither a `PATH` change nor
-a reinstall elsewhere can quietly disable it.
+a reinstall elsewhere can quietly disable it. The fallback trusts a `repown` only
+if `repown --version` names it. A program that merely shares the name and exits 0
+would otherwise pass every push unchecked; that's how the old `gid` hooks fail open
+against GNU idutils (§10).
 
 If both fail it **refuses**. A hook that cannot run its check is not a check, and
 exiting 0 there is precisely how the previous design let five of six branches

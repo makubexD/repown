@@ -72,6 +72,19 @@ export async function guardState(git: Git): Promise<GuardState> {
   return classify(await readFile(path, 'utf8').catch(() => ''));
 }
 
+/**
+ * The PATH fallback trusts a `repown` only if it SAYS it is repown. Without this, any
+ * program of that name that exits 0 passes every push unchecked -- which is exactly
+ * how an old gid hook fails open against GNU idutils' unrelated `gid` (DECISIONS §10).
+ */
+const PATH_FALLBACK_CHECK = [
+  'repown_on_path() {',
+  '    command -v repown >/dev/null 2>&1 || return 1',
+  '    case "$(repown --version 2>/dev/null)" in "repown "*) return 0 ;; *) return 1 ;; esac',
+  '}',
+  '',
+];
+
 export function hookBody(entry: string, nodePath: string): string {
   const q = (value: string): string => "'" + value.replace(/'/g, "'\\''") + "'";
   return [
@@ -86,9 +99,10 @@ export function hookBody(entry: string, nodePath: string): string {
     'repown_entry=' + q(entry),
     'repown_node=' + q(nodePath),
     '',
+    ...PATH_FALLBACK_CHECK,
     'if [ -f "$repown_entry" ] && [ -x "$repown_node" ]; then',
     '    "$repown_node" "$repown_entry" guard check --remote "$1" --url "$2"',
-    'elif command -v repown >/dev/null 2>&1; then',
+    'elif repown_on_path; then',
     '    repown guard check --remote "$1" --url "$2"',
     'else',
     '    echo "" >&2',

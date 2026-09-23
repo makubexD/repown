@@ -14,7 +14,8 @@ import { Git } from '../src/core/git.ts';
 import { check, parsePushRefs } from '../src/core/guard/check.ts';
 import { hookBody, MARKER, guardState, installGuard, uninstallGuard } from '../src/core/guard/hook.ts';
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, delimiter } from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const ZERO = '0'.repeat(40);
 const OURS = 'pinned@example.invalid';
@@ -241,6 +242,47 @@ describe('hook body', () => {
 // The header of a hook written by `gid guard on` before the rename. FROZEN here on
 // purpose: hookBody() now writes repown's hook, so it can no longer reproduce what
 // is already on disk in clones set up under the old name.
+// Through a REAL `git push`, so the hook runs in the shell git actually uses for
+// hooks (on Windows, the one bundled with Git for Windows).
+describe('the installed hook, when its recorded CLI is gone', () => {
+  let box: Sandbox;
+  let fakeBin: string;
+  const savedPath = process.env['PATH'];
+
+  before(() => {
+    box = sandbox();
+    box.git('init', '-q', '--bare', join(box.dir, '..', 'remote.git'));
+    box.git('remote', 'add', 'origin', join(box.dir, '..', 'remote.git'));
+    box.git('commit', '-q', '--allow-empty', '-m', 'base');
+    mkdirSync(join(box.dir, '.git', 'hooks'), { recursive: true });
+    writeFileSync(join(box.dir, '.git', 'hooks', 'pre-push'),
+      hookBody(join(box.dir, 'missing', 'cli.js'), join(box.dir, 'missing', 'node')), { mode: 0o755 });
+    fakeBin = join(box.dir, '..', 'fake-bin');
+    mkdirSync(fakeBin);
+  });
+  after(() => { process.env['PATH'] = savedPath; box.dispose(); });
+
+  const pushWith = (impostor: string): ReturnType<typeof spawnSync> => {
+    writeFileSync(join(fakeBin, 'repown'), impostor, { mode: 0o755 });
+    return spawnSync('git', ['push', '-q', 'origin', 'HEAD:refs/heads/main'], {
+      cwd: box.dir, encoding: 'utf8',
+      env: { ...process.env, PATH: fakeBin + delimiter + (savedPath ?? '') },
+    });
+  };
+
+  test('refuses when a `repown` on PATH is not repown, even if it exits 0', () => {
+    const run = pushWith('#!/bin/sh\necho "some other tool 1.0"\nexit 0\n');
+    assert.notEqual(run.status, 0, 'an impostor that exits 0 must not pass the push');
+    assert.match(String(run.stderr), /cannot be found/);
+  });
+
+  test('uses a `repown` on PATH that identifies itself, and honours its verdict', () => {
+    const run = pushWith('#!/bin/sh\n[ "$1" = --version ] && { echo "repown 9.9.9"; exit 0; }\necho refused-by-fake >&2\nexit 1\n');
+    assert.notEqual(run.status, 0);
+    assert.match(String(run.stderr), /refused-by-fake/);
+  });
+});
+
 const OLD_GID_HOOK = [
   '#!/bin/sh',
   '# gid-identity-guard: installed by `gid guard on`, removed by `gid guard off`.',

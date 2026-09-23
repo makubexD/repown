@@ -211,7 +211,8 @@ It also refuses:
   because each silently outranks the identity it just checked;
 - a clone with no pinned identity;
 - **itself being unrunnable.** If `repown` can't be found, the hook refuses rather
-  than passing ([§3](docs/DECISIONS.md#3-the-hook-calls-the-installed-cli-and-refuses-when-it-cannot)).
+  than passing. A `repown` found on PATH is trusted only if `repown --version` says
+  it is repown ([§3](docs/DECISIONS.md#3-the-hook-calls-the-installed-cli-and-refuses-when-it-cannot)).
 
 It ignores credential problems, because a failed authentication publishes
 nothing; `repown` and `repown doctor` warn about those instead

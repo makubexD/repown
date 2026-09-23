@@ -62,6 +62,7 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - `test/cli.test.ts` spawns the real entry point. Keep `guard check --remote --url` working,
   because every installed hook calls exactly that.
 - `test/docs.test.ts` checks the README against `repown --help` and `repown help <group>`.
-  It fails when a command is missing from README.md, or when the README shows a command
-  or action (hidden aliases like `guard enable` included) that help doesn't advertise.
-  It does not notice an undocumented new *action*; check that by hand.
+  It fails when a command or user-facing action is missing from README.md (as
+  `repown <group> <action>` or in a `repown <group> a \| b` list), or when the README shows
+  one help doesn't advertise, hidden aliases like `guard enable` included. An action whose
+  help summary says "not for direct use" (`guard check`) is exempt.

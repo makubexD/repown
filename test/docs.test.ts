@@ -13,26 +13,47 @@ const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 const README = readFileSync(fileURLToPath(new URL('../README.md', import.meta.url)), 'utf8');
 const WORD = /^[a-z][\w-]*$/;
 
+const helpCache = new Map<string, string>();
+
 function help(args: readonly string[]): string {
+  const key = args.join(' ');
+  const cached = helpCache.get(key);
+  if (cached !== undefined) return cached;
   const run = spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' });
-  assert.equal(run.status, 0, '`repown ' + args.join(' ') + '` failed: ' + run.stderr);
+  assert.equal(run.status, 0, '`repown ' + key + '` failed: ' + run.stderr);
+  helpCache.set(key, run.stdout);
   return run.stdout;
 }
 
-function listed(text: string, indent: number): string[] {
-  const row = new RegExp('^ {' + indent + '}([a-z]+) {2,}\\S');
-  return text.split('\n').flatMap((line) => row.exec(line)?.[1] ?? []);
+type RowFilter = (summary: string) => boolean;
+const ANY: RowFilter = () => true;
+/** `guard check` is listed for completeness but is the hook's, not the user's. */
+const USER_FACING: RowFilter = (summary) => !summary.includes('not for direct use');
+
+function listed(text: string, indent: number, keep: RowFilter = ANY): string[] {
+  const row = new RegExp('^ {' + indent + '}([a-z]+) {2,}(\\S.*)$');
+  return text.split('\n').flatMap((line) => {
+    const match = row.exec(line.trimEnd());
+    return match && keep(match[2]!) ? [match[1]!] : [];
+  });
 }
 
 /** Actions of every command that is a group; plain commands are left out. */
-function groupActions(commands: readonly string[]): Map<string, string[]> {
+function groupActions(commands: readonly string[], keep: RowFilter = ANY): Map<string, string[]> {
   const groups = new Map<string, string[]>();
   for (const command of commands) {
     const text = help(['help', command]);
     const actions = text.split('Actions:')[1];
-    if (actions !== undefined) groups.set(command, listed(actions, 4));
+    if (actions !== undefined) groups.set(command, listed(actions, 4, keep));
   }
   return groups;
+}
+
+/** An action counts as documented as `repown <group> <action>` or in a `<group> a \| b` list. */
+function undocumentedActions(markdown: string, groups: ReadonlyMap<string, readonly string[]>): string[] {
+  return [...groups].flatMap(([group, actions]) => actions
+    .filter((action) => !new RegExp('repown ' + group + ' (?:[a-z-]+ \\\\?\\| )*' + action + '\\b').test(markdown))
+    .map((action) => group + ' ' + action));
 }
 
 /** The words after `repown` in every fenced line and inline code span that runs it. */
@@ -78,6 +99,17 @@ describe('README.md documents the real command surface', () => {
     const groups = groupActions(commands);
     assert.ok(groups.has('guard') && groups.has('accounts'), 'groups parsed: ' + [...groups.keys()].join(', '));
     assert.deepEqual(unknownActions(README, groups), [], 'README examples naming no real action');
+  });
+
+  test('every action help advertises for users appears in the README', () => {
+    assert.deepEqual(undocumentedActions(README, groupActions(commands, USER_FACING)), [],
+      'actions the README never mentions');
+  });
+
+  test('undocumentedActions catches an action left out of a README list', () => {
+    const fixture = '| `repown guard on \\| off` | ... |\n```\nrepown accounts list\nrepown accounts add x\nrepown accounts rm x\n```\n';
+    const groups = new Map([['guard', ['on', 'off', 'status']], ['accounts', ['list', 'add', 'rm']]]);
+    assert.deepEqual(undocumentedActions(fixture, groups), ['guard status']);
   });
 
   test('unknownActions catches a wrong action and a hidden alias', () => {

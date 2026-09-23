@@ -35,6 +35,8 @@ jobs:
         run: |
           vhs demo/demo.tape
           ls -la demo
+          find / -xdev -name '*.gif' -newer demo/demo.tape 2>/dev/null || true
+          ffmpeg -hide_banner -version | head -1
           test -s demo/demo.gif
 
       - uses: actions/upload-artifact@v4

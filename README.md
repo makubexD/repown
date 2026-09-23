@@ -1,9 +1,10 @@
 # gid
 
-**Use several git accounts on one machine without ever switching.** Each clone
-commits and pushes as its own account, so you can go from a work repo to a
-personal one to a client one and every push is authenticated as the right
-account. A push carrying the wrong identity is refused before it leaves.
+**Use several git accounts on one machine, and move between their repositories
+with no switch command.** Each clone commits and pushes as its own account, so
+you can go from a work repo to a personal one to a client one and every push is
+authenticated as the right account. A push carrying the wrong identity is refused
+before it leaves.
 
 ```
 gid doctor             # once per machine: is git's credential helper ready?
@@ -41,7 +42,9 @@ git clone https://github.com/makubexD/gid.git
 cd gid && npm install && npm run build && npm link
 ```
 
-`npm link` puts `gid` on your PATH, and `npm unlink -g gid` removes it.
+`npm link` puts `gid` on your PATH, and `npm unlink -g gid` removes it. The
+package is kept unpublished until its command surface has settled; after that it
+will install with `npm install -g gid`.
 
 ## Quickstart
 
@@ -66,9 +69,12 @@ OK    identity   Octo Cat <octocat@users.noreply.github.com>  push-as:octocat
 $ gid guard on
 ```
 
-The first time you use an account, `gid use` asks for its commit name and email,
-suggesting the GitHub noreply address, and remembers them for every other clone.
-To record an account up front instead, run `gid accounts add octocat`.
+`gid use` takes the account's commit name and email from this machine's registry.
+The first time, if they aren't recorded, it asks for them, suggesting the GitHub
+noreply address ([§5](docs/DECISIONS.md#5-no-names-or-addresses-live-in-any-repository)),
+and records them for every other clone. Without a terminal it can't ask, so
+record the account up front:
+`gid accounts add octocat --name "Octo Cat" --email octocat@users.noreply.github.com`.
 
 `gid use` writes four repo-local keys and nothing else:
 
@@ -114,13 +120,18 @@ repo-local identity (global config is never touched), then `gid use <other>`.
 ```
 $ gid scan ~/code ~/work
 
-    repo                    owner       host    identity     guard   identities in history
-    ------------------------------------------------------------------------------------
-    personal-project        octocat     github  INHERITED    off     work.example=122
-    work-service            acme        github  INHERITED    off     work.example=13655 +12 more
-    the-fork                octocat     github  pinned       on      octocat.example=8 (excl. mirror)
+    repo             owner          host    identity     guard   identities in history
+    --------------------------------------------------------------------
+    personal-project octocat        github  INHERITED    off     work.example=122
+    work-service     acme           github  INHERITED    off     work.example=13655 +12 more
+    the-fork         octocat        github  pinned       on      octocat.example=8  (excl. mirror)
+
+  repositories     3
+  not pinned       2
+  not guarded      2
 ```
 
+With no directory it scans the current one, looking 3 levels deep (`--depth`).
 It shows domains and counts rather than addresses, because this output gets pasted
 into chats; `--emails` shows the exact addresses. A shared repository legitimately
 has many identities. The row worth acting on is a repository you own whose history
@@ -137,18 +148,21 @@ history.
 | `gid doctor` | what serves credentials on this machine, and to whom |
 | `gid fix [--dry-run] [--yes]` | undo `gh auth setup-git` so per-clone pins work again |
 | `gid guard on \| off \| status` | install, remove or show the pre-push hook |
-| `gid accounts list \| add \| rm` | the accounts this machine knows (name and email per account) |
-| `gid scan <dir>... [--emails]` | audit every clone under a directory |
+| `gid accounts list \| add \| rm` | the accounts this machine knows (`add` takes `--name`, `--email`, `--host github\|azdo\|generic`) |
+| `gid scan [dir...] [--emails] [--depth <n>]` | audit every clone under the given directories (default: the current one) |
 
-`gid --help` lists them, and `gid help <command>` shows one command's options.
-Asking for help never changes anything. `--cwd <dir>` works on every command.
-Exit codes: `0` success, `1` failure or refusal, `2` usage error.
+`gid --help` lists them. `gid help <command>` (or `gid <command> --help`) shows a
+command's options, and `gid help guard on` goes one level deeper. Asking for help
+never changes anything. `--cwd <dir>` works on every command, and `gid --version`
+prints the version. Exit codes: `0` success, `1` failure or refusal, `2` usage error.
 
 ## The guard
 
-It reads the refs git is about to push and checks **the commits themselves**, so
-it also catches a commit made before setup, on another branch, or brought in by a
-merge, rebase or cherry-pick
+It reads the refs git is about to push and checks **the commits themselves**:
+the author and the committer of every commit the push would publish. So it also
+catches a commit made before setup, on another branch, or brought in by a merge,
+rebase or cherry-pick. Commits the remote already has are skipped, because
+pushing them again publishes nothing new
 ([§2](docs/DECISIONS.md#2-the-guard-verifies-commits-not-configuration)).
 
 ```
@@ -173,8 +187,11 @@ It also refuses:
 - **itself being unrunnable.** If `gid` can't be found, the hook refuses rather
   than passing ([§3](docs/DECISIONS.md#3-the-hook-calls-the-installed-cli-and-refuses-when-it-cannot)).
 
-Credential problems only warn: a failed authentication publishes nothing
-([§8](docs/DECISIONS.md#8-what-refuses-and-what-only-warns)).
+It ignores credential problems, because a failed authentication publishes
+nothing; `gid` and `gid doctor` warn about those instead
+([§8](docs/DECISIONS.md#8-what-refuses-and-what-only-warns)). If a `pre-push` hook
+that gid didn't write already exists, `gid guard on` and `gid guard off` leave it
+alone.
 
 Two repo-local keys adjust it:
 

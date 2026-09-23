@@ -1,6 +1,6 @@
 # Todo: make gid's goal obvious
 
-Status: Phase 4 done (T0-T3); Phase 5 review next.
+Status: Phase 5 fixes committed; waiting at GATE 5.
 
 - [x] Phase 1 intent confirmed (GATE 1)
 - [x] Phase 2 spec approved (GATE 2, with docs sync test)

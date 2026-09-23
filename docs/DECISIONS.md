@@ -119,10 +119,19 @@ asking instead "is the config right at this instant". That is a proxy. A commit
 authored before setup, or on a branch where the identity was never applied,
 passed cleanly as soon as the config was corrected afterwards.
 
-So the guard reads its stdin and inspects the authorship of every commit in the
-range being published — covering commits made before setup, after `gid off`, on
-any branch, and those introduced by merge, rebase, cherry-pick or an IDE, none of
-which a config check can see.
+So the guard reads its stdin and inspects the author **and committer** address of
+every commit in the range being published — covering commits made before setup,
+after `gid off`, on any branch, and those introduced by merge, rebase, cherry-pick
+or an IDE, none of which a config check can see.
+
+The range excludes what the remote already has (`--not --remotes=<remote>`). A
+commit already on a remote-tracking ref made its addresses permanent when it was
+first published; pushing it onto a second branch publishes nothing new. Without
+the exclusion, a fork that merges upstream into its release branch is refused for
+every upstream commit, one step after pushing those same commits to its mirror.
+The cost: a stale remote-tracking ref (a branch deleted or force-pushed on the
+server) can exclude a commit that is no longer really published, and
+`git fetch --prune` corrects it.
 
 It also refuses when `GH_TOKEN` or `GITHUB_TOKEN` is set, because those make gh's
 helper set `gotUser = "x-access-token"` and skip its username check **entirely**;
@@ -224,6 +233,10 @@ That is also why setup is per machine and why a re-clone repeats it. A deliberat
 cost, not an oversight — and the reason `gid scan` prints domains and counts
 rather than addresses by default.
 
+For GitHub, `gid use` suggests the account's noreply address
+(`<login>@users.noreply.github.com`). It is publishable by design and still links
+the commit to the account.
+
 ---
 
 ## 6. Hosts are a Strategy, and only claim what was measured
@@ -274,12 +287,13 @@ is subprocess orchestration and formatting, which no language does better, and
 the pre-push hook needed only `sh` and `pwsh`, both guaranteed on a Windows git
 machine.
 
-The counter-argument that carried: a package anyone can `npm install -g` is a far
-better answer to "available on every machine, in every project" than a shell
-module, and the hook's new dependency mostly dissolves under npm distribution —
-a machine that installed the tool has Node by construction. It was verified that
-`node` resolves on the Git Bash `PATH`, which is the shell git invokes hooks
-from, and the hook refuses rather than passing if it ever does not.
+The counter-argument that carried: an npm package (installed from the repository
+today, with `npm install -g` once published) is a far better answer to "available
+on every machine, in every project" than a shell module, and the hook's new
+dependency mostly dissolves under npm distribution — a machine that installed the
+tool has Node by construction. The hook runs the Node executable and CLI path
+recorded at install time, falls back to `gid` on the `PATH` of the shell git
+invokes hooks from, and refuses rather than passing if neither runs.
 
 **The real cost was that ~900 lines of empirically-verified logic lost their
 verification.** Not the code — the evidence. Each finding below was re-proven in
@@ -292,7 +306,7 @@ TypeScript before the PowerShell version was deleted:
 | gh has a third state — "could not be queried" ≠ "no active account" | an error result callers cannot collapse into the empty case |
 | The hook must be LF-only; `sh` rejects CRLF | a test asserting no carriage returns, plus `od` on the installed hook |
 | `git config --get` exits 1 for "not set" — an answer, not an error | unit tests on the git wrapper |
-| Guard scenarios A–F | the same matrix, plus two through real `git push` |
+| Guard scenarios A–E | the same matrix, run through the check against real repositories in a sandbox |
 
 Zero runtime dependencies, deliberately. This reads credential configuration; the
 smallest possible supply chain is part of that job.
@@ -336,10 +350,10 @@ in fact perfectly safe.
 | A commit in the pushed range has a foreign author | **refuse** | not its job | Irreversible once published |
 | No identity pinned in this clone | **refuse** | **fail** | The next commit inherits the machine's identity |
 | `GH_TOKEN` / `GIT_AUTHOR_EMAIL` set | **refuse** | — | Silently outranks the config just validated |
-| Push destination is not this account's | **refuse** | **fail** | Wrong repository entirely |
-| gh is the git credential helper | **warn** | **fail** | Cannot forge a commit; it only breaks authentication |
-| gh active as another account | **warn** | **warn** | Affects `gh pr create`, never the push |
-| gh could not be queried | **warn** | **warn** | Unknown, and said so rather than skipped |
+| Push destination is not this account's | **refuse** | **warn** | Wrong repository entirely; `gid` only warns because an organisation owner may simply need `gid.allowOwner` |
+| gh is the git credential helper | — | **fail** | Cannot forge a commit; it only breaks authentication |
+| gh active as another account | — | **warn** | Affects `gh pr create`, never the push |
+| gh could not be queried | — | **warn** | Unknown, and said so rather than skipped |
 | A foreign pre-push hook is installed | — | **warn** | Someone else's hook; left alone |
 
 The rule this encodes: **a check that was skipped must never look like one that

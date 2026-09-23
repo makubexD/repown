@@ -2,7 +2,8 @@
 
 `gid` lets one machine use several git accounts without switching: each clone is pinned
 to its own account (repo-local `user.name`, `user.email`, `credential.<host>.username`,
-`user.useConfigOnly`), and a `pre-push` hook refuses commits authored by anyone else.
+`user.useConfigOnly`), and a `pre-push` hook refuses commits authored or committed by
+anyone else.
 README.md is the user view. **docs/DECISIONS.md holds the reasons, many of them measured
 empirically; read the relevant section before changing behaviour.**
 
@@ -29,8 +30,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - **A skipped check must never look like a passed one.** Failures that are answers
   ("gh could not be queried") are a `Result` (`src/core/result.ts`), never null or empty.
 - **Severity (DECISIONS §8):** the guard refuses only what's irreversible (a foreign author,
-  a wrong destination owner, no pinned identity, `GH_TOKEN`/`GIT_*_EMAIL` set). Credential
-  and gh problems only warn.
+  a wrong destination owner, no pinned identity, `GH_TOKEN`/`GIT_*_EMAIL` set). It ignores
+  credential and gh problems; `gid` and `gid doctor` report those.
 - **Credential pinning is claimed only where it was measured.** An empty `credentialKeys()`
   means "can't pin", never a guess. Azure DevOps is deliberately unpinned (DECISIONS §6).
 - `.claude/rules/code-quality.md` applies: functions ≤20 lines, ≤4 params, no
@@ -45,8 +46,9 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - Adding a host: one provider file in `src/core/hosts/` plus one line in `providers()`
   (index.ts). `generic` stays last.
 - The hook (`src/core/guard/hook.ts`) is LF-only. It calls the installed CLI's absolute path,
-  falls back to PATH, and refuses if neither runs. `check.ts` inspects every commit in the
-  pushed range read from stdin, not the current config.
+  falls back to PATH, and refuses if neither runs. `check.ts` inspects the author and
+  committer of every commit in the pushed range read from stdin (excluding what the remote
+  already has), not the current config.
 - `src/ui/format.ts`: payload (`pass`/`line`/`field`) goes to stdout; `warn`/`fail`/`detail`
   and prompts go to stderr. Colour is decided per stream.
 

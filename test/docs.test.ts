@@ -13,8 +13,9 @@ const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 const README = readFileSync(fileURLToPath(new URL('../README.md', import.meta.url)), 'utf8');
 
 function helpCommands(): string[] {
-  const help = spawnSync(process.execPath, [CLI, '--help'], { encoding: 'utf8' }).stdout;
-  const listing = help.split('\n').filter((line) => /^ {2}[a-z]+ {2,}\S/.test(line));
+  const run = spawnSync(process.execPath, [CLI, '--help'], { encoding: 'utf8' });
+  assert.equal(run.status, 0, '`gid --help` failed: ' + run.stderr);
+  const listing = run.stdout.split('\n').filter((line) => /^ {2}[a-z]+ {2,}\S/.test(line));
   return listing.map((line) => line.trim().split(/\s+/)[0]!);
 }
 

@@ -48,7 +48,7 @@ export default {
     { name: 'emails', kind: 'boolean', help: 'show exact addresses instead of domains and counts' },
     { name: 'depth', kind: 'string', default: '3', help: 'how many directories deep to look for a clone' },
   ],
-  examples: ['gid scan', 'gid scan ~/code ~/work --emails'],
+  examples: ['repown scan', 'repown scan ~/code ~/work --emails'],
 
   async run(args: Args): Promise<number> {
     const roots = args.positional.length > 0 ? args.positional : [flagString(args, 'cwd') ?? process.cwd()];
@@ -102,7 +102,7 @@ async function describe(found: Found, showEmails: boolean): Promise<Row> {
   // A mirror branch, where configured, is someone else's history passing
   // through this clone. Counting it reports their contributors, not this
   // clone's behaviour, so it is excluded from the tally.
-  const mirror = await git.getConfig('gid.mirrorBranch');
+  const mirror = await git.getConfig('repown.mirrorBranch');
   const counts = await git.emailCounts(mirror ? 'refs/heads/' + mirror : undefined);
 
   return {
@@ -177,7 +177,7 @@ function summarise(rows: readonly Row[]): number {
   out.line('  repository you own whose history carries an address that is not yours.');
   out.line();
   if (unpinned.length > 0) {
-    out.line('  Pin one:  cd <repo> && gid use <account> && gid guard on');
+    out.line('  Pin one:  cd <repo> && repown use <account> && repown guard on');
     out.line();
   }
   return 0;

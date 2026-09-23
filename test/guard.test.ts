@@ -12,7 +12,9 @@ import assert from 'node:assert/strict';
 import { sandbox, type Sandbox } from './helpers.ts';
 import { Git } from '../src/core/git.ts';
 import { check, parsePushRefs } from '../src/core/guard/check.ts';
-import { hookBody, MARKER } from '../src/core/guard/hook.ts';
+import { hookBody, MARKER, guardState, installGuard, uninstallGuard } from '../src/core/guard/hook.ts';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const ZERO = '0'.repeat(40);
 const OURS = 'pinned@example.invalid';
@@ -75,14 +77,14 @@ describe('guard check', () => {
 
   test('C  the mirror exemption applies ONLY to the configured branch', async () => {
     const sha = commitAs(THEIRS, 'upstream work');
-    // With no gid.mirrorBranch, nothing is exempt -- the safe default.
+    // With no repown.mirrorBranch, nothing is exempt -- the safe default.
     assert.equal((await push(sha, 'refs/heads/master')).length, 1);
 
-    box.git('config', '--local', 'gid.mirrorBranch', 'master');
+    box.git('config', '--local', 'repown.mirrorBranch', 'master');
     assert.deepEqual(await push(sha, 'refs/heads/master'), []);
     // ...and still refuses everywhere else.
     assert.equal((await push(sha, 'refs/heads/feat/x')).length, 1);
-    box.git('config', '--local', '--unset', 'gid.mirrorBranch');
+    box.git('config', '--local', '--unset', 'repown.mirrorBranch');
   });
 
   test('D  a push to someone else’s repository is REFUSED', async () => {
@@ -224,7 +226,7 @@ describe('hook body', () => {
     assert.ok(hookBody('a', 'b').includes(MARKER));
   });
 
-  test('REFUSES when gid cannot be found, rather than exiting 0', () => {
+  test('REFUSES when repown cannot be found, rather than exiting 0', () => {
     const body = hookBody('/missing/cli.js', '/missing/node');
     assert.match(body, /exit 1/);
     assert.match(body, /Refusing rather than passing silently/);
@@ -233,6 +235,65 @@ describe('hook body', () => {
   test('single quotes in a path cannot break out of the shell literal', () => {
     const body = hookBody("/tmp/it's here/cli.js", '/usr/bin/node');
     assert.ok(body.includes("'\\''"), 'the quote must be escaped for sh');
+  });
+});
+
+// The header of a hook written by `gid guard on` before the rename. FROZEN here on
+// purpose: hookBody() now writes repown's hook, so it can no longer reproduce what
+// is already on disk in clones set up under the old name.
+const OLD_GID_HOOK = [
+  '#!/bin/sh',
+  '# gid-identity-guard: installed by `gid guard on`, removed by `gid guard off`.',
+  'gid_entry=\'/old/cli.js\'',
+  'elif command -v gid >/dev/null 2>&1; then',
+  '',
+].join('\n');
+
+describe('upgrading from gid', () => {
+  let box: Sandbox;
+  let git: Git;
+  const hook = (): string => join(box.dir, '.git', 'hooks', 'pre-push');
+  const writeHook = (body: string): void => {
+    mkdirSync(join(box.dir, '.git', 'hooks'), { recursive: true });
+    writeFileSync(hook(), body);
+  };
+
+  beforeEach(() => { box = sandbox(); git = new Git(box.dir); });
+  after(() => box?.dispose());
+
+  test('the new hook carries the repown marker as its header and falls back to `repown`', () => {
+    const body = hookBody('a', 'b');
+    assert.ok(body.includes('# ' + MARKER + ':'), 'marker must be the header line');
+    assert.equal(MARKER, 'repown-identity-guard');
+    assert.match(body, /command -v repown /);
+    assert.doesNotMatch(body, /\bgid\b/);
+  });
+
+  test('an old gid hook is recognised as legacy, not as someone else\'s', async () => {
+    writeHook(OLD_GID_HOOK);
+    assert.equal(await guardState(git), 'legacy');
+  });
+
+  test('`guard on` replaces an old gid hook with repown\'s', async () => {
+    writeHook(OLD_GID_HOOK);
+    const installed = await installGuard(git);
+    assert.ok(installed.ok);
+    assert.equal(installed.value.replaced, 'legacy');
+    assert.ok(readFileSync(hook(), 'utf8').includes('# ' + MARKER + ':'));
+  });
+
+  test('`guard off` removes an old gid hook', async () => {
+    writeHook(OLD_GID_HOOK);
+    const removed = await uninstallGuard(git);
+    assert.ok(removed.ok && removed.value);
+  });
+
+  test('a hook that merely MENTIONS a marker in passing stays foreign and untouched', async () => {
+    const chained = '#!/bin/sh\n# runs after my own checks; see gid-identity-guard and ' + MARKER + '\nexit 0\n';
+    writeHook(chained);
+    assert.equal(await guardState(git), 'foreign');
+    assert.equal((await uninstallGuard(git)).ok, false);
+    assert.equal(readFileSync(hook(), 'utf8'), chained);
   });
 });
 
@@ -283,10 +344,10 @@ describe('organisation repositories', () => {
       const before = await push();
       assert.equal(before.length, 1);
       assert.match(before[0]!.reason, /goes to "An-Org"/);
-      assert.ok(before[0]!.detail.some((d) => d.includes('gid.allowOwner')),
+      assert.ok(before[0]!.detail.some((d) => d.includes('repown.allowOwner')),
                 'the refusal must name the way out');
 
-      box.git('config', '--local', '--add', 'gid.allowOwner', 'An-Org');
+      box.git('config', '--local', '--add', 'repown.allowOwner', 'An-Org');
       assert.deepEqual(await push(), [], 'a listed owner is legitimate');
 
       // ...and listing one owner does not open the door to any other.

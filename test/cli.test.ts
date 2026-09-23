@@ -21,7 +21,7 @@ interface Run {
   readonly stderr: string;
 }
 
-function gid(args: readonly string[], options: { cwd?: string; input?: string } = {}): Run {
+function repown(args: readonly string[], options: { cwd?: string; input?: string } = {}): Run {
   const result = spawnSync(process.execPath, [CLI, ...args], {
     cwd: options.cwd,
     input: options.input ?? '',
@@ -31,17 +31,17 @@ function gid(args: readonly string[], options: { cwd?: string; input?: string } 
   return { status: result.status ?? -1, stdout: result.stdout, stderr: result.stderr };
 }
 
-describe('gid --version / --help', () => {
+describe('repown --version / --help', () => {
   test('--version prints the version from package.json', () => {
     const pkgPath = fileURLToPath(new URL('../package.json', import.meta.url));
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version: string };
-    const run = gid(['--version']);
+    const run = repown(['--version']);
     assert.equal(run.status, 0);
-    assert.equal(run.stdout.trim(), 'gid ' + pkg.version);
+    assert.equal(run.stdout.trim(), 'repown ' + pkg.version);
   });
 
   test('--help exits 0 and lists every command', () => {
-    const run = gid(['--help']);
+    const run = repown(['--help']);
     assert.equal(run.status, 0);
     for (const name of ['status', 'use', 'off', 'doctor', 'fix', 'guard', 'accounts', 'scan']) {
       assert.match(run.stdout, new RegExp('\\b' + name + '\\b'));
@@ -49,7 +49,7 @@ describe('gid --version / --help', () => {
   });
 
   test('the guard summary advertises the user actions, not the hook\'s', () => {
-    const line = gid(['--help']).stdout.split('\n').find((text) => text.trim().startsWith('guard'));
+    const line = repown(['--help']).stdout.split('\n').find((text) => text.trim().startsWith('guard'));
     assert.match(line ?? '', /on \| off \| status/);
     assert.doesNotMatch(line ?? '', /\bcheck\)/);
   });
@@ -62,19 +62,19 @@ describe('help is side-effect free', () => {
 
   test('`off --help` does not unpin the clone', () => {
     box.git('config', '--local', 'user.name', 'Should Not Change');
-    const run = gid(['off', '--help'], { cwd: box.dir });
+    const run = repown(['off', '--help'], { cwd: box.dir });
     assert.equal(run.status, 0);
     assert.equal(box.git('config', '--local', '--get', 'user.name'), 'Should Not Change');
   });
 
   test('`guard on --help` does not install the hook', () => {
-    const run = gid(['guard', 'on', '--help'], { cwd: box.dir });
+    const run = repown(['guard', 'on', '--help'], { cwd: box.dir });
     assert.equal(run.status, 0);
     assert.equal(existsSync(join(box.dir, '.git', 'hooks', 'pre-push')), false);
   });
 
   test('`guard --help` (no action) shows the group, not the default action', () => {
-    const run = gid(['guard', '--help'], { cwd: box.dir });
+    const run = repown(['guard', '--help'], { cwd: box.dir });
     assert.equal(run.status, 0);
     assert.match(run.stdout, /Actions:/);
   });
@@ -82,66 +82,66 @@ describe('help is side-effect free', () => {
 
 describe('usage errors', () => {
   test('an unknown option is refused and corrected, on stderr, exit 2', () => {
-    const run = gid(['use', 'octocat', '--emial', 'x@example.invalid']);
+    const run = repown(['use', 'octocat', '--emial', 'x@example.invalid']);
     assert.equal(run.status, 2);
     assert.equal(run.stdout, '');
     assert.match(run.stderr, /unknown option --emial/);
   });
 
   test('an unknown command is refused and corrected', () => {
-    const run = gid(['statuss']);
+    const run = repown(['statuss']);
     assert.equal(run.status, 2);
     assert.match(run.stderr, /did you mean 'status'\?/);
   });
 
   test('an unknown guard action is refused and lists the real ones', () => {
-    const run = gid(['guard', 'bogus']);
+    const run = repown(['guard', 'bogus']);
     assert.equal(run.status, 2);
     assert.match(run.stderr, /known: on, off, status, check/);
   });
 
   test('`use` with no account names the missing positional, not a stack trace', () => {
-    const run = gid(['use']);
+    const run = repown(['use']);
     assert.equal(run.status, 2);
     assert.equal(run.stdout, '');
     assert.match(run.stderr, /FAIL/);
   });
 
   test('scan rejects a non-numeric --depth before touching the filesystem', () => {
-    const run = gid(['scan', '--depth', 'abc']);
+    const run = repown(['scan', '--depth', 'abc']);
     assert.equal(run.status, 2);
     assert.match(run.stderr, /invalid --depth 'abc'/);
   });
 
   test('scan rejects a root that does not exist', () => {
-    const run = gid(['scan', join(tmpdir(), 'gid-no-such-directory-xyz')]);
+    const run = repown(['scan', join(tmpdir(), 'repown-no-such-directory-xyz')]);
     assert.equal(run.status, 2);
     assert.match(run.stderr, /no such directory/);
   });
 });
 
-describe('gid help <command> / <group> <action>', () => {
-  test('`gid help guard` shows the group, not the default action', () => {
-    const run = gid(['help', 'guard']);
+describe('repown help <command> / <group> <action>', () => {
+  test('`repown help guard` shows the group, not the default action', () => {
+    const run = repown(['help', 'guard']);
     assert.equal(run.status, 0);
     assert.match(run.stdout, /Actions:/);
   });
 
-  test('`gid help guard on` shows the action itself', () => {
-    const run = gid(['help', 'guard', 'on']);
+  test('`repown help guard on` shows the action itself', () => {
+    const run = repown(['help', 'guard', 'on']);
     assert.equal(run.status, 0);
-    assert.match(run.stdout, /gid guard on/);
+    assert.match(run.stdout, /repown guard on/);
     assert.doesNotMatch(run.stdout, /Actions:/);
   });
 
-  test('`gid help <unknown command>` is refused, exit 2', () => {
-    const run = gid(['help', 'bogus']);
+  test('`repown help <unknown command>` is refused, exit 2', () => {
+    const run = repown(['help', 'bogus']);
     assert.equal(run.status, 2);
     assert.match(run.stderr, /Unknown command: bogus/);
   });
 
-  test('`gid help guard <unknown action>` is refused, exit 2', () => {
-    const run = gid(['help', 'guard', 'bogus']);
+  test('`repown help guard <unknown action>` is refused, exit 2', () => {
+    const run = repown(['help', 'guard', 'bogus']);
     assert.equal(run.status, 2);
     assert.match(run.stderr, /Unknown action: bogus/);
   });
@@ -153,19 +153,19 @@ describe('hidden aliases resolve to the same action as their canonical name', ()
   after(() => box.dispose());
 
   test('`guard enable` installs the hook, exactly like `guard on`', () => {
-    const run = gid(['guard', 'enable'], { cwd: box.dir });
+    const run = repown(['guard', 'enable'], { cwd: box.dir });
     assert.equal(run.status, 0);
     assert.equal(existsSync(join(box.dir, '.git', 'hooks', 'pre-push')), true);
   });
 
   test('`guard disable` removes it, exactly like `guard off`', () => {
-    const run = gid(['guard', 'disable'], { cwd: box.dir });
+    const run = repown(['guard', 'disable'], { cwd: box.dir });
     assert.equal(run.status, 0);
     assert.equal(existsSync(join(box.dir, '.git', 'hooks', 'pre-push')), false);
   });
 
   test('an alias is never advertised in help', () => {
-    const run = gid(['guard', '--help'], { cwd: box.dir });
+    const run = repown(['guard', '--help'], { cwd: box.dir });
     assert.equal(run.status, 0);
     assert.doesNotMatch(run.stdout, /\benable\b/);
     assert.doesNotMatch(run.stdout, /\bdisable\b/);
@@ -174,12 +174,12 @@ describe('hidden aliases resolve to the same action as their canonical name', ()
 
 describe('accounts add --host', () => {
   let configDir: string;
-  before(() => { configDir = mkdtempSync(join(tmpdir(), 'gid-registry-')); });
+  before(() => { configDir = mkdtempSync(join(tmpdir(), 'repown-registry-')); });
   after(() => rmSync(configDir, { recursive: true, force: true }));
 
   test('an unrecognised host is refused before anything is written', () => {
     const run = spawnSync(process.execPath, [CLI, 'accounts', 'add', 'x', '--host', 'nope'], {
-      env: { ...process.env, GID_CONFIG_DIR: configDir },
+      env: { ...process.env, REPOWN_CONFIG_DIR: configDir },
       encoding: 'utf8',
     });
     assert.equal(run.status, 2);
@@ -190,11 +190,11 @@ describe('accounts add --host', () => {
 
 describe('`accounts remove` (alias) reaches the same action as `accounts rm`', () => {
   let configDir: string;
-  before(() => { configDir = mkdtempSync(join(tmpdir(), 'gid-registry-')); });
+  before(() => { configDir = mkdtempSync(join(tmpdir(), 'repown-registry-')); });
   after(() => rmSync(configDir, { recursive: true, force: true }));
 
   test('removes an account recorded via `accounts add`', () => {
-    const env = { ...process.env, GID_CONFIG_DIR: configDir };
+    const env = { ...process.env, REPOWN_CONFIG_DIR: configDir };
     const run = (args: readonly string[]) =>
       spawnSync(process.execPath, [CLI, ...args], { env, encoding: 'utf8' });
 
@@ -230,7 +230,7 @@ describe('guard check (the hook contract every installed hook already calls)', (
   test('a correctly authored commit passes', () => {
     const sha = box.git('rev-parse', 'HEAD');
     const stdin = `refs/heads/main ${sha} refs/heads/main ${'0'.repeat(40)}\n`;
-    const run = gid(['guard', 'check', '--remote', 'origin', '--url', ORIGIN], { cwd: box.dir, input: stdin });
+    const run = repown(['guard', 'check', '--remote', 'origin', '--url', ORIGIN], { cwd: box.dir, input: stdin });
     assert.equal(run.status, 0);
   });
 
@@ -242,8 +242,27 @@ describe('guard check (the hook contract every installed hook already calls)', (
       'commit-tree', tree, '-p', parent, '-m', 'foreign',
     );
     const stdin = `refs/heads/main ${sha} refs/heads/main ${'0'.repeat(40)}\n`;
-    const run = gid(['guard', 'check', '--remote', 'origin', '--url', ORIGIN], { cwd: box.dir, input: stdin });
+    const run = repown(['guard', 'check', '--remote', 'origin', '--url', ORIGIN], { cwd: box.dir, input: stdin });
     assert.equal(run.status, 1);
     assert.match(run.stderr, /not authored as/);
+  });
+});
+
+describe('status after the rename from gid', () => {
+  let box: Sandbox;
+  before(() => { box = sandbox(); });
+  after(() => box.dispose());
+
+  test('old gid.* keys are reported as ignored, with the command that moves them', () => {
+    box.git('config', '--local', '--add', 'gid.allowOwner', 'An-Org');
+    const run = repown([], { cwd: box.dir });
+    assert.match(run.stderr, /gid\.\* keys .*ignored/);
+    assert.match(run.stderr, /git config --local --rename-section gid repown/);
+  });
+
+  test('the new keys are named repown.* in every hint', () => {
+    box.git('config', '--local', '--remove-section', 'gid');
+    const run = repown(['guard', 'on', '--help'], { cwd: box.dir });
+    assert.doesNotMatch(run.stdout + run.stderr, /\bgid\b/);
   });
 });

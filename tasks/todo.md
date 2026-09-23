@@ -1,10 +1,10 @@
 # Todo: gid -> repown, public, richer README
 
-Status: Phase 4, T0 done; ⚠ T1 next (needs go).
+Status: Phase 4, T1 done; T2 next.
 
 - [x] GATE 1 intent, GATE 2 spec, GATE 3 plan
 - [x] T0 Plan commit - Docs: none
-- [ ] ⚠ T1 Rename gid -> repown in code, tests, CI (old hook marker = legacy) - Docs: README, CLAUDE.md, DECISIONS §10
+- [x] ⚠ T1 Rename gid -> repown in code, tests, CI (old hook marker = legacy) - Docs: README, CLAUDE.md, DECISIONS §10
 - [ ] T2 LICENSE + README: comparison, badges, status, FAQ - Docs: README, LICENSE
 - [ ] T3 Demo: VHS tape -> GIF (asks before installing) - Docs: README
 - [ ] Phase 5 review: code-reviewer + docs-drift + security-auditor

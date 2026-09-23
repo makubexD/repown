@@ -20,7 +20,7 @@ async function enable(args: Args): Promise<number> {
   if (!installed.ok) { out.fail('guard', installed.error); return 1; }
 
   if (installed.value.replaced === 'legacy') {
-    out.pass('guard', 'upgraded the PowerShell-era hook, and removed its copies under .git/fork-guard');
+    out.pass('guard', 'replaced the hook from an earlier version (gid, or the PowerShell guard)');
   } else {
     out.pass('guard', 'on -- every push is checked before it leaves');
   }
@@ -62,7 +62,7 @@ function report(refusals: readonly Refusal[]): void {
   }
 }
 
-/** Empty when nothing is piped in, so `gid guard check` by hand is not a hang. */
+/** Empty when nothing is piped in, so `repown guard check` by hand is not a hang. */
 async function readStdin(): Promise<string> {
   if (process.stdin.isTTY) return '';
   const chunks: Buffer[] = [];
@@ -72,13 +72,13 @@ async function readStdin(): Promise<string> {
 
 const onAction: Command = {
   summary: 'install the pre-push hook',
-  examples: ['gid guard on'],
+  examples: ['repown guard on'],
   run: enable,
 };
 
 const offAction: Command = {
   summary: 'remove the pre-push hook',
-  examples: ['gid guard off'],
+  examples: ['repown guard off'],
   run: disable,
 };
 
@@ -97,7 +97,7 @@ const checkAction: Command = {
 };
 
 export default {
-  summary: 'check every push before it leaves (gid guard on | off | status)',
+  summary: 'check every push before it leaves (repown guard on | off | status)',
   defaultAction: 'status',
   actions: { on: onAction, off: offAction, status: statusAction, check: checkAction },
   aliases: { enable: 'on', disable: 'off' },

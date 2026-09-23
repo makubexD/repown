@@ -1,6 +1,6 @@
 // The GitHub CLI, asked only about ITSELF.
 //
-// After `gid fix` gh has nothing to do with git authentication. It remains the
+// After `repown fix` gh has nothing to do with git authentication. It remains the
 // account store and the thing `gh pr create` acts as, and that is worth
 // reporting -- a pull request opened from the wrong account on a public repo is
 // as permanent as a commit.

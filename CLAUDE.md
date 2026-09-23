@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-`gid` lets one machine use several git accounts without switching: each clone is pinned
+`repown` lets one machine use several git accounts without switching: each clone is pinned
 to its own account (repo-local `user.name`, `user.email`, `credential.<host>.username`,
 `user.useConfigOnly`), and a `pre-push` hook refuses commits authored or committed by
 anyone else.
@@ -31,7 +31,7 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   ("gh could not be queried") are a `Result` (`src/core/result.ts`), never null or empty.
 - **Severity (DECISIONS §8):** the guard refuses only what's irreversible (a foreign author,
   a wrong destination owner, no pinned identity, `GH_TOKEN`/`GIT_*_EMAIL` set). It ignores
-  credential and gh problems; `gid` and `gid doctor` report those.
+  credential and gh problems; `repown` and `repown doctor` report those.
 - **Credential pinning is claimed only where it was measured.** An empty `credentialKeys()`
   means "can't pin", never a guess. Azure DevOps is deliberately unpinned (DECISIONS §6).
 - `.claude/rules/code-quality.md` applies: functions ≤20 lines, ≤4 params, no
@@ -59,6 +59,6 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - Guard tests build foreign-authored commits with `git commit-tree`, which doesn't move HEAD.
 - `test/cli.test.ts` spawns the real entry point. Keep `guard check --remote --url` working,
   because every installed hook calls exactly that.
-- `test/docs.test.ts` checks the README against `gid --help` and `gid help <group>`.
+- `test/docs.test.ts` checks the README against `repown --help` and `repown help <group>`.
   Adding or renaming a command or action means updating README.md, or this test fails;
   the README must not show hidden aliases (`guard enable`).

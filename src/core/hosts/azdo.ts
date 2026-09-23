@@ -23,7 +23,7 @@
 //              appears in that namespace.
 //
 // SO CREDENTIALS ARE DELIBERATELY NOT PINNED HERE. `credentialKeys` is empty,
-// and `gid` says so in as many words rather than writing a key that would look
+// and `repown` says so in as many words rather than writing a key that would look
 // like configuration while selecting nothing. Commit identity is still pinned
 // and every push is still guarded -- an author address is the same fact on any
 // host.
@@ -47,7 +47,7 @@ export function azureDevOpsProvider(): HostProvider {
     ownerOf,
     credentialKeys: () => [],
     listStoredAccounts: async (): Promise<Result<string[]>> =>
-      err('Azure DevOps credentials are not pinned by gid -- see src/core/hosts/azdo.ts'),
+      err('Azure DevOps credentials are not pinned by repown -- see src/core/hosts/azdo.ts'),
     resolveProfile: async (): Promise<Profile | null> => null,
   };
 }

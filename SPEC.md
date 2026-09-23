@@ -16,8 +16,8 @@ and commit just work. `gid` was unclear and is taken on npm.
 
 1. `git log --all --format='%ae%n%ce' | sort -u` shows only
    `makubexD@users.noreply.github.com`. This is checked again right before going public.
-2. `repown --help` works, and `git grep -iw gid` matches only the DECISIONS "formerly gid"
-   note. Renamed: the package name and bin, `repown.mirrorBranch` / `repown.allowOwner`,
+2. `repown --help` works. `git grep -iw gid` matches only DECISIONS §10, the legacy-hook
+   and old-key detection code (`hook.ts`, `status.ts`, `guard.ts`), and their test fixtures. Renamed: the package name and bin, `repown.mirrorBranch` / `repown.allowOwner`,
    `REPOWN_CONFIG_DIR`, the registry folder `repown`, the hook marker, variables and
    messages, help, CI, and the docs.
 3. Clean break: no fallback for old keys, the old env var or the old registry. One exception:

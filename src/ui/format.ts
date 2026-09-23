@@ -15,8 +15,8 @@ const COLOURS = {
 
 /**
  * Colour is a property of the STREAM a line goes to, not of the process: piping
- * stdout into a file while stderr stays a terminal (`gid 2>&1 | less`, or the
- * reverse, `gid 2>err.log`) must not colour the redirected side. `NO_COLOR`
+ * stdout into a file while stderr stays a terminal (`repown 2>&1 | less`, or the
+ * reverse, `repown 2>err.log`) must not colour the redirected side. `NO_COLOR`
  * only counts when it is non-empty, and `FORCE_COLOR=0`/`false` turns colour
  * off even though the variable is set -- both per the NO_COLOR/FORCE_COLOR
  * conventions these variables are named after.
@@ -71,8 +71,8 @@ export function dim(text: string): string {
 }
 
 /**
- * A reader closing early (`gid help | head -3`) delivers EPIPE on the next
- * write. That is the reader's choice, not a fault in gid, so it is treated as
+ * A reader closing early (`repown help | head -3`) delivers EPIPE on the next
+ * write. That is the reader's choice, not a fault in repown, so it is treated as
  * an ordinary end of output rather than left to surface as an unhandled
  * 'error' event and crash with a stack trace.
  */

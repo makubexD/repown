@@ -20,10 +20,10 @@ export function renderTopHelp(entries: ReadonlyMap<string, Command | CommandGrou
 }
 
 function topHeader(entries: ReadonlyMap<string, Command | CommandGroup>): string[] {
-  const lines = ['', '  gid <command> [options]', ''];
+  const lines = ['', '  repown <command> [options]', ''];
   for (const [name, entry] of entries) lines.push('  ' + name.padEnd(10) + entry.summary);
-  lines.push('', '  Run `gid` with no command for the state of this repository.');
-  lines.push('  Run `gid help <command>` for its options.', '');
+  lines.push('', '  Run `repown` with no command for the state of this repository.');
+  lines.push('  Run `repown help <command>` for its options.', '');
   return lines;
 }
 
@@ -38,7 +38,7 @@ function globalOptionsHelp(): string[] {
 function environmentHelp(): string[] {
   return [
     '  Environment:',
-    '    ' + 'GID_CONFIG_DIR'.padEnd(20) + 'where the per-machine account registry lives',
+    '    ' + 'REPOWN_CONFIG_DIR'.padEnd(20) + 'where the per-machine account registry lives',
     '    ' + 'NO_COLOR'.padEnd(20) + 'disable colored output when set to a non-empty value',
     '    ' + 'FORCE_COLOR'.padEnd(20) + 'force colored output even when not a terminal',
     '',
@@ -53,12 +53,12 @@ export function renderCommandHelp(path: readonly string[], command: Command): st
 }
 
 export function renderGroupHelp(path: readonly string[], group: CommandGroup): string[] {
-  const lines = ['', '  gid ' + path.join(' ') + ' <action> [options]', '', '  Actions:'];
+  const lines = ['', '  repown ' + path.join(' ') + ' <action> [options]', '', '  Actions:'];
   for (const [name, action] of Object.entries(group.actions)) {
     const marker = name === group.defaultAction ? '  (default)' : '';
     lines.push('    ' + name.padEnd(10) + action.summary + marker);
   }
-  lines.push('', '  Run `gid help ' + path.join(' ') + ' <action>` for its options.', '');
+  lines.push('', '  Run `repown help ' + path.join(' ') + ' <action>` for its options.', '');
   return lines;
 }
 
@@ -69,7 +69,7 @@ export function renderHelpFor(path: readonly string[], entry: Command | CommandG
 function usageFor(path: readonly string[], command: Command): string {
   const positionals = positionalUsage(command);
   const options = optionsOf(command).map(optionUsageToken).join(' ');
-  return ['gid', ...path, positionals, options].filter((part) => part.length > 0).join(' ');
+  return ['repown', ...path, positionals, options].filter((part) => part.length > 0).join(' ');
 }
 
 function positionalUsage(command: Command): string {

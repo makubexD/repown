@@ -1,4 +1,4 @@
-// What `gid` with no arguments prints: is this clone set up correctly?
+// What `repown` with no arguments prints: is this clone set up correctly?
 //
 // Three separate things decide who you are here, and they fail differently:
 //
@@ -12,6 +12,7 @@
 import { inspectRepo, inspectAuth, activeAccountLabel, type RepoState, type AuthState } from '../core/inspect.ts';
 import { isPinned } from '../core/identity.ts';
 import { allowedOwners } from '../core/guard/check.ts';
+import type { Git } from '../core/git.ts';
 import { gitFor, type Args } from '../ui/args.ts';
 import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
@@ -23,8 +24,8 @@ export default {
     const git = gitFor(args);
     const repo = await inspectRepo(git);
     if (!repo.isRepo) {
-      out.fail('gid', 'Not a git repository: ' + git.cwd);
-      out.detail('gid pins an identity per clone, so it needs one to work in.');
+      out.fail('repown', 'Not a git repository: ' + git.cwd);
+      out.detail('repown pins an identity per clone, so it needs one to work in.');
       return 1;
     }
     const auth = await inspectAuth(git, repo.originUrl ?? undefined);
@@ -32,6 +33,7 @@ export default {
     summary(repo, auth);
     const problems = collectProblems(repo, auth);
     await reportWarnings(repo, auth);
+    await renamedKeysWarning(git);
 
     if (problems.length === 0) {
       out.pass('identity', 'this clone is pinned, and its credential mechanism honours it');
@@ -67,20 +69,20 @@ function collectProblems(repo: RepoState, auth: AuthState): Problem[] {
     problems.push({
       what: 'This clone sets no identity of its own, so it inherits the machine default (' +
             (id.inheritedEmail ?? 'nothing') + ').',
-      fix: 'gid use <account>',
+      fix: 'repown use <account>',
     });
   } else if (repo.credentialKeys.length > 0 && !id.account) {
     problems.push({
       what: 'No account is pinned, so pushes fall back to the machine default (' +
             (id.inheritedAccount ?? 'nothing') + ').',
-      fix: 'gid use <account>',
+      fix: 'repown use <account>',
     });
   }
   if (auth.ghIsHelper) {
     problems.push({
       what: 'gh is the git credential helper, so only its ACTIVE account can ' +
             'authenticate and every clone pinned elsewhere is prompted for a password.',
-      fix: 'gid fix',
+      fix: 'repown fix',
     });
   }
   return problems;
@@ -95,7 +97,7 @@ async function reportWarnings(repo: RepoState, auth: AuthState): Promise<void> {
   if (repo.owner && allowed.length > 0 && !allowed.includes(repo.owner.toLowerCase())) {
     out.warn('origin', 'origin belongs to "' + repo.owner + '", which is not an owner this clone pushes to.');
     out.detail('if that is an organisation you belong to:');
-    out.detail('  git config --local --add gid.allowOwner ' + repo.owner);
+    out.detail('  git config --local --add repown.allowOwner ' + repo.owner);
   }
   guardWarning(repo);
 
@@ -112,14 +114,27 @@ async function reportWarnings(repo: RepoState, auth: AuthState): Promise<void> {
   }
 }
 
+/**
+ * The rename from gid was a clean break: gid.* keys are no longer READ. That is
+ * only safe if it is SAID -- an ignored gid.allowOwner or gid.mirrorBranch looks
+ * configured to anyone reading .git/config, while every push acts as if unset.
+ */
+async function renamedKeysWarning(git: Git): Promise<void> {
+  const leftovers = await git.configOrigins('^gid\\.', 'local');
+  if (leftovers.length === 0) return;
+  out.warn('config', 'gid.* keys from before the rename are ignored: ' +
+    leftovers.map((entry) => entry.key).join(', '));
+  out.detail('move them: git config --local --rename-section gid repown');
+}
+
 function guardWarning(repo: RepoState): void {
   if (repo.guard === 'on') return;
   if (repo.guard === 'off') {
-    out.warn('guard', 'off -- pushes are not checked. Enable it: gid guard on');
+    out.warn('guard', 'off -- pushes are not checked. Enable it: repown guard on');
   } else if (repo.guard === 'legacy') {
-    out.warn('guard', 'a hook from the PowerShell tooling is installed; gid did not write it.');
-    out.detail('upgrade it in place: gid guard on');
+    out.warn('guard', 'a hook from an earlier version (gid, or the PowerShell tooling) is installed.');
+    out.detail('it runs old code, or none if that is uninstalled. Replace it: repown guard on');
   } else {
-    out.warn('guard', 'a pre-push hook gid did not write is installed; it was left alone.');
+    out.warn('guard', 'a pre-push hook repown did not write is installed; it was left alone.');
   }
 }

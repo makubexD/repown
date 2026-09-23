@@ -18,7 +18,7 @@ export interface Sandbox {
 }
 
 export function sandbox(): Sandbox {
-  const dir = mkdtempSync(join(tmpdir(), 'gid-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'repown-test-'));
   const globalConfig = join(dir, 'gitconfig-global');
   const systemConfig = join(dir, 'gitconfig-system');
   writeFileSync(globalConfig, '');

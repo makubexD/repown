@@ -1,4 +1,4 @@
-# CI for gid.
+# CI for repown.
 #
 # WHY IT RUNS ON LINUX AND MACOS AS WELL AS WINDOWS. Every line of this tool was
 # written and verified on one Windows machine, and it is full of things that are
@@ -103,7 +103,7 @@ jobs:
       - name: Pack
         run: |
           npm pack
-          ls -l gid-*.tgz
+          ls -l repown-*.tgz
 
       # ...then switch to the oldest supported Node, so everything below runs
       # against the version a user on the stated minimum would actually have.
@@ -114,28 +114,28 @@ jobs:
       - name: Install it globally and run it
         run: |
           node --version
-          npm install -g ./gid-*.tgz
-          gid --version
-          gid --help
+          npm install -g ./repown-*.tgz
+          repown --version
+          repown --help
 
       # A CLI that pins identity per clone must say so plainly when there is no
       # clone, rather than crashing or reporting something misleading.
       - name: It reports honestly outside a repository
         run: |
           mkdir -p /tmp/not-a-repo && cd /tmp/not-a-repo
-          if gid; then echo "expected a non-zero exit outside a repository"; exit 1; fi
-          gid 2>&1 | grep -q 'Not a git repository'
+          if repown; then echo "expected a non-zero exit outside a repository"; exit 1; fi
+          repown 2>&1 | grep -q 'Not a git repository'
 
       - name: It pins a real clone end to end
         run: |
-          export GID_CONFIG_DIR="$RUNNER_TEMP/gid-config"
+          export REPOWN_CONFIG_DIR="$RUNNER_TEMP/repown-config"
           git init -q -b main "$RUNNER_TEMP/demo"
           cd "$RUNNER_TEMP/demo"
           git remote add origin https://github.com/octocat/hello-world.git
 
-          gid accounts add octocat --name 'Octo Cat' --email octocat@users.noreply.github.com
-          gid use octocat
-          gid guard on
+          repown accounts add octocat --name 'Octo Cat' --email octocat@users.noreply.github.com
+          repown use octocat
+          repown guard on
 
           test "$(git config --local --get user.name)" = 'Octo Cat'
           test "$(git config --local --get credential.https://github.com.username)" = 'octocat'
@@ -145,5 +145,5 @@ jobs:
           # "bad interpreter" -- a failure that only ever appears at push time.
           ! grep -q $'\r' .git/hooks/pre-push
 
-          gid off
+          repown off
           test -z "$(git config --local --get user.name)"

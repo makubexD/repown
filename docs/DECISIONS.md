@@ -1,6 +1,6 @@
 # Decisions
 
-Why `gid` is shaped the way it is. One decision per section: what was wanted,
+Why `repown` is shaped the way it is. One decision per section: what was wanted,
 what was rejected, and what it costs.
 
 Most of this was established empirically — against `cli/cli` source, git's own
@@ -78,13 +78,13 @@ from anywhere" — its documented multi-account feature.
 
 ### The decision
 
-Remove the two entries per host. `gid fix` does it, showing what it will remove
+Remove the two entries per host. `repown fix` does it, showing what it will remove
 and the undo first, because a change to global config should be reviewable
 rather than magic. `gh auth setup-git` puts them back exactly as they were.
 
 **No switching is required for git at all.** Each clone authenticates as its own
 account, permanently. `gh auth switch` becomes invisible to git and can be used
-freely — which is why `gid` does not wrap it, and why `gid use --gh` merely
+freely — which is why `repown` does not wrap it, and why `repown use --gh` merely
 calls it rather than replacing it.
 
 ### What was rejected
@@ -99,7 +99,7 @@ calls it rather than replacing it.
 ### The maintenance gotcha
 
 Re-running `gh auth login` may offer to configure git credentials again, which
-re-adds the two entries. Decline it. Both `gid` and `gid doctor` detect the
+re-adds the two entries. Decline it. Both `repown` and `repown doctor` detect the
 re-added helper and name the fix, so the setup cannot silently regress.
 
 ---
@@ -121,7 +121,7 @@ passed cleanly as soon as the config was corrected afterwards.
 
 So the guard reads its stdin and inspects the author **and committer** address of
 every commit in the range being published — covering commits made before setup,
-after `gid off`, on any branch, and those introduced by merge, rebase, cherry-pick
+after `repown off`, on any branch, and those introduced by merge, rebase, cherry-pick
 or an IDE, none of which a config check can see.
 
 The range excludes what the remote already has (`--not --remotes=<remote>`). A
@@ -167,7 +167,7 @@ check refuses every push to every organisation repository -- which is most
 working repositories in most jobs, and would be discovered on the first push
 rather than in review.
 
-`gid.allowOwner` lists additional legitimate owners, per repository, explicitly.
+`repown.allowOwner` lists additional legitimate owners, per repository, explicitly.
 Resolving organisation membership from the host API was the alternative and was
 rejected: it puts a network call and an auth dependency in the pre-push path,
 where a rate limit or an offline laptop turns into a failed push. An explicit
@@ -184,14 +184,14 @@ pushing a branch that contains a colleague's commit is ordinary work, and a
 guard that refuses ordinary work gets switched off -- taking the identity pin
 with it.
 
-So the guard is opt-in per clone rather than implied by `gid use`, and the
+So the guard is opt-in per clone rather than implied by `repown use`, and the
 documentation says plainly where not to use it. The control that fits a shared
 repository is a server-side ruleset on author addresses, enforced on receive.
 
 ### The mirror exemption is opt-in
 
 A fork whose `master` only fast-forwards to upstream commits carries other
-people's addresses legitimately, and `gid.mirrorBranch` exempts exactly that
+people's addresses legitimately, and `repown.mirrorBranch` exempts exactly that
 branch. **Unset means no exemption.** The previous design's exemption was written
 for one mirror branch and silently covered every feature branch as well; an
 exemption that applies by default is how that happens.
@@ -213,7 +213,7 @@ un-committable as the JSON file was, with none of the bespoke code.
 
 ### But the account registry is per machine, and that is different
 
-`gid use <account>` needs a name and address. Looking those up from the host API
+`repown use <account>` needs a name and address. Looking those up from the host API
 and then asking, in every repository, every time, is what makes a tool annoying
 enough to go unused. So they are recorded **once per machine**, outside every
 repository, in `accounts.json`.
@@ -230,10 +230,10 @@ permanently. So the tool contains no identifiers: everything personal lives in
 `.git/config`, which git cannot track, or in the per-machine registry.
 
 That is also why setup is per machine and why a re-clone repeats it. A deliberate
-cost, not an oversight — and the reason `gid scan` prints domains and counts
+cost, not an oversight — and the reason `repown scan` prints domains and counts
 rather than addresses by default.
 
-For GitHub, `gid use` suggests the account's noreply address
+For GitHub, `repown use` suggests the account's noreply address
 (`<login>@users.noreply.github.com`). It is publishable by design and still links
 the commit to the account.
 
@@ -292,7 +292,7 @@ today, with `npm install -g` once published) is a far better answer to "availabl
 on every machine, in every project" than a shell module, and the hook's new
 dependency mostly dissolves under npm distribution — a machine that installed the
 tool has Node by construction. The hook runs the Node executable and CLI path
-recorded at install time, falls back to `gid` on the `PATH` of the shell git
+recorded at install time, falls back to `repown` on the `PATH` of the shell git
 invokes hooks from, and refuses rather than passing if neither runs.
 
 **The real cost was that ~900 lines of empirically-verified logic lost their
@@ -318,7 +318,7 @@ or parameter properties, and nothing that needs generated code. So every file ru
 under bare `node` with no build step. That is why the tests import `src/` directly,
 and why a change can be verified without compiling.
 
-The cost is two different Node requirements. **Running `gid` needs Node 20;
+The cost is two different Node requirements. **Running `repown` needs Node 20;
 developing it needs 22.6+.** The tests need type stripping, and `npm test` passes
 a glob to `node --test`, which Node 20 does not expand (it reports
 `Could not find 'test/*.test.ts'`). Neither applies to the published package,
@@ -336,7 +336,7 @@ irreversible**:
 | | Refuses | Warns |
 | --- | --- | --- |
 | **Question** | Would this publish something that cannot be taken back? | Is something here not as it should be? |
-| **Asked by** | the pre-push guard | `gid`, `gid doctor` |
+| **Asked by** | the pre-push guard | `repown`, `repown doctor` |
 
 A **commit** is irreversible once pushed. That is what the guard refuses over.
 
@@ -345,12 +345,12 @@ authenticate — loudly, immediately, with nothing published. Blocking the push
 adds nothing the failure would not already say, and would refuse pushes that are
 in fact perfectly safe.
 
-| Condition | `guard check` | `gid` | Why |
+| Condition | `guard check` | `repown` | Why |
 | --- | --- | --- | --- |
 | A commit in the pushed range has a foreign author | **refuse** | not its job | Irreversible once published |
 | No identity pinned in this clone | **refuse** | **fail** | The next commit inherits the machine's identity |
 | `GH_TOKEN` / `GIT_AUTHOR_EMAIL` set | **refuse** | — | Silently outranks the config just validated |
-| Push destination is not this account's | **refuse** | **warn** | Wrong repository entirely; `gid` only warns because an organisation owner may simply need `gid.allowOwner` |
+| Push destination is not this account's | **refuse** | **warn** | Wrong repository entirely; `repown` only warns because an organisation owner may simply need `repown.allowOwner` |
 | gh is the git credential helper | — | **fail** | Cannot forge a commit; it only breaks authentication |
 | gh active as another account | — | **warn** | Affects `gh pr create`, never the push |
 | gh could not be queried | — | **warn** | Unknown, and said so rather than skipped |
@@ -365,11 +365,35 @@ passed.** Every "unknown" above is printed, never omitted.
 
 | Not done | What it would fix | Why not |
 | --- | --- | --- |
-| **`includeIf "gitdir:…"` in global config** | The fresh-clone window: between `git clone` and `gid use`, a commit inherits the machine's identity. | It writes new identity behaviour into global config. `gid fix` only *removes* entries; this would add. The guard catches such commits at push time instead. |
+| **`includeIf "gitdir:…"` in global config** | The fresh-clone window: between `git clone` and `repown use`, a commit inherits the machine's identity. | It writes new identity behaviour into global config. `repown fix` only *removes* entries; this would add. The guard catches such commits at push time instead. |
 | **A host-side ruleset restricting author and committer emails** | The only control `git push --no-verify` cannot bypass, since the host enforces it on receive. | A settings change per repository rather than per machine. Worth doing if `--no-verify` becomes a habit. |
 | **A `pre-commit` hook** | Would catch a wrong-author commit as it is made. | Skipped by `commit --no-verify`, and by merge, rebase, cherry-pick and revert — partial cover for a risk the range check already covers completely. |
-| **Rewriting existing history** | Commits already carrying the wrong address. | Destructive, and only the owner can weigh it. `gid scan` reports them; nothing rewrites them. |
-| **Proactive SSO-authorization-state detection** | The incident this tool exists to prevent (§1, the SSO prompt with nothing to type): a credential that is valid but not yet SSO-authorized for an organisation looks identical to "fine" until the push/fetch that actually needs that org's resources fails — with no password to fall back on. | Measured directly, not assumed: `gh auth status --json hosts` (checked against gh v2.89.0's real output, and against `cli/cli`'s `pkg/cmd/auth/status/status.go` source on `trunk`) has exactly three `state` values — `success`, `timeout`, `error` — and `error` is set only when a call to resolve the token's login name fails, a general identity check that is never scoped to one organisation. SAML/SSO enforcement is enforced per-organisation on resource access, so nothing short of a request against that specific org's resources can observe it — the same rate-limit/auth dependency §3 already rejected for `gid.allowOwner`. Git Credential Manager's `diagnose` subcommand writes free-form logs for a human to read, not a field `gid` could parse. The signal exists only at the moment `git push`/`git fetch` actually hits the protected resource, and only in that command's own error text — reactive, not something a `doctor`-style check can see in advance. |
+| **Rewriting existing history** | Commits already carrying the wrong address. | Destructive, and only the owner can weigh it. `repown scan` reports them; nothing rewrites them. |
+| **Proactive SSO-authorization-state detection** | The incident this tool exists to prevent (§1, the SSO prompt with nothing to type): a credential that is valid but not yet SSO-authorized for an organisation looks identical to "fine" until the push/fetch that actually needs that org's resources fails — with no password to fall back on. | Measured directly, not assumed: `gh auth status --json hosts` (checked against gh v2.89.0's real output, and against `cli/cli`'s `pkg/cmd/auth/status/status.go` source on `trunk`) has exactly three `state` values — `success`, `timeout`, `error` — and `error` is set only when a call to resolve the token's login name fails, a general identity check that is never scoped to one organisation. SAML/SSO enforcement is enforced per-organisation on resource access, so nothing short of a request against that specific org's resources can observe it — the same rate-limit/auth dependency §3 already rejected for `repown.allowOwner`. Git Credential Manager's `diagnose` subcommand writes free-form logs for a human to read, not a field `repown` could parse. The signal exists only at the moment `git push`/`git fetch` actually hits the protected resource, and only in that command's own error text — reactive, not something a `doctor`-style check can see in advance. |
+
+---
+
+## 10. Named repown, formerly gid, as a clean break
+
+`gid` said nothing about what the tool does, and the name was already taken on npm,
+so it could never have been installed under it. **repown** is repo + own: each repo
+owns its identity, so any of several clones, on any account, host or sign-in
+method, can be returned to without switching anything.
+
+The rename is a clean break, because the only user was the author and the tool is
+pre-1.0. `gid.*` keys, `GID_CONFIG_DIR` and the old registry directory are **not
+read**. Reading them would mean carrying two names forever. But a clean break
+must never be silent, because an ignored `gid.allowOwner` still *looks* configured.
+So `repown` warns when `gid.*` keys remain and gives the one command that moves
+them (`git config --local --rename-section gid repown`).
+
+There is one exception. A hook written by `gid guard on` is classified **legacy**,
+not foreign, so `repown guard on` replaces it and `repown guard off` removes it.
+Otherwise every clone set up under the old name would have a hook that the tool
+refuses to touch, running old code or, once gid is uninstalled, refusing every push
+with a fix naming a command that no longer exists. Markers count only as the
+`# <marker>:` header line, so a foreign hook that merely mentions one is still left
+alone.
 
 ## Residual risks, stated plainly
 
@@ -377,12 +401,12 @@ passed.** Every "unknown" above is printed, never omitted.
   libgit2 rather than the `git` binary. Hooks are advisory by design.
 - Environment variables outrank config. The guard refuses when it can **see**
   them set, which is a check, not a guarantee.
-- A fresh clone has no hook until `gid guard on` runs.
+- A fresh clone has no hook until `repown guard on` runs.
 - `gh pr create` and `gh api` act as gh's active account, and no git config
-  affects them. `gid` warns when it differs; nothing can enforce it.
+  affects them. `repown` warns when it differs; nothing can enforce it.
 - Commits already made with the wrong author must be rewritten by hand.
-- Credential pinning on a host with no provider is not done, and `gid` says so
+- Credential pinning on a host with no provider is not done, and `repown` says so
   rather than implying otherwise.
 - A credential that is valid but not SSO-authorized for an organisation looks
-  identical to "fine" in `gid doctor`/`gid` right up until a push or fetch
+  identical to "fine" in `repown doctor`/`repown` right up until a push or fetch
   against that org's resources fails. Nothing pre-flights this.

@@ -13,7 +13,7 @@
 // also why this is per clone: a second machine, or a re-clone, runs it again.
 //
 // You do not switch this afterwards, and you do not need to. Changing which
-// account the GitHub CLI acts as is `gh auth switch`, which after `gid fix` has
+// account the GitHub CLI acts as is `gh auth switch`, which after `repown fix` has
 // no effect on git at all -- `--gh` does both at once for when you want them to
 // agree.
 
@@ -28,14 +28,14 @@ import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
 export default {
-  summary: 'pin this clone to an account (gid use <account>)',
+  summary: 'pin this clone to an account (repown use <account>)',
   positionals: { min: 1, max: 1, label: '<account>' },
   options: [
     { name: 'gh', kind: 'boolean', help: "also switch the GitHub CLI's active account to match" },
     { name: 'name', kind: 'string', help: 'the commit author name (skips the registry and the prompt)' },
     { name: 'email', kind: 'string', help: 'the commit author email (skips the registry and the prompt)' },
   ],
-  examples: ['gid use octocat', 'gid use octocat --gh'],
+  examples: ['repown use octocat', 'repown use octocat --gh'],
 
   async run(args: Args): Promise<number> {
     const account = args.positional[0]!;
@@ -87,7 +87,7 @@ async function askAndRecord(
   const suggested = (await repo.provider.resolveProfile?.(account)) ?? {};
   if (!interactive()) {
     out.fail('use', 'no record of "' + account + '" and no terminal to ask.');
-    out.detail('record it once:  gid accounts add ' + account + ' --name "..." --email "..."');
+    out.detail('record it once:  repown accounts add ' + account + ' --name "..." --email "..."');
     return null;
   }
   out.line();
@@ -114,7 +114,7 @@ async function switchCli(account: string): Promise<void> {
 /** Everything that is now true but not yet right. Warnings, never refusals. */
 async function reportConcerns(account: string, repo: RepoState): Promise<void> {
   if (repo.credentialKeys.length === 0 && repo.url) {
-    out.warn('host', repo.provider.label + ' credentials are not pinned by gid.');
+    out.warn('host', repo.provider.label + ' credentials are not pinned by repown.');
     out.detail('commits are pinned and the guard still runs; only credential');
     out.detail('selection is left to whatever already serves this host.');
   }
@@ -123,21 +123,21 @@ async function reportConcerns(account: string, repo: RepoState): Promise<void> {
     if (!allowed.includes(repo.owner.toLowerCase())) {
       out.warn('origin', 'origin belongs to "' + repo.owner + '", not "' + account + '".');
       out.detail('normal for an organisation repository. To stop the guard refusing it:');
-      out.detail('  git config --local --add gid.allowOwner ' + repo.owner);
+      out.detail('  git config --local --add repown.allowOwner ' + repo.owner);
     }
   }
 
   const auth = await inspectAuth(repo.git, repo.originUrl ?? undefined);
   if (auth.ghIsHelper) {
     out.warn('helper', 'gh is still the git credential helper, so this pin is not honoured.');
-    out.detail('fix: gid fix');
+    out.detail('fix: repown fix');
   } else if (auth.gcmPresent && auth.stored.ok && !auth.stored.value.includes(account)) {
     out.line();
     out.line('  No stored credential for "' + account + '" yet -- the first push signs in');
-    out.line('  once, then never again. Verify it afterwards: gid doctor');
+    out.line('  once, then never again. Verify it afterwards: repown doctor');
   }
   if (repo.guard === 'off') {
     out.line();
-    out.line('  Next: gid guard on    (check every push before it leaves)');
+    out.line('  Next: repown guard on    (check every push before it leaves)');
   }
 }

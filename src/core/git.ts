@@ -1,7 +1,7 @@
 // Everything this tool asks of git, in one place.
 //
 // Bound to a working directory rather than reading a global: every command runs
-// against an explicit clone, `gid scan` walks seventeen of them in one process,
+// against an explicit clone, `repown scan` walks seventeen of them in one process,
 // and the pre-push hook runs inside whichever worktree git invoked it from.
 //
 // STRIP-ONLY TYPESCRIPT throughout this project: no parameter properties, no
@@ -107,7 +107,7 @@ export class Git {
    * and wrong here. An empty `credential.<url>.helper` is not noise: it is the
    * list reset that discards every helper configured before it, and so it is the
    * single most important line to show someone asking why their credentials
-   * stopped working. Filtering it out made `gid fix` preview two values while
+   * stopped working. Filtering it out made `repown fix` preview two values while
    * removing four, and hid the one the explanation is actually about.
    */
   async getAllConfigRaw(key: string, scope?: ConfigScope): Promise<string[]> {

@@ -1,6 +1,6 @@
 // The per-machine account registry: name and email per account, recorded once.
 //
-// THIS IS WHAT MAKES `gid use <account>` A ONE-WORD COMMAND. Without it, pinning
+// THIS IS WHAT MAKES `repown use <account>` A ONE-WORD COMMAND. Without it, pinning
 // a clone means looking the name up from the host API and then asking the user,
 // every time, in every repository. With it that happens once per machine and
 // every clone afterwards is instant and non-interactive -- as short as
@@ -32,14 +32,14 @@ export interface Registry {
 const EMPTY: Registry = { accounts: {} };
 
 export function configDirectory(): string {
-  const explicit = process.env['GID_CONFIG_DIR'];
+  const explicit = process.env['REPOWN_CONFIG_DIR'];
   if (explicit) return explicit;
 
   if (process.platform === 'win32' && process.env['APPDATA']) {
-    return join(process.env['APPDATA'], 'gid');
+    return join(process.env['APPDATA'], 'repown');
   }
   const xdg = process.env['XDG_CONFIG_HOME'];
-  return xdg ? join(xdg, 'gid') : join(homedir(), '.config', 'gid');
+  return xdg ? join(xdg, 'repown') : join(homedir(), '.config', 'repown');
 }
 
 export function registryPath(): string {

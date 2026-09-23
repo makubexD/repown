@@ -18,7 +18,7 @@ export default {
     { name: 'yes', kind: 'boolean', help: 'remove the entries without asking to confirm' },
     { name: 'dry-run', kind: 'boolean', help: 'show what would be removed and stop there' },
   ],
-  examples: ['gid fix', 'gid fix --dry-run'],
+  examples: ['repown fix', 'repown fix --dry-run'],
 
   async run(args: Args): Promise<number> {
     const git = gitFor(args);
@@ -78,7 +78,7 @@ async function apply(results: readonly RemovalOutcome[], git: ReturnType<typeof 
   out.line();
   if (failed.length > 0) return 1;
 
-  out.line('  Each clone now authenticates as its own pinned account. Check one:  gid');
+  out.line('  Each clone now authenticates as its own pinned account. Check one:  repown');
   out.line();
   return 0;
 }

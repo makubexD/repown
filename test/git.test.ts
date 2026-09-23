@@ -15,8 +15,8 @@ describe('Git', () => {
   });
 
   test('reads a key that is set', async () => {
-    box.git('config', '--local', 'gid.probe', 'value');
-    assert.equal(await git.getConfig('gid.probe'), 'value');
+    box.git('config', '--local', 'repown.probe', 'value');
+    assert.equal(await git.getConfig('repown.probe'), 'value');
   });
 
   test('unsetting an absent key succeeds rather than erroring', async () => {
@@ -24,9 +24,9 @@ describe('Git', () => {
   });
 
   test('getAllConfig returns every value of a multi-valued key', async () => {
-    box.git('config', '--local', '--add', 'gid.multi', 'one');
-    box.git('config', '--local', '--add', 'gid.multi', 'two');
-    assert.deepEqual(await git.getAllConfig('gid.multi'), ['one', 'two']);
+    box.git('config', '--local', '--add', 'repown.multi', 'one');
+    box.git('config', '--local', '--add', 'repown.multi', 'two');
+    assert.deepEqual(await git.getAllConfig('repown.multi'), ['one', 'two']);
   });
 
   test('an empty credential helper RESETS the list, discarding what came before', async () => {
@@ -82,7 +82,7 @@ describe('empty config values', () => {
 
   test('an EMPTY helper value is preserved, because it is the list reset', async () => {
     // This is exactly what `gh auth setup-git` writes. Dropping the blank made
-    // `gid fix` preview half of what it was about to remove, and hid the line
+    // `repown fix` preview half of what it was about to remove, and hid the line
     // that explains why credentials broke.
     box.writeGlobalConfig([
       '[credential "https://github.com"]',

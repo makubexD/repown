@@ -21,8 +21,8 @@ import { providerFor } from '../hosts/index.ts';
 import { readIdentity } from '../identity.ts';
 
 const ZERO = '0'.repeat(40);
-const MIRROR_KEY = 'gid.mirrorBranch';
-const ALLOW_OWNER_KEY = 'gid.allowOwner';
+const MIRROR_KEY = 'repown.mirrorBranch';
+const ALLOW_OWNER_KEY = 'repown.allowOwner';
 
 /** Variables that override the identity the guard just validated, or bypass the check gh performs. */
 const HOSTILE = [
@@ -73,7 +73,7 @@ export async function check(input: CheckInput): Promise<Refusal[]> {
     return [{
       reason: 'This clone sets no identity of its own, so the guard cannot tell ' +
               'your commits from anyone else’s.',
-      detail: ['fix: gid use <account>'],
+      detail: ['fix: repown use <account>'],
     }];
   }
 
@@ -96,7 +96,7 @@ function checkEnvironment(): Refusal[] {
 
 /**
  * Owners this clone may legitimately push to: the pinned account, plus anything
- * listed in gid.allowOwner.
+ * listed in repown.allowOwner.
  *
  * THE LIST EXISTS BECAUSE ORGANISATIONS ARE NOT ACCOUNTS. A repository owned by
  * an organisation you belong to has an owner that is not, and never will be,
@@ -151,7 +151,7 @@ async function checkCommits(input: CheckInput, expected: string): Promise<Refusa
 }
 
 /**
- * The mirror exemption is OPT-IN, per repository, via gid.mirrorBranch. A branch
+ * The mirror exemption is OPT-IN, per repository, via repown.mirrorBranch. A branch
  * that only ever fast-forwards to upstream commits nobody here authored would
  * otherwise be refused for carrying their addresses -- but defaulting to an
  * exemption is how the previous design left five of six branches unguarded, so

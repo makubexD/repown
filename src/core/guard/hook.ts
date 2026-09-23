@@ -24,11 +24,28 @@ import { fileURLToPath } from 'node:url';
 import type { Git } from '../git.ts';
 import { ok, err, type Result } from '../result.ts';
 
-export const MARKER = 'gid-identity-guard';
+export const MARKER = 'repown-identity-guard';
+/** This tool before it was renamed from gid. Recognised so `guard on` can replace it. */
+const GID_MARKER = 'gid-identity-guard';
 /** The PowerShell tooling this replaced. Recognised so `guard on` can upgrade it. */
-export const LEGACY_MARKER = 'fork-identity-guard';
+const POWERSHELL_MARKER = 'fork-identity-guard';
 
 export type GuardState = 'off' | 'foreign' | 'legacy' | 'on';
+
+/**
+ * A marker counts only as the header comment this tool writes -- `# <marker>:` -- so a
+ * hook that merely MENTIONS one (a chained hook's comment, say) stays foreign and is
+ * never overwritten or deleted. The PowerShell format predates that header.
+ */
+function hasHeader(body: string, marker: string): boolean {
+  return body.split('\n').some((line) => line.startsWith('# ' + marker + ':'));
+}
+
+function classify(body: string): GuardState {
+  if (hasHeader(body, MARKER)) return 'on';
+  if (hasHeader(body, GID_MARKER) || body.includes(POWERSHELL_MARKER)) return 'legacy';
+  return 'foreign';
+}
 
 /** This CLI's own entry point, as the hook will invoke it. */
 export function entryPoint(): string {
@@ -49,43 +66,40 @@ export async function hookPath(git: Git): Promise<string | null> {
 export async function guardState(git: Git): Promise<GuardState> {
   const path = await hookPath(git);
   if (!path || !existsSync(path)) return 'off';
-  const body = await readFile(path, 'utf8').catch(() => '');
-  if (body.includes(MARKER)) return 'on';
-  if (body.includes(LEGACY_MARKER)) return 'legacy';
-  return 'foreign';
+  return classify(await readFile(path, 'utf8').catch(() => ''));
 }
 
 export function hookBody(entry: string, nodePath: string): string {
   const q = (value: string): string => "'" + value.replace(/'/g, "'\\''") + "'";
   return [
     '#!/bin/sh',
-    '# ' + MARKER + ': installed by `gid guard on`, removed by `gid guard off`.',
+    '# ' + MARKER + ': installed by `repown guard on`, removed by `repown guard off`.',
     '# Bypass one push (recorded in the reflog either way): git push --no-verify',
     '#',
     '# stdin -- the <local ref> <local sha> <remote ref> <remote sha> lines -- is',
     '# inherited by the child, and is what says WHICH COMMITS are about to be',
     '# published. That is the thing being checked, not the config as it stands now.',
     '',
-    'gid_entry=' + q(entry),
-    'gid_node=' + q(nodePath),
+    'repown_entry=' + q(entry),
+    'repown_node=' + q(nodePath),
     '',
-    'if [ -f "$gid_entry" ] && [ -x "$gid_node" ]; then',
-    '    "$gid_node" "$gid_entry" guard check --remote "$1" --url "$2"',
-    'elif command -v gid >/dev/null 2>&1; then',
-    '    gid guard check --remote "$1" --url "$2"',
+    'if [ -f "$repown_entry" ] && [ -x "$repown_node" ]; then',
+    '    "$repown_node" "$repown_entry" guard check --remote "$1" --url "$2"',
+    'elif command -v repown >/dev/null 2>&1; then',
+    '    repown guard check --remote "$1" --url "$2"',
     'else',
     '    echo "" >&2',
-    '    echo "gid: the identity guard is installed but gid cannot be found," >&2',
+    '    echo "repown: the identity guard is installed but repown cannot be found," >&2',
     '    echo "so this push CANNOT be checked. Refusing rather than passing silently." >&2',
-    '    echo "  expected: $gid_entry" >&2',
-    '    echo "  fix:      reinstall gid, then run: gid guard on" >&2',
+    '    echo "  expected: $repown_entry" >&2',
+    '    echo "  fix:      reinstall repown, then run: repown guard on" >&2',
     '    exit 1',
     'fi',
     '',
     'status=$?',
     'if [ $status -ne 0 ]; then',
     '    echo "" >&2',
-    '    echo "Push stopped by the gid identity guard (above)." >&2',
+    '    echo "Push stopped by the repown identity guard (above)." >&2',
     '    echo "Override this one push with: git push --no-verify" >&2',
     'fi',
     'exit $status',

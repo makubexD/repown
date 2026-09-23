@@ -6,7 +6,7 @@
 //
 // A command declares its OWN options and how many positionals it takes; this
 // module never guesses. A boolean option never consumes the next token (an
-// earlier bug: `gid use --gh octocat` read "octocat" as --gh's value and left
+// earlier bug: `repown use --gh octocat` read "octocat" as --gh's value and left
 // no account), an unknown option is refused rather than silently dropped, and
 // so is an extra positional.
 

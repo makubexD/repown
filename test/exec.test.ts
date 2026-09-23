@@ -1,7 +1,7 @@
 // The subprocess layer, run in a child Node so the test can see what the unit
 // alone cannot: whether the PROCESS is free to exit once run() has answered.
 // Spawn's own `timeout` option left a 30 s timer behind whenever the binary was
-// missing, and gid's status sat silent for that long after printing its result.
+// missing, and repown's status sat silent for that long after printing its result.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,7 +13,7 @@ const EXEC = pathToFileURL(fileURLToPath(new URL('../src/core/exec.ts', import.m
 test('a missing binary resolves as not installed, and leaves nothing holding the process open', () => {
   const script =
     `const { run, notInstalled } = await import(${JSON.stringify(EXEC)});` +
-    `console.log(notInstalled(await run('gid-definitely-missing-binary', [])));`;
+    `console.log(notInstalled(await run('repown-definitely-missing-binary', [])));`;
   const started = Date.now();
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
     encoding: 'utf8',

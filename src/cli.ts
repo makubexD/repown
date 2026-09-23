@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// gid -- pin a git clone to one account, and refuse to push commits that carry
+// repown -- pin a git clone to one account, and refuse to push commits that carry
 // another identity.
 //
-// The grammar is short on purpose. `gid use <account>` has to be as quick to
+// The grammar is short on purpose. `repown use <account>` has to be as quick to
 // type as `gh auth switch`, or it will not be typed. Everything longer than a
 // word is a command you run once per clone or once per machine.
 //
@@ -133,12 +133,12 @@ async function runHelp(path: readonly string[]): Promise<number> {
 }
 
 async function main(argv: readonly string[]): Promise<number> {
-  if (argv[0] === '--version' || argv[0] === '-v') { out.line('gid ' + version()); return 0; }
+  if (argv[0] === '--version' || argv[0] === '-v') { out.line('repown ' + version()); return 0; }
   if (argv[0] === '--help' || argv[0] === '-h') return runHelp([]);
   if (argv[0] === 'help') return runHelp(argv.slice(1));
 
   const top = await resolveTop(argv);
-  if (!top.ok) { reportUsageError('gid', top.error); return 2; }
+  if (!top.ok) { reportUsageError('repown', top.error); return 2; }
   return dispatch(top.value.name, top.value.entry, top.value.rest);
 }
 
@@ -147,6 +147,6 @@ out.ignoreBrokenPipe();
 main(process.argv.slice(2))
   .then((code) => { process.exitCode = code; })
   .catch((error: unknown) => {
-    out.fail('gid', error instanceof Error ? error.message : String(error));
+    out.fail('repown', error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
   });

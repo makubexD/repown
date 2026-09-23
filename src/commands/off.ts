@@ -13,7 +13,7 @@ import * as out from '../ui/format.ts';
 
 export default {
   summary: 'unpin this clone (leaves global config alone)',
-  examples: ['gid off'],
+  examples: ['repown off'],
 
   async run(args: Args): Promise<number> {
     const git = gitFor(args);
@@ -35,7 +35,7 @@ export default {
     out.line();
     if (repo.guard !== 'off') {
       out.warn('guard', 'still installed. It now checks against the INHERITED identity.');
-      out.detail('remove it too: gid guard off');
+      out.detail('remove it too: repown guard off');
     }
     return 0;
   },

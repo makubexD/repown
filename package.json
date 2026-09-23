@@ -1,10 +1,18 @@
 {
-  "name": "gid",
+  "name": "repown",
   "version": "0.1.0",
-  "description": "Pin a git clone to one account, and refuse to push commits that carry another identity.",
+  "description": "Use several git accounts on one machine: each repo owns its identity, so you move between repos with no switch command and never push the wrong one.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/makubexD/repown.git"
+  },
+  "homepage": "https://github.com/makubexD/repown#readme",
+  "bugs": {
+    "url": "https://github.com/makubexD/repown/issues"
+  },
   "type": "module",
   "bin": {
-    "gid": "dist/cli.js"
+    "repown": "dist/cli.js"
   },
   "main": "dist/cli.js",
   "engines": {

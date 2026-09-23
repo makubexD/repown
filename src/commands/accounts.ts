@@ -1,6 +1,6 @@
 // The per-machine account registry.
 //
-// Recording an account once is what makes `gid use <account>` a one-word command
+// Recording an account once is what makes `repown use <account>` a one-word command
 // afterwards, in every repository on the machine.
 
 import { loadRegistry, saveAccount, removeAccount, registryPath, type Account } from '../core/registry.ts';
@@ -18,8 +18,8 @@ async function list(): Promise<number> {
   if (names.length === 0) {
     out.line('  No accounts recorded yet.');
     out.line();
-    out.line('  Record one so `gid use <account>` never has to ask again:');
-    out.line('    gid accounts add <account>');
+    out.line('  Record one so `repown use <account>` never has to ask again:');
+    out.line('    repown accounts add <account>');
     out.line();
     return 0;
   }
@@ -52,7 +52,7 @@ async function add(args: Args): Promise<number> {
 
   out.pass('accounts', account + '  ' + name + ' <' + email + '>');
   out.line();
-  out.line('  Use it in any clone:  gid use ' + account);
+  out.line('  Use it in any clone:  repown use ' + account);
   out.line();
   return 0;
 }
@@ -68,7 +68,7 @@ async function askFor(label: string, suggestion?: string): Promise<string | null
   const answer = await ask(label, suggestion);
   if (answer.ok) return answer.value;
   out.fail('accounts', answer.error);
-  out.detail('pass it directly:  gid accounts add <account> --name "..." --email "..."');
+  out.detail('pass it directly:  repown accounts add <account> --name "..." --email "..."');
   return null;
 }
 
@@ -81,7 +81,7 @@ async function remove(args: Args): Promise<number> {
   out.pass('accounts', 'removed ' + account);
   out.line();
   out.line('  Clones already pinned to it are unchanged -- their identity is in');
-  out.line('  their own .git/config. Unpin one with: gid off');
+  out.line('  their own .git/config. Unpin one with: repown off');
   out.line();
   return 0;
 }
@@ -103,14 +103,14 @@ const addAction: Command = {
       help: 'which host this account belongs to',
     },
   ],
-  examples: ['gid accounts add octocat'],
+  examples: ['repown accounts add octocat'],
   run: add,
 };
 
 const rmAction: Command = {
   summary: 'forget a recorded account (clones already pinned to it are unaffected)',
   positionals: { min: 1, max: 1, label: '<account>' },
-  examples: ['gid accounts rm octocat'],
+  examples: ['repown accounts rm octocat'],
   run: remove,
 };
 

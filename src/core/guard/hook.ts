@@ -1,11 +1,10 @@
 // The pre-push hook: writing it, recognising it, removing it.
 //
-// WHY THE HOOK CALLS AN INSTALLED CLI RATHER THAN A COPY OF ITSELF. The
-// PowerShell implementation copied five modules into .git/fork-guard/ at install
-// time, which bought branch-independence at the cost of two extra states --
-// `stale` (a copy is missing, so the check cannot load) and `drifted` (the copies
-// are older than the tool). Calling the installed entry point removes both: there
-// is only ever one implementation, and it is current by construction.
+// WHY THE HOOK CALLS AN INSTALLED CLI RATHER THAN A COPY OF ITSELF. A copy of
+// the checker inside .git/ adds two states -- `stale` (a copy is missing, so the
+// check cannot load) and `drifted` (the copy is older than the tool). Calling the
+// installed entry point removes both: there is only ever one implementation, and
+// it is current by construction (DECISIONS §3).
 //
 // The absolute path is baked in at install time AND a PATH lookup is kept as a
 // fallback, so neither a PATH change nor a reinstall elsewhere can quietly
@@ -25,29 +24,18 @@ import type { Git } from '../git.ts';
 import { ok, err, type Result } from '../result.ts';
 
 export const MARKER = 'repown-identity-guard';
-/** This tool before it was renamed from gid. Recognised so `guard on` can replace it. */
-const GID_MARKER = 'gid-identity-guard';
-/** The PowerShell tooling this replaced. Recognised so `guard on` can upgrade it. */
-const POWERSHELL_MARKER = 'fork-identity-guard';
 
-export type GuardState = 'off' | 'foreign' | 'legacy' | 'on';
-
-/** How far into a hook the PowerShell guard's marker may sit; it predates the header. */
-const POWERSHELL_MARKER_LINES = 5;
+export type GuardState = 'off' | 'foreign' | 'on';
 
 /**
  * A marker counts only where this tool writes it: the header comment on the line right
- * after the shebang, `# <marker>:`. A hook that merely MENTIONS one, or that has this
+ * after the shebang, `# <marker>:`. A hook that merely MENTIONS it, or that has this
  * tool's body pasted below lines of its own, is someone else's -- and a hook classified
- * as ours or legacy gets overwritten by `guard on` and deleted by `guard off`.
+ * as ours gets overwritten by `guard on` and deleted by `guard off`.
  */
 function classify(body: string): GuardState {
-  const lines = body.split('\n');
-  const header = lines[1] ?? '';
-  if (header.startsWith('# ' + MARKER + ':')) return 'on';
-  if (header.startsWith('# ' + GID_MARKER + ':')) return 'legacy';
-  const top = lines.slice(0, POWERSHELL_MARKER_LINES);
-  return top.some((line) => line.includes(POWERSHELL_MARKER)) ? 'legacy' : 'foreign';
+  const header = body.split('\n')[1] ?? '';
+  return header.startsWith('# ' + MARKER + ':') ? 'on' : 'foreign';
 }
 
 /** This CLI's own entry point, as the hook will invoke it. */
@@ -74,8 +62,7 @@ export async function guardState(git: Git): Promise<GuardState> {
 
 /**
  * The PATH fallback trusts a `repown` only if it SAYS it is repown. Without this, any
- * program of that name that exits 0 passes every push unchecked -- which is exactly
- * how an old gid hook fails open against GNU idutils' unrelated `gid` (DECISIONS §10).
+ * program of that name that exits 0 passes every push unchecked.
  */
 const PATH_FALLBACK_CHECK = [
   'repown_on_path() {',
@@ -126,16 +113,13 @@ export function hookBody(entry: string, nodePath: string): string {
 
 export interface InstallOutcome {
   readonly path: string;
-  /** What was there before -- `legacy` means a PowerShell-era hook was upgraded. */
-  readonly replaced: GuardState;
 }
 
 export async function installGuard(git: Git): Promise<Result<InstallOutcome>> {
   const path = await hookPath(git);
   if (!path) return err('could not locate the git directory for this repository');
 
-  const existing = await guardState(git);
-  if (existing === 'foreign') {
+  if (await guardState(git) === 'foreign') {
     return err('a pre-push hook this tool did not write already exists at ' + path +
                ' -- leaving it alone');
   }
@@ -143,8 +127,7 @@ export async function installGuard(git: Git): Promise<Result<InstallOutcome>> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, hookBody(entryPoint(), process.execPath), 'utf8');
   await chmod(path, 0o755).catch(() => { /* Windows filesystems carry no mode */ });
-  await removeLegacyPayload(git);
-  return ok({ path, replaced: existing });
+  return ok({ path });
 }
 
 export async function uninstallGuard(git: Git): Promise<Result<boolean>> {
@@ -157,14 +140,5 @@ export async function uninstallGuard(git: Git): Promise<Result<boolean>> {
     return err('the pre-push hook at ' + path + ' was not written by this tool -- leaving it alone');
   }
   await rm(path, { force: true });
-  await removeLegacyPayload(git);
   return ok(true);
-}
-
-/** The PowerShell guard's module copies. Left behind, they look like live configuration. */
-async function removeLegacyPayload(git: Git): Promise<void> {
-  const common = await git.commonDir();
-  if (!common) return;
-  const directory = join(absoluteCommonDir(common, git.cwd), 'fork-guard');
-  await rm(directory, { recursive: true, force: true }).catch(() => { /* best effort */ });
 }

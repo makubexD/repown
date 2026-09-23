@@ -12,7 +12,6 @@
 import { inspectRepo, inspectAuth, activeAccountLabel, type RepoState, type AuthState } from '../core/inspect.ts';
 import { isPinned } from '../core/identity.ts';
 import { allowedOwners } from '../core/guard/check.ts';
-import type { Git } from '../core/git.ts';
 import { gitFor, type Args } from '../ui/args.ts';
 import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
@@ -33,7 +32,6 @@ export default {
     summary(repo, auth);
     const problems = collectProblems(repo, auth);
     await reportWarnings(repo, auth);
-    await renamedKeysWarning(git);
 
     if (problems.length === 0) {
       out.pass('identity', 'this clone is pinned, and its credential mechanism honours it');
@@ -114,26 +112,10 @@ async function reportWarnings(repo: RepoState, auth: AuthState): Promise<void> {
   }
 }
 
-/**
- * The rename from gid was a clean break: gid.* keys are no longer READ. That is
- * only safe if it is SAID -- an ignored gid.allowOwner or gid.mirrorBranch looks
- * configured to anyone reading .git/config, while every push acts as if unset.
- */
-async function renamedKeysWarning(git: Git): Promise<void> {
-  const leftovers = await git.configOrigins('^gid\\.', 'local');
-  if (leftovers.length === 0) return;
-  const keys = new Set(leftovers.map((entry) => entry.key));
-  out.warn('config', 'gid.* keys from before the rename are ignored: ' + [...keys].join(', '));
-  out.detail('move them: git config --local --rename-section gid repown');
-}
-
 function guardWarning(repo: RepoState): void {
   if (repo.guard === 'on') return;
   if (repo.guard === 'off') {
     out.warn('guard', 'off -- pushes are not checked. Enable it: repown guard on');
-  } else if (repo.guard === 'legacy') {
-    out.warn('guard', 'a hook from an earlier version (gid, or the PowerShell tooling) is installed.');
-    out.detail('it runs old code, or none if that is uninstalled. Replace it: repown guard on');
   } else {
     out.warn('guard', 'a pre-push hook repown did not write is installed; it was left alone.');
   }

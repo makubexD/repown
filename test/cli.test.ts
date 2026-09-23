@@ -248,30 +248,16 @@ describe('guard check (the hook contract every installed hook already calls)', (
   });
 });
 
-describe('status after the rename from gid', () => {
+describe('status in a clone pushing to an organisation', () => {
   let box: Sandbox;
   beforeEach(() => { box = sandbox(); });
   afterEach(() => box.dispose());
 
-  test('old gid.* keys are reported as ignored -- each key once -- with the command that moves them', () => {
-    box.git('config', '--local', '--add', 'gid.allowOwner', 'An-Org');
-    box.git('config', '--local', '--add', 'gid.allowOwner', 'Other-Org');
-    const run = repown([], { cwd: box.dir });
-    assert.match(run.stderr, /gid\.\* keys from before the rename are ignored: gid\.allowowner\n/);
-    assert.match(run.stderr, /git config --local --rename-section gid repown/);
-  });
-
-  test('with no gid.* keys there is no rename warning at all', () => {
-    const run = repown([], { cwd: box.dir });
-    assert.doesNotMatch(run.stderr, /rename/);
-  });
-
-  test('the organisation hint names repown.allowOwner, not the old key', () => {
+  test('the organisation hint gives the exact repown.allowOwner command', () => {
     box.git('remote', 'add', 'origin', 'https://github.com/An-Org/project.git');
     box.git('config', '--local', 'credential.https://github.com.username', 'octocat');
     const run = repown([], { cwd: box.dir });
     assert.match(run.stderr, /git config --local --add repown\.allowOwner An-Org/);
-    assert.doesNotMatch(run.stdout + run.stderr, /\bgid\b/);
   });
 });
 

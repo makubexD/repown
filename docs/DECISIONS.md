@@ -155,8 +155,7 @@ it is current by construction. The absolute path is baked into the hook at
 install time, with a `PATH` lookup as a fallback, so neither a `PATH` change nor
 a reinstall elsewhere can quietly disable it. The fallback trusts a `repown` only
 if `repown --version` names it. A program that merely shares the name and exits 0
-would otherwise pass every push unchecked; that's how the old `gid` hooks fail open
-against GNU idutils (§10).
+would otherwise pass every push unchecked.
 
 If both fail it **refuses**. A hook that cannot run its check is not a check, and
 exiting 0 there is precisely how the previous design let five of six branches
@@ -358,8 +357,6 @@ in fact perfectly safe.
 | gh active as another account | — | **warn** | Affects `gh pr create`, never the push |
 | gh could not be queried | — | **warn** | Unknown, and said so rather than skipped |
 | A foreign pre-push hook is installed | — | **warn** | Someone else's hook; left alone |
-| A hook from an earlier version (gid, PowerShell) | — | **warn** | It runs old code, or refuses once that is uninstalled; `guard on` replaces it |
-| `gid.*` keys left from before the rename | — | **warn** | Ignored, yet they look configured (§10) |
 
 The rule this encodes: **a check that was skipped must never look like one that
 passed.** Every "unknown" above is printed, never omitted.
@@ -378,34 +375,19 @@ passed.** Every "unknown" above is printed, never omitted.
 
 ---
 
-## 10. Named repown, formerly gid, as a clean break
+## 10. The name, and which hooks count as ours
 
-`gid` said nothing about what the tool does, and the name was already taken on npm,
-so it could never have been installed under it. **repown** is repo + own: each repo
-owns its identity, so any of several clones, on any account, host or sign-in
-method, can be returned to without switching anything.
+**repown** is repo + own: each repo owns its identity, so any of several clones, on
+any account, host or sign-in method, can be returned to without switching anything.
+The name is also free on npm, which a shorter one often isn't.
 
-The rename is a clean break, because the only user was the author and the tool is
-pre-1.0. `gid.*` keys, `GID_CONFIG_DIR` and the old registry directory are **not
-read**. Reading them would mean carrying two names forever. But a clean break
-must never be silent, because an ignored `gid.allowOwner` still *looks* configured.
-So `repown` warns when `gid.*` keys remain and gives the one command that moves
-them (`git config --local --rename-section gid repown`).
-
-There is one exception. A hook written by `gid guard on` is classified **legacy**,
-not foreign, so `repown guard on` replaces it and `repown guard off` removes it.
-Otherwise every clone set up under the old name would have a hook that the tool
-refuses to touch, running old code or, once gid is uninstalled, refusing every push
-with a fix naming a command that no longer exists. That hook's fallback is also why
-the upgrade order matters: once gid is gone it runs whatever `gid` is on PATH,
-and GNU idutils ships one. So the README says to replace the hooks *before*
-uninstalling gid.
-
-A marker counts only as the `# <marker>:` header on the line after the shebang,
-exactly where this tool writes it. A foreign hook that merely mentions a marker,
-or that has this tool's body pasted below lines of its own, is left alone. The
-PowerShell guard predates that header, so its marker is accepted anywhere in the
-first five lines, and no further down.
+A pre-push hook is repown's only if its `# repown-identity-guard:` header sits on
+the line right after the shebang, exactly where `guard on` writes it. Every other
+hook is **foreign**, and `guard on` and `guard off` leave it alone. That includes a
+hook that merely mentions the marker, one with repown's body pasted below lines of
+its own, and hooks left by other identity tools, even ones that look similar.
+Overwriting or deleting a hook we can't prove we wrote could silently remove
+someone else's check.
 
 ## Residual risks, stated plainly
 

@@ -19,11 +19,7 @@ async function enable(args: Args): Promise<number> {
   const installed = await installGuard(gitFor(args));
   if (!installed.ok) { out.fail('guard', installed.error); return 1; }
 
-  if (installed.value.replaced === 'legacy') {
-    out.pass('guard', 'replaced the hook from an earlier version (gid, or the PowerShell guard and its .git/fork-guard copies)');
-  } else {
-    out.pass('guard', 'on -- every push is checked before it leaves');
-  }
+  out.pass('guard', 'on -- every push is checked before it leaves');
   out.line(out.dim('  ' + installed.value.path));
   return 0;
 }

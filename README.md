@@ -18,7 +18,6 @@ repown guard on        # refuse any push that carries another identity
 ```
 
 > **Status:** pre-1.0. The commands may still change, and it isn't on npm yet.
-> Formerly named `gid`; see [Upgrading from gid](#upgrading-from-gid).
 
 ## The problem
 
@@ -290,28 +289,6 @@ Authorize that credential for the organisation on GitHub, then push again.
 **Does it work with Azure DevOps or another host?** Commit identity and the guard
 work on every host. Choosing the push credential per clone is GitHub-only for now.
 Elsewhere it's left to whatever already serves that host ([Hosts](#hosts)).
-
-### Upgrading from gid
-
-repown was called `gid`, and the rename was a clean break
-([§10](docs/DECISIONS.md#10-named-repown-formerly-gid-as-a-clean-break)). Your pins
-keep working, because they are plain git config. What to redo:
-
-1. Install repown (see [Install](#install)). Keep gid installed for now.
-2. In each guarded clone, run `repown guard on`. It replaces the old gid hook.
-   `repown scan ~/code` finds the ones left: their guard column reads `legacy`.
-3. If `repown` warns about `gid.*` keys, run
-   `git config --local --rename-section gid repown` in that clone.
-4. Copy `accounts.json` from the old registry folder to the new one, or record
-   the accounts again with `repown accounts add`. The old folder is wherever
-   `GID_CONFIG_DIR` pointed, otherwise `%APPDATA%\gid` on Windows and
-   `$XDG_CONFIG_HOME/gid` (default `~/.config/gid`) elsewhere. The new one follows
-   the same rules with `REPOWN_CONFIG_DIR` and `repown`.
-5. Only now remove gid (`npm unlink -g gid`, or `npm uninstall -g gid` if it was
-   installed from a package).
-
-Do step 2 before step 5. An old hook whose gid is gone falls back to whatever
-`gid` is on PATH, and an unrelated program has that name (GNU idutils).
 
 ## Development
 

@@ -239,9 +239,6 @@ describe('hook body', () => {
   });
 });
 
-// The header of a hook written by `gid guard on` before the rename. FROZEN here on
-// purpose: hookBody() now writes repown's hook, so it can no longer reproduce what
-// is already on disk in clones set up under the old name.
 // Through a REAL `git push`, so the hook runs in the shell git actually uses for
 // hooks (on Windows, the one bundled with Git for Windows).
 describe('the installed hook, when its recorded CLI is gone', () => {
@@ -283,15 +280,10 @@ describe('the installed hook, when its recorded CLI is gone', () => {
   });
 });
 
-const OLD_GID_HOOK = [
-  '#!/bin/sh',
-  '# gid-identity-guard: installed by `gid guard on`, removed by `gid guard off`.',
-  'gid_entry=\'/old/cli.js\'',
-  'elif command -v gid >/dev/null 2>&1; then',
-  '',
-].join('\n');
+/** A hook another identity tool wrote, with the same header shape as repown's. */
+const OTHER_GUARD_HOOK = '#!/bin/sh\n# other-identity-guard: installed by another tool\nexit 0\n';
 
-describe('upgrading from gid', () => {
+describe('only a hook repown wrote is repown\'s', () => {
   let box: Sandbox;
   let git: Git;
   const hook = (): string => join(box.dir, '.git', 'hooks', 'pre-push');
@@ -308,31 +300,28 @@ describe('upgrading from gid', () => {
     assert.ok(body.includes('# ' + MARKER + ':'), 'marker must be the header line');
     assert.equal(MARKER, 'repown-identity-guard');
     assert.match(body, /command -v repown /);
-    assert.doesNotMatch(body, /\bgid\b/);
   });
 
-  test('an old gid hook is recognised as legacy, not as someone else\'s', async () => {
-    writeHook(OLD_GID_HOOK);
-    assert.equal(await guardState(git), 'legacy');
+  test('another tool\'s identity-guard hook is foreign', async () => {
+    writeHook(OTHER_GUARD_HOOK);
+    assert.equal(await guardState(git), 'foreign');
   });
 
-  test('`guard on` replaces an old gid hook with repown\'s', async () => {
-    writeHook(OLD_GID_HOOK);
-    const installed = await installGuard(git);
-    assert.ok(installed.ok);
-    assert.equal(installed.value.replaced, 'legacy');
-    assert.ok(readFileSync(hook(), 'utf8').includes('# ' + MARKER + ':'));
+  test('`guard on` refuses to overwrite another tool\'s identity-guard hook', async () => {
+    writeHook(OTHER_GUARD_HOOK);
+    assert.equal((await installGuard(git)).ok, false);
+    assert.equal(readFileSync(hook(), 'utf8'), OTHER_GUARD_HOOK);
   });
 
-  test('`guard off` removes an old gid hook', async () => {
-    writeHook(OLD_GID_HOOK);
-    const removed = await uninstallGuard(git);
-    assert.ok(removed.ok && removed.value);
+  test('`guard off` refuses to delete another tool\'s identity-guard hook', async () => {
+    writeHook(OTHER_GUARD_HOOK);
+    assert.equal((await uninstallGuard(git)).ok, false);
+    assert.equal(readFileSync(hook(), 'utf8'), OTHER_GUARD_HOOK);
   });
 
-  test('an old gid hook checked out with CRLF line endings is still legacy', async () => {
-    writeHook(OLD_GID_HOOK.replace(/\n/g, '\r\n'));
-    assert.equal(await guardState(git), 'legacy');
+  test('our own hook checked out with CRLF line endings is still ours', async () => {
+    writeHook(hookBody('a', 'b').replace(/\n/g, '\r\n'));
+    assert.equal(await guardState(git), 'on');
   });
 
   test('our header pasted BELOW someone else\'s lines is theirs, not ours', async () => {
@@ -343,13 +332,8 @@ describe('upgrading from gid', () => {
     assert.equal(readFileSync(hook(), 'utf8'), combined);
   });
 
-  test('the PowerShell marker deep inside a foreign hook does not make it legacy', async () => {
-    writeHook('#!/bin/sh\n' + 'true\n'.repeat(10) + '# replaced fork-identity-guard long ago\nexit 0\n');
-    assert.equal(await guardState(git), 'foreign');
-  });
-
   test('a hook that merely MENTIONS a marker in passing stays foreign and untouched', async () => {
-    const chained = '#!/bin/sh\n# runs after my own checks; see gid-identity-guard and ' + MARKER + '\nexit 0\n';
+    const chained = '#!/bin/sh\n# runs after my own checks; see ' + MARKER + '\nexit 0\n';
     writeHook(chained);
     assert.equal(await guardState(git), 'foreign');
     assert.equal((await uninstallGuard(git)).ok, false);

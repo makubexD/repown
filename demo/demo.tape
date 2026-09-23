@@ -1,6 +1,7 @@
 # Renders demo/demo.gif. From the repository root:  vhs demo/demo.tape
-# Needs vhs, ttyd and ffmpeg, plus bash, git and node 22.6+ on PATH. The usual way
-# is the manual `demo` workflow (.github/workflows/demo.yml), which runs it on Linux.
+# Needs vhs, ttyd and ffmpeg, plus bash, git and node 22.6+ on PATH. Not rendered
+# yet: vhs hung on Windows, and on GitHub's Ubuntu 22.04/24.04 runners it produced
+# no frames (even for a two-line control tape, with either ffmpeg).
 
 Output demo/demo.gif
 

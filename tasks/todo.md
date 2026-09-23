@@ -1,6 +1,6 @@
 # Todo: make gid's goal obvious
 
-Status: Phase 4, T2a+T2 done; T3 next.
+Status: Phase 4 done (T0-T3); Phase 5 review next.
 
 - [x] Phase 1 intent confirmed (GATE 1)
 - [x] Phase 2 spec approved (GATE 2, with docs sync test)
@@ -9,7 +9,7 @@ Status: Phase 4, T2a+T2 done; T3 next.
 - [x] T1 DECISIONS absorbs README-only facts - Docs: docs/DECISIONS.md
 - [x] T2a test/docs.test.ts, shown RED on the missing `off` - Docs: none
 - [x] T2 README rewrite, T2a GREEN - Docs: README.md
-- [ ] T3 CLAUDE.md rewrite, tracked with .claude/rules/code-quality.md - Docs: CLAUDE.md
+- [x] T3 CLAUDE.md rewrite, tracked with .claude/rules/code-quality.md - Docs: CLAUDE.md
 - [ ] Phase 5 review: code-reviewer + docs-drift, run in parallel
 - [ ] Phase 6 close-out: delete SPEC.md and tasks/
 

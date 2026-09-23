@@ -1,0 +1,40 @@
+# Renders demo/demo.gif. From the repository root:  vhs demo/demo.tape
+# Needs vhs, ttyd and ffmpeg, plus bash, git and node 22.6+ on PATH. The usual way
+# is the manual `demo` workflow (.github/workflows/demo.yml), which runs it on Linux.
+
+Output demo/demo.gif
+
+Set Shell "bash"
+Set FontSize 16
+Set Width 1200
+Set Height 640
+Set Padding 20
+Set TypingSpeed 35ms
+Set Theme "Dracula"
+
+Hide
+Type "source demo/setup.sh" Enter
+Sleep 2s
+Show
+
+Type "# pin this clone to an account, once" Enter
+Type "repown use octocat" Enter
+Sleep 2s
+
+Type "repown guard on" Enter
+Sleep 1500ms
+
+Type "git commit -qm 'first' --allow-empty" Enter
+Sleep 500ms
+Type "# a commit made with some other identity (an IDE, a copied config...)" Enter
+Type "git -c user.email=someone@example.invalid commit -qm 'oops' --allow-empty" Enter
+Sleep 500ms
+
+Type "git push origin main" Enter
+Sleep 3s
+
+Type "repown" Enter
+Sleep 3500ms
+
+Hide
+Type "cd / && rm -rf /c/repown-demo /tmp/repown-demo" Enter

@@ -312,7 +312,9 @@ npm run build     # tsc, also the typecheck
 
 Developing needs Node 22.6+, even though running needs only 20
 ([§7](docs/DECISIONS.md#7-typescript-on-node-and-what-that-cost)). Zero runtime
-dependencies, by choice. [CLAUDE.md](CLAUDE.md) has the contributor rules;
+dependencies, by choice. The demo is a [VHS](https://github.com/charmbracelet/vhs)
+script (`demo/demo.tape`) that the manual `demo` workflow renders on Linux; it uses
+placeholder identities in a throwaway sandbox. [CLAUDE.md](CLAUDE.md) has the contributor rules;
 [docs/DECISIONS.md](docs/DECISIONS.md) explains why every non-obvious choice was
 made.
 

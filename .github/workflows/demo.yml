@@ -1,0 +1,35 @@
+# Renders demo/demo.gif from demo/demo.tape. Run by hand (Actions -> demo -> Run
+# workflow), then download the `demo-gif` artifact and commit it.
+#
+# Rendered here rather than locally because VHS drives a headless browser through
+# ttyd, which is reliable on Linux and was not on the Windows machine this was
+# written on. The tape runs `src/cli.ts` straight from the checkout, so the GIF
+# always shows the code at the commit it was rendered from.
+
+name: demo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - uses: charmbracelet/vhs-action@v2
+        with:
+          path: demo/demo.tape
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo-gif
+          path: demo/demo.gif
+          if-no-files-found: error

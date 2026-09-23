@@ -27,9 +27,15 @@ jobs:
           node-version: '24'
 
       # Third-party, so pinned to a commit (v2 when pinned) rather than a movable tag.
+      # Used only to install vhs, ttyd and ffmpeg: running the tape ourselves keeps
+      # its output in this log and fails the job if no GIF comes out.
       - uses: charmbracelet/vhs-action@f6d7db07a432fcd3b06772628d36a57f96d95dcf
-        with:
-          path: demo/demo.tape
+
+      - name: Render
+        run: |
+          vhs demo/demo.tape
+          ls -la demo
+          test -s demo/demo.gif
 
       - uses: actions/upload-artifact@v4
         with:

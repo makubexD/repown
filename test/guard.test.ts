@@ -105,6 +105,24 @@ describe('guard check', () => {
     }
   });
 
+  // The commit's author chooses its subject and name. A separator byte in either
+  // must not make the commit disappear from the check, or shift its fields.
+  test('B2 a subject carrying a record separator cannot hide a foreign commit', async () => {
+    const sha = commitAs(THEIRS, 'fix typo\x1e');
+    const refusals = await push(sha, 'refs/heads/feat/x');
+    assert.equal(refusals.length, 1);
+    assert.ok(refusals[0]!.detail.some((row) => row.includes(sha.slice(0, 9))));
+  });
+
+  test('B3 a name carrying a field separator cannot shift the addresses read', async () => {
+    const tree = box.git('rev-parse', 'HEAD^{tree}');
+    const sha = box.git(
+      '-c', 'user.name=x\x1f' + OURS + '\x1f' + 'y', '-c', `user.email=${THEIRS}`,
+      'commit-tree', tree, '-p', box.git('rev-parse', 'HEAD'), '-m', 'spoof',
+    );
+    assert.equal((await push(sha, 'refs/heads/feat/x')).length, 1);
+  });
+
   test('D  a push to someone else’s repository is REFUSED', async () => {
     const sha = commitAs(OURS, 'ours');
     const refusals = await push(sha, 'refs/heads/feat/x',

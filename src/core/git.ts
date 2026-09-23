@@ -40,9 +40,6 @@ export interface ConfigEntry {
   readonly value: string;
 }
 
-const UNIT = '\x1f';
-const RECORD = '\x1e';
-
 export class Git {
   readonly cwd: string;
 
@@ -183,11 +180,20 @@ export class Git {
    * separate arguments so a caller can use `<sha> --not --remotes=origin`.
    */
   async identitiesIn(range: readonly string[]): Promise<Result<CommitIdentity[]>> {
-    const format = ['%H', '%s', '%an', '%ae', '%cn', '%ce'].join(UNIT) + RECORD;
-    const result = await this.exec(['log', `--format=${format}`, ...range]);
+    const [log, count] = await Promise.all([
+      this.exec(['log', '--no-show-signature', `--format=${IDENTITY_FORMAT}`, ...range]),
+      this.exec(['rev-list', '--count', ...range]),
+    ]);
     // An empty list would read as "no foreign commits": a failure must stay one.
-    if (!succeeded(result)) return err(result.stderr.trim() || 'git log failed');
-    return ok(result.stdout.split(RECORD).flatMap(parseIdentityRecord));
+    if (!succeeded(log)) return err(log.stderr.trim() || 'git log failed');
+    const commits = parseIdentities(log.stdout);
+    // The author writes the subject and the name. Whatever they contain, every
+    // commit in the range must come back parsed, or the answer is not trusted.
+    if (!commits.ok) return commits;
+    if (!succeeded(count) || Number(count.stdout.trim()) !== commits.value.length) {
+      return err('could not account for every commit in the range');
+    }
+    return commits;
   }
 
   /** Whether this clone has the commit at all -- a remote tip it never fetched is absent. */
@@ -225,15 +231,24 @@ function parseOriginLine(line: string): ConfigEntry[] {
   return [{ file: match[1]!, key: match[2]!, value: match[3] ?? '' }];
 }
 
-function parseIdentityRecord(record: string): CommitIdentity[] {
-  const fields = record.replace(/^\r?\n/, '').split(UNIT);
-  if (fields.length < 6 || !fields[0]) return [];
-  return [{
-    sha: fields[0]!,
-    subject: fields[1]!,
-    authorName: fields[2]!,
-    authorEmail: fields[3]!,
-    committerName: fields[4]!,
-    committerEmail: fields[5]!,
-  }];
+/**
+ * NUL-terminated fields, subject LAST. git refuses NUL in a name or an address,
+ * so nothing an author writes can shift them; the subject cannot reach past its
+ * own terminator either. Records are a fixed IDENTITY_FIELDS long.
+ */
+const IDENTITY_FORMAT = '%H%x00%ae%x00%ce%x00%an%x00%cn%x00%s%x00';
+const IDENTITY_FIELDS = 6;
+const SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+
+function parseIdentities(stdout: string): Result<CommitIdentity[]> {
+  const fields = stdout.split('\0');
+  const commits: CommitIdentity[] = [];
+  for (let at = 0; at + IDENTITY_FIELDS <= fields.length; at += IDENTITY_FIELDS) {
+    const [sha, authorEmail, committerEmail, authorName, committerName, subject] =
+      fields.slice(at, at + IDENTITY_FIELDS).map((field, index) => index === 0 ? field.trim() : field);
+    if (!SHA.test(sha!)) return err('unreadable commit record from git log');
+    commits.push({ sha: sha!, subject: subject!, authorName: authorName!, authorEmail: authorEmail!,
+      committerName: committerName!, committerEmail: committerEmail! });
+  }
+  return ok(commits);
 }

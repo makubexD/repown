@@ -49,7 +49,17 @@ added `--account`, was closed unmerged.
 
 So while gh is the helper, every `gh auth switch` guarantees a password prompt
 for every repository pinned to a different account. It is structural, not a
-configuration mistake.
+configuration mistake:
+
+```
+gh auth switch -u personal
+git pull                    # in a work repo
+    remote: Invalid username or token. Password authentication is not supported
+    fatal: Authentication failed for 'https://github.com/...'
+```
+
+That is not a bad token. And for an account gated behind SSO, with no
+traditional password, there is nothing to type at that prompt.
 
 ### Why a wrapper cannot paper over it
 
@@ -287,6 +297,20 @@ TypeScript before the PowerShell version was deleted:
 Zero runtime dependencies, deliberately. This reads credential configuration; the
 smallest possible supply chain is part of that job.
 
+### Strip-only TypeScript, and two Node versions
+
+The source uses only TypeScript that type stripping can erase: no enums, namespaces
+or parameter properties, and nothing that needs generated code. So every file runs
+under bare `node` with no build step. That is why the tests import `src/` directly,
+and why a change can be verified without compiling.
+
+The cost is two different Node requirements. **Running `gid` needs Node 20;
+developing it needs 22.6+.** The tests need type stripping, and `npm test` passes
+a glob to `node --test`, which Node 20 does not expand (it reports
+`Could not find 'test/*.test.ts'`). Neither applies to the published package,
+which is compiled JavaScript. So `engines` stays at `>=20`, and CI's install job
+proves that on Node 20 rather than assuming it.
+
 ---
 
 ## 8. What refuses, and what only warns
@@ -331,7 +355,7 @@ passed.** Every "unknown" above is printed, never omitted.
 | **A host-side ruleset restricting author and committer emails** | The only control `git push --no-verify` cannot bypass, since the host enforces it on receive. | A settings change per repository rather than per machine. Worth doing if `--no-verify` becomes a habit. |
 | **A `pre-commit` hook** | Would catch a wrong-author commit as it is made. | Skipped by `commit --no-verify`, and by merge, rebase, cherry-pick and revert — partial cover for a risk the range check already covers completely. |
 | **Rewriting existing history** | Commits already carrying the wrong address. | Destructive, and only the owner can weigh it. `gid scan` reports them; nothing rewrites them. |
-| **Proactive SSO-authorization-state detection** | The incident this tool exists to prevent (README, "Why not just switch accounts"): a credential that is valid but not yet SSO-authorized for an organisation looks identical to "fine" until the push/fetch that actually needs that org's resources fails — with no password to fall back on. | Measured directly, not assumed: `gh auth status --json hosts` (checked against gh v2.89.0's real output, and against `cli/cli`'s `pkg/cmd/auth/status/status.go` source on `trunk`) has exactly three `state` values — `success`, `timeout`, `error` — and `error` is set only when a call to resolve the token's login name fails, a general identity check that is never scoped to one organisation. SAML/SSO enforcement is enforced per-organisation on resource access, so nothing short of a request against that specific org's resources can observe it — the same rate-limit/auth dependency §3 already rejected for `gid.allowOwner`. Git Credential Manager's `diagnose` subcommand writes free-form logs for a human to read, not a field `gid` could parse. The signal exists only at the moment `git push`/`git fetch` actually hits the protected resource, and only in that command's own error text — reactive, not something a `doctor`-style check can see in advance. |
+| **Proactive SSO-authorization-state detection** | The incident this tool exists to prevent (§1, the SSO prompt with nothing to type): a credential that is valid but not yet SSO-authorized for an organisation looks identical to "fine" until the push/fetch that actually needs that org's resources fails — with no password to fall back on. | Measured directly, not assumed: `gh auth status --json hosts` (checked against gh v2.89.0's real output, and against `cli/cli`'s `pkg/cmd/auth/status/status.go` source on `trunk`) has exactly three `state` values — `success`, `timeout`, `error` — and `error` is set only when a call to resolve the token's login name fails, a general identity check that is never scoped to one organisation. SAML/SSO enforcement is enforced per-organisation on resource access, so nothing short of a request against that specific org's resources can observe it — the same rate-limit/auth dependency §3 already rejected for `gid.allowOwner`. Git Credential Manager's `diagnose` subcommand writes free-form logs for a human to read, not a field `gid` could parse. The signal exists only at the moment `git push`/`git fetch` actually hits the protected resource, and only in that command's own error text — reactive, not something a `doctor`-style check can see in advance. |
 
 ## Residual risks, stated plainly
 

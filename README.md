@@ -1,92 +1,58 @@
 # gid
 
-Pin a git clone to one account, and refuse to push commits that carry another
-identity.
-
-If you use more than one GitHub account on one machine — a work account and a
-personal one — then every clone on that machine inherits whichever identity is
-in your global config. That is fine until it isn't: a commit's author address is
-baked into the commit object, and on a public repository it is permanent.
-
-`gid` makes each clone say who it is, once, and then checks every push before it
-leaves.
+**Use several git accounts on one machine without ever switching.** Each clone
+commits and pushes as its own account, so you can go from a work repo to a
+personal one to a client one and every push is authenticated as the right
+account. A push carrying the wrong identity is refused before it leaves.
 
 ```
-gid use octocat        # this clone is octocat's, permanently
-gid guard on           # and nothing else gets pushed from it
+gid doctor             # once per machine: is git's credential helper ready?
+gid use octocat        # once per clone: this clone is octocat's
+gid guard on           # refuse any push that carries another identity
 ```
 
-## Why not just switch accounts
+## The problem
 
-Because switching is the problem, not the solution.
+- Every clone inherits the identity in your global git config, and a commit's
+  author address is permanent once pushed to a public repository.
+- `gh auth switch` changes the account machine-wide. While `gh` is git's
+  credential helper, every switch breaks the *other* account's repositories, and
+  an SSO-only account has no password to type at the prompt.
+  ([DECISIONS §1](docs/DECISIONS.md#1-git-credentials-come-from-the-credential-manager-gh-is-for-the-cli))
 
-`gh auth switch` changes which account the GitHub CLI acts as, machine-wide. If
-the CLI is also your git credential helper — which `gh auth setup-git` makes it —
-then switching breaks every repository belonging to the *other* account:
+## How gid solves it
 
-```
-gh auth switch -u personal
-git pull                    # in a work repo
-    remote: Invalid username or token. Password authentication is not supported
-    fatal: Authentication failed for 'https://github.com/...'
-```
-
-That is not a bad token. `gh auth git-credential` looks the token up by **host**
-and serves only the **active** account; asked for any other it returns nothing
-and exits 1, even though that account's token is sitting in the same keyring.
-So while gh is the helper, every switch guarantees a prompt on the other side —
-and for an account gated behind SSO, with no traditional password, there is
-nothing to type.
-
-Git Credential Manager already does the right thing: one credential per account,
-keyed `git:https://<user>@github.com`, chosen per repository from
-`credential.<url>.username`. Hand the host back to GCM and **no switching is
-needed at all** — each clone authenticates as itself, from anywhere, forever.
-
-```
-gid doctor      # what actually serves credentials here
-gid fix         # undo `gh auth setup-git`, reversibly
-```
-
-`gh` keeps the job it is good at: it stays the account store, and `gh pr create`
-and `gh api` keep working. It simply stops being involved in push and pull.
+- **Pin each clone:** `gid use <account>` writes the commit identity and the push
+  account into that clone's `.git/config`. It is set once and never switched.
+- **One credential per account:** Git Credential Manager already stores one
+  credential per account and picks it per clone. `gid doctor` checks that it is the
+  helper, and `gid fix` hands the host back to it if `gh auth setup-git` took over.
+  `gh` stays your account store for `gh pr create` and `gh api`.
+- **Guard every push:** `gid guard on` installs a `pre-push` hook that checks the
+  commits themselves, not just today's config.
 
 ## Install
 
-Needs Node 20+ and git. Windows, macOS and Linux. (Developing it needs Node
-22.6+ — see below.)
-
-Not on npm yet, so install from the repository:
+Needs Node 20+ and git, on Windows, macOS or Linux. It is not on npm yet, so
+install it from the repository:
 
 ```
 git clone https://github.com/makubexD/gid.git
 cd gid && npm install && npm run build && npm link
 ```
 
-`npm link` puts `gid` on your PATH. To remove it again: `npm unlink -g gid`.
+`npm link` puts `gid` on your PATH, and `npm unlink -g gid` removes it.
 
-Once published, this becomes `npm install -g gid`. The package is written
-publish-ready, and deliberately not published until the command surface has
-settled.
+## Quickstart
 
-## Use
-
-### Once per machine
-
-Record an account so you never have to type its details again:
+**Once per machine**, check what serves your git credentials:
 
 ```
-$ gid accounts add octocat
-OK    accounts   octocat  Octo Cat <octocat@users.noreply.github.com>
-
-  Use it in any clone:  gid use octocat
+gid doctor      # names the fix if gh is the credential helper
+gid fix         # only if doctor says so; shows what it removes and the undo first
 ```
 
-With no `--name` / `--email` it asks, suggesting the account's public name and
-its GitHub noreply address — which is publishable by design and still links the
-commit to the account.
-
-### Once per clone
+**Once per clone:**
 
 ```
 $ gid use octocat
@@ -96,9 +62,15 @@ OK    identity   Octo Cat <octocat@users.noreply.github.com>  push-as:octocat
   once, then never again. Verify it afterwards: gid doctor
 
   Next: gid guard on    (check every push before it leaves)
+
+$ gid guard on
 ```
 
-That writes four repo-local git config keys and nothing else:
+The first time you use an account, `gid use` asks for its commit name and email,
+suggesting the GitHub noreply address, and remembers them for every other clone.
+To record an account up front instead, run `gid accounts add octocat`.
+
+`gid use` writes four repo-local keys and nothing else:
 
 | Key | What it decides |
 | --- | --- |
@@ -106,14 +78,14 @@ That writes four repo-local git config keys and nothing else:
 | `credential.<host>.username` | which stored credential serves the **push** |
 | `user.useConfigOnly` | git refuses to invent an identity from the hostname |
 
-All of it lands in `.git/config`, which git never tracks. Nothing is written to
-the repository, which is what keeps a name or address out of a public one — and
-also why it is per clone: a second machine, or a re-clone, runs it again.
+`.git/config` is never tracked, so no name or address reaches the repository.
+The same is true on a second machine or after a re-clone, where you run `gid use`
+again.
 
-You do not switch this afterwards, and you do not need to. `gid use <account> --gh`
-also switches the CLI's active account, for when you want the two to agree.
+## Day to day
 
-### Any time
+**Moving between accounts needs no command.** `cd` into any pinned clone, then
+commit and push. To see who a clone is, run `gid` (short for `gid status`):
 
 ```
 $ gid
@@ -130,33 +102,54 @@ WARN  gh         active as "<your other account>", so `gh pr create` here would 
 OK    identity   this clone is pinned, and its credential mechanism honours it
 ```
 
-Three separate things decide who you are, and they fail differently. All three
-are printed, because the one that is invisible is the one that catches people
-out.
+It prints all three things that decide who you are (commit identity, push
+credential, gh's active account), because the one you can't see is the one that
+catches you out. `gid use octocat --gh` also switches gh to match.
 
-### Help, and exit codes
+**Re-point a clone** that now belongs to another account: `gid off` removes the
+repo-local identity (global config is never touched), then `gid use <other>`.
 
-`gid --help` lists every command; `gid <command> --help` (or `gid help
-<command>`) shows one command's own options, and for `guard` and `accounts`,
-its actions — `gid guard on --help` goes one level deeper. Asking for help
-never changes anything, no matter what the command itself would otherwise do.
+**Audit every clone** you already have:
 
-Every command exits `0` on success, `1` on a failure or a refusal, and `2` on
-a usage error — a missing account, an unknown option, or the like.
+```
+$ gid scan ~/code ~/work
+
+    repo                    owner       host    identity     guard   identities in history
+    ------------------------------------------------------------------------------------
+    personal-project        octocat     github  INHERITED    off     work.example=122
+    work-service            acme        github  INHERITED    off     work.example=13655 +12 more
+    the-fork                octocat     github  pinned       on      octocat.example=8 (excl. mirror)
+```
+
+It shows domains and counts rather than addresses, because this output gets pasted
+into chats; `--emails` shows the exact addresses. A shared repository legitimately
+has many identities. The row worth acting on is a repository you own whose history
+carries an address that isn't yours. The guard stops new ones; it cannot rewrite
+history.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `gid status` (or just `gid`) | the state of this repository and this machine |
+| `gid use <account> [--gh]` | pin this clone to an account (`--name`/`--email` skip the registry) |
+| `gid off` | unpin this clone, leaving global config alone |
+| `gid doctor` | what serves credentials on this machine, and to whom |
+| `gid fix [--dry-run] [--yes]` | undo `gh auth setup-git` so per-clone pins work again |
+| `gid guard on \| off \| status` | install, remove or show the pre-push hook |
+| `gid accounts list \| add \| rm` | the accounts this machine knows (name and email per account) |
+| `gid scan <dir>... [--emails]` | audit every clone under a directory |
+
+`gid --help` lists them, and `gid help <command>` shows one command's options.
+Asking for help never changes anything. `--cwd <dir>` works on every command.
+Exit codes: `0` success, `1` failure or refusal, `2` usage error.
 
 ## The guard
 
-```
-gid guard on
-```
-
-Installs a `pre-push` hook that reads the refs git is about to push and checks
-**the commits themselves**.
-
-That distinction is the entire point. A config check answers "is the identity
-right at this moment" — which a commit authored before setup, or on a branch, or
-introduced by a merge, rebase, cherry-pick or an IDE, passes cleanly as soon as
-the config is put right afterwards. The push is recoverable. The commit is not.
+It reads the refs git is about to push and checks **the commits themselves**, so
+it also catches a commit made before setup, on another branch, or brought in by a
+merge, rebase or cherry-pick
+([§2](docs/DECISIONS.md#2-the-guard-verifies-commits-not-configuration)).
 
 ```
 $ git push
@@ -171,97 +164,44 @@ Override this one push with: git push --no-verify
 
 It also refuses:
 
-- a push whose **destination** is owned by someone other than the pinned account,
-  parsed as a URL — so `https://octocat@github.com/someone-else/repo` does not
-  pass on its userinfo alone;
-- `GH_TOKEN` / `GITHUB_TOKEN`, which make gh serve that token whatever account
-  git asked for, skipping its own username check entirely;
-- `GIT_AUTHOR_EMAIL` / `GIT_COMMITTER_EMAIL`, which silently override the
-  identity the guard just validated;
-- a clone with no pinned identity, because it cannot tell your commits from
-  anyone else's;
-- **itself being unrunnable.** If `gid` cannot be found, the hook refuses rather
-  than exiting 0. A hook that cannot run its check is not a check.
+- a destination owned by someone other than the pinned account, parsed from the
+  URL, so `https://octocat@github.com/someone-else/repo` doesn't pass on its
+  userinfo;
+- `GH_TOKEN` / `GITHUB_TOKEN`, or `GIT_AUTHOR_EMAIL` / `GIT_COMMITTER_EMAIL`,
+  because each silently outranks the identity it just checked;
+- a clone with no pinned identity;
+- **itself being unrunnable.** If `gid` can't be found, the hook refuses rather
+  than passing ([§3](docs/DECISIONS.md#3-the-hook-calls-the-installed-cli-and-refuses-when-it-cannot)).
 
-### Two repo-local keys it reads
+Credential problems only warn: a failed authentication publishes nothing
+([§8](docs/DECISIONS.md#8-what-refuses-and-what-only-warns)).
 
-```
-git config --local gid.mirrorBranch master        # a branch that mirrors someone else
-git config --local --add gid.allowOwner An-Org    # another owner you may push to
-```
-
-**`gid.mirrorBranch`** — a fork whose `master` only ever fast-forwards to
-upstream commits carries other people's addresses legitimately. This exempts
-exactly that branch. Unset means **no exemption**, which is the safe default: an
-exemption that applies by default is how guards end up covering one branch and
-missing the ones that carry the actual work.
-
-**`gid.allowOwner`** — repeatable. An organisation is never an account name, so
-without this the destination check refuses every push to every organisation
-repository, which is most repositories in most jobs. Listing one owner does not
-open the door to any other. `gid` prints the exact command when it sees an owner
-it does not recognise.
-
-Organisation membership could have been resolved from the host API instead. It
-deliberately is not: that would put a network call and an auth dependency in the
-pre-push path, where a rate limit or an offline laptop becomes a failed push.
-
-### When the guard is the wrong tool
-
-It refuses **any** foreign author in a push. That is right for a repository where
-every commit should be yours, and wrong for a shared one, where pushing a branch
-containing a colleague's commit is ordinary work.
-
-So on a team repository: `gid use` it, and leave the guard off. You still get an
-explicit identity that cannot drift with your global config, and the credential
-pin that makes multi-account work. The control that fits a shared repository is a
-server-side ruleset on author addresses, which the host enforces on receive and
-`--no-verify` cannot bypass.
-
-## Auditing what you already have
+Two repo-local keys adjust it:
 
 ```
-$ gid scan ~/code ~/work
-
-    repo                    owner       host    identity     guard   identities in history
-    ------------------------------------------------------------------------------------
-    personal-project        octocat     github  INHERITED    off     work.example=122
-    work-service            acme        github  INHERITED    off     work.example=13655 +12 more
-    the-fork                octocat     github  pinned       on      octocat.example=8 (excl. mirror)
-
-  repositories     3
-  not pinned       2
-  not guarded      3
+git config --local gid.mirrorBranch master        # a branch that only mirrors upstream
+git config --local --add gid.allowOwner An-Org    # another owner you may push to (repeatable)
 ```
 
-Domains and counts by default, never addresses — this is the sort of output that
-gets pasted into a chat window. `--emails` opts in when you need the exact value.
+Unset `gid.mirrorBranch` means no exemption. An organisation is never an account
+name, so organisation repositories need `gid.allowOwner`; `gid use` prints the
+exact command when it sees an unknown owner.
 
-The identity column is a **fact, not a verdict**: a shared repository
-legitimately carries many addresses. What is worth acting on is a repository you
-own whose history carries an address that is not yours — the first row above.
-
-The guard stops new ones. It cannot undo commits that already exist.
+**Leave the guard off on shared repositories.** It refuses *any* foreign author,
+and pushing a colleague's commit is ordinary work there. `gid use` alone still
+pins your identity; a server-side ruleset on author addresses is the right control
+for a team.
 
 ## Hosts
 
 | Host | Commit identity | Guard | Credential pinning |
 | --- | --- | --- | --- |
 | GitHub | yes | yes | yes |
-| Azure DevOps | yes | yes | **no** — see below |
+| Azure DevOps | yes | yes | **no** ([§6](docs/DECISIONS.md#6-hosts-are-a-strategy-and-only-claim-what-was-measured)) |
 | anything else | yes | yes | no |
 
-An author address is the same fact everywhere, so commit pinning and the guard
-work on any host. Credential pinning needs the host's credential model to be
-understood, and `gid` only claims the ones that were actually measured.
-
-Azure DevOps is recognised — including that its two URL forms disagree about
-what the first path segment means, so the organisation is read correctly from
-both — but its credentials are deliberately left alone. `src/core/hosts/azdo.ts`
-records exactly what was probed and what remains open.
-
-Adding a host is one file implementing `HostProvider` and one line in
-`src/core/hosts/index.ts`.
+An author address is the same fact on every host, so pinning and the guard work
+everywhere. Credential pinning is claimed only where it was measured.
 
 ## Where things live
 
@@ -272,31 +212,21 @@ Adding a host is one file implementing `HostProvider` and one line in
 | `%APPDATA%\gid\accounts.json` | name + email per account | yes |
 | OS credential store | one credential per account | yes |
 | global `.gitconfig` | `credential.helper`, and your default account | yes |
-| `gh`'s `hosts.yml` | accounts and the active one — **CLI only, not git** | yes |
+| `gh`'s `hosts.yml` | accounts and the active one (**CLI only, not git**) | yes |
 
-`GID_CONFIG_DIR` overrides the registry location. On Linux and macOS it follows
-`XDG_CONFIG_HOME`, defaulting to `~/.config/gid`.
+On Linux and macOS the registry is `$XDG_CONFIG_HOME/gid` (default
+`~/.config/gid`). `GID_CONFIG_DIR` overrides it everywhere.
 
 ## Development
 
 ```
 npm install
 npm test          # node's own test runner, no framework
-npm run build
+npm run build     # tsc, also the typecheck
 ```
 
-**Running it needs Node 20. Developing it needs Node 22.6+.** Those are
-genuinely different requirements and CI checks both. The tests import `src/*.ts`
-directly, which needs type stripping, and `npm test` passes a glob to
-`node --test`, which Node 20 does not expand — it reports
-`Could not find 'test/*.test.ts'`. Neither applies to the published package,
-which is compiled JavaScript, so `engines` stays at `>=20` and the CI install
-job proves that on Node 20 rather than assuming it.
-
-Zero runtime dependencies, by choice: this tool reads credentials configuration,
-and the smallest possible supply chain is part of that job.
-
-The source is **strip-only TypeScript** — no parameter properties, no enums, no
-namespaces, nothing that needs code generated rather than types removed. So every
-file runs under bare `node` with no build step, which is why the tests import
-`src/` directly and why a change can be verified without compiling first.
+Developing needs Node 22.6+, even though running needs only 20
+([§7](docs/DECISIONS.md#7-typescript-on-node-and-what-that-cost)). Zero runtime
+dependencies, by choice. [CLAUDE.md](CLAUDE.md) has the contributor rules;
+[docs/DECISIONS.md](docs/DECISIONS.md) explains why every non-obvious choice was
+made.

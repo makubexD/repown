@@ -229,7 +229,9 @@ git config --local repown.mirrorBranch master        # a branch that only mirror
 git config --local --add repown.allowOwner An-Org    # another owner you may push to (repeatable)
 ```
 
-Unset `repown.mirrorBranch` means no exemption. An organisation is never an account
+Unset `repown.mirrorBranch` means no exemption. On the mirror branch, commits
+already on any remote (fetched from upstream, say) don't count, but a commit made
+here and on no remote is still refused. An organisation is never an account
 name, so organisation repositories need `repown.allowOwner`; `repown use` prints the
 exact command when it sees an unknown owner.
 

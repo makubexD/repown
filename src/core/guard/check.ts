@@ -144,10 +144,18 @@ async function checkCommits(input: CheckInput, expected: string): Promise<Refusa
 
   for (const ref of parsePushRefs(input.stdin)) {
     if (ref.localSha === ZERO) continue;              // a deletion publishes nothing
-    if (mirror && ref.remoteRef === 'refs/heads/' + mirror) continue;
-    refusals.push(...await checkRange(input, ref, expected));
+    const exclude = mirror && ref.remoteRef === 'refs/heads/' + mirror
+      ? ['--not', '--remotes']                          // public on ANY remote: upstream's
+      : ['--not', '--remotes=' + input.remote];
+    refusals.push(...await checkRange(input, { ref, exclude }, expected));
   }
   return refusals;
+}
+
+/** One pushed ref, and the commits that do not count because a remote already has them. */
+interface Pushed {
+  readonly ref: PushRef;
+  readonly exclude: readonly string[];
 }
 
 /**
@@ -156,6 +164,11 @@ async function checkCommits(input: CheckInput, expected: string): Promise<Refusa
  * otherwise be refused for carrying their addresses -- but defaulting to an
  * exemption is how the previous design left five of six branches unguarded, so
  * an unset key means no exemption at all.
+ *
+ * EVEN THEN THE MIRROR IS CHECKED, just against a wider exclusion: a commit on
+ * ANY remote-tracking ref (upstream's included) is public already and does not
+ * count, but one on no remote was made here. Skipping the ref outright let
+ * `git push origin feature:master` publish anything at all.
  *
  * BOTH RANGES EXCLUDE WHAT THE REMOTE ALREADY HAS. The question this guard asks
  * is which addresses THIS push makes permanent -- and a commit already on a
@@ -170,8 +183,9 @@ async function checkCommits(input: CheckInput, expected: string): Promise<Refusa
  * exclude a commit that is no longer really published. `git fetch --prune`
  * corrects it, and the new-branch path has always carried the same exposure.
  */
-async function checkRange(input: CheckInput, ref: PushRef, expected: string): Promise<Refusal[]> {
-  const commits = await input.git.identitiesIn(await rangeFor(input, ref));
+
+async function checkRange(input: CheckInput, { ref, exclude }: Pushed, expected: string): Promise<Refusal[]> {
+  const commits = await input.git.identitiesIn(await rangeFor(input.git, ref, exclude));
   if (!commits.ok) {
     return [{
       reason: 'The guard could not read the commits bound for ' + ref.remoteRef +
@@ -190,9 +204,8 @@ async function checkRange(input: CheckInput, ref: PushRef, expected: string): Pr
  * push is checked as if the branch were new: everything the remote's
  * tracking refs do not already carry.
  */
-async function rangeFor(input: CheckInput, ref: PushRef): Promise<string[]> {
-  const exclude = ['--not', '--remotes=' + input.remote];
-  const known = ref.remoteSha !== ZERO && await input.git.hasCommit(ref.remoteSha);
+async function rangeFor(git: Git, ref: PushRef, exclude: readonly string[]): Promise<string[]> {
+  const known = ref.remoteSha !== ZERO && await git.hasCommit(ref.remoteSha);
   return known ? [ref.remoteSha + '..' + ref.localSha, ...exclude] : [ref.localSha, ...exclude];
 }
 

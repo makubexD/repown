@@ -198,6 +198,12 @@ branch. **Unset means no exemption.** The previous design's exemption was writte
 for one mirror branch and silently covered every feature branch as well; an
 exemption that applies by default is how that happens.
 
+The exemption is narrower than skipping the branch. On the mirror branch, a commit
+already on **any** remote-tracking ref, upstream's included, doesn't count, because
+it's public already. A commit on no remote was made here, and it's still checked.
+Skipping the branch outright let `git push origin feature:master` publish anything.
+So fetch upstream before pushing the mirror.
+
 ---
 
 ## 4. There is no profile store

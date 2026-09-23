@@ -78,6 +78,7 @@ describe('guard check', () => {
 
   test('C  the mirror exemption applies ONLY to the configured branch', async () => {
     const sha = commitAs(THEIRS, 'upstream work');
+    box.git('update-ref', 'refs/remotes/upstream/master', sha);   // fetched from upstream
     // With no repown.mirrorBranch, nothing is exempt -- the safe default.
     assert.equal((await push(sha, 'refs/heads/master')).length, 1);
 
@@ -86,6 +87,22 @@ describe('guard check', () => {
     // ...and still refuses everywhere else.
     assert.equal((await push(sha, 'refs/heads/feat/x')).length, 1);
     box.git('config', '--local', '--unset', 'repown.mirrorBranch');
+    box.git('update-ref', '-d', 'refs/remotes/upstream/master');
+  });
+
+  // The mirror carries upstream's commits, which are public already. A commit
+  // made HERE and on no remote at all is not upstream's, whatever branch it is
+  // pushed to -- `git push origin feature:master` must not launder it.
+  test('C2 the mirror branch still refuses a foreign commit that is on no remote', async () => {
+    const stray = commitAs(THEIRS, 'made here, never fetched from anywhere');
+    box.git('config', '--local', 'repown.mirrorBranch', 'master');
+    try {
+      const refusals = await push(stray, 'refs/heads/master');
+      assert.equal(refusals.length, 1);
+      assert.ok(refusals[0]!.detail.some((row) => row.includes(stray.slice(0, 9))));
+    } finally {
+      box.git('config', '--local', '--unset', 'repown.mirrorBranch');
+    }
   });
 
   test('D  a push to someone else’s repository is REFUSED', async () => {

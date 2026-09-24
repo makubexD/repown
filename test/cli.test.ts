@@ -160,6 +160,7 @@ describe('hidden aliases resolve to the same action as their canonical name', ()
   });
 
   test('`guard disable` removes it, exactly like `guard off`', () => {
+    assert.equal(existsSync(join(box.dir, '.git', 'hooks', 'pre-push')), true, 'nothing to remove: vacuous');
     const run = repown(['guard', 'disable'], { cwd: box.dir });
     assert.equal(run.status, 0);
     assert.equal(existsSync(join(box.dir, '.git', 'hooks', 'pre-push')), false);
@@ -199,12 +200,10 @@ describe('`accounts remove` (alias) reaches the same action as `accounts rm`', (
     const run = (args: readonly string[]) =>
       spawnSync(process.execPath, [CLI, ...args], { env, encoding: 'utf8' });
 
-    // --host generic: the github provider's resolveProfile calls out to `gh`
-    // to suggest a name/email even when both are given explicitly; generic's
-    // is a no-op, which is what keeps this test offline and deterministic.
-    const added = run(['accounts', 'add', 'octocat', '--host', 'generic',
-      '--name', 'Octo Cat', '--email', 'octocat@example.invalid']);
+    const added = run(['accounts', 'add', 'octocat', '--name', 'Octo Cat', '--email', 'octocat@example.invalid']);
     assert.equal(added.status, 0);
+    assert.equal(existsSync(join(configDir, 'accounts.json')), true, 'written where REPOWN_CONFIG_DIR says');
+    assert.match(run(['accounts', 'list']).stdout, /octocat\s+Octo Cat <octocat@example\.invalid>/);
 
     const removed = run(['accounts', 'remove', 'octocat']);
     assert.equal(removed.status, 0);
@@ -274,6 +273,52 @@ describe('guard check (the hook contract every installed hook already calls)', (
     child.stdin.end(`refs/heads/main ${sha} refs/heads/main ${'0'.repeat(40)}\n`);
     const [code] = await once(child, 'exit') as [number | null];
     assert.notEqual(code, 0);
+  });
+});
+
+describe('repown status, doctor and fix: exit codes and what they change', () => {
+  let box: Sandbox;
+  beforeEach(() => { box = sandbox(); });
+  afterEach(() => box.dispose());
+  const GH_HELPER = '[credential "https://github.com"]\n\thelper =\n\thelper = !gh auth git-credential\n' +
+                    '[credential "https://gist.github.com"]\n\thelper =\n\thelper = !gh auth git-credential\n';
+
+  test('status exits 1 on an unpinned clone and names the address it would inherit', () => {
+    box.git('config', '--local', '--unset', 'user.name');
+    box.git('config', '--local', '--unset', 'user.email');
+    box.writeGlobalConfig('[user]\n\tname = Machine\n\temail = machine@example.invalid\n');
+    const run = repown([], { cwd: box.dir });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /machine@example\.invalid/);
+  });
+
+  test('status exits 0 on a pinned clone', () => {
+    assert.equal(repown([], { cwd: box.dir }).status, 0);
+  });
+
+  test('doctor exits 1 and names `repown fix` when gh is the credential helper', () => {
+    box.writeGlobalConfig(GH_HELPER);
+    const run = repown(['doctor'], { cwd: box.dir });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr + run.stdout, /repown fix/);
+  });
+
+  test('fix --dry-run changes nothing', () => {
+    box.writeGlobalConfig(GH_HELPER);
+    assert.equal(repown(['fix', '--dry-run'], { cwd: box.dir }).status, 0);
+    assert.equal(readFileSync(box.globalConfig, 'utf8'), GH_HELPER);
+  });
+
+  test('fix without --yes and without a terminal refuses and changes nothing', () => {
+    box.writeGlobalConfig(GH_HELPER);
+    assert.equal(repown(['fix'], { cwd: box.dir }).status, 1);
+    assert.equal(readFileSync(box.globalConfig, 'utf8'), GH_HELPER);
+  });
+
+  test('fix --yes removes gh from github.com AND gist.github.com', () => {
+    box.writeGlobalConfig(GH_HELPER);
+    assert.equal(repown(['fix', '--yes'], { cwd: box.dir }).status, 0);
+    assert.doesNotMatch(readFileSync(box.globalConfig, 'utf8'), /gh auth git-credential/);
   });
 });
 

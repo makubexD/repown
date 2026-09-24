@@ -149,7 +149,16 @@ describe('Git', () => {
   });
 
   test('isRepo is false outside a repository', async () => {
-    assert.equal(await new Git(box.dir + '/../').isRepo(), false);
+    // A TEMP inside a git repository (a dotfiles home) would otherwise answer true.
+    const outside = join(box.dir, '..');
+    const saved = process.env['GIT_CEILING_DIRECTORIES'];
+    process.env['GIT_CEILING_DIRECTORIES'] = join(outside, '..');
+    try {
+      assert.equal(await new Git(outside).isRepo(), false);
+    } finally {
+      if (saved === undefined) delete process.env['GIT_CEILING_DIRECTORIES'];
+      else process.env['GIT_CEILING_DIRECTORIES'] = saved;
+    }
   });
 });
 

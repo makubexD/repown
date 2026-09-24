@@ -42,7 +42,9 @@ function hostSuffix(entry: Account): string {
 async function add(args: Args): Promise<number> {
   const account = args.positional[0]!;
   const hostId = flagString(args, 'host') ?? 'github';
-  const suggested = await suggestProfile(hostId, account);
+  // Only when something is left to ask: the suggestion is a network call.
+  const complete = flagString(args, 'name') !== null && flagString(args, 'email') !== null;
+  const suggested = complete ? {} : await suggestProfile(hostId, account);
 
   const name = flagString(args, 'name') ?? await askFor('Commit name', suggested.name ?? account);
   if (name === null) return 1;

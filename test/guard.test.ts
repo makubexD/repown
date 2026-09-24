@@ -612,6 +612,27 @@ describe('guard check, the destination on hosts with no credential key', () => {
   });
 });
 
+describe('pinning writes one key at a time', () => {
+  // `git config` writes through a .lock file; two at once and one loses,
+  // quietly. The sandbox test below cannot SEE concurrency -- a Promise.all
+  // there passes most runs -- so this counts writes in flight directly.
+  test('never has two config writes in flight', async () => {
+    const { pinIdentity } = await import('../src/core/identity.ts');
+    let inFlight = 0;
+    let peak = 0;
+    const counting = {
+      setConfig: async (): Promise<boolean> => {
+        inFlight += 1; peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight -= 1;
+        return true;
+      },
+    } as unknown as Git;
+    await pinIdentity(counting, { name: 'N', email: 'e@example.invalid', account: 'a' }, ['credential.x.username']);
+    assert.equal(peak, 1);
+  });
+});
+
 describe('pinning writes every key', () => {
   test('all five keys land -- they are written one at a time, never concurrently', async () => {
     const box = sandbox();

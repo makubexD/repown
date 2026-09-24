@@ -59,8 +59,18 @@ async function hookDirs(git: Git): Promise<HookDirs | null> {
 
 /** The pre-push hook git will actually RUN -- through core.hooksPath if that is set. */
 export async function hookPath(git: Git): Promise<string | null> {
+  return (await hookLocation(git))?.path ?? null;
+}
+
+export interface HookLocation {
+  readonly path: string;
+  /** core.hooksPath points elsewhere, so `guard on` will not write there. */
+  readonly redirected: boolean;
+}
+
+export async function hookLocation(git: Git): Promise<HookLocation | null> {
   const dirs = await hookDirs(git);
-  return dirs ? join(dirs.effective, 'pre-push') : null;
+  return dirs ? { path: join(dirs.effective, 'pre-push'), redirected: isRedirected(dirs) } : null;
 }
 
 /**
@@ -181,7 +191,9 @@ export async function uninstallGuard(git: Git): Promise<Result<boolean>> {
   if (!dirs) return err(NO_GIT_DIR);
   const removed = await removeIfOurs(join(dirs.own, 'pre-push'));
   if (!removed.ok || removed.value || !isRedirected(dirs)) return removed;
-  return existsSync(join(dirs.effective, 'pre-push')) ? err(redirectMessage(dirs)) : ok(false);
+  // A repown hook in the redirected directory is ours to report but not to delete;
+  // anything else there is simply someone else's, and there is nothing to turn off.
+  return await stateOf(join(dirs.effective, 'pre-push')) === 'on' ? err(redirectMessage(dirs)) : ok(false);
 }
 
 async function removeIfOurs(path: string): Promise<Result<boolean>> {

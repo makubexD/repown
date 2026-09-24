@@ -34,7 +34,9 @@ export default {
     await reportWarnings(repo, auth);
 
     if (problems.length === 0) {
-      out.pass('identity', 'this clone is pinned, and its credential mechanism honours it');
+      out.pass('identity', repo.credentialKeys.length > 0
+        ? 'this clone is pinned, and its credential mechanism honours it'
+        : 'this clone\'s commit identity is pinned; its credentials are left to ' + (repo.helper ?? 'nothing'));
       return 0;
     }
     out.line();
@@ -46,10 +48,9 @@ export default {
 function summary(repo: RepoState, auth: AuthState): void {
   const id = repo.identity;
   out.line();
-  out.field('commits as', id.name ? id.name + ' <' + id.email + '>' : 'NOT SET LOCALLY');
-  if (repo.credentialKeys.length > 0) {
-    out.field('pushes as', id.account ?? 'NOT SET LOCALLY');
-  }
+  out.field('commits as', id.name || id.email ? (id.name ?? '?') + ' <' + (id.email ?? '?') + '>' : 'NOT SET LOCALLY');
+  out.field('pushes as', repo.credentialKeys.length > 0 ? id.account ?? 'NOT SET LOCALLY'
+    : 'not pinned by repown on ' + repo.provider.label);
   out.field('origin', (repo.owner ?? 'unknown') + '  ' + out.dim('(' + repo.provider.label + ')'));
   out.field('helper', repo.helper ?? 'none');
   out.field('gh active', activeAccountLabel(auth));
@@ -114,10 +115,13 @@ async function reportWarnings(repo: RepoState, auth: AuthState): Promise<void> {
 
 function guardWarning(repo: RepoState): void {
   if (repo.guard === 'on') return;
-  if (repo.guard === 'off') {
+  if (repo.hook?.redirected) {
+    out.warn('guard', 'core.hooksPath makes git run hooks from another tool\'s directory; repown does not install there.');
+    out.detail('guard this clone from that tool\'s pre-push hook: repown guard check --remote="$1" --url="$2"');
+  } else if (repo.guard === 'off') {
     out.warn('guard', 'off -- pushes are not checked. Enable it: repown guard on');
   } else {
     out.warn('guard', 'a pre-push hook repown did not write is installed; it was left alone.');
-    out.detail('read it first; if it is safe to drop, delete .git/hooks/pre-push, then run: repown guard on');
+    out.detail('read it first; if it is safe to drop, delete ' + (repo.hook?.path ?? 'it') + ', then run: repown guard on');
   }
 }

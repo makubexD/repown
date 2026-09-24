@@ -11,7 +11,7 @@ import { Git, type ConfigEntry } from './git.ts';
 import { parseGitUrl, type GitUrl } from './url.ts';
 import { providerFor, type HostProvider } from './hosts/index.ts';
 import { readIdentity, type RepoIdentity } from './identity.ts';
-import { guardState, type GuardState } from './guard/hook.ts';
+import { guardState, hookLocation, type GuardState, type HookLocation } from './guard/hook.ts';
 import { findGcm, listAccounts } from './credential/gcm.ts';
 import { ghState, ghInstalled, isGh, type GhState } from './credential/gh.ts';
 import type { Result } from './result.ts';
@@ -22,7 +22,6 @@ export interface RepoState {
   readonly git: Git;
   readonly isRepo: boolean;
   readonly root: string | null;
-  readonly branch: string | null;
   readonly originUrl: string | null;
   readonly url: GitUrl | null;
   readonly provider: HostProvider;
@@ -31,6 +30,8 @@ export interface RepoState {
   readonly identity: RepoIdentity;
   readonly credentialKeys: readonly string[];
   readonly guard: GuardState;
+  /** Where git runs the pre-push hook from; null outside a repository. */
+  readonly hook: HookLocation | null;
   /** The effective credential helper for THIS repository's remote. */
   readonly helper: string | null;
 }
@@ -56,18 +57,18 @@ export async function inspectRepo(git: Git): Promise<RepoState> {
   const provider = providerFor(url);
   const credentialKeys = url ? provider.credentialKeys(url) : [];
 
-  const [root, branch, identity, guard, helper] = await Promise.all([
+  const [root, hook, identity, guard, helper] = await Promise.all([
     isRepo ? git.root() : Promise.resolve(null),
-    isRepo ? git.currentBranch() : Promise.resolve(null),
+    isRepo ? hookLocation(git) : Promise.resolve(null),
     readIdentity(git, credentialKeys[0] ?? null),
     isRepo ? guardState(git) : Promise.resolve<GuardState>('off'),
     git.getUrlMatch('credential.helper', originUrl ?? DEFAULT_PROBE_URL),
   ]);
 
   return {
-    git, isRepo, root, branch, originUrl, url, provider,
+    git, isRepo, root, originUrl, url, provider,
     owner: url ? provider.ownerOf(url) : null,
-    identity, credentialKeys, guard, helper,
+    identity, credentialKeys, guard, hook, helper,
   };
 }
 

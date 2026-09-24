@@ -84,12 +84,6 @@ export class Git {
     return output(await this.exec(['rev-parse', '--git-path', 'hooks']));
   }
 
-  /** null when HEAD is detached, which callers must handle rather than assume. */
-  async currentBranch(): Promise<string | null> {
-    const branch = output(await this.exec(['rev-parse', '--abbrev-ref', 'HEAD']));
-    return branch === 'HEAD' ? null : branch;
-  }
-
   async hasCommits(): Promise<boolean> {
     return succeeded(await this.exec(['rev-parse', '--verify', '--quiet', 'HEAD']));
   }

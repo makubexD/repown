@@ -138,7 +138,7 @@ async function reportConcerns(account: string, repo: RepoState): Promise<void> {
     out.line('  No stored credential for "' + account + '" yet -- the first push signs in');
     out.line('  once, then never again. Verify it afterwards: repown doctor');
   }
-  if (repo.guard === 'off') {
+  if (repo.guard === 'off' && !repo.hook?.redirected) {
     out.line();
     out.line('  Next: repown guard on    (check every push before it leaves)');
   }

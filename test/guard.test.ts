@@ -502,6 +502,17 @@ describe('only a hook repown wrote is repown\'s', () => {
     assert.equal(existsSync(join(shared, 'pre-push')), true, 'a directory repown does not own is left alone');
   });
 
+  test('with core.hooksPath set and only another tool\'s hook there, `guard off` has nothing to do', async () => {
+    const shared = join(box.dir, 'husky');
+    mkdirSync(shared, { recursive: true });
+    writeFileSync(join(shared, 'pre-push'), OTHER_GUARD_HOOK);
+    box.git('config', '--local', 'core.hooksPath', shared);
+    const removed = await uninstallGuard(git);
+    assert.ok(removed.ok, 'turning off a guard that was never installed is not an error');
+    assert.equal(removed.value, false);
+    assert.equal(readFileSync(join(shared, 'pre-push'), 'utf8'), OTHER_GUARD_HOOK);
+  });
+
   test('with core.hooksPath set, `guard off` still removes repown\'s own leftover in .git/hooks', async () => {
     writeHook(hookBody('a', 'b'));
     box.git('config', '--local', 'core.hooksPath', join(box.dir, 'elsewhere'));

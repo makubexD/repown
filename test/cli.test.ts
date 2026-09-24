@@ -335,7 +335,28 @@ describe('status in a clone pushing to an organisation', () => {
     const run = repown([], { cwd: box.dir });
     assert.match(run.stdout, /push guard\s+foreign/);
     assert.match(run.stderr, /repown did not write/);
-    assert.match(run.stderr, /delete \.git\/hooks\/pre-push, then run: repown guard on/);
+    assert.match(run.stderr, /delete .*pre-push, then run: repown guard on/);
+  });
+
+  test('with core.hooksPath redirecting hooks, it does not advise a `guard on` that would refuse', () => {
+    box.git('config', '--local', 'core.hooksPath', join(box.dir, 'husky'));
+    const run = repown([], { cwd: box.dir });
+    assert.match(run.stderr, /core\.hooksPath/);
+    assert.doesNotMatch(run.stderr, /Enable it: repown guard on/);
+  });
+
+  // DECISIONS §6: where credentials are not pinned, `repown` says so rather than
+  // implying otherwise.
+  test('on a host whose credentials repown does not pin, it says so rather than "honours it"', () => {
+    const azure = sandbox();
+    try {
+      azure.git('remote', 'add', 'origin', 'https://dev.azure.com/octo-org/p/_git/r');
+      const run = repown([], { cwd: azure.dir });
+      assert.match(run.stdout, /pushes as\s+not pinned by repown/);
+      assert.doesNotMatch(run.stdout, /honours it/);
+    } finally {
+      azure.dispose();
+    }
   });
 });
 

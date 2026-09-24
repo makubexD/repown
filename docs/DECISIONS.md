@@ -80,7 +80,10 @@ from anywhere" — its documented multi-account feature.
 
 Remove the two entries per host. `repown fix` does it, showing what it will remove
 and the undo first, because a change to global config should be reviewable
-rather than magic. `gh auth setup-git` puts them back exactly as they were.
+rather than magic. `gh auth setup-git` puts them back exactly as they were. It
+removes gh's value and the empty reset beside it, and only on a key that holds a
+gh value. Any other helper configured for the host stays, because the undo would
+never bring it back.
 
 **No switching is required for git at all.** Each clone authenticates as its own
 account, permanently. `gh auth switch` becomes invisible to git and can be used

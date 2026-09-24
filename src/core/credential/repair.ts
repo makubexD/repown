@@ -27,6 +27,7 @@
 // machine-wide and needs an elevated shell.
 
 import type { Git, ConfigScope } from '../git.ts';
+import { isGh } from './gh.ts';
 
 const SCOPES: readonly ConfigScope[] = ['local', 'global', 'system'];
 const HOSTS = ['https://github.com', 'https://gist.github.com'];
@@ -38,24 +39,33 @@ export interface RemovalOutcome {
   readonly removed: boolean;
 }
 
-/** What `repair` would remove, without removing it. */
+/**
+ * What `repair` would remove, without removing it: on each key, gh's values and
+ * the empty reset gh writes with them. A key holding no gh value is not listed,
+ * and any other helper on a listed key stays -- `gh auth setup-git`, the undo,
+ * would never bring it back.
+ */
 export async function planRepair(git: Git): Promise<RemovalOutcome[]> {
   const found: RemovalOutcome[] = [];
   for (const scope of SCOPES) {
     for (const host of HOSTS) {
       const key = 'credential.' + host + '.helper';
       const values = await git.getAllConfigRaw(key, scope);
-      if (values.length > 0) found.push({ scope, key, values, removed: false });
+      if (!values.some(isGh)) continue;
+      const ghs = values.filter((value) => isGh(value) || value.trim().length === 0);
+      found.push({ scope, key, values: ghs, removed: false });
     }
   }
   return found;
 }
 
 export async function repair(git: Git): Promise<RemovalOutcome[]> {
-  const planned = await planRepair(git);
   const results: RemovalOutcome[] = [];
-  for (const entry of planned) {
-    const removed = await git.unsetConfig(entry.key, entry.scope);
+  for (const entry of await planRepair(git)) {
+    let removed = true;
+    for (const value of new Set(entry.values)) {
+      removed = await git.unsetConfigValue(entry.key, value, entry.scope) && removed;
+    }
     results.push({ ...entry, removed });
   }
   return results;

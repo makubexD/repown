@@ -30,6 +30,11 @@ export interface GhState {
   readonly active: string | null;
 }
 
+/** A credential-helper value that `gh auth setup-git` wrote: `!<path>/gh auth git-credential`. */
+export function isGh(helper: string | null): boolean {
+  return helper !== null && /auth\s+git-credential/.test(helper);
+}
+
 export async function ghInstalled(): Promise<boolean> {
   return !notInstalled(await run('gh', ['--version']));
 }

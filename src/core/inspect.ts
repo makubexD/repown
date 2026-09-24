@@ -13,7 +13,7 @@ import { providerFor, type HostProvider } from './hosts/index.ts';
 import { readIdentity, type RepoIdentity } from './identity.ts';
 import { guardState, type GuardState } from './guard/hook.ts';
 import { findGcm, listAccounts } from './credential/gcm.ts';
-import { ghState, ghInstalled, type GhState } from './credential/gh.ts';
+import { ghState, ghInstalled, isGh, type GhState } from './credential/gh.ts';
 import type { Result } from './result.ts';
 
 const DEFAULT_PROBE_URL = 'https://github.com/';
@@ -92,10 +92,6 @@ export async function inspectAuth(git: Git, probeUrl?: string): Promise<AuthStat
     helperIsGcm: helper !== null && /^manager/.test(helper),
     ghHelperOrigins,
   };
-}
-
-export function isGh(helper: string | null): boolean {
-  return helper !== null && /auth\s+git-credential/.test(helper);
 }
 
 /**

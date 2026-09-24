@@ -1,9 +1,10 @@
 // Hand credential serving back to whatever was configured before
 // `gh auth setup-git` took it over.
 //
-// It edits global -- and possibly system -- config, so it shows exactly what it
-// will remove, and the undo, BEFORE asking. A change to machine-wide config
-// should be reviewable rather than magic.
+// It edits local, global and possibly system config -- only gh's own helper
+// values and the reset gh wrote with them -- so it shows exactly what it will
+// remove, and the undo, BEFORE asking. A change to machine-wide config should be
+// reviewable rather than magic.
 
 import { inspectAuth } from '../core/inspect.ts';
 import { planRepair, repair, describeValue, type RemovalOutcome } from '../core/credential/repair.ts';

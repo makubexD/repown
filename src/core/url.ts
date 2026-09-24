@@ -40,7 +40,8 @@ export function parseGitUrl(raw: string): GitUrl | null {
 const SEPARATOR = '[\\\\/]';
 
 function isFilesystemPath(text: string): boolean {
-  return new RegExp('^[A-Za-z]:' + SEPARATOR).test(text)   // C:/... and C:\...
+  return /^file:/i.test(text)                              // file:///..., which the scp form reads as host "file"
+      || new RegExp('^[A-Za-z]:' + SEPARATOR).test(text)   // C:/... and C:\...
       || new RegExp('^' + SEPARATOR).test(text)            // /abs/path and \\unc\share
       || new RegExp('^\\.\\.?' + SEPARATOR).test(text);    // ./rel and ../rel
 }

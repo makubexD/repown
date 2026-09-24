@@ -126,6 +126,9 @@ describe('local paths are not URLs', () => {
     '..\\sibling\\repo.git',
     '../sibling/repo.git',
     '\\\\server\\share\\repo.git',
+    'file:///c/repos/remote.git',
+    'file:///srv/git/remote.git',
+    'FILE://localhost/srv/git/remote.git',
   ]) {
     test(path + ' does not parse as a remote with an owner', () => {
       assert.equal(parseGitUrl(path), null,

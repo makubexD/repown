@@ -2,9 +2,35 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { sandbox, type Sandbox } from './helpers.ts';
 import { Git } from '../src/core/git.ts';
-import { writeFileSync, existsSync } from 'node:fs';
+import { writeFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { execFileSync, spawnSync } from 'node:child_process';
+
+// A hook or husky-style tool exports GIT_DIR. Inherited by `npm test`, it
+// pointed every sandbox git call at the developer's real repository -- which
+// the tests then pinned to "Sandbox <sandbox@example.invalid>".
+describe('sandbox isolation', () => {
+  test('an inherited GIT_DIR (or identity variable) does not escape the sandbox', () => {
+    const decoy = mkdtempSync(join(tmpdir(), 'repown-decoy-'));
+    execFileSync('git', ['init', '-q', decoy]);
+    const saved = { dir: process.env['GIT_DIR'], email: process.env['GIT_AUTHOR_EMAIL'] };
+    process.env['GIT_DIR'] = join(decoy, '.git');
+    process.env['GIT_AUTHOR_EMAIL'] = 'leak@example.invalid';
+    const box = sandbox();
+    try {
+      const decoyName = spawnSync('git', ['config', '--local', '--get', 'user.name'],
+        { cwd: decoy, encoding: 'utf8', env: { ...process.env, GIT_DIR: join(decoy, '.git') } });
+      assert.equal(decoyName.stdout.trim(), '', 'the decoy repository was written to');
+      assert.equal(process.env['GIT_AUTHOR_EMAIL'], undefined);
+    } finally {
+      box.dispose();
+      rmSync(decoy, { recursive: true, force: true });
+      if (saved.dir === undefined) delete process.env['GIT_DIR']; else process.env['GIT_DIR'] = saved.dir;
+      if (saved.email !== undefined) process.env['GIT_AUTHOR_EMAIL'] = saved.email;
+    }
+  });
+});
 
 describe('Git', () => {
   let box: Sandbox;

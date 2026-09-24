@@ -265,6 +265,46 @@ describe('guard check (the hook contract every installed hook already calls)', (
   });
 });
 
+describe('repown off', () => {
+  let box: Sandbox;
+  const pin = (): void => {
+    box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
+    box.git('config', '--local', 'user.name', 'Octo Cat');
+    box.git('config', '--local', 'user.email', 'octocat@example.invalid');
+    box.git('config', '--local', 'user.useConfigOnly', 'true');
+    box.git('config', '--local', 'repown.account', 'octocat');
+    box.git('config', '--local', 'credential.https://github.com.username', 'octocat');
+  };
+  const local = (key: string): string =>
+    spawnSync('git', ['config', '--local', '--get', key], { cwd: box.dir, encoding: 'utf8' }).stdout.trim();
+  beforeEach(() => { box = sandbox(); pin(); box.writeGlobalConfig('[user]\n\tname = Machine\n\temail = machine@example.invalid\n'); });
+  afterEach(() => box.dispose());
+
+  test('removes every key `use` wrote, and shows the default the clone NOW inherits', () => {
+    const run = repown(['off'], { cwd: box.dir });
+    assert.equal(run.status, 0);
+    for (const key of ['user.name', 'user.email', 'user.useConfigOnly', 'repown.account',
+                       'credential.https://github.com.username']) {
+      assert.equal(local(key), '', key + ' is still set');
+    }
+    assert.match(run.stdout, /Machine <machine@example\.invalid>/);
+    assert.doesNotMatch(run.stdout, /octocat@example\.invalid/, 'that is the identity it just removed');
+  });
+
+  test('with the guard on, it says every push will now be refused', () => {
+    repown(['guard', 'on'], { cwd: box.dir });
+    const run = repown(['off'], { cwd: box.dir });
+    assert.match(run.stderr, /refuse every push/);
+  });
+
+  test('a key it could not remove is a FAILURE, not an OK', () => {
+    writeFileSync(join(box.dir, '.git', 'config.lock'), '');
+    const run = repown(['off'], { cwd: box.dir });
+    assert.equal(run.status, 1);
+    assert.doesNotMatch(run.stdout, /^OK/m);
+  });
+});
+
 describe('status in a clone pushing to an organisation', () => {
   let box: Sandbox;
   beforeEach(() => { box = sandbox(); });

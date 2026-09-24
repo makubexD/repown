@@ -141,6 +141,34 @@ describe('guard check', () => {
     assert.deepEqual(await push(box.git('rev-parse', 'v-ours'), 'refs/tags/v-ours'), []);
   });
 
+  test('B6 a foreign COMMITTER is named in the refusal, not the correct author', async () => {
+    const tree = box.git('rev-parse', 'HEAD^{tree}');
+    const sha = box.git('-c', `user.email=${OURS}`, '-c', 'committer.name=Other', '-c', `committer.email=${THEIRS}`,
+      'commit-tree', tree, '-p', box.git('rev-parse', 'HEAD'), '-m', 'rebased by someone');
+    const refusals = await push(sha, 'refs/heads/feat/x');
+    assert.equal(refusals.length, 1);
+    assert.ok(refusals[0]!.detail.some((row) => row.includes(THEIRS)), 'the offending address must be shown');
+  });
+
+  test('B7 a subject cannot smuggle terminal control sequences into the refusal', async () => {
+    const sha = commitAs(THEIRS, 'looks fine\x1b[2K\x1b[1AOK all good');
+    const refusals = await push(sha, 'refs/heads/feat/x');
+    assert.ok(refusals[0]!.detail.every((row) => !/[\x00-\x1f\x7f]/.test(row)));
+  });
+
+  test('D0 a token in the remote URL is never echoed', async () => {
+    const sha = commitAs(OURS, 'ours');
+    const refusals = await push(sha, 'refs/heads/feat/x', 'https://x:ghp_SECRET@github.com/someone-else/r.git');
+    assert.equal(refusals.length, 1);
+    assert.ok(refusals[0]!.detail.every((row) => !row.includes('ghp_SECRET')));
+  });
+
+  test('D1 the suggested allowOwner command quotes an owner the shell would interpret', async () => {
+    const sha = commitAs(OURS, 'ours');
+    const refusals = await push(sha, 'refs/heads/feat/x', 'https://github.com/x%3B%20curl%20evil/r.git');
+    assert.ok(refusals[0]!.detail.some((row) => row.endsWith("repown.allowOwner 'x; curl evil'")));
+  });
+
   test('D  a push to someone else’s repository is REFUSED', async () => {
     const sha = commitAs(OURS, 'ours');
     const refusals = await push(sha, 'refs/heads/feat/x',

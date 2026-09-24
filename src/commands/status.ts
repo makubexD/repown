@@ -11,7 +11,7 @@
 
 import { inspectRepo, inspectAuth, activeAccountLabel, type RepoState, type AuthState } from '../core/inspect.ts';
 import { isPinned } from '../core/identity.ts';
-import { allowedOwners } from '../core/guard/check.ts';
+import { allowedOwners, shellWord } from '../core/guard/check.ts';
 import { gitFor, type Args } from '../ui/args.ts';
 import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
@@ -95,7 +95,7 @@ async function reportWarnings(repo: RepoState, auth: AuthState): Promise<void> {
   if (repo.owner && allowed.length > 0 && !allowed.includes(repo.owner.toLowerCase())) {
     out.warn('origin', 'origin belongs to "' + repo.owner + '", which is not an owner this clone pushes to.');
     out.detail('if that is an organisation you belong to:');
-    out.detail('  git config --local --add repown.allowOwner ' + repo.owner);
+    out.detail('  git config --local --add repown.allowOwner ' + shellWord(repo.owner));
   }
   guardWarning(repo);
 

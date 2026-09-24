@@ -135,12 +135,12 @@ function checkDestination({ url, owner, allowed }: Destination, onNote?: (note: 
   if (skipped) { onNote?.('destination not checked: ' + skipped); return []; }
   if (allowed.includes(owner!.toLowerCase())) return [];
   return [{
-    reason: 'This push goes to "' + owner + '", which this clone is not pinned to.',
+    reason: 'This push goes to "' + printable(owner!) + '", which this clone is not pinned to.',
     detail: [
-      'destination: ' + url!.raw,
+      'destination: ' + printable(redacted(url!.raw)),
       'allowed here: ' + allowed.join(', '),
       'if that owner is legitimate -- an organisation you belong to, say:',
-      '  git config --local --add ' + ALLOW_OWNER_KEY + ' ' + owner,
+      '  git config --local --add ' + ALLOW_OWNER_KEY + ' ' + shellWord(printable(owner!)),
     ],
   }];
 }
@@ -242,18 +242,37 @@ async function rangeFor(git: Git, ref: PushRef, exclude: readonly string[]): Pro
   return known ? [ref.remoteSha + '..' + ref.localSha, ...exclude] : [ref.localSha, ...exclude];
 }
 
+/** Each commit shows the address that is WRONG -- the committer's, when the author is right. */
 function foreignRefusal(ref: PushRef, foreign: readonly CommitIdentity[], expected: string): Refusal {
-  const shown = foreign.slice(0, 10).map((commit) =>
-    '  ' + commit.sha.slice(0, 9) + '  ' + commit.authorEmail + '  ' + commit.subject);
+  const shown = foreign.slice(0, 10).map((commit) => {
+    const wrong = [...new Set([commit.authorEmail, commit.committerEmail])]
+      .filter((address) => !matches(address, expected));
+    return '  ' + commit.sha.slice(0, 9) + '  ' + printable(wrong.join(', ')) + '  ' + printable(commit.subject);
+  });
   const more = foreign.length > shown.length ? ['  ... and ' + (foreign.length - shown.length) + ' more'] : [];
 
   return {
     reason: foreign.length + ' commit(s) bound for ' + ref.remoteRef +
-            ' were not authored as ' + expected + '.',
+            ' were not authored as ' + expected + ', or were committed by someone else.',
     detail: [...shown, ...more, '', 'These addresses become permanent once pushed.'],
   };
 }
 
 function matches(actual: string, expected: string): boolean {
   return actual.toLowerCase() === expected.toLowerCase();
+}
+
+/** Text a commit's author chose: control characters could rewrite the terminal around the refusal. */
+function printable(text: string): string {
+  return text.replace(/[\x00-\x1f\x7f-\x9f]/g, '?');
+}
+
+/** A URL as it may be shown: a password or token in its userinfo is replaced. */
+function redacted(raw: string): string {
+  return raw.replace(/^([a-z][a-z0-9+.-]*:\/\/[^:@/]*):[^@/]*@/i, '$1:***@');
+}
+
+/** An owner comes from the URL, so a suggested command must quote it for the shell. */
+export function shellWord(value: string): string {
+  return /^[\w.@-]+$/.test(value) ? value : "'" + value.replace(/'/g, "'\\''") + "'";
 }

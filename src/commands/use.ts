@@ -21,7 +21,7 @@ import { inspectRepo, inspectAuth, type RepoState } from '../core/inspect.ts';
 import { pinIdentity } from '../core/identity.ts';
 import { lookupAccount, saveAccount, type Account } from '../core/registry.ts';
 import { ghSwitch } from '../core/credential/gh.ts';
-import { allowedOwners } from '../core/guard/check.ts';
+import { allowedOwners, shellWord } from '../core/guard/check.ts';
 import { ask, interactive } from '../ui/prompt.ts';
 import { flagString, flagBool, gitFor, type Args } from '../ui/args.ts';
 import type { Command } from '../ui/command.ts';
@@ -125,7 +125,7 @@ async function reportConcerns(account: string, repo: RepoState): Promise<void> {
     if (!allowed.includes(repo.owner.toLowerCase())) {
       out.warn('origin', 'origin belongs to "' + repo.owner + '", not "' + account + '".');
       out.detail('normal for an organisation repository. To stop the guard refusing it:');
-      out.detail('  git config --local --add repown.allowOwner ' + repo.owner);
+      out.detail('  git config --local --add repown.allowOwner ' + shellWord(repo.owner));
     }
   }
 

@@ -39,6 +39,8 @@ repown guard on        # refuse any push that carries another identity
 - **Guard every push:** `repown guard on` installs a `pre-push` hook that checks the
   commits themselves, not just today's config.
 
+Every scenario, with diagrams: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
+
 ## Compared with the alternatives
 
 | Approach | Right commit identity | Right push credential | Checked before push | Catch |

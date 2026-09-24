@@ -5,7 +5,8 @@ to its own account (repo-local `user.name`, `user.email`, `repown.account`,
 `credential.<host>.username` where measured, `user.useConfigOnly`), and a `pre-push` hook
 refuses commits authored or committed by anyone else.
 README.md is the user view. **docs/DECISIONS.md holds the reasons, many of them measured
-empirically; read the relevant section before changing behaviour.**
+empirically; read the relevant section before changing behaviour.** docs/HOW-IT-WORKS.md
+walks through every scenario with diagrams; update its card when behaviour or output changes.
 
 ## Commands
 

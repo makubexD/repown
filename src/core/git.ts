@@ -236,16 +236,18 @@ export class Git {
    * project reports that project's contributors and says nothing about this
    * clone. Excluding the mirror branch leaves the commits written HERE.
    */
-  async emailCounts(exclude?: string): Promise<Map<string, number>> {
+  async emailCounts(exclude?: string): Promise<Result<Map<string, number>>> {
     const range = exclude ? ['--all', '--not', exclude] : ['--all'];
     // --no-show-signature: a scanned repository's own log.showSignature + gpg.program
     // would otherwise run a program of its choosing.
     const result = await this.exec(['log', '--no-show-signature', ...range, '--format=%ae%n%ce']);
+    // An empty map would read as "no identities in history": a failure stays one.
+    if (!succeeded(result)) return err(result.stderr.trim() || 'git log failed');
     const counts = new Map<string, number>();
     for (const address of lines(result)) {
       counts.set(address, (counts.get(address) ?? 0) + 1);
     }
-    return counts;
+    return ok(counts);
   }
 
   /** Does this object exist here? Used to tell a pushed commit from a local one. */
@@ -254,8 +256,13 @@ export class Git {
   }
 }
 
+/**
+ * `file:<path>\t<key> <value>`. The path is printed UNQUOTED and may hold
+ * spaces (`C:/Program Files/Git/etc/gitconfig`), so it ends at the TAB, not at
+ * the first space.
+ */
 function parseOriginLine(line: string): ConfigEntry[] {
-  const match = /^file:(\S+)\s+(\S+)\s*(.*)$/.exec(line);
+  const match = /^file:([^\t]+)\t(\S+)(?: (.*))?$/.exec(line);
   if (!match) return [];
   return [{ file: match[1]!, key: match[2]!, value: match[3] ?? '' }];
 }

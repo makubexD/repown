@@ -60,19 +60,41 @@ export default {
     const badRoot = roots.map(invalidRoot).find((problem) => problem !== null);
     if (badRoot) { out.fail('scan', badRoot); return 2; }
 
-    const showEmails = flagBool(args, 'emails');
-    const found = (await Promise.all(roots.map((root) => discover(root, root, depth)))).flat();
+    const unreadable: string[] = [];
+    const found = (await Promise.all(roots.map((root) => discover({ root, path: root }, depth, unreadable)))).flat();
+    for (const path of unreadable) out.warn('scan', 'could not read ' + path + ' -- not scanned');
     if (found.length === 0) {
       out.warn('scan', 'no git repositories found under: ' + roots.join(', '));
       return 0;
     }
 
-    const rows = await Promise.all(found.map((entry) => describe(entry, showEmails)));
+    const showEmails = flagBool(args, 'emails');
+    const rows = await mapLimited(found, CONCURRENCY, (entry) => describe(entry, showEmails));
     rows.sort((a, b) => a.name.localeCompare(b.name));
     render(rows);
     return summarise(rows);
   },
 } satisfies Command;
+
+/**
+ * Each clone costs about ten git processes. All at once, a folder of a hundred
+ * clones launched a thousand; calls then hit exec's timeout, and a killed
+ * `git config --get` reads as "not set" -- rows that looked unpinned but weren't.
+ */
+const CONCURRENCY = 6;
+
+async function mapLimited<T, R>(items: readonly T[], limit: number, work: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await work(items[index]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
 function parseDepth(raw: string): number | null {
   return /^\d+$/.test(raw) ? Number(raw) : null;
@@ -84,15 +106,18 @@ function invalidRoot(root: string): string | null {
   return null;
 }
 
-async function discover(root: string, path: string, depth: number): Promise<Found[]> {
-  if (depth < 0 || !existsSync(path)) return [];
-  if (existsSync(join(path, '.git'))) return [{ root, path }];
+/** A directory that cannot be listed is reported, never silently left out of the audit. */
+async function discover(at: Found, depth: number, unreadable: string[]): Promise<Found[]> {
+  if (depth < 0 || !existsSync(at.path)) return [];
+  if (existsSync(join(at.path, '.git'))) return [at];
 
-  const entries = await readdir(path, { withFileTypes: true }).catch(() => []);
+  let entries;
+  try { entries = await readdir(at.path, { withFileTypes: true }); }
+  catch { unreadable.push(at.path); return []; }
   const directories = entries
     .filter((entry) => entry.isDirectory() && entry.name !== 'node_modules')
-    .map((entry) => join(path, entry.name));
-  const nested = await Promise.all(directories.map((child) => discover(root, child, depth - 1)));
+    .map((entry) => join(at.path, entry.name));
+  const nested = await Promise.all(directories.map((child) => discover({ root: at.root, path: child }, depth - 1, unreadable)));
   return nested.flat();
 }
 
@@ -101,8 +126,10 @@ async function describe(found: Found, showEmails: boolean): Promise<Row> {
   const repo = await inspectRepo(git);
   // A mirror branch, where configured, is someone else's history passing
   // through this clone. Counting it reports their contributors, not this
-  // clone's behaviour, so it is excluded from the tally.
-  const mirror = await git.getConfig('repown.mirrorBranch');
+  // clone's behaviour, so it is excluded -- when it exists; excluding a ref
+  // that is not there made git log fail and the row read as empty history.
+  const configured = await git.getConfig('repown.mirrorBranch', 'local');
+  const mirror = configured && await git.hasCommit('refs/heads/' + configured) ? configured : null;
   const counts = await git.emailCounts(mirror ? 'refs/heads/' + mirror : undefined);
 
   return {
@@ -113,14 +140,14 @@ async function describe(found: Found, showEmails: boolean): Promise<Row> {
     host: repo.url ? repo.provider.id : '-',
     identity: identityLabel(repo),
     guard: repo.guard,
-    identities: summariseIdentities(counts, showEmails),
+    identities: counts.ok ? summariseIdentities(counts.value, showEmails) : 'unknown -- history could not be read',
     mirrored: mirror !== null,
   };
 }
 
 function identityLabel(repo: RepoState): string {
   if (!repo.identity.name || !repo.identity.email) return 'INHERITED';
-  return repo.identity.account ? 'pinned' : 'commits only';
+  return repo.identity.account || repo.identity.owner ? 'pinned' : 'commits only';
 }
 
 function summariseIdentities(counts: ReadonlyMap<string, number>, showEmails: boolean): string {

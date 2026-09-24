@@ -39,6 +39,18 @@ async function searchDirectories(): Promise<string[]> {
   return directories;
 }
 
+/**
+ * Whether a credential.helper value is GCM. Git for Windows writes `manager`
+ * (once `manager-core`); the macOS and Linux installers write the executable's
+ * path. Matched on the last path component, so a path form is not reported as
+ * "a helper repown has no opinion about".
+ */
+export function isGcm(helper: string | null): boolean {
+  if (helper === null) return false;
+  const base = helper.trim().split(/[\\/]/).pop() ?? '';
+  return /^(git-credential-)?manager(-core)?(\.exe)?$/i.test(base);
+}
+
 /** The GCM executable, or null. Checks PATH first, then the known locations. */
 export async function findGcm(): Promise<string | null> {
   for (const name of NAMES) {

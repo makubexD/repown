@@ -78,6 +78,27 @@ describe('Git', () => {
     }
   });
 
+  test('a history that cannot be read is an ERROR, not an empty history', async () => {
+    const counts = await git.emailCounts('refs/heads/no-such-branch');
+    assert.equal(counts.ok, false);
+  });
+
+  // git prints `file:<path>\t<key> <value>` with the path unquoted, and on
+  // Windows every system entry lives under `C:/Program Files/...`.
+  test('configOrigins keeps a config file path that contains a space', async () => {
+    const included = join(box.dir, '..', 'with space.gitconfig');
+    writeFileSync(included, '[repown]\n\tprobe2 = value\n');
+    box.git('config', '--local', 'include.path', included.replace(/\\/g, '/'));
+    try {
+      const origins = await git.configOrigins('^repown\\.probe2$');
+      assert.equal(origins.length, 1);
+      assert.match(origins[0]!.file, /with space\.gitconfig$/);
+      assert.equal(origins[0]!.value, 'value');
+    } finally {
+      box.git('config', '--local', '--unset', 'include.path');
+    }
+  });
+
   test('getAllConfig returns every value of a multi-valued key', async () => {
     box.git('config', '--local', '--add', 'repown.multi', 'one');
     box.git('config', '--local', '--add', 'repown.multi', 'two');

@@ -277,6 +277,31 @@ describe('guard check (the hook contract every installed hook already calls)', (
   });
 });
 
+describe('repown scan', () => {
+  let box: Sandbox;
+  beforeEach(() => {
+    box = sandbox();
+    box.git('-c', 'user.email=someone@work.example.invalid', 'commit', '-q', '--allow-empty', '-m', 'x');
+  });
+  afterEach(() => box.dispose());
+
+  // Scan output gets pasted into chats and issues: domains and counts by default.
+  test('shows domains, never addresses, unless --emails', () => {
+    const run = repown(['scan', join(box.dir, '..')]);
+    assert.equal(run.status, 0);
+    assert.match(run.stdout, /work\.example\.invalid=2/);
+    assert.doesNotMatch(run.stdout, /someone@/);
+    assert.match(repown(['scan', join(box.dir, '..'), '--emails']).stdout, /someone@work\.example\.invalid/);
+  });
+
+  test('a mirror branch that does not exist does not turn the history into "unknown"', () => {
+    box.git('config', '--local', 'repown.mirrorBranch', 'no-such-branch');
+    const run = repown(['scan', join(box.dir, '..')]);
+    assert.match(run.stdout, /work\.example\.invalid=2/);
+    assert.doesNotMatch(run.stdout, /unknown|excl\. mirror/);
+  });
+});
+
 describe('repown off', () => {
   let box: Sandbox;
   const pin = (): void => {

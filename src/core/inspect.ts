@@ -12,7 +12,7 @@ import { parseGitUrl, type GitUrl } from './url.ts';
 import { providerFor, type HostProvider } from './hosts/index.ts';
 import { readIdentity, type RepoIdentity } from './identity.ts';
 import { guardState, hookLocation, type GuardState, type HookLocation } from './guard/hook.ts';
-import { findGcm, listAccounts } from './credential/gcm.ts';
+import { findGcm, listAccounts, isGcm } from './credential/gcm.ts';
 import { ghState, ghInstalled, isGh, type GhState } from './credential/gh.ts';
 import type { Result } from './result.ts';
 
@@ -90,7 +90,7 @@ export async function inspectAuth(git: Git, probeUrl?: string): Promise<AuthStat
     gh,
     helper,
     ghIsHelper: isGh(helper),
-    helperIsGcm: helper !== null && /^manager/.test(helper),
+    helperIsGcm: isGcm(helper),
     ghHelperOrigins,
   };
 }

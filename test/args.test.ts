@@ -1,5 +1,5 @@
 // The parser is what stands between a typo and a command doing the wrong
-// thing quietly (CLI-5): a boolean must never swallow the next positional, an
+// thing quietly: a boolean must never swallow the next positional, an
 // unknown option must never be dropped, and an option's value is validated
 // against its declared choices before a command ever sees it.
 

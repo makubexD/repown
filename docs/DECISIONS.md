@@ -255,7 +255,9 @@ rather than addresses by default.
 
 For GitHub, `repown use` suggests the account's noreply address
 (`<id>+<login>@users.noreply.github.com`, built from the account's numeric id). It is
-publishable by design and still links the commit to the account.
+publishable by design and still links the commit to the account. The id comes from
+`gh api`, so the suggestion needs gh installed and signed in. Without that, the
+prompt simply has no default.
 
 ---
 
@@ -324,9 +326,9 @@ TypeScript before the PowerShell version was deleted:
 | Finding | Re-proven by |
 | --- | --- |
 | An empty `credential.<url>.helper` resets the list | a test with that exact config shape, against real git |
-| GCM is not on `PATH`; it ships inside Git's directory | resolved from PowerShell, where a `PATH` lookup fails |
+| GCM is not on `PATH`; it ships inside Git's directory | probed by hand from PowerShell, where a `PATH` lookup fails; not covered by a test |
 | gh has a third state — "could not be queried" ≠ "no active account" | an error result callers cannot collapse into the empty case |
-| The hook must be LF-only; `sh` rejects CRLF | a test asserting no carriage returns, plus `od` on the installed hook |
+| The hook must be LF-only; `sh` rejects CRLF | a test asserting no carriage returns, plus CI grepping the installed hook for `\r` |
 | `git config --get` exits 1 for "not set" — an answer, not an error | unit tests on the git wrapper |
 | Guard scenarios A–E | the same matrix, run through the check against real repositories in a sandbox |
 
@@ -341,11 +343,15 @@ under bare `node` with no build step. That is why the tests import `src/` direct
 and why a change can be verified without compiling.
 
 The cost is two different Node requirements. **Running `repown` needs Node 20;
-developing it needs 22.6+.** The tests need type stripping, and `npm test` passes
+developing it needs 22.18+.** The tests need type stripping without a flag, which
+22.18 was the first 22.x to ship. 22.6–22.17 strip types only behind
+`--experimental-strip-types`, which `npm test` doesn't pass. And `npm test` passes
 a glob to `node --test`, which Node 20 does not expand (it reports
 `Could not find 'test/*.test.ts'`). Neither applies to the published package,
-which is compiled JavaScript. So `engines` stays at `>=20`, and CI's install job
-proves that on Node 20 rather than assuming it.
+which is compiled JavaScript. So `engines` stays at `>=20`. CI's install job packs
+the tarball, installs it on Node 20, and drives `accounts add`, `use`, `guard on`,
+a real push the hook checks (one allowed, one foreign-authored and refused), and
+`off`. The full suite runs on 22 and 24.
 
 ---
 
@@ -443,3 +449,19 @@ back and exits 0, which would make a path nobody runs hooks from look installed.
 - A credential that is valid but not SSO-authorized for an organisation looks
   identical to "fine" in `repown doctor`/`repown` right up until a push or fetch
   against that org's resources fails. Nothing pre-flights this.
+- **Submodules are separate clones.** A submodule has its own config and hooks. If it
+  isn't pinned and guarded itself, `git push --recurse-submodules` (or
+  `push.recurseSubmodules`) publishes its commits unchecked, while the
+  superproject's guard reports `on`. Pin and guard each submodule like any clone.
+- **"Already on the remote" is read from the remote-tracking refs.** With a
+  `pushurl` pointing somewhere other than `url`, those refs describe the fetch
+  side. A commit fetched from a private `url` is then excluded when pushing to a
+  public `pushurl`. The same holds for a stale ref (`git fetch --prune` corrects
+  it) and, on a mirror branch, for any private remote (§3).
+- **A clone pinned before `repown.account` existed** has no account for the
+  destination check on hosts without a credential key. The guard prints
+  `destination not checked` until `repown use` runs again there.
+- **git versions.** CI tests the runners' current git; older versions are not
+  tested, and no minimum is claimed. `--path-format` (git 2.31) was removed
+  because older git echoes an unknown flag back and exits 0. The test suite
+  itself needs git 2.32 (`GIT_CONFIG_GLOBAL`).

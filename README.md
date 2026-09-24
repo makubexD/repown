@@ -87,12 +87,15 @@ OK    identity   Octo Cat <octocat@users.noreply.github.com>  push-as:octocat
   Next: repown guard on    (check every push before it leaves)
 
 $ repown guard on
+OK    guard      on -- every push is checked before it leaves
+  /path/to/clone/.git/hooks/pre-push
 ```
 
 `repown use` takes the account's commit name and email from this machine's registry.
-The first time, if they aren't recorded, it asks for them, suggesting the GitHub
-noreply address ([§5](docs/DECISIONS.md#5-no-names-or-addresses-live-in-any-repository)),
-and records them for every other clone. Without a terminal it can't ask, so
+The first time, if they aren't recorded, it asks for them. When gh is installed and
+signed in, it suggests the account's GitHub noreply address
+([§5](docs/DECISIONS.md#5-no-names-or-addresses-live-in-any-repository)).
+It then records them for every other clone. Without a terminal it can't ask, so
 record the account up front:
 `repown accounts add octocat --name "Octo Cat" --email octocat@users.noreply.github.com`.
 
@@ -162,8 +165,18 @@ $ repown scan ~/code ~/work
 
 With no directory it scans the current one, looking 3 levels deep (`--depth`).
 It shows domains and counts rather than addresses, because this output gets pasted
-into chats; `--emails` shows the exact addresses. The guard stops new wrong
-addresses; it cannot rewrite history.
+into chats; `--emails` shows the exact addresses. A count is how often an address
+appears as author or committer across every branch, not a number of commits. The
+guard stops new wrong addresses; it cannot rewrite history.
+
+The columns can also read:
+- identity `commits only`: a name and email are pinned, but no account;
+- owner `?`: a remote no owner can be read from;
+- owner `no remote`, host `-`: the clone has no `origin`;
+- identities `-`: an empty history;
+- identities `unknown`: git couldn't read the history.
+
+A directory scan can't open is reported, not skipped.
 
 ## Commands
 
@@ -194,14 +207,19 @@ pushing them again publishes nothing new
 
 ```
 $ git push
-FAIL  guard      1 commit(s) bound for refs/heads/main were not authored as octocat@users.noreply.github.com.
+
+FAIL  guard      1 commit(s) bound for refs/heads/main were not authored as octocat@users.noreply.github.com, or were committed by someone else.
          fb201afcc  someone-else@example.invalid  not ours
 
        These addresses become permanent once pushed.
 
+
 Push stopped by the repown identity guard (above).
 Override this one push with: git push --no-verify
+error: failed to push some refs to 'https://github.com/octocat/hello-world.git'
 ```
+
+Each commit shows the address that doesn't match, the author's or the committer's.
 
 It also refuses:
 
@@ -317,7 +335,7 @@ npm test          # node's own test runner, no framework
 npm run build     # tsc, also the typecheck
 ```
 
-Developing needs Node 22.6+, even though running needs only 20
+Developing needs Node 22.18+, even though running needs only 20
 ([§7](docs/DECISIONS.md#7-typescript-on-node-and-what-that-cost)). Zero runtime
 dependencies, by choice. `demo/demo.tape` is a [VHS](https://github.com/charmbracelet/vhs)
 script for a demo recording, run with `vhs demo/demo.tape`. It uses placeholder

@@ -39,8 +39,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Linux and Windows across both supported Node versions, because those
-        # are where this actually runs. macOS gets one job rather than a full
+        # Linux and Windows on Node 22 and 24, because those are where this
+        # actually runs. macOS gets one job rather than a full
         # row: what it adds over Linux is a different filesystem and path
         # case-sensitivity, which one configuration exercises just as well as four.
         # 22, not 20. The SOURCE needs a newer Node than the shipped package
@@ -81,7 +81,7 @@ jobs:
 
   # Deliberately on the OLDEST Node the package claims to support. `engines` says
   # >=20, and this is what makes that a tested fact rather than a hopeful number:
-  # the tarball is built by the test job's Node, then installed and driven here.
+  # the tarball is packed with Node 24 below, then installed and driven on Node 20.
   install:
     name: install on the oldest supported Node (20)
     runs-on: ubuntu-latest
@@ -143,6 +143,15 @@ jobs:
           # The hook is executed by `sh`, which rejects a CRLF script with
           # "bad interpreter" -- a failure that only ever appears at push time.
           ! grep -q $'\r' .git/hooks/pre-push
+
+          # The path every installed hook takes: `guard check`, on Node 20. A
+          # commit of our own is pushed; a foreign-authored one is refused.
+          git init -q --bare "$RUNNER_TEMP/remote.git"
+          git remote add local "$RUNNER_TEMP/remote.git"
+          git commit -q --allow-empty -m ours
+          git push -q local HEAD:refs/heads/main
+          git -c user.email=someone@example.invalid commit -q --allow-empty -m foreign
+          if git push -q local HEAD:refs/heads/main; then echo "a foreign-authored push was not refused"; exit 1; fi
 
           repown off
           test -z "$(git config --local --get user.name)"

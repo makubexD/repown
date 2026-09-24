@@ -1,8 +1,7 @@
 // Exercises the command surface itself -- dispatch, help, parsing, exit codes
 // and the stdout/stderr split -- by spawning the real entry point rather than
-// calling functions directly. `npm test` never touched any of this before
-// (CLI-14); the CI `install` job only smoke-tests a handful of commands after
-// a global install.
+// calling functions directly. The CI `install` job only smoke-tests a handful of
+// commands after a global install.
 
 import { test, describe, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';

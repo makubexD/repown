@@ -1,6 +1,6 @@
 // Argument parsing: turning argv into structured, validated Args.
 //
-// Moved out of cli.ts (CLI-12) so a command can import it without dragging in
+// Kept out of cli.ts so a command can import it without dragging in
 // the dispatcher -- importing cli.ts used to run `main()` -- and so the parser
 // itself is unit-testable.
 //

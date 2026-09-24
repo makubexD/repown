@@ -3,9 +3,9 @@
 //
 // Split in two because the two halves have different lifetimes. The REPO state
 // is per clone and cheap. The AUTH state is machine-wide, costs subprocesses
-// (`git --exec-path`, GCM, gh) and is identical for every clone on the machine --
-// so `repown scan`, which walks seventeen repositories, reads it once and hands it
-// down rather than paying for it seventeen times.
+// (`git --exec-path`, GCM, gh) and is identical for every clone on the machine,
+// so the commands that need it ask for it separately -- and `repown scan`, which
+// walks many repositories, never asks for it at all.
 
 import { Git, type ConfigEntry } from './git.ts';
 import { parseGitUrl, type GitUrl } from './url.ts';

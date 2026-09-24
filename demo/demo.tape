@@ -1,5 +1,5 @@
 # Renders demo/demo.gif. From the repository root:  vhs demo/demo.tape
-# Needs vhs, ttyd and ffmpeg, plus bash, git and node 22.6+ on PATH. Not rendered
+# Needs vhs, ttyd and ffmpeg, plus bash, git and node 22.18+ on PATH. Not rendered
 # yet: vhs hung on Windows, and on GitHub's Ubuntu 22.04/24.04 runners it produced
 # no frames (even for a two-line control tape, with either ffmpeg).
 

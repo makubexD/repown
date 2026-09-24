@@ -6,7 +6,7 @@
 // is, with the flag that would have avoided the question.
 //
 // The prompt itself writes to STDERR, matching every other piece of output that
-// is not the payload (OK/WARN/FAIL all go there too): stdout stays reserved for
+// is not the payload (WARN and FAIL go there too): stdout stays reserved for
 // whatever a command actually produces, so `repown accounts add x | tee log` does
 // not interleave a prompt into the log.
 

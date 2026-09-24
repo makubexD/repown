@@ -13,7 +13,7 @@
 // identifiers live here and the repository gets only what git already stores in
 // .git/config, which git never tracks.
 
-import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { ok, err, type Result } from './result.ts';
@@ -27,9 +27,11 @@ export interface Account {
 
 export interface Registry {
   readonly accounts: Readonly<Record<string, Account>>;
+  /** Entries present in the file but not readable as an account. Nothing may overwrite them. */
+  readonly unreadable: readonly string[];
 }
 
-const EMPTY: Registry = { accounts: {} };
+const EMPTY: Registry = { accounts: {}, unreadable: [] };
 
 export function configDirectory(): string {
   const explicit = process.env['REPOWN_CONFIG_DIR'];
@@ -60,23 +62,32 @@ export async function loadRegistry(): Promise<Result<Registry>> {
     return err('could not read ' + registryPath() + ': ' + (cause as Error).message);
   }
   try {
-    return ok({ accounts: validAccounts((JSON.parse(raw) as { accounts?: unknown }).accounts) });
+    return ok(readAccounts((JSON.parse(raw) as { accounts?: unknown }).accounts));
   } catch (cause) {
     return err(registryPath() + ' is not valid JSON (' + (cause as Error).message +
                ') -- fix it or remove it; repown will not overwrite it');
   }
 }
 
-/** Only entries with a string name and email, in an object with no prototype to collide with. */
-function validAccounts(value: unknown): Record<string, Account> {
+/** Entries with a string name and email, in an object with no prototype to collide with. */
+function readAccounts(value: unknown): Registry {
   const accounts = Object.create(null) as Record<string, Account>;
-  if (typeof value !== 'object' || value === null) return accounts;
+  const unreadable: string[] = [];
+  if (typeof value !== 'object' || value === null) return { accounts, unreadable };
   for (const [key, entry] of Object.entries(value)) {
     const { name, email, host } = (entry ?? {}) as Partial<Account>;
-    if (typeof name !== 'string' || typeof email !== 'string') continue;
+    if (typeof name !== 'string' || typeof email !== 'string') { unreadable.push(key); continue; }
     accounts[key] = typeof host === 'string' ? { name, email, host } : { name, email };
   }
-  return accounts;
+  return { accounts, unreadable };
+}
+
+/** The registry, but only if a write would keep every entry in it. */
+async function loadForWrite(): Promise<Result<Registry>> {
+  const registry = await loadRegistry();
+  if (!registry.ok || registry.value.unreadable.length === 0) return registry;
+  return err(registryPath() + ' has entries repown cannot read (' + registry.value.unreadable.join(', ') +
+             ') -- saving would drop them; fix or remove them first');
 }
 
 export async function lookupAccount(account: string): Promise<Result<Account | null>> {
@@ -86,32 +97,35 @@ export async function lookupAccount(account: string): Promise<Result<Account | n
 }
 
 export async function saveAccount(account: string, entry: Account): Promise<Result<void>> {
-  const registry = await loadRegistry();
+  const registry = await loadForWrite();
   if (!registry.ok) return registry;
-  return write({ accounts: { ...registry.value.accounts, [account]: entry } });
+  return write({ ...registry.value.accounts, [account]: entry });
 }
 
 export async function removeAccount(account: string): Promise<Result<boolean>> {
-  const registry = await loadRegistry();
+  const registry = await loadForWrite();
   if (!registry.ok) return registry;
   if (!Object.hasOwn(registry.value.accounts, account)) return ok(false);
 
   const accounts = { ...registry.value.accounts };
   delete accounts[account];
-  const written = await write({ accounts });
+  const written = await write(accounts);
   return written.ok ? ok(true) : err(written.error);
 }
 
 /**
  * Written via a temporary file and renamed, so an interrupted write cannot
- * truncate it. Owner-only, since it holds names and addresses.
+ * truncate it. Owner-only, since it holds names and addresses -- and a
+ * leftover temporary file is removed first, because `mode` applies only when
+ * the file is created, and rename would carry an old one's permissions over.
  */
-async function write(registry: Registry): Promise<Result<void>> {
+async function write(accounts: Record<string, Account>): Promise<Result<void>> {
   const target = registryPath();
   const temporary = `${target}.tmp`;
   try {
     await mkdir(dirname(target), { recursive: true });
-    await writeFile(temporary, JSON.stringify(registry, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
+    await rm(temporary, { force: true });
+    await writeFile(temporary, JSON.stringify({ accounts }, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
     await rename(temporary, target);
     return ok(undefined);
   } catch (cause) {

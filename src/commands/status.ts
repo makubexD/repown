@@ -142,6 +142,7 @@ function guardWarning(repo: RepoState): void {
   if (repo.hook?.redirected) {
     out.warn('guard', 'core.hooksPath makes git run hooks from another tool\'s directory; repown does not install there.');
     out.detail('guard this clone from that tool\'s pre-push hook: repown guard check --remote="$1" --url="$2"');
+    out.detail('(that hook must pass its stdin through: the refs being pushed arrive there)');
   } else if (repo.guard === 'off') {
     out.warn('guard', 'off -- pushes are not checked. Enable it: repown guard on');
   } else {

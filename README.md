@@ -250,7 +250,8 @@ directory. repown then reports the hook git will actually run, and
 `repown guard on` / `repown guard off` never write to or delete from that directory.
 `repown guard off` still removes a repown hook left in `.git/hooks`. To guard such a
 clone, have that tool's `pre-push` hook run
-`repown guard check --remote="$1" --url="$2"`.
+`repown guard check --remote="$1" --url="$2"`, passing its stdin through (the refs
+being pushed arrive there).
 
 Three repo-local keys adjust it. They count only in the clone's own config, never
 global:

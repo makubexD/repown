@@ -52,6 +52,16 @@ describe('the account registry', () => {
     assert.deepEqual(Object.keys(registry.value.accounts), ['octocat']);
   });
 
+  // An entry it cannot read -- a future format, a hand edit -- is still someone's
+  // account. Saving would rewrite the file without it.
+  test('a save refuses to drop an entry it could not read', async () => {
+    const original = JSON.stringify({ accounts: { future: { name: 'x', emails: ['a'] }, octocat: OCTOCAT } });
+    writeFileSync(registryPath(), original);
+    assert.equal((await saveAccount('other', OCTOCAT)).ok, false);
+    assert.equal((await removeAccount('octocat')).ok, false);
+    assert.equal(readFileSync(registryPath(), 'utf8'), original);
+  });
+
   test('the file is readable by its owner only', { skip: process.platform === 'win32' }, async () => {
     await saveAccount('octocat', OCTOCAT);
     assert.equal(statSync(registryPath()).mode & 0o777, 0o600);

@@ -468,6 +468,14 @@ back and exits 0, which would make a path nobody runs hooks from look installed.
   removes it. A clone with neither key (Azure DevOps, generic hosts) has no account
   to compare. The guard prints `destination not checked` until `repown use` runs
   again there.
+- **The destination check compares the owner, not the host.** A clone pinned to
+  `octocat` passes a push to `gitlab.com/octocat/...` or an Enterprise host's
+  `octocat`. Commit identity is still checked there.
+- **What git's parser shows is what is checked.** An object crafted with
+  `hash-object --literally` can carry a second `author`/`committer`/`tagger` line
+  that git ignores. And a merge of a signed tag embeds that tag's tagger in a
+  `mergetag` header that isn't checked. Hosts that fsck incoming pushes reject the
+  crafted cases; the `mergetag` tagger is usually upstream's, already public.
 - **git versions.** CI tests the runners' current git; older versions are not
   tested, and no minimum is claimed. `--path-format` (git 2.31) was removed
   because older git echoes an unknown flag back and exits 0. The test suite

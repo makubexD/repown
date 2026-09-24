@@ -229,7 +229,7 @@ async function checkRange(input: CheckInput, { ref, exclude }: Pushed, expected:
     return [{
       reason: 'The guard could not read the commits bound for ' + ref.remoteRef +
               ', so it cannot tell whether they are yours. Refusing rather than passing unchecked.',
-      detail: ['git said: ' + commits.error, 'try: git fetch, then push again'],
+      detail: ['reason: ' + commits.error, unreadableHint(commits.error)],
     }];
   }
   const foreign = commits.value.filter((commit) =>
@@ -267,6 +267,13 @@ function foreignRefusal(ref: PushRef, foreign: readonly CommitIdentity[], expect
             ' were not authored as ' + expected + ', or were committed by someone else.',
     detail: [...shown, ...more, '', 'These addresses become permanent once pushed.'],
   };
+}
+
+/** A fetch cures a missing object; it does nothing for history git printed in a shape repown cannot parse. */
+function unreadableHint(error: string): string {
+  return /account for every commit|unreadable commit record/.test(error)
+    ? 'the history could not be parsed reliably; inspect it yourself before any --no-verify'
+    : 'try: git fetch, then push again';
 }
 
 function matches(actual: string, expected: string): boolean {

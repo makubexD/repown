@@ -21,6 +21,9 @@ async function list(): Promise<number> {
     const entry = loaded.value.accounts[name]!;
     out.field(name, entry.name + ' <' + entry.email + '>' + hostSuffix(entry), 24);
   }
+  for (const key of loaded.value.unreadable) {
+    out.warn('accounts', key + ': an entry repown cannot read; it is kept, and blocks saving until fixed.');
+  }
   out.line();
   out.line(out.dim('  ' + registryPath()));
   out.line();

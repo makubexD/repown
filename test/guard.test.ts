@@ -123,6 +123,24 @@ describe('guard check', () => {
     assert.equal((await push(sha, 'refs/heads/feat/x')).length, 1);
   });
 
+  // An annotated tag carries its own `tagger` address, as permanent as an
+  // author's -- and `git log <tag>` peels straight past it to the commit.
+  test('B4 an annotated tag with a foreign tagger is REFUSED, even on our own commit', async () => {
+    const commit = commitAs(OURS, 'ours');
+    box.git('-c', `user.email=${THEIRS}`, 'tag', '-a', 'v-foreign', '-m', 'release', commit);
+    const tag = box.git('rev-parse', 'v-foreign');
+    const refusals = await push(tag, 'refs/tags/v-foreign');
+    assert.equal(refusals.length, 1);
+    assert.match(refusals[0]!.reason, /tag/);
+    assert.ok(refusals[0]!.detail.some((row) => row.includes(THEIRS)));
+  });
+
+  test('B5 an annotated tag we made ourselves passes', async () => {
+    const commit = commitAs(OURS, 'ours');
+    box.git('-c', `user.email=${OURS}`, 'tag', '-a', 'v-ours', '-m', 'release', commit);
+    assert.deepEqual(await push(box.git('rev-parse', 'v-ours'), 'refs/tags/v-ours'), []);
+  });
+
   test('D  a push to someone else’s repository is REFUSED', async () => {
     const sha = commitAs(OURS, 'ours');
     const refusals = await push(sha, 'refs/heads/feat/x',

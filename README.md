@@ -208,6 +208,8 @@ It also refuses:
   userinfo;
 - `GH_TOKEN` / `GITHUB_TOKEN`, or `GIT_AUTHOR_EMAIL` / `GIT_COMMITTER_EMAIL`,
   because each silently outranks the identity it just checked;
+- an annotated tag whose tagger isn't the pinned address (the tagger is
+  published with the tag, as permanently as an author);
 - a clone with no pinned identity;
 - commits it can't read. When the remote's branch tip was never fetched (a
   force-push over someone else's push, say), it checks every commit the remote

@@ -147,9 +147,28 @@ async function checkCommits(input: CheckInput, expected: string): Promise<Refusa
     const exclude = mirror && ref.remoteRef === 'refs/heads/' + mirror
       ? ['--not', '--remotes']                          // mirror: on any remote, upstream included
       : ['--not', '--remotes=' + input.remote];
+    refusals.push(...await checkTaggers(input.git, ref, expected));
     refusals.push(...await checkRange(input, { ref, exclude }, expected));
   }
   return refusals;
+}
+
+/** An annotated tag's tagger is published with it, as permanently as an author. */
+async function checkTaggers(git: Git, ref: PushRef, expected: string): Promise<Refusal[]> {
+  const taggers = await git.taggersOf(ref.localSha);
+  if (!taggers.ok) {
+    return [{
+      reason: 'The guard could not read the tag bound for ' + ref.remoteRef + '. Refusing rather than passing unchecked.',
+      detail: ['git said: ' + taggers.error],
+    }];
+  }
+  const foreign = taggers.value.filter((tagger) => !matches(tagger, expected));
+  if (foreign.length === 0) return [];
+  return [{
+    reason: 'The tag bound for ' + ref.remoteRef + ' was not tagged as ' + expected + '.',
+    detail: [...foreign.map((tagger) => '  tagger  ' + (tagger || '(none)')), '',
+      'The tagger address becomes permanent once pushed.'],
+  }];
 }
 
 /** One pushed ref, and the commits that do not count because a remote already has them. */

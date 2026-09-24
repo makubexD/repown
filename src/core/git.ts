@@ -196,6 +196,28 @@ export class Git {
     return commits;
   }
 
+  /**
+   * The tagger address of every annotated tag in the chain starting at `sha`
+   * (a tag may point at a tag). Empty when `sha` is not a tag at all. `git log`
+   * peels tags to their commit, so this is the only place a tagger is seen.
+   */
+  async taggersOf(sha: string): Promise<Result<string[]>> {
+    const taggers: string[] = [];
+    for (let object = sha, depth = 0; depth < MAX_TAG_CHAIN; depth++) {
+      const type = await this.exec(['cat-file', '-t', object]);
+      // A missing starting object is the range check's to refuse; only a broken chain is ours.
+      if (!succeeded(type)) return depth === 0 ? ok(taggers) : err('could not read object ' + object);
+      if (type.stdout.trim() !== 'tag') return ok(taggers);
+      const body = await this.exec(['cat-file', 'tag', object]);
+      const next = /^object ([0-9a-f]+)$/m.exec(body.stdout)?.[1];
+      if (!succeeded(body) || !next) return err('could not read tag ' + object);
+      const tagger = /^tagger [^<\n]*<([^>\n]*)>/m.exec(body.stdout)?.[1];
+      taggers.push(tagger ?? '');                        // no tagger line: '' never matches
+      object = next;
+    }
+    return err('tag chain longer than ' + MAX_TAG_CHAIN + ' starting at ' + sha);
+  }
+
   /** Whether this clone has the commit at all -- a remote tip it never fetched is absent. */
   async hasCommit(sha: string): Promise<boolean> {
     return succeeded(await this.exec(['cat-file', '-e', sha + '^{commit}']));
@@ -238,6 +260,7 @@ function parseOriginLine(line: string): ConfigEntry[] {
  */
 const IDENTITY_FORMAT = '%H%x00%ae%x00%ce%x00%an%x00%cn%x00%s%x00';
 const IDENTITY_FIELDS = 6;
+const MAX_TAG_CHAIN = 16;
 const SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 
 function parseIdentities(stdout: string): Result<CommitIdentity[]> {

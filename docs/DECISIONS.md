@@ -359,6 +359,7 @@ in fact perfectly safe.
 | Condition | `guard check` | `repown` | Why |
 | --- | --- | --- | --- |
 | A commit in the pushed range has a foreign author | **refuse** | not its job | Irreversible once published |
+| A pushed annotated tag has a foreign tagger | **refuse** | not its job | Same: `git log` peels past the tag, so it's read separately |
 | No identity pinned in this clone | **refuse** | **fail** | The next commit inherits the machine's identity |
 | The pushed commits cannot be read | **refuse** | — | An empty answer would read as "nothing foreign"; a remote tip this clone never fetched is checked as a new branch instead |
 | `GH_TOKEN`, `GITHUB_TOKEN`, `GIT_AUTHOR_EMAIL` or `GIT_COMMITTER_EMAIL` set | **refuse** | — | Silently outranks the config just validated |

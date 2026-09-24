@@ -40,7 +40,7 @@ function environmentHelp(): string[] {
     '  Environment:',
     '    ' + 'REPOWN_CONFIG_DIR'.padEnd(20) + 'where the per-machine account registry lives',
     '    ' + 'NO_COLOR'.padEnd(20) + 'disable colored output when set to a non-empty value',
-    '    ' + 'FORCE_COLOR'.padEnd(20) + 'force colored output even when not a terminal',
+    '    ' + 'FORCE_COLOR'.padEnd(20) + 'colored output even when not a terminal; 0 or false turns it off (wins over NO_COLOR)',
     '',
   ];
 }

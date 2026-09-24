@@ -48,6 +48,14 @@ describe('repown --version / --help', () => {
     }
   });
 
+  test('help describes FORCE_COLOR as the code treats it: 0 or false turns colour off', () => {
+    const line = repown(['--help']).stdout.split('\n').find((text) => text.trim().startsWith('FORCE_COLOR'));
+    assert.match(line ?? '', /\b0\b.*\bfalse\b.*off/);
+    const coloured = (value: string): boolean => /\x1b\[/.test(spawnSync(process.execPath, [CLI, 'no-such-command'],
+      { env: { ...process.env, FORCE_COLOR: value }, encoding: 'utf8' }).stderr);
+    assert.deepEqual([coloured('1'), coloured('0'), coloured('false')], [true, false, false]);
+  });
+
   test('the guard summary advertises the user actions, not the hook\'s', () => {
     const line = repown(['--help']).stdout.split('\n').find((text) => text.trim().startsWith('guard'));
     assert.match(line ?? '', /on \| off \| status/);

@@ -54,13 +54,20 @@ function summary(repo: RepoState, auth: AuthState): void {
   const id = repo.identity;
   out.line();
   out.field('commits as', id.name || id.email ? (id.name ?? '?') + ' <' + (id.email ?? '?') + '>' : 'NOT SET LOCALLY');
-  out.field('pushes as', repo.credentialKeys.length > 0 ? id.account ?? 'NOT SET LOCALLY'
-    : 'not pinned by repown on ' + repo.provider.label);
-  out.field('origin', (repo.owner ?? 'unknown') + '  ' + out.dim('(' + repo.provider.label + ')'));
+  out.field('pushes as', pushesAs(repo));
+  out.field('origin', repo.originUrl
+    ? (repo.owner ?? 'unknown') + '  ' + out.dim('(' + repo.provider.label + ')')
+    : 'no remote');
   out.field('helper', repo.helper ?? 'none');
   out.field('gh active', activeAccountLabel(auth));
   out.field('push guard', repo.guard);
   out.line();
+}
+
+function pushesAs(repo: RepoState): string {
+  if (!repo.originUrl) return 'no remote to push to';
+  if (repo.credentialKeys.length === 0) return 'not pinned by repown on ' + repo.provider.label;
+  return repo.identity.account ?? 'NOT SET LOCALLY';
 }
 
 interface Problem { readonly what: string; readonly fix: string; }

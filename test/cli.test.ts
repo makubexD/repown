@@ -489,6 +489,19 @@ describe('status in a clone pushing to an organisation', () => {
       azure.dispose();
     }
   });
+
+  test('with no origin URL, it says there is no remote rather than naming an unknown host', () => {
+    const bare = sandbox();
+    try {
+      bare.git('remote', 'add', 'origin', '');
+      const run = repown([], { cwd: bare.dir });
+      assert.match(run.stdout, /origin\s+no remote/);
+      assert.match(run.stdout, /pushes as\s+no remote to push to/);
+      assert.doesNotMatch(run.stdout, /this host/);
+    } finally {
+      bare.dispose();
+    }
+  });
 });
 
 describe('help shows an optional positional as optional', () => {

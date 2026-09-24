@@ -51,7 +51,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 
 ## Non-obvious structure
 
-- `src/cli.ts` only dispatches. `--help` is intercepted before a command's `run()`, so help
+- `src/cli.ts` only declares the program; `src/ui/dispatch.ts` dispatches it, and the release
+  tool (`scripts/release.ts`) reuses it. `--help` is intercepted before a command's `run()`, so help
   never has side effects. A command declares its options in `src/commands/<name>.ts`, and
   `src/ui/help.ts` renders help from that same declaration, so help can't drift from the
   parser.

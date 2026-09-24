@@ -46,32 +46,32 @@ function environmentHelp(): string[] {
   ];
 }
 
-export function renderCommandHelp(path: readonly string[], command: Command): string[] {
-  const lines = ['', '  ' + usageFor(path, command), '', '  ' + command.summary, ''];
+export function renderCommandHelp(path: readonly string[], command: Command, program = 'repown'): string[] {
+  const lines = ['', '  ' + usageFor(program, path, command), '', '  ' + command.summary, ''];
   if (optionsOf(command).length > 0) lines.push(...optionsHelp(command), '');
   lines.push('  Global options:', ...GLOBAL_OPTIONS.map((option) => '    ' + optionHelp(option)), '');
   if (command.examples && command.examples.length > 0) lines.push(...examplesHelp(command.examples), '');
   return lines;
 }
 
-export function renderGroupHelp(path: readonly string[], group: CommandGroup): string[] {
-  const lines = ['', '  repown ' + path.join(' ') + ' <action>', '', '  Actions:'];
+export function renderGroupHelp(path: readonly string[], group: CommandGroup, program = 'repown'): string[] {
+  const lines = ['', '  ' + program + ' ' + path.join(' ') + ' <action>', '', '  Actions:'];
   for (const [name, action] of Object.entries(group.actions)) {
     const marker = name === group.defaultAction ? '  (default)' : '';
     lines.push('    ' + name.padEnd(10) + action.summary + marker);
   }
-  lines.push('', '  Run `repown help ' + path.join(' ') + ' <action>` for its options.', '');
+  lines.push('', '  Run `' + program + ' help ' + path.join(' ') + ' <action>` for its options.', '');
   return lines;
 }
 
-export function renderHelpFor(path: readonly string[], entry: Command | CommandGroup): string[] {
-  return isGroup(entry) ? renderGroupHelp(path, entry) : renderCommandHelp(path, entry);
+export function renderHelpFor(path: readonly string[], entry: Command | CommandGroup, program = 'repown'): string[] {
+  return isGroup(entry) ? renderGroupHelp(path, entry, program) : renderCommandHelp(path, entry, program);
 }
 
-function usageFor(path: readonly string[], command: Command): string {
+function usageFor(program: string, path: readonly string[], command: Command): string {
   const positionals = positionalUsage(command);
   const options = optionsOf(command).map(optionUsageToken).join(' ');
-  return ['repown', ...path, positionals, options].filter((part) => part.length > 0).join(' ');
+  return [program, ...path, positionals, options].filter((part) => part.length > 0).join(' ');
 }
 
 function positionalUsage(command: Command): string {

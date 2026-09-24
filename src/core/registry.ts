@@ -46,44 +46,72 @@ export function registryPath(): string {
   return join(configDirectory(), 'accounts.json');
 }
 
-/** An absent or unreadable registry is an EMPTY one, never a crash. */
-export async function loadRegistry(): Promise<Registry> {
+/**
+ * No file yet is an EMPTY registry. Anything else that fails is an error --
+ * reading a broken file as empty made the next save replace it, and every
+ * account in it, with a single entry.
+ */
+export async function loadRegistry(): Promise<Result<Registry>> {
+  let raw: string;
   try {
-    const raw = await readFile(registryPath(), 'utf8');
-    const parsed = JSON.parse(raw) as { accounts?: Record<string, Account> };
-    return { accounts: parsed.accounts ?? {} };
-  } catch {
-    return EMPTY;
+    raw = await readFile(registryPath(), 'utf8');
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return ok(EMPTY);
+    return err('could not read ' + registryPath() + ': ' + (cause as Error).message);
+  }
+  try {
+    return ok({ accounts: validAccounts((JSON.parse(raw) as { accounts?: unknown }).accounts) });
+  } catch (cause) {
+    return err(registryPath() + ' is not valid JSON (' + (cause as Error).message +
+               ') -- fix it or remove it; repown will not overwrite it');
   }
 }
 
-export async function lookupAccount(account: string): Promise<Account | null> {
+/** Only entries with a string name and email, in an object with no prototype to collide with. */
+function validAccounts(value: unknown): Record<string, Account> {
+  const accounts = Object.create(null) as Record<string, Account>;
+  if (typeof value !== 'object' || value === null) return accounts;
+  for (const [key, entry] of Object.entries(value)) {
+    const { name, email, host } = (entry ?? {}) as Partial<Account>;
+    if (typeof name !== 'string' || typeof email !== 'string') continue;
+    accounts[key] = typeof host === 'string' ? { name, email, host } : { name, email };
+  }
+  return accounts;
+}
+
+export async function lookupAccount(account: string): Promise<Result<Account | null>> {
   const registry = await loadRegistry();
-  return registry.accounts[account] ?? null;
+  if (!registry.ok) return registry;
+  return ok(Object.hasOwn(registry.value.accounts, account) ? registry.value.accounts[account]! : null);
 }
 
 export async function saveAccount(account: string, entry: Account): Promise<Result<void>> {
   const registry = await loadRegistry();
-  return write({ accounts: { ...registry.accounts, [account]: entry } });
+  if (!registry.ok) return registry;
+  return write({ accounts: { ...registry.value.accounts, [account]: entry } });
 }
 
 export async function removeAccount(account: string): Promise<Result<boolean>> {
   const registry = await loadRegistry();
-  if (!(account in registry.accounts)) return ok(false);
+  if (!registry.ok) return registry;
+  if (!Object.hasOwn(registry.value.accounts, account)) return ok(false);
 
-  const accounts = { ...registry.accounts };
+  const accounts = { ...registry.value.accounts };
   delete accounts[account];
   const written = await write({ accounts });
   return written.ok ? ok(true) : err(written.error);
 }
 
-/** Written via a temporary file and renamed, so an interrupted write cannot truncate it. */
+/**
+ * Written via a temporary file and renamed, so an interrupted write cannot
+ * truncate it. Owner-only, since it holds names and addresses.
+ */
 async function write(registry: Registry): Promise<Result<void>> {
   const target = registryPath();
   const temporary = `${target}.tmp`;
   try {
     await mkdir(dirname(target), { recursive: true });
-    await writeFile(temporary, JSON.stringify(registry, null, 2) + '\n', 'utf8');
+    await writeFile(temporary, JSON.stringify(registry, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
     await rename(temporary, target);
     return ok(undefined);
   } catch (cause) {

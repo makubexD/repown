@@ -11,7 +11,9 @@ import type { Command, CommandGroup } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
 async function list(): Promise<number> {
-  const registry = await loadRegistry();
+  const loaded = await loadRegistry();
+  if (!loaded.ok) { out.fail('accounts', loaded.error); return 1; }
+  const registry = loaded.value;
   const names = Object.keys(registry.accounts).sort();
 
   out.line();

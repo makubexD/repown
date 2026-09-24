@@ -71,7 +71,9 @@ async function resolveAccount(
   const flagged = { name: flagString(args, 'name'), email: flagString(args, 'email') };
   if (flagged.name && flagged.email) return { name: flagged.name, email: flagged.email };
 
-  const recorded = await lookupAccount(account);
+  const lookup = await lookupAccount(account);
+  if (!lookup.ok) { out.fail('use', lookup.error); return null; }
+  const recorded = lookup.value;
   const name = flagged.name ?? recorded?.name;
   const email = flagged.email ?? recorded?.email;
   if (name && email) return { name, email };

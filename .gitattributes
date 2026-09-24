@@ -1,0 +1,4 @@
+# sh rejects a CRLF script ("bad interpreter"), and a Windows checkout with
+# core.autocrlf would otherwise give it one.
+*.sh    text eol=lf
+*.tape  text eol=lf

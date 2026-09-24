@@ -22,7 +22,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc -p tsconfig.test.json",
     "watch": "tsc --watch",
     "test": "node --test \"test/*.test.ts\"",
     "prepare": "npm run build"

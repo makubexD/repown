@@ -12,7 +12,7 @@ empirically; read the relevant section before changing behaviour.**
     npm test                             # node --test "test/*.test.ts" (no framework)
     node --test test/guard.test.ts       # one file
     node --test --test-name-pattern="<regex>" test/guard.test.ts   # one test
-    npm run build                        # tsc -> dist/; also the only static check (no lint)
+    npm run build                        # tsc -> dist/, then type-checks test/ too; the only static check (no lint)
     node src/cli.ts <args>               # run from source, no build needed
 
 Developing needs Node 22.6+; the package targets Node 20+ (DECISIONS §7). CI runs Linux,

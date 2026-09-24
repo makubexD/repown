@@ -24,7 +24,9 @@ would then read `on` while every push goes unchecked.
   belongs to another tool, or to every repository on the machine, where a pinned-identity
   hook would refuse pushes in clones that were never pinned.
   - `guard off` still removes a repown hook from `.git/hooks`, which would otherwise come
-    back as soon as `core.hooksPath` is unset.
+    back as soon as `core.hooksPath` is unset. If a repown hook is also in the redirected
+    directory, `guard off` fails and names it rather than reporting `off`, because that
+    one still runs.
   - To guard such a clone, have that tool's `pre-push` run
     `repown guard check --remote="$1" --url="$2"` and pass its stdin through.
 - **Paths are compared as real paths,** so a symlinked `.git/hooks` isn't mistaken for a

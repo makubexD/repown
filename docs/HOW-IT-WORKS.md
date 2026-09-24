@@ -360,7 +360,7 @@ whole team, use a server-side rule on author addresses.
 | --- | --- |
 | A `pre-push` hook repown didn't write already exists | `guard on` and `guard off` leave it alone and say so |
 | `core.hooksPath` is set (husky, lefthook…) | never writes or deletes there; `repown` warns and prints the line below |
-| A repown hook left in `.git/hooks` while `core.hooksPath` is set | `guard off` still removes it, so it can't come back when `core.hooksPath` is unset |
+| A repown hook left in `.git/hooks` while `core.hooksPath` is set | `guard off` still removes it, so it can't come back when `core.hooksPath` is unset; if a repown hook is in that directory too, it says so instead of `off` |
 
 To guard such a clone, call repown from that tool's `pre-push` hook, passing stdin through:
 

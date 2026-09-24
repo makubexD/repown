@@ -192,10 +192,11 @@ export async function uninstallGuard(git: Git): Promise<Result<boolean>> {
   const dirs = await hookDirs(git);
   if (!dirs) return err(NO_GIT_DIR);
   const removed = await removeIfOurs(join(dirs.own, 'pre-push'));
-  if (!removed.ok || removed.value || !isRedirected(dirs)) return removed;
-  // A repown hook in the redirected directory is ours to report but not to delete;
-  // anything else there is simply someone else's, and there is nothing to turn off.
-  return await stateOf(join(dirs.effective, 'pre-push')) === 'on' ? err(redirectMessage(dirs)) : ok(false);
+  if (!removed.ok || !isRedirected(dirs)) return removed;
+  // A repown hook in the redirected directory is ours to report but not to delete,
+  // and it still runs -- so "off" would be false even after removing the leftover.
+  // Anything else there is simply someone else's, and there is nothing to turn off.
+  return await stateOf(join(dirs.effective, 'pre-push')) === 'on' ? err(redirectMessage(dirs)) : removed;
 }
 
 async function removeIfOurs(path: string): Promise<Result<boolean>> {

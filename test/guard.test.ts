@@ -604,6 +604,19 @@ describe('only a hook repown wrote is repown\'s', () => {
     assert.equal(existsSync(hook()), false);
   });
 
+  test('with repown hooks in both places, `guard off` removes the leftover but does not report off', async () => {
+    const shared = join(box.dir, 'shared-hooks');
+    mkdirSync(shared, { recursive: true });
+    writeFileSync(join(shared, 'pre-push'), hookBody('a', 'b'));
+    writeHook(hookBody('a', 'b'));
+    box.git('config', '--local', 'core.hooksPath', shared);
+    const removed = await uninstallGuard(git);
+    assert.equal(removed.ok, false, 'the redirected repown hook still runs on every push');
+    assert.match(removed.ok ? '' : removed.error, /core\.hooksPath/);
+    assert.equal(existsSync(hook()), false, 'the .git/hooks leftover is still removed');
+    assert.equal(existsSync(join(shared, 'pre-push')), true, 'a directory repown does not own is left alone');
+  });
+
   test('our own hook checked out with CRLF line endings is still ours', async () => {
     writeHook(hookBody('a', 'b').replace(/\n/g, '\r\n'));
     assert.equal(await guardState(git), 'on');

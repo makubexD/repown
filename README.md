@@ -170,7 +170,7 @@ addresses; it cannot rewrite history.
 | Command | What it does |
 | --- | --- |
 | `repown status` (or just `repown`) | the state of this repository and this machine |
-| `repown use <account> [--gh]` | pin this clone to an account (`--name`/`--email` skip the registry) |
+| `repown use <account> [--gh]` | pin this clone to an account (`--name` and `--email` together skip the registry) |
 | `repown off` | unpin this clone, leaving global config alone |
 | `repown doctor` | what serves credentials on this machine, and to whom |
 | `repown fix [--dry-run] [--yes]` | undo `gh auth setup-git` so per-clone pins work again |

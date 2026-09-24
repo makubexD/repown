@@ -6,7 +6,8 @@
 //   user.name
 //   user.email
 //   user.useConfigOnly            git refuses to invent an identity from the hostname
-//   credential.<host>.username    which stored credential serves this remote
+//   repown.account                whose clone this is -- the guard's destination check
+//   credential.<host>.username    which stored credential serves this remote (GitHub over https)
 //
 // NOTHING IS WRITTEN TO THE REPOSITORY. All of it lands in .git/config, which git
 // never tracks -- which is what keeps a name or address out of a public repo, and
@@ -32,8 +33,8 @@ export default {
   positionals: { min: 1, max: 1, label: '<account>' },
   options: [
     { name: 'gh', kind: 'boolean', help: "also switch the GitHub CLI's active account to match" },
-    { name: 'name', kind: 'string', help: 'the commit author name (skips the registry and the prompt)' },
-    { name: 'email', kind: 'string', help: 'the commit author email (skips the registry and the prompt)' },
+    { name: 'name', kind: 'string', help: 'the commit author name (given with --email, skips the registry and the prompt)' },
+    { name: 'email', kind: 'string', help: 'the commit author email (given with --name, skips the registry and the prompt)' },
   ],
   examples: ['repown use octocat', 'repown use octocat --gh'],
 
@@ -62,7 +63,10 @@ export default {
   },
 } satisfies Command;
 
-/** Registry first, then the host, then ask. The registry is why this is usually instant. */
+/**
+ * Flags first, then the registry, then ask -- with the host only suggesting the
+ * prompt's defaults. The registry is why this is usually instant.
+ */
 async function resolveAccount(
   account: string,
   repo: RepoState,
@@ -86,12 +90,14 @@ async function askAndRecord(
   repo: RepoState,
   known: { name: string | undefined; email: string | undefined },
 ): Promise<Account | null> {
-  const suggested = (await repo.provider.resolveProfile?.(account)) ?? {};
+  // Checked BEFORE asking the host for a suggestion: with no terminal there is
+  // nobody to suggest to, and the lookup is a network call.
   if (!interactive()) {
     out.fail('use', 'no record of "' + account + '" and no terminal to ask.');
     out.detail('record it once:  repown accounts add ' + account + ' --name "..." --email "..."');
     return null;
   }
+  const suggested = (await repo.provider.resolveProfile?.(account)) ?? {};
   out.line();
   out.line('  No record of "' + account + '" yet. Asking once, then never again.');
 

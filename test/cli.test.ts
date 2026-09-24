@@ -277,6 +277,52 @@ describe('guard check (the hook contract every installed hook already calls)', (
   });
 });
 
+describe('repown use', () => {
+  let box: Sandbox;
+  let configDir: string;
+  const saved = process.env['REPOWN_CONFIG_DIR'];
+  beforeEach(() => {
+    box = sandbox();
+    box.git('config', '--local', '--unset', 'user.name');
+    box.git('config', '--local', '--unset', 'user.email');
+    box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
+    configDir = mkdtempSync(join(tmpdir(), 'repown-use-'));
+    process.env['REPOWN_CONFIG_DIR'] = configDir;
+  });
+  afterEach(() => {
+    box.dispose();
+    rmSync(configDir, { recursive: true, force: true });
+    if (saved === undefined) delete process.env['REPOWN_CONFIG_DIR']; else process.env['REPOWN_CONFIG_DIR'] = saved;
+  });
+  const local = (key: string): string =>
+    spawnSync('git', ['config', '--local', '--get', key], { cwd: box.dir, encoding: 'utf8' }).stdout.trim();
+
+  test('pins every key from --name and --email', () => {
+    const run = repown(['use', 'octocat', '--name', 'Octo Cat', '--email', 'octocat@example.invalid'], { cwd: box.dir });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(local('user.name'), 'Octo Cat');
+    assert.equal(local('user.email'), 'octocat@example.invalid');
+    assert.equal(local('user.useConfigOnly'), 'true');
+    assert.equal(local('repown.account'), 'octocat');
+    assert.equal(local('credential.https://github.com.username'), 'octocat');
+  });
+
+  test('a write it could not make is reported as NOT pinned, never as OK', () => {
+    writeFileSync(join(box.dir, '.git', 'config.lock'), '');
+    const run = repown(['use', 'octocat', '--name', 'Octo Cat', '--email', 'octocat@example.invalid'], { cwd: box.dir });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /NOT pinned/);
+    assert.doesNotMatch(run.stdout, /^OK/m);
+  });
+
+  test('with no record and no terminal it writes nothing and says how to record one', () => {
+    const run = repown(['use', 'octocat'], { cwd: box.dir });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /repown accounts add octocat/);
+    assert.equal(local('user.email'), '');
+  });
+});
+
 describe('repown scan', () => {
   let box: Sandbox;
   beforeEach(() => {

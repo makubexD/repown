@@ -29,6 +29,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - **`src/core/exec.ts` is the only place that spawns processes.** It never writes to the
   console (`git credential fill` prints live passwords), and a non-zero exit resolves rather
   than rejects (`git config --get` exits 1 for "not set"). Always `shell: false`.
+- **Every `git log` passes `--no-show-signature`.** `scan` runs it in repositories
+  it merely found, and their config can set `gpg.program`.
 - **A skipped check must never look like a passed one.** Failures that are answers
   ("gh could not be queried") are a `Result` (`src/core/result.ts`), never null or empty.
 - **Severity (DECISIONS §8):** the guard refuses only what's irreversible (a foreign author,

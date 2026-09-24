@@ -2,6 +2,9 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { sandbox, type Sandbox } from './helpers.ts';
 import { Git } from '../src/core/git.ts';
+import { writeFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 describe('Git', () => {
   let box: Sandbox;
@@ -21,6 +24,32 @@ describe('Git', () => {
 
   test('unsetting an absent key succeeds rather than erroring', async () => {
     assert.equal(await git.unsetConfig('never.existed'), true);
+  });
+
+  // `repown scan` runs `git log` in every repository it finds. With
+  // log.showSignature and gpg.program set in a repository's own config, a
+  // signed commit makes git run that program -- code execution from a tree the
+  // user merely scanned.
+  test('reading history never runs a signature program the repository configures', async () => {
+    const marker = join(box.dir, '..', 'RAN');
+    const program = join(box.dir, '..', 'fake-gpg.sh');
+    writeFileSync(program, '#!/bin/sh\ntouch "' + marker.replace(/\\/g, '/') + '"\nexit 1\n', { mode: 0o755 });
+    const tree = execFileSync('git', ['mktree'], { cwd: box.dir, input: '', encoding: 'utf8' }).trim();
+    const signed = 'tree ' + tree + '\nauthor a <a@example.invalid> 1 +0000\ncommitter a <a@example.invalid> 1 +0000\n' +
+      'gpgsig -----BEGIN PGP SIGNATURE-----\n \n x\n -----END PGP SIGNATURE-----\n\nsigned\n';
+    const sha = execFileSync('git', ['hash-object', '-t', 'commit', '-w', '--stdin'],
+      { cwd: box.dir, input: signed, encoding: 'utf8' }).trim();
+    box.git('update-ref', 'refs/heads/signed', sha);
+    box.git('config', '--local', 'log.showSignature', 'true');
+    box.git('config', '--local', 'gpg.program', program.replace(/\\/g, '/'));
+    try {
+      await git.emailCounts();
+      await git.identitiesIn([sha]);
+      assert.equal(existsSync(marker), false, 'the configured program must not have run');
+    } finally {
+      box.git('config', '--local', '--unset', 'log.showSignature');
+      box.git('update-ref', '-d', 'refs/heads/signed');
+    }
   });
 
   test('getAllConfig returns every value of a multi-valued key', async () => {

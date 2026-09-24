@@ -244,7 +244,9 @@ export class Git {
    */
   async emailCounts(exclude?: string): Promise<Map<string, number>> {
     const range = exclude ? ['--all', '--not', exclude] : ['--all'];
-    const result = await this.exec(['log', ...range, '--format=%ae%n%ce']);
+    // --no-show-signature: a scanned repository's own log.showSignature + gpg.program
+    // would otherwise run a program of its choosing.
+    const result = await this.exec(['log', '--no-show-signature', ...range, '--format=%ae%n%ce']);
     const counts = new Map<string, number>();
     for (const address of lines(result)) {
       counts.set(address, (counts.get(address) ?? 0) + 1);

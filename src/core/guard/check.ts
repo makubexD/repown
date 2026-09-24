@@ -278,9 +278,12 @@ function printable(text: string): string {
   return text.replace(/[\x00-\x1f\x7f-\x9f]/g, '?');
 }
 
-/** A URL as it may be shown: a password or token in its userinfo is replaced. */
+/**
+ * A URL as it may be shown: the WHOLE userinfo is replaced. A token is often the
+ * username itself (`https://ghp_...@github.com/`), not only a password.
+ */
 function redacted(raw: string): string {
-  return raw.replace(/^([a-z][a-z0-9+.-]*:\/\/[^:@/]*):[^@/]*@/i, '$1:***@');
+  return raw.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/]*@/i, '$1***@');
 }
 
 /** An owner comes from the URL, so a suggested command must quote it for the shell. */

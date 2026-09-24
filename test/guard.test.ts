@@ -230,9 +230,12 @@ describe('guard check', () => {
 
   test('D0 a token in the remote URL is never echoed', async () => {
     const sha = commitAs(OURS, 'ours');
-    const refusals = await push(sha, 'refs/heads/feat/x', 'https://x:ghp_SECRET@github.com/someone-else/r.git');
-    assert.equal(refusals.length, 1);
-    assert.ok(refusals[0]!.detail.every((row) => !row.includes('ghp_SECRET')));
+    for (const url of ['https://x:ghp_SECRET@github.com/someone-else/r.git',
+                       'https://ghp_SECRET@github.com/someone-else/r.git']) {
+      const refusals = await push(sha, 'refs/heads/feat/x', url);
+      assert.equal(refusals.length, 1, url);
+      assert.ok(refusals[0]!.detail.every((row) => !row.includes('ghp_SECRET')), url);
+    }
   });
 
   test('D1 the suggested allowOwner command quotes an owner the shell would interpret', async () => {

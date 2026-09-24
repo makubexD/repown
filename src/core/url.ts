@@ -66,8 +66,23 @@ interface UrlParts {
 
 function build(raw: string, { scheme, user, host, rawPath }: UrlParts): GitUrl {
   const path = rawPath.replace(/^\/+/, '').replace(/\/+$/, '').replace(/\.git$/i, '');
-  const segments = path.split('/').filter((s) => s.length > 0).map(decodeSegment);
+  const segments = collapseDots(path.split('/').filter((s) => s.length > 0).map(decodeSegment));
   return { raw, scheme, user, host: host.toLowerCase(), path, segments };
+}
+
+/**
+ * git and curl collapse `.` and `..` before sending (RFC 3986), `%2e%2e`
+ * included. The owner must be read from that collapsed path: otherwise
+ * `github.com/octocat/../someone-else/r` reads as octocat's while the push
+ * goes to someone-else.
+ */
+function collapseDots(segments: readonly string[]): string[] {
+  const kept: string[] = [];
+  for (const segment of segments) {
+    if (segment === '..') kept.pop();
+    else if (segment !== '.') kept.push(segment);
+  }
+  return kept;
 }
 
 // Azure DevOps organisation and project names may contain spaces, which arrive

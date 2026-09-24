@@ -42,6 +42,15 @@ describe('parseGitUrl', () => {
     assert.equal(credentialPrefix(parseGitUrl('https://github.com/a/b')!), 'https://github.com');
   });
 
+  // git and curl collapse dot segments before sending, so the owner is read
+  // from the path the server actually receives.
+  test('dot segments are collapsed, so ../ cannot fake the owner', () => {
+    assert.equal(owner('https://github.com/octocat/../someone-else/r.git'), 'someone-else');
+    assert.equal(owner('https://github.com/octocat/%2e%2e/someone-else/r.git'), 'someone-else');
+    assert.equal(owner('https://github.com/./octocat/r.git'), 'octocat');
+    assert.equal(owner('git@github.com:octocat/../someone-else/r.git'), 'someone-else');
+  });
+
   test('rubbish is null, not a throw', () => {
     assert.equal(parseGitUrl(''), null);
     assert.equal(parseGitUrl('   '), null);

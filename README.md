@@ -66,6 +66,22 @@ cd repown && npm install && npm run build && npm link
 package is marked `private` and kept off npm until its command surface has
 settled.
 
+### Uninstall
+
+Remove the guard from each clone **before** removing repown. A guard that can't
+find repown refuses every push rather than letting it through unchecked.
+
+```
+repown scan <dir>          # the "guard" column lists the clones where it is on
+repown guard off           # in each of those clones
+repown off                 # optional: also drop the pinned identity
+npm unlink -g repown       # or npm uninstall -g repown
+```
+
+If repown is already gone, a push prints the way out: delete that clone's
+`.git/hooks/pre-push`, or use `git push --no-verify` for a single push. repown
+writes nothing else to a clone: no tracked file and nothing that gets committed.
+
 ## Quickstart
 
 **Once per machine**, check what serves your git credentials:

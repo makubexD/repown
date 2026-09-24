@@ -479,6 +479,14 @@ describe('the installed hook, when its recorded CLI is gone', () => {
     assert.match(String(run.stderr), /cannot be found/);
   });
 
+  // Someone who uninstalled repown without `guard off` must not be left stuck:
+  // the refusal names the way out that needs no repown at all.
+  test('the refusal says how to stop using repown here without reinstalling it', () => {
+    const run = pushWith('#!/bin/sh\nexit 1\n');
+    assert.match(String(run.stderr), /delete [^\n]*hooks[\\/]pre-push/);
+    assert.match(String(run.stderr), /git push --no-verify/);
+  });
+
   test('uses a `repown` on PATH that identifies itself, and honours its verdict', () => {
     const run = pushWith('#!/bin/sh\n[ "$1" = --version ] && { echo "repown 9.9.9"; exit 0; }\necho refused-by-fake >&2\nexit 1\n');
     assert.notEqual(run.status, 0);

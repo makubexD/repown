@@ -141,6 +141,8 @@ export function hookBody(entry: string, nodePath: string): string {
     '    echo "so this push CANNOT be checked. Refusing rather than passing silently." >&2',
     '    echo "  expected: $repown_entry" >&2',
     '    echo "  fix:      reinstall repown, then run: repown guard on" >&2',
+    '    echo "  or, to stop using repown in this clone, delete $0" >&2',
+    '    echo "  or, for this one push only: git push --no-verify" >&2',
     '    exit 1',
     'fi',
     '',

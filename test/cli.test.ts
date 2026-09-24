@@ -490,6 +490,36 @@ describe('status in a clone pushing to an organisation', () => {
     }
   });
 
+  // "honours it" is a claim about the credential helper, so it is made only where
+  // the helper is Git Credential Manager, the one measured to honour the pin.
+  describe('the credential claim in a pinned GitHub clone', () => {
+    const pinned = (helper: string | null): ReturnType<typeof repown> => {
+      box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
+      box.git('config', '--local', 'user.name', 'Octo Cat');
+      box.git('config', '--local', 'user.email', 'octocat@users.noreply.github.com');
+      box.git('config', '--local', 'repown.account', 'octocat');
+      box.git('config', '--local', 'credential.https://github.com.username', 'octocat');
+      if (helper) box.git('config', '--local', 'credential.helper', helper);
+      return repown([], { cwd: box.dir });
+    };
+
+    test('with Git Credential Manager as the helper, it says the pin is honoured', () => {
+      assert.match(pinned('manager').stdout, /honours it/);
+    });
+
+    test('with no helper at all, it does not claim the pin is honoured, and says why', () => {
+      const run = pinned(null);
+      assert.doesNotMatch(run.stdout, /honours it/);
+      assert.match(run.stderr, /no credential helper is set/);
+    });
+
+    test('with a helper repown has not measured, it says it cannot tell', () => {
+      const run = pinned('store');
+      assert.doesNotMatch(run.stdout, /honours it/);
+      assert.match(run.stderr, /"store".*cannot tell whether it honours/);
+    });
+  });
+
   test('with no origin URL, it says there is no remote rather than naming an unknown host', () => {
     const bare = sandbox();
     try {

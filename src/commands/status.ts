@@ -34,13 +34,14 @@ export default {
     summary(repo, auth);
     const problems = collectProblems(repo, auth);
     await reportWarnings(repo, auth);
-    return verdict(repo, problems);
+    return verdict(repo, auth, problems);
   },
 } satisfies Command;
 
-function verdict(repo: RepoState, problems: readonly Problem[]): number {
+/** "Honours it" only where the helper is GCM, the one measured to read the pin (DECISIONS §1). */
+function verdict(repo: RepoState, auth: AuthState, problems: readonly Problem[]): number {
   if (problems.length === 0) {
-    out.pass('identity', repo.credentialKeys.length > 0
+    out.pass('identity', repo.credentialKeys.length > 0 && auth.helperIsGcm
       ? 'this clone is pinned, and its credential mechanism honours it'
       : 'this clone\'s commit identity is pinned; its credentials are left to ' + (repo.helper ?? 'nothing'));
     return 0;
@@ -102,7 +103,19 @@ async function reportWarnings(repo: RepoState, auth: AuthState): Promise<void> {
   await ownerWarning(repo);
   guardWarning(repo);
   submoduleWarning(repo);
+  helperWarning(repo, auth);
   ghWarning(repo.identity.account, auth);
+}
+
+/** A pinned credential key is only as good as the helper reading it. gh as helper is a problem, reported elsewhere. */
+function helperWarning(repo: RepoState, auth: AuthState): void {
+  if (repo.credentialKeys.length === 0 || auth.helperIsGcm || auth.ghIsHelper) return;
+  if (!auth.helper) {
+    out.warn('helper', 'no credential helper is set, so the pinned account selects no credential; git will prompt on push.');
+  } else {
+    out.warn('helper', '"' + auth.helper + '" serves credentials here, and repown cannot tell whether it honours the pinned account.');
+  }
+  out.detail('see: repown doctor   (Git Credential Manager is the helper repown pins for)');
 }
 
 /**

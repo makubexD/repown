@@ -180,6 +180,7 @@ OK    identity   this clone is pinned, and its credential mechanism honours it
 | --- | --- | --- |
 | 🔴 `commits as NOT SET LOCALLY` | the clone inherits the machine default | `repown use <account>` |
 | 🔴 `gh is the git credential helper` | only gh's active account can push | `repown fix` |
+| 🟡 `no credential helper is set` / `cannot tell whether it honours` | the push account is pinned, but nothing that reads the pin serves credentials | `repown doctor` ([card 1](#1-set-up-the-machine)) |
 | 🟡 `gh active as "…"` | the gh CLI would act as another account | `gh auth switch -u <account>` |
 | 🟡 `origin belongs to "octo-org"` | an organisation repository | `git config --local --add repown.allowOwner octo-org` |
 | 🟡 `guard off` | pushes are not checked | `repown guard on` |

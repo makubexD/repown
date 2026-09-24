@@ -21,6 +21,7 @@ import { join, relative, sep } from 'node:path';
 import { existsSync, statSync } from 'node:fs';
 import { Git } from '../core/git.ts';
 import { inspectRepo, type RepoState } from '../core/inspect.ts';
+import { ok, err, type Result } from '../core/result.ts';
 import { flagBool, flagString, type Args } from '../ui/args.ts';
 import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
@@ -51,14 +52,9 @@ export default {
   examples: ['repown scan', 'repown scan ~/code ~/work --emails'],
 
   async run(args: Args): Promise<number> {
-    const roots = args.positional.length > 0 ? args.positional : [flagString(args, 'cwd') ?? process.cwd()];
-    const depth = parseDepth(flagString(args, 'depth')!);
-    if (depth === null) {
-      out.fail('scan', `invalid --depth '${flagString(args, 'depth')}': expected a whole number >= 0`);
-      return 2;
-    }
-    const badRoot = roots.map(invalidRoot).find((problem) => problem !== null);
-    if (badRoot) { out.fail('scan', badRoot); return 2; }
+    const target = scanTarget(args);
+    if (!target.ok) { out.fail('scan', target.error); return 2; }
+    const { roots, depth } = target.value;
 
     const unreadable: string[] = [];
     const found = (await Promise.all(roots.map((root) => discover({ root, path: root }, depth, unreadable)))).flat();
@@ -96,6 +92,14 @@ async function mapLimited<T, R>(items: readonly T[], limit: number, work: (item:
   return results;
 }
 
+function scanTarget(args: Args): Result<{ roots: readonly string[]; depth: number }> {
+  const roots = args.positional.length > 0 ? args.positional : [flagString(args, 'cwd') ?? process.cwd()];
+  const depth = parseDepth(flagString(args, 'depth')!);
+  if (depth === null) return err(`invalid --depth '${flagString(args, 'depth')}': expected a whole number >= 0`);
+  const badRoot = roots.map(invalidRoot).find((problem) => problem !== null);
+  return badRoot ? err(badRoot) : ok({ roots, depth });
+}
+
 function parseDepth(raw: string): number | null {
   return /^\d+$/.test(raw) ? Number(raw) : null;
 }
@@ -121,20 +125,23 @@ async function discover(at: Found, depth: number, unreadable: string[]): Promise
   return nested.flat();
 }
 
+/**
+ * A mirror branch, where configured, is someone else's history passing through
+ * this clone. Counting it reports their contributors, not this clone's
+ * behaviour, so it is excluded -- when it exists; excluding a ref that is not
+ * there made git log fail and the row read as empty history.
+ *
+ * The name is relative to the scanned root, so two clones of the same project
+ * in different folders are told apart instead of printed as one name twice.
+ */
 async function describe(found: Found, showEmails: boolean): Promise<Row> {
   const git = new Git(found.path);
   const repo = await inspectRepo(git);
-  // A mirror branch, where configured, is someone else's history passing
-  // through this clone. Counting it reports their contributors, not this
-  // clone's behaviour, so it is excluded -- when it exists; excluding a ref
-  // that is not there made git log fail and the row read as empty history.
   const configured = await git.getConfig('repown.mirrorBranch', 'local');
   const mirror = configured && await git.hasCommit('refs/heads/' + configured) ? configured : null;
   const counts = await git.emailCounts(mirror ? 'refs/heads/' + mirror : undefined);
 
   return {
-    // Relative to the scanned root, so two clones of the same project in
-    // different folders are told apart instead of printed as one name twice.
     name: relative(found.root, found.path).split(sep).join('/') || found.path,
     owner: repo.owner ?? (repo.originUrl ? '?' : 'no remote'),
     host: repo.url ? repo.provider.id : '-',

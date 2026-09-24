@@ -32,18 +32,21 @@ export default {
     summary(repo, auth);
     const problems = collectProblems(repo, auth);
     await reportWarnings(repo, auth);
-
-    if (problems.length === 0) {
-      out.pass('identity', repo.credentialKeys.length > 0
-        ? 'this clone is pinned, and its credential mechanism honours it'
-        : 'this clone\'s commit identity is pinned; its credentials are left to ' + (repo.helper ?? 'nothing'));
-      return 0;
-    }
-    out.line();
-    for (const problem of problems) { out.fail('identity', problem.what); out.detail('fix: ' + problem.fix); }
-    return 1;
+    return verdict(repo, problems);
   },
 } satisfies Command;
+
+function verdict(repo: RepoState, problems: readonly Problem[]): number {
+  if (problems.length === 0) {
+    out.pass('identity', repo.credentialKeys.length > 0
+      ? 'this clone is pinned, and its credential mechanism honours it'
+      : 'this clone\'s commit identity is pinned; its credentials are left to ' + (repo.helper ?? 'nothing'));
+    return 0;
+  }
+  out.line();
+  for (const problem of problems) { out.fail('identity', problem.what); out.detail('fix: ' + problem.fix); }
+  return 1;
+}
 
 function summary(repo: RepoState, auth: AuthState): void {
   const id = repo.identity;
@@ -61,48 +64,55 @@ function summary(repo: RepoState, auth: AuthState): void {
 interface Problem { readonly what: string; readonly fix: string; }
 
 function collectProblems(repo: RepoState, auth: AuthState): Problem[] {
-  const problems: Problem[] = [];
-  const id = repo.identity;
+  const gh: Problem[] = auth.ghIsHelper ? [{
+    what: 'gh is the git credential helper, so only its ACTIVE account can ' +
+          'authenticate and every clone pinned elsewhere is prompted for a password.',
+    fix: 'repown fix',
+  }] : [];
+  return [...identityProblems(repo), ...gh];
+}
 
+function identityProblems(repo: RepoState): Problem[] {
+  const id = repo.identity;
   if (!isPinned(id)) {
-    problems.push({
+    return [{
       what: 'This clone sets no identity of its own, so it inherits the machine default (' +
             (id.inheritedEmail ?? 'nothing') + ').',
       fix: 'repown use <account>',
-    });
-  } else if (repo.credentialKeys.length > 0 && !id.account) {
-    problems.push({
-      what: 'No account is pinned, so pushes fall back to the machine default (' +
-            (id.inheritedAccount ?? 'nothing') + ').',
-      fix: 'repown use <account>',
-    });
+    }];
   }
-  if (auth.ghIsHelper) {
-    problems.push({
-      what: 'gh is the git credential helper, so only its ACTIVE account can ' +
-            'authenticate and every clone pinned elsewhere is prompted for a password.',
-      fix: 'repown fix',
-    });
-  }
-  return problems;
+  if (repo.credentialKeys.length === 0 || id.account) return [];
+  return [{
+    what: 'No account is pinned, so pushes fall back to the machine default (' +
+          (id.inheritedAccount ?? 'nothing') + ').',
+    fix: 'repown use <account>',
+  }];
 }
 
 async function reportWarnings(repo: RepoState, auth: AuthState): Promise<void> {
-  const account = repo.identity.account;
-
-  // An organisation is never an account name, so a bare owner-vs-account
-  // comparison warns on every org repository -- which is most of them at work.
-  const allowed = await allowedOwners(repo.git, repo.identity.owner ?? account);
-  if (repo.owner && allowed.length > 0 && !allowed.includes(repo.owner.toLowerCase())) {
-    out.warn('origin', 'origin belongs to "' + repo.owner + '", which is not an owner this clone pushes to.');
-    out.detail('if that is an organisation you belong to:');
-    out.detail('  git config --local --add repown.allowOwner ' + shellWord(repo.owner));
-  }
+  await ownerWarning(repo);
   guardWarning(repo);
+  ghWarning(repo.identity.account, auth);
+}
 
-  // The unknown case is REPORTED, never skipped. Guarding this on the active
-  // account being truthy is how a failed lookup used to make the whole warning
-  // disappear, leaving output that looked clean rather than uncertain.
+/**
+ * An organisation is never an account name, so a bare owner-vs-account
+ * comparison warns on every org repository -- which is most of them at work.
+ */
+async function ownerWarning(repo: RepoState): Promise<void> {
+  const allowed = await allowedOwners(repo.git, repo.identity.owner ?? repo.identity.account);
+  if (!repo.owner || allowed.length === 0 || allowed.includes(repo.owner.toLowerCase())) return;
+  out.warn('origin', 'origin belongs to "' + repo.owner + '", which is not an owner this clone pushes to.');
+  out.detail('if that is an organisation you belong to:');
+  out.detail('  git config --local --add repown.allowOwner ' + shellWord(repo.owner));
+}
+
+/**
+ * The unknown case is REPORTED, never skipped. Guarding this on the active
+ * account being truthy is how a failed lookup used to make the whole warning
+ * disappear, leaving output that looked clean rather than uncertain.
+ */
+function ghWarning(account: string | null, auth: AuthState): void {
   if (auth.ghPresent && !auth.gh.ok) {
     out.warn('gh', 'could not be queried, so who `gh pr create` would act as is UNVERIFIED.');
     out.detail('check it yourself: gh auth status');

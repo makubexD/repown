@@ -6,7 +6,8 @@
 // remove, and the undo, BEFORE asking. A change to machine-wide config should be
 // reviewable rather than magic.
 
-import { inspectAuth } from '../core/inspect.ts';
+import { inspectAuth, storedAccountsLabel } from '../core/inspect.ts';
+import type { Git } from '../core/git.ts';
 import { planRepair, repair, describeValue, type RemovalOutcome } from '../core/credential/repair.ts';
 import { confirm, interactive } from '../ui/prompt.ts';
 import { flagBool, gitFor, type Args } from '../ui/args.ts';
@@ -32,19 +33,22 @@ export default {
 
     preview(planned);
     if (flagBool(args, 'dry-run')) { out.line('  (dry run -- nothing was changed)'); out.line(); return 0; }
-
-    if (!flagBool(args, 'yes')) {
-      if (!interactive()) {
-        out.fail('fix', 'this changes global config, so it needs confirmation.');
-        out.detail('re-run with --yes to proceed without being asked.');
-        return 1;
-      }
-      if (!await confirm('Remove these entries?')) { out.line('  Nothing was changed.'); return 1; }
-    }
-
+    if (!await confirmed(args)) return 1;
     return apply(await repair(git), git);
   },
 } satisfies Command;
+
+async function confirmed(args: Args): Promise<boolean> {
+  if (flagBool(args, 'yes')) return true;
+  if (!interactive()) {
+    out.fail('fix', 'this changes global config, so it needs confirmation.');
+    out.detail('re-run with --yes to proceed without being asked.');
+    return false;
+  }
+  if (await confirm('Remove these entries?')) return true;
+  out.line('  Nothing was changed.');
+  return false;
+}
 
 function preview(planned: readonly RemovalOutcome[]): void {
   out.line();
@@ -60,26 +64,26 @@ function preview(planned: readonly RemovalOutcome[]): void {
   out.line();
 }
 
-async function apply(results: readonly RemovalOutcome[], git: ReturnType<typeof gitFor>): Promise<number> {
-  const failed = results.filter((entry) => !entry.removed);
-  for (const entry of results.filter((candidate) => candidate.removed)) {
-    out.pass('fix', 'removed  ' + entry.scope + ': ' + entry.key);
-  }
-  for (const entry of failed) {
-    out.warn('fix', 'could NOT remove  ' + entry.scope + ': ' + entry.key);
-    if (entry.scope === 'system') {
-      out.detail('the system scope is machine-wide; re-run this in an ELEVATED shell.');
-    }
-  }
-
+async function apply(results: readonly RemovalOutcome[], git: Git): Promise<number> {
+  const failed = reportRemovals(results);
   out.line();
   const auth = await inspectAuth(git);
   out.field('helper now', auth.helper ?? 'none', 16);
-  out.field('accounts', auth.stored.ok ? auth.stored.value.join(', ') || 'none' : 'unknown', 16);
+  out.field('accounts', storedAccountsLabel(auth), 16);
   out.line();
-  if (failed.length > 0) return 1;
+  if (failed > 0) return 1;
 
   out.line('  Each clone now authenticates as its own pinned account. Check one:  repown');
   out.line();
   return 0;
+}
+
+/** One line per entry, removed or not. Returns how many could not be removed. */
+function reportRemovals(results: readonly RemovalOutcome[]): number {
+  for (const entry of results) {
+    if (entry.removed) { out.pass('fix', 'removed  ' + entry.scope + ': ' + entry.key); continue; }
+    out.warn('fix', 'could NOT remove  ' + entry.scope + ': ' + entry.key);
+    if (entry.scope === 'system') out.detail('the system scope is machine-wide; re-run this in an ELEVATED shell.');
+  }
+  return results.filter((entry) => !entry.removed).length;
 }

@@ -18,6 +18,19 @@ const spec = (over: Partial<Spec> = {}): Spec => ({
 });
 
 describe('parseArgs', () => {
+  // `repown use -x` used to pin an account literally named "-x".
+  test('a single-dash token is refused as an unknown option, not taken as a positional', () => {
+    const result = parseArgs(['-x'], spec());
+    assert.equal(result.ok, false);
+    assert.match(result.ok ? '' : result.error, /unknown option -x/);
+  });
+
+  test('after --, a dash-led value is still a positional', () => {
+    const result = parseArgs(['--', '-x'], spec());
+    assert.ok(result.ok);
+    assert.deepEqual(result.value.positional, ['-x']);
+  });
+
   test('a boolean option never consumes the next token', () => {
     const result = parseArgs(['--gh', 'octocat'], spec());
     assert.ok(result.ok);

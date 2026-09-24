@@ -13,26 +13,26 @@ import * as out from '../ui/format.ts';
 async function list(): Promise<number> {
   const loaded = await loadRegistry();
   if (!loaded.ok) { out.fail('accounts', loaded.error); return 1; }
-  const registry = loaded.value;
-  const names = Object.keys(registry.accounts).sort();
+  const names = Object.keys(loaded.value.accounts).sort();
 
   out.line();
-  if (names.length === 0) {
-    out.line('  No accounts recorded yet.');
-    out.line();
-    out.line('  Record one so `repown use <account>` never has to ask again:');
-    out.line('    repown accounts add <account>');
-    out.line();
-    return 0;
-  }
+  if (names.length === 0) { printNoneYet(); return 0; }
   for (const name of names) {
-    const entry = registry.accounts[name]!;
+    const entry = loaded.value.accounts[name]!;
     out.field(name, entry.name + ' <' + entry.email + '>' + hostSuffix(entry), 24);
   }
   out.line();
   out.line(out.dim('  ' + registryPath()));
   out.line();
   return 0;
+}
+
+function printNoneYet(): void {
+  out.line('  No accounts recorded yet.');
+  out.line();
+  out.line('  Record one so `repown use <account>` never has to ask again:');
+  out.line('    repown accounts add <account>');
+  out.line();
 }
 
 function hostSuffix(entry: Account): string {

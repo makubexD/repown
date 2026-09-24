@@ -165,7 +165,7 @@ export class Git {
       this.exec(['rev-list', '--count', ...range]),
     ]);
     // An empty list would read as "no foreign commits": a failure must stay one.
-    if (!succeeded(log)) return err(log.stderr.trim() || 'git log failed');
+    if (!succeeded(log)) return err(log.timedOut ? 'git log timed out reading the range' : log.stderr.trim() || 'git log failed');
     const commits = parseIdentities(log.stdout);
     // The author writes the subject and the name. Whatever they contain, every
     // commit in the range must come back parsed, or the answer is not trusted.

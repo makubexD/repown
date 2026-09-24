@@ -48,22 +48,23 @@ function isFilesystemPath(text: string): boolean {
 function parseSchemed(text: string): GitUrl | null {
   const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/(?:([^@/]+)@)?([^/:]+)(?::\d+)?\/(.*)$/.exec(text);
   if (!match) return null;
-  return build(text, match[1]!.toLowerCase(), match[2] ?? null, match[3]!, match[4]!);
+  return build(text, { scheme: match[1]!.toLowerCase(), user: match[2] ?? null, host: match[3]!, rawPath: match[4]! });
 }
 
 function parseScpLike(text: string): GitUrl | null {
   const match = /^(?:([^@/]+)@)?([^/:]+):(.+)$/.exec(text);
   if (!match) return null;
-  return build(text, 'ssh', match[1] ?? null, match[2]!, match[3]!);
+  return build(text, { scheme: 'ssh', user: match[1] ?? null, host: match[2]!, rawPath: match[3]! });
 }
 
-function build(
-  raw: string,
-  scheme: string,
-  user: string | null,
-  host: string,
-  rawPath: string,
-): GitUrl {
+interface UrlParts {
+  readonly scheme: string;
+  readonly user: string | null;
+  readonly host: string;
+  readonly rawPath: string;
+}
+
+function build(raw: string, { scheme, user, host, rawPath }: UrlParts): GitUrl {
   const path = rawPath.replace(/^\/+/, '').replace(/\/+$/, '').replace(/\.git$/i, '');
   const segments = path.split('/').filter((s) => s.length > 0).map(decodeSegment);
   return { raw, scheme, user, host: host.toLowerCase(), path, segments };

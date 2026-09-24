@@ -2,11 +2,11 @@
 //
 // TWO INVARIANTS, BOTH LOAD-BEARING.
 //
-// 1. NOTHING HERE WRITES TO A CONSOLE, EVER. `git credential fill` returns a
-//    live password on stdout. It is read in one place, which extracts the
-//    username and discards the rest, and that is only safe while this layer
-//    cannot leak. There is no debug flag and no logging hook by design -- the
-//    absence is the control. test/exec.test.ts asserts it.
+// 1. NOTHING HERE WRITES TO A CONSOLE, EVER. Credential helpers and git can
+//    print live secrets on stdout. Whatever a child prints is RETURNED to the
+//    caller, never shown, so this layer is never the thing that leaks it.
+//    There is no debug flag and no logging hook by design -- the absence is
+//    the control. test/exec.test.ts asserts it.
 //
 // 2. A NON-ZERO EXIT IS NOT AN ERROR. git answers questions with exit codes:
 //    `git config --get missing.key` exits 1, and that is the answer "not set",
@@ -18,7 +18,7 @@
 // `shell: false` throughout: no argument ever reaches a shell parser, so a
 // branch name or URL containing shell metacharacters cannot be interpreted.
 
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 export interface ExecResult {
   readonly code: number;
@@ -26,6 +26,8 @@ export interface ExecResult {
   readonly stderr: string;
   /** Set when the binary could not be launched at all (ENOENT and friends). */
   readonly spawnError?: NodeJS.ErrnoException;
+  /** Killed at the timeout -- so a caller can say "timed out", not just "failed". */
+  readonly timedOut?: boolean;
 }
 
 export interface ExecOptions {
@@ -37,6 +39,12 @@ export interface ExecOptions {
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+/**
+ * The timeout is our own timer, NOT spawn's `timeout` option. Node clears that
+ * one only on 'exit', which a spawn that fails (ENOENT) never emits -- so every
+ * probe for a binary that is not on PATH held the process open for the full
+ * 30 s after the command had already printed its answer.
+ */
 export function run(
   file: string,
   args: readonly string[],
@@ -49,32 +57,30 @@ export function run(
       shell: false,
       windowsHide: true,
     });
-
-    // Our own timer, NOT spawn's `timeout` option. Node clears that one only on
-    // 'exit', which a spawn that fails (ENOENT) never emits -- so every probe for
-    // a binary that is not on PATH held the process open for the full 30 s after
-    // the command had already printed its answer.
-    const timer = setTimeout(() => child.kill(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-
-    let stdout = '';
-    let stderr = '';
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk: string) => { stdout += chunk; });
-    child.stderr.on('data', (chunk: string) => { stderr += chunk; });
-
-    child.on('error', (error: NodeJS.ErrnoException) => {
+    const output = collect(child);
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; child.kill(); }, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    const settle = (result: Omit<ExecResult, 'stdout' | 'stderr'>): void => {
       clearTimeout(timer);
-      resolve({ code: -1, stdout, stderr, spawnError: error });
-    });
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve({ code: code ?? -1, stdout, stderr });
-    });
+      resolve({ ...output(), ...result, ...(timedOut ? { timedOut } : {}) });
+    };
+    child.on('error', (error: NodeJS.ErrnoException) => settle({ code: -1, spawnError: error }));
+    child.on('close', (code) => settle({ code: code ?? -1 }));
 
     child.stdin.on('error', () => { /* the child may exit before stdin drains */ });
     child.stdin.end(options.input ?? '');
   });
+}
+
+/** Accumulates the child's stdout and stderr; call the result for what has arrived so far. */
+function collect(child: ChildProcessWithoutNullStreams): () => { stdout: string; stderr: string } {
+  let stdout = '';
+  let stderr = '';
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', (chunk: string) => { stdout += chunk; });
+  child.stderr.on('data', (chunk: string) => { stderr += chunk; });
+  return () => ({ stdout, stderr });
 }
 
 /** Ran, and exited 0. */

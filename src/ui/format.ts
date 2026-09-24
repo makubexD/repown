@@ -32,20 +32,28 @@ function paint(stream: NodeJS.WriteStream, colour: keyof typeof COLOURS, text: s
   return useColour(stream) ? COLOURS[colour] + text + COLOURS.reset : text;
 }
 
-function status(stream: NodeJS.WriteStream, word: string, colour: keyof typeof COLOURS, tag: string, message: string): string {
-  return paint(stream, colour, word.padEnd(5)) + ' ' + tag.padEnd(10) + ' ' + message;
+/** A status word, the stream it goes to, and its colour. */
+interface Level {
+  readonly stream: NodeJS.WriteStream;
+  readonly word: string;
+  readonly colour: keyof typeof COLOURS;
+}
+
+function status(level: Level, tag: string, message: string): void {
+  const word = paint(level.stream, level.colour, level.word.padEnd(5));
+  level.stream.write(word + ' ' + tag.padEnd(10) + ' ' + message + '\n');
 }
 
 export function pass(tag: string, message: string): void {
-  process.stdout.write(status(process.stdout, 'OK', 'green', tag, message) + '\n');
+  status({ stream: process.stdout, word: 'OK', colour: 'green' }, tag, message);
 }
 
 export function warn(tag: string, message: string): void {
-  process.stderr.write(status(process.stderr, 'WARN', 'yellow', tag, message) + '\n');
+  status({ stream: process.stderr, word: 'WARN', colour: 'yellow' }, tag, message);
 }
 
 export function fail(tag: string, message: string): void {
-  process.stderr.write(status(process.stderr, 'FAIL', 'red', tag, message) + '\n');
+  status({ stream: process.stderr, word: 'FAIL', colour: 'red' }, tag, message);
 }
 
 /** A continuation line under a warn or fail, aligned with its message column. */

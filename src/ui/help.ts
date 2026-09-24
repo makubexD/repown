@@ -30,8 +30,8 @@ function topHeader(entries: ReadonlyMap<string, Command | CommandGroup>): string
 function globalOptionsHelp(): string[] {
   const lines = ['  Global options:'];
   for (const option of GLOBAL_OPTIONS) lines.push('    ' + optionHelp(option));
-  lines.push('    ' + '--help, -h'.padEnd(20) + 'show help for the command');
-  lines.push('    ' + '--version, -v'.padEnd(20) + 'show the installed version', '');
+  lines.push('    ' + '--help, -h'.padEnd(20) + 'show help for the command', '');
+  lines.push('  `repown --version` (or -v) prints the installed version.', '');
   return lines;
 }
 

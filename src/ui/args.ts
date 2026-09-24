@@ -49,7 +49,8 @@ export const GLOBAL_OPTIONS: readonly OptionSpec[] = [
 /**
  * `--name value`, `--name=value` and `--flag` are all accepted; everything else
  * is positional. A token that is exactly `--` ends option parsing, so a branch
- * or path beginning with a dash can still be passed.
+ * or path beginning with a dash can still be passed. Before it, a `-x` is an
+ * unknown option, never a value: `repown use -x` pinned an account named "-x".
  */
 export function parseArgs(tokens: readonly string[], spec: Spec): Result<Args> {
   const options = [...GLOBAL_OPTIONS, ...spec.options];
@@ -59,8 +60,9 @@ export function parseArgs(tokens: readonly string[], spec: Spec): Result<Args> {
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!;
-    if (optionsEnded || !token.startsWith('--')) { positional.push(token); continue; }
+    if (optionsEnded || !token.startsWith('-')) { positional.push(token); continue; }
     if (token === '--') { optionsEnded = true; continue; }
+    if (!token.startsWith('--')) return err(`unknown option ${token}`);
 
     const consumed = readOption(token, tokens[index + 1], options, flags);
     if (!consumed.ok) return err(consumed.error);
@@ -69,11 +71,14 @@ export function parseArgs(tokens: readonly string[], spec: Spec): Result<Args> {
 
   const range = checkPositionalCount(positional, spec.positionals);
   if (!range.ok) return err(range.error);
+  applyDefaults(options, flags);
+  return ok({ positional, flags });
+}
 
+function applyDefaults(options: readonly OptionSpec[], flags: Map<string, string | boolean>): void {
   for (const option of options) {
     if (option.default !== undefined && !flags.has(option.name)) flags.set(option.name, option.default);
   }
-  return ok({ positional, flags });
 }
 
 /** Parses one `--name`/`--name=value` token. Returns whether it also consumed `next`. */
@@ -155,7 +160,7 @@ export function flagString(args: Args, name: string): string | null {
 }
 
 export function flagBool(args: Args, name: string): boolean {
-  return args.flags.get(name) !== undefined && args.flags.get(name) !== 'false';
+  return args.flags.get(name) === true;
 }
 
 export function gitFor(args: Args): Git {

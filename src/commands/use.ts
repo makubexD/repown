@@ -19,7 +19,7 @@
 // agree.
 
 import { inspectRepo, inspectAuth, type RepoState } from '../core/inspect.ts';
-import { pinIdentity } from '../core/identity.ts';
+import { pinIdentity, type PinOutcome } from '../core/identity.ts';
 import { lookupAccount, saveAccount, type Account } from '../core/registry.ts';
 import { ghSwitch } from '../core/credential/gh.ts';
 import { allowedOwners, shellWord } from '../core/guard/check.ts';
@@ -47,14 +47,7 @@ export default {
     const values = await resolveAccount(account, repo, args);
     if (!values) return 1;
 
-    const outcomes = await pinIdentity(git, { ...values, account }, repo.credentialKeys);
-    const failed = outcomes.filter((outcome) => !outcome.written);
-    if (failed.length > 0) {
-      out.fail('use', 'could not write ' + failed.length + ' of ' + outcomes.length + ' keys.');
-      for (const outcome of failed) out.detail(outcome.key);
-      out.detail('this clone is NOT pinned -- nothing here reports success it did not have.');
-      return 1;
-    }
+    if (!reportPinned(await pinIdentity(git, { ...values, account }, repo.credentialKeys))) return 1;
     out.pass('identity', values.name + ' <' + values.email + '>  push-as:' + account);
 
     if (flagBool(args, 'gh')) await switchCli(account);
@@ -62,6 +55,16 @@ export default {
     return 0;
   },
 } satisfies Command;
+
+/** False, naming every key, when any write failed: nothing reports success it did not have. */
+function reportPinned(outcomes: readonly PinOutcome[]): boolean {
+  const failed = outcomes.filter((outcome) => !outcome.written);
+  if (failed.length === 0) return true;
+  out.fail('use', 'could not write ' + failed.length + ' of ' + outcomes.length + ' keys.');
+  for (const outcome of failed) out.detail(outcome.key);
+  out.detail('this clone is NOT pinned -- nothing here reports success it did not have.');
+  return false;
+}
 
 /**
  * Flags first, then the registry, then ask -- with the host only suggesting the
@@ -100,17 +103,23 @@ async function askAndRecord(
   const suggested = (await repo.provider.resolveProfile?.(account)) ?? {};
   out.line();
   out.line('  No record of "' + account + '" yet. Asking once, then never again.');
+  const entry = await askProfile({
+    name: known.name ?? suggested.name ?? account, email: known.email ?? suggested.email,
+  }, repo.provider.id);
+  if (!entry) return null;
 
-  const name = await ask('Commit name', known.name ?? suggested.name ?? account);
-  if (!name.ok) { out.fail('use', name.error); return null; }
-  const email = await ask('Commit email', known.email ?? suggested.email);
-  if (!email.ok) { out.fail('use', email.error); return null; }
-
-  const entry: Account = { name: name.value, email: email.value, host: repo.provider.id };
   const saved = await saveAccount(account, entry);
   if (!saved.ok) out.warn('accounts', 'pinned, but not recorded: ' + saved.error);
   out.line();
   return entry;
+}
+
+async function askProfile(defaults: { name: string; email: string | undefined }, host: string): Promise<Account | null> {
+  const name = await ask('Commit name', defaults.name);
+  if (!name.ok) { out.fail('use', name.error); return null; }
+  const email = await ask('Commit email', defaults.email);
+  if (!email.ok) { out.fail('use', email.error); return null; }
+  return { name: name.value, email: email.value, host };
 }
 
 async function switchCli(account: string): Promise<void> {
@@ -126,15 +135,23 @@ async function reportConcerns(account: string, repo: RepoState): Promise<void> {
     out.detail('commits are pinned and the guard still runs; only credential');
     out.detail('selection is left to whatever already serves this host.');
   }
-  if (repo.owner && repo.owner.toLowerCase() !== account.toLowerCase()) {
-    const allowed = await allowedOwners(repo.git, account);
-    if (!allowed.includes(repo.owner.toLowerCase())) {
-      out.warn('origin', 'origin belongs to "' + repo.owner + '", not "' + account + '".');
-      out.detail('normal for an organisation repository. To stop the guard refusing it:');
-      out.detail('  git config --local --add repown.allowOwner ' + shellWord(repo.owner));
-    }
+  await ownerConcern(account, repo);
+  await credentialConcern(account, repo);
+  if (repo.guard === 'off' && !repo.hook?.redirected) {
+    out.line();
+    out.line('  Next: repown guard on    (check every push before it leaves)');
   }
+}
 
+async function ownerConcern(account: string, repo: RepoState): Promise<void> {
+  if (!repo.owner || repo.owner.toLowerCase() === account.toLowerCase()) return;
+  if ((await allowedOwners(repo.git, account)).includes(repo.owner.toLowerCase())) return;
+  out.warn('origin', 'origin belongs to "' + repo.owner + '", not "' + account + '".');
+  out.detail('normal for an organisation repository. To stop the guard refusing it:');
+  out.detail('  git config --local --add repown.allowOwner ' + shellWord(repo.owner));
+}
+
+async function credentialConcern(account: string, repo: RepoState): Promise<void> {
   const auth = await inspectAuth(repo.git, repo.originUrl ?? undefined);
   if (auth.ghIsHelper) {
     out.warn('helper', 'gh is still the git credential helper, so this pin is not honoured.');
@@ -143,9 +160,5 @@ async function reportConcerns(account: string, repo: RepoState): Promise<void> {
     out.line();
     out.line('  No stored credential for "' + account + '" yet -- the first push signs in');
     out.line('  once, then never again. Verify it afterwards: repown doctor');
-  }
-  if (repo.guard === 'off' && !repo.hook?.redirected) {
-    out.line();
-    out.line('  Next: repown guard on    (check every push before it leaves)');
   }
 }

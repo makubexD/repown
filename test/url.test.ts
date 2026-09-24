@@ -34,7 +34,7 @@ describe('parseGitUrl', () => {
   });
 
   test('percent-encoded path segments are decoded', () => {
-    const url = parseGitUrl('https://contoso.visualstudio.com/A%20B%20C/_git/repo')!;
+    const url = parseGitUrl('https://octo-org.visualstudio.com/A%20B%20C/_git/repo')!;
     assert.equal(url.segments[0], 'A B C');
   });
 
@@ -56,11 +56,11 @@ describe('provider resolution', () => {
 
   test('azure devops, BOTH url forms, disagreeing about the first path segment', () => {
     // Legacy: organisation is the SUBDOMAIN, first segment is the project.
-    assert.equal(providerId('https://contoso.visualstudio.com/Proj/_git/repo'), 'azdo');
-    assert.equal(owner('https://contoso.visualstudio.com/Proj/_git/repo'), 'contoso');
+    assert.equal(providerId('https://octo-org.visualstudio.com/Proj/_git/repo'), 'azdo');
+    assert.equal(owner('https://octo-org.visualstudio.com/Proj/_git/repo'), 'octo-org');
 
     // Modern: organisation IS the first segment.
-    assert.equal(owner('https://dev.azure.com/contoso/Proj/_git/repo'), 'contoso');
+    assert.equal(owner('https://dev.azure.com/octo-org/Proj/_git/repo'), 'octo-org');
   });
 
   // Azure's SSH remotes carry a `v3/` prefix ahead of the organisation, on two
@@ -73,9 +73,9 @@ describe('provider resolution', () => {
   });
 
   test('the generic provider would get the legacy form wrong -- hence azdo exists', () => {
-    const url = parseGitUrl('https://contoso.visualstudio.com/Proj/_git/repo')!;
+    const url = parseGitUrl('https://octo-org.visualstudio.com/Proj/_git/repo')!;
     assert.equal(url.segments[0], 'Proj');          // what a naive owner check sees
-    assert.equal(providerFor(url).ownerOf(url), 'contoso'); // what is actually true
+    assert.equal(providerFor(url).ownerOf(url), 'octo-org'); // what is actually true
   });
 
   test('an unknown host falls through to generic, which still pins commit identity', () => {
@@ -84,11 +84,11 @@ describe('provider resolution', () => {
     assert.equal(provider.ownerOf(parseGitUrl('https://git.example.com/team/repo.git')!), 'team');
   });
 
-  test('hosts with no verified credential model pin NOTHING rather than something wrong', async () => {
-    const azdo = providerFor(parseGitUrl('https://dev.azure.com/org/p/_git/r'));
-    assert.deepEqual(azdo.credentialKeys(parseGitUrl('https://dev.azure.com/org/p/_git/r')!), []);
-    const stored = await azdo.listStoredAccounts();
-    assert.equal(stored.ok, false);   // "could not be asked", never "holds nothing"
+  test('hosts with no verified credential model pin NOTHING rather than something wrong', () => {
+    for (const raw of ['https://dev.azure.com/org/p/_git/r', 'https://git.example.invalid/team/r.git']) {
+      const url = parseGitUrl(raw)!;
+      assert.deepEqual(providerFor(url).credentialKeys(url), [], raw);
+    }
   });
 
   test('github pins the key GCM actually reads', () => {

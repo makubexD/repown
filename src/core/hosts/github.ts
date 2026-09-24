@@ -12,9 +12,7 @@
 import type { HostProvider, Profile } from './types.ts';
 import type { GitUrl } from '../url.ts';
 import { credentialPrefix } from '../url.ts';
-import { findGcm, listAccounts } from '../credential/gcm.ts';
 import { ghProfileField } from '../credential/gh.ts';
-import type { Result } from '../result.ts';
 
 const HOSTS = ['github.com', 'gist.github.com', 'www.github.com', 'ssh.github.com'];
 
@@ -26,8 +24,6 @@ export function githubProvider(): HostProvider {
     ownerOf: (url: GitUrl) => url.segments[0] ?? null,
     credentialKeys: (url: GitUrl) =>
       url.scheme === 'https' ? [`credential.${credentialPrefix(url)}.username`] : [],
-    listStoredAccounts: async (): Promise<Result<string[]>> =>
-      listAccounts(await findGcm(), 'github'),
     resolveProfile: async (account: string): Promise<Profile | null> => {
       const [name, id] = await Promise.all([
         ghProfileField(account, 'name'),

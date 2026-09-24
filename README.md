@@ -147,7 +147,7 @@ $ repown scan ~/code ~/work
     --------------------------------------------------------------------
     personal-project octocat        github  INHERITED    off     work.example.invalid=122
     the-fork         octocat        github  pinned       on      users.noreply.github.com=8  (excl. mirror)
-    work-service     acme           github  INHERITED    off     work.example.invalid=13655 +12 more
+    work-service     octo-org       github  INHERITED    off     work.example.invalid=13655 +12 more
 
   repositories     3
   not pinned       2
@@ -239,7 +239,7 @@ global:
 
 ```
 git config --local repown.mirrorBranch master        # a branch that only mirrors upstream
-git config --local --add repown.allowOwner An-Org    # another owner you may push to (repeatable)
+git config --local --add repown.allowOwner octo-org    # another owner you may push to (repeatable)
 ```
 
 Unset `repown.mirrorBranch` means no exemption. On the mirror branch, commits

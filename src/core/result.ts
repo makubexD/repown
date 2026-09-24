@@ -17,8 +17,3 @@ export function ok<T>(value: T): Result<T, never> {
 export function err<E>(error: E): Result<never, E> {
   return { ok: false, error };
 }
-
-/** The value, or `fallback` when the result is an error. */
-export function or<T>(result: Result<T, unknown>, fallback: T): T {
-  return result.ok ? result.value : fallback;
-}

@@ -670,7 +670,7 @@ describe('organisation repositories', () => {
       box.git('config', '--local', 'credential.https://github.com.username', 'a-person');
       box.git('commit', '--allow-empty', '-m', 'base');
       const sha = box.git('rev-parse', 'HEAD');
-      const orgUrl = 'https://github.com/An-Org/service.git';
+      const orgUrl = 'https://github.com/octo-org/service.git';
       const push = () => check({
         git, remote: 'origin', url: orgUrl,
         stdin: `refs/heads/work ${sha} refs/heads/work ${ZERO}\n`,
@@ -680,11 +680,11 @@ describe('organisation repositories', () => {
       // every push to every org repository would be refused.
       const before = await push();
       assert.equal(before.length, 1);
-      assert.match(before[0]!.reason, /goes to "An-Org"/);
+      assert.match(before[0]!.reason, /goes to "octo-org"/);
       assert.ok(before[0]!.detail.some((d) => d.includes('repown.allowOwner')),
                 'the refusal must name the way out');
 
-      box.git('config', '--local', '--add', 'repown.allowOwner', 'An-Org');
+      box.git('config', '--local', '--add', 'repown.allowOwner', 'octo-org');
       assert.deepEqual(await push(), [], 'a listed owner is legitimate');
 
       // ...and listing one owner does not open the door to any other.

@@ -19,12 +19,6 @@ import { ok, err, type Result } from './result.ts';
 
 export type ConfigScope = 'local' | 'global' | 'system';
 
-export interface Remote {
-  readonly name: string;
-  readonly url: string | null;
-  readonly pushUrl: string | null;
-}
-
 export interface CommitIdentity {
   readonly sha: string;
   readonly subject: string;
@@ -82,10 +76,6 @@ export class Git {
    */
   async hooksDir(): Promise<string | null> {
     return output(await this.exec(['rev-parse', '--git-path', 'hooks']));
-  }
-
-  async hasCommits(): Promise<boolean> {
-    return succeeded(await this.exec(['rev-parse', '--verify', '--quiet', 'HEAD']));
   }
 
   // ---- config -------------------------------------------------------------
@@ -163,21 +153,6 @@ export class Git {
     return lines(await this.exec(args)).flatMap(parseOriginLine);
   }
 
-  // ---- remotes ------------------------------------------------------------
-
-  async remotes(): Promise<Remote[]> {
-    const names = lines(await this.exec(['remote']));
-    return Promise.all(names.map((name) => this.remote(name)));
-  }
-
-  async remote(name: string): Promise<Remote> {
-    const [url, pushUrl] = await Promise.all([
-      this.getConfig(`remote.${name}.url`),
-      this.getConfig(`remote.${name}.pushurl`),
-    ]);
-    return { name, url, pushUrl };
-  }
-
   // ---- history ------------------------------------------------------------
 
   /**
@@ -248,11 +223,6 @@ export class Git {
       counts.set(address, (counts.get(address) ?? 0) + 1);
     }
     return ok(counts);
-  }
-
-  /** Does this object exist here? Used to tell a pushed commit from a local one. */
-  async has(sha: string): Promise<boolean> {
-    return succeeded(await this.exec(['cat-file', '-e', `${sha}^{commit}`]));
   }
 }
 

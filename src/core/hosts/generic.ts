@@ -7,7 +7,6 @@
 
 import type { HostProvider, Profile } from './types.ts';
 import type { GitUrl } from '../url.ts';
-import { err, type Result } from '../result.ts';
 
 export function genericProvider(): HostProvider {
   return {
@@ -16,8 +15,6 @@ export function genericProvider(): HostProvider {
     matches: () => true,
     ownerOf: (url: GitUrl) => url.segments[0] ?? null,
     credentialKeys: () => [],
-    listStoredAccounts: async (): Promise<Result<string[]>> =>
-      err('no credential store is known for this host'),
     resolveProfile: async (): Promise<Profile | null> => null,
   };
 }

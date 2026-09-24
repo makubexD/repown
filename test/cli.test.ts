@@ -439,10 +439,10 @@ describe('status in a clone pushing to an organisation', () => {
   afterEach(() => box.dispose());
 
   test('the organisation hint gives the exact repown.allowOwner command', () => {
-    box.git('remote', 'add', 'origin', 'https://github.com/An-Org/project.git');
+    box.git('remote', 'add', 'origin', 'https://github.com/octo-org/project.git');
     box.git('config', '--local', 'credential.https://github.com.username', 'octocat');
     const run = repown([], { cwd: box.dir });
-    assert.match(run.stderr, /git config --local --add repown\.allowOwner An-Org/);
+    assert.match(run.stderr, /git config --local --add repown\.allowOwner octo-org/);
   });
 
   test('a hook repown did not write is reported with what to do about it', () => {

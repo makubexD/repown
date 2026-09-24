@@ -8,7 +8,6 @@
 // a host no provider claims.
 
 import type { GitUrl } from '../url.ts';
-import type { Result } from '../result.ts';
 
 export interface Profile {
   readonly name?: string;
@@ -33,12 +32,6 @@ export interface HostProvider {
    * still runs; only credential selection is unavailable.
    */
   credentialKeys(url: GitUrl): readonly string[];
-
-  /**
-   * Accounts the credential store holds for this host. An error means the store
-   * could not be ASKED, which callers must not report as "holds nothing".
-   */
-  listStoredAccounts(): Promise<Result<string[]>>;
 
   /** Best-effort name/email lookup, to save the user retyping. Optional. */
   resolveProfile?(account: string): Promise<Profile | null>;

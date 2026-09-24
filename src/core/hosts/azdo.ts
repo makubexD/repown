@@ -2,7 +2,7 @@
 //
 // WHAT WAS ACTUALLY PROBED, on a machine with five Azure Repos clones:
 //
-//   remote  https://contoso.visualstudio.com/<project>/_git/<repo>
+//   remote  https://octo-org.visualstudio.com/<project>/_git/<repo>
 //           -- the legacy *.visualstudio.com form, where the ORGANISATION is the
 //              subdomain and the first path segment is the PROJECT. The modern
 //              form is https://dev.azure.com/<org>/<project>/_git/<repo>, where
@@ -34,7 +34,6 @@
 
 import type { HostProvider, Profile } from './types.ts';
 import type { GitUrl } from '../url.ts';
-import { err, type Result } from '../result.ts';
 
 const MODERN_HOST = 'dev.azure.com';
 const LEGACY_SUFFIX = '.visualstudio.com';
@@ -48,8 +47,6 @@ export function azureDevOpsProvider(): HostProvider {
     matches,
     ownerOf,
     credentialKeys: () => [],
-    listStoredAccounts: async (): Promise<Result<string[]>> =>
-      err('Azure DevOps credentials are not pinned by repown -- see src/core/hosts/azdo.ts'),
     resolveProfile: async (): Promise<Profile | null> => null,
   };
 }

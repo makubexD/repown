@@ -41,6 +41,16 @@ export interface Spec {
 
 export const NO_POSITIONALS: PositionalSpec = { min: 0, max: 0 };
 
+/** For commands whose payload a script may read. Only `json` is a stable contract (ADR-014). */
+export const FORMAT_OPTION: OptionSpec = {
+  name: 'format', kind: 'string', default: 'text', choices: ['text', 'json'],
+  help: 'text for people, json for scripts',
+};
+
+export function wantsJson(args: Args): boolean {
+  return flagString(args, 'format') === 'json';
+}
+
 /** Accepted on every command, in addition to whatever it declares itself. */
 export const GLOBAL_OPTIONS: readonly OptionSpec[] = [
   { name: 'cwd', kind: 'string', help: 'run as if started in this directory' },

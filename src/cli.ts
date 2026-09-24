@@ -52,23 +52,33 @@ function reportUsageError(tag: string, message: string): void {
   for (const line of rest) out.detail(line);
 }
 
-interface Resolved { readonly name: string; readonly entry: Entry; readonly rest: readonly string[]; }
+/** `implicit`: no command was typed, so a usage error is repown's, not status's. */
+interface Resolved {
+  readonly name: string;
+  readonly entry: Entry;
+  readonly rest: readonly string[];
+  readonly implicit: boolean;
+}
 
 async function resolveTop(argv: readonly string[]): Promise<Result<Resolved>> {
   const first = argv[0];
   if (first === undefined || first.startsWith('-')) {
-    return ok({ name: 'status', entry: await COMMANDS['status']!(), rest: argv });
+    return ok({ name: 'status', entry: await COMMANDS['status']!(), rest: argv, implicit: true });
   }
   const loader = COMMANDS[first];
-  if (!loader) {
-    const hint = suggest(first, Object.keys(COMMANDS));
-    return err('Unknown command: ' + first + hintSuffix(hint) + '\nknown: ' + Object.keys(COMMANDS).join(', '));
-  }
-  return ok({ name: first, entry: await loader(), rest: argv.slice(1) });
+  if (!loader) return err(unknown('command', first, Object.keys(COMMANDS)));
+  return ok({ name: first, entry: await loader(), rest: argv.slice(1), implicit: false });
 }
 
-function hintSuffix(hint: string | null): string {
-  return hint ? ` (did you mean '${hint}'?)` : '';
+/** One correction wherever a name is looked up: `repown x`, `repown help x`, a group's action. */
+function unknown(kind: 'command' | 'action', name: string, known: readonly string[]): string {
+  const hint = suggest(name, known);
+  const guess = hint ? ` (did you mean '${hint}'?)` : '';
+  return 'Unknown ' + kind + ': ' + name + guess + '\nknown: ' + known.join(', ');
+}
+
+function helpPointer(path: readonly string[]): string {
+  return '\nrun `' + ['repown', 'help', ...path].join(' ') + '` for usage';
 }
 
 interface PickedAction {
@@ -85,30 +95,28 @@ function resolveAction(group: CommandGroup, rest: readonly string[]): Result<Pic
   }
   const canonical = resolveAlias(group, first);
   const command = group.actions[canonical];
-  if (!command) {
-    const hint = suggest(first, Object.keys(group.actions));
-    return err('Unknown action: ' + first + hintSuffix(hint) + '\nknown: ' + Object.keys(group.actions).join(', '));
-  }
+  if (!command) return err(unknown('action', first, Object.keys(group.actions)));
   return ok({ command, action: canonical, remaining: rest.slice(1), explicit: true });
 }
 
-async function runLeaf(path: readonly string[], command: Command, rest: readonly string[]): Promise<number> {
+async function runLeaf(path: readonly string[], command: Command, rest: readonly string[], tag: string): Promise<number> {
   const spec = specFor(command);
   if (hasHelpFlag(rest, spec.options)) { printHelp(path, command); return 0; }
   const parsed = parseArgs(rest, spec);
-  if (!parsed.ok) { reportUsageError(path.join(' '), parsed.error); return 2; }
+  if (!parsed.ok) { reportUsageError(tag, parsed.error + helpPointer(path)); return 2; }
   return command.run(parsed.value);
 }
 
-async function dispatch(name: string, entry: Entry, rest: readonly string[]): Promise<number> {
-  if (!isGroup(entry)) return runLeaf([name], entry, rest);
+async function dispatch(top: Resolved): Promise<number> {
+  const { name, entry, rest } = top;
+  if (!isGroup(entry)) return runLeaf([name], entry, rest, top.implicit ? 'repown' : name);
 
   const picked = resolveAction(entry, rest);
   if (!picked.ok) { reportUsageError(name, picked.error); return 2; }
   const { command, action, remaining, explicit } = picked.value;
 
   if (!explicit && hasHelpFlag(remaining)) { printHelp([name], entry); return 0; }
-  return runLeaf([name, action], command, remaining);
+  return runLeaf([name, action], command, remaining, name + ' ' + action);
 }
 
 function printHelp(path: readonly string[], entry: Entry): void {
@@ -121,14 +129,14 @@ async function runHelp(path: readonly string[]): Promise<number> {
     return 0;
   }
   const loader = COMMANDS[path[0]!];
-  if (!loader) { reportUsageError('help', 'Unknown command: ' + path[0]); return 2; }
+  if (!loader) { reportUsageError('help', unknown('command', path[0]!, Object.keys(COMMANDS))); return 2; }
 
   const top = await loader();
   if (!isGroup(top) || path.length === 1) { printHelp([path[0]!], top); return 0; }
 
   const canonical = resolveAlias(top, path[1]!);
   const command = top.actions[canonical];
-  if (!command) { reportUsageError('help', 'Unknown action: ' + path[1]); return 2; }
+  if (!command) { reportUsageError('help', unknown('action', path[1]!, Object.keys(top.actions))); return 2; }
   printHelp([path[0]!, canonical], command);
   return 0;
 }
@@ -140,7 +148,7 @@ async function main(argv: readonly string[]): Promise<number> {
 
   const top = await resolveTop(argv);
   if (!top.ok) { reportUsageError('repown', top.error); return 2; }
-  return dispatch(top.value.name, top.value.entry, top.value.rest);
+  return dispatch(top.value);
 }
 
 out.ignoreBrokenPipe();

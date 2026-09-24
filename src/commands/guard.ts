@@ -10,8 +10,11 @@ import { flagString, gitFor, type Args } from '../ui/args.ts';
 import type { Command, CommandGroup } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
+/** "off" is an answer about a repository; outside one, it would be a guess. */
 async function status(args: Args): Promise<number> {
-  out.field('push guard', await guardState(gitFor(args)));
+  const git = gitFor(args);
+  if (!(await git.isRepo())) { out.fail('guard', 'Not a git repository: ' + git.cwd); return 1; }
+  out.field('push guard', await guardState(git));
   return 0;
 }
 

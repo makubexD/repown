@@ -158,13 +158,16 @@ how often. It never changes anything.
 | `repown doctor` | what serves credentials on this machine, and to whom |
 | `repown fix [--dry-run] [--yes]` | undo `gh auth setup-git` so per-clone pins work again |
 | `repown guard on \| off \| status` | install, remove or show the pre-push hook |
-| `repown accounts list \| add \| rm` | the accounts this machine knows (`add` takes `--name`, `--email`, `--host github\|azdo\|generic`) |
-| `repown scan [dir...] [--emails] [--depth <n>]` | audit every clone under the given directories (default: the current one) |
+| `repown accounts list \| add \| remove` | the accounts this machine knows (`add` takes `--name`, `--email`, `--host github\|azdo\|generic`) |
+| `repown scan [dir...] [--emails] [--depth <n>] [--format json]` | audit every clone under the given directories (default: the current one) |
 
 - **Help:** `repown --help` lists the commands. `repown help <command>` (or
   `repown <command> --help`) shows a command's options, and `repown help guard on` goes
   one level deeper. Asking for help never changes anything.
 - **Every command:** `--cwd <dir>` works on all of them.
+- **Scripts:** `repown scan --format json` and `repown accounts list --format json` print
+  one JSON document on stdout. Those fields are stable; the text layout isn't
+  ([ADR-014](docs/decisions/ADR-014-json-for-scripts.md)).
 - **Version:** `repown --version`.
 - **Exit codes:** `0` success, `1` failure or refusal, `2` usage error.
 

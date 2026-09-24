@@ -65,6 +65,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   stdin (excluding what the remote already has), and every tagger, not the current config.
 - `src/ui/format.ts`: payload (`pass`/`line`/`field`) goes to stdout; `warn`/`fail`/`detail`
   and prompts go to stderr. Colour is decided per stream.
+- `--format json` (`scan`, `accounts list`) is a stable contract for scripts; the text
+  layout isn't. Renaming a JSON field is breaking (ADR-014).
 
 ## Tests
 

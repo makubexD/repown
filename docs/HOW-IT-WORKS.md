@@ -91,7 +91,7 @@ repown accounts add octocat              # asks; with gh signed in, suggests <id
 repown accounts add octocat --name "Octo Cat" --email octocat@users.noreply.github.com
 repown accounts add octo-work --host azdo
 repown accounts list
-repown accounts rm octocat               # clones already pinned keep their identity
+repown accounts remove octocat           # clones already pinned keep their identity
 ```
 
 The registry is `accounts.json` in `%APPDATA%\repown` on Windows and in
@@ -379,6 +379,7 @@ repown guard check --remote="$1" --url="$2"
 ```
 repown scan ~/code ~/work      # every clone: owner, host, identity, guard, addresses in history
 repown scan --emails           # show the exact addresses instead of domains and counts
+repown scan --format json      # the same facts as JSON, for scripts (ADR-014)
 repown off && repown use octo-work   # re-point this clone to another account
 ```
 

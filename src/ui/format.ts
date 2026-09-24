@@ -19,12 +19,14 @@ const COLOURS = {
  * reverse, `repown 2>err.log`) must not colour the redirected side. `NO_COLOR`
  * only counts when it is non-empty, and `FORCE_COLOR=0`/`false` turns colour
  * off even though the variable is set -- both per the NO_COLOR/FORCE_COLOR
- * conventions these variables are named after.
+ * conventions these variables are named after. `TERM=dumb` is a terminal that
+ * cannot render escape codes, so it gets none unless FORCE_COLOR insists.
  */
-function useColour(stream: NodeJS.WriteStream): boolean {
+export function useColour(stream: NodeJS.WriteStream): boolean {
   const force = process.env['FORCE_COLOR'];
   if (force !== undefined) return force !== '0' && force !== 'false';
   if (process.env['NO_COLOR']) return false;
+  if (process.env['TERM'] === 'dumb') return false;
   return stream.isTTY === true;
 }
 
@@ -68,6 +70,11 @@ export function line(message = ''): void {
 /** `  label      value` -- the shape every status block uses. */
 export function field(label: string, value: string, width = 14): void {
   process.stdout.write('  ' + label.padEnd(width) + ' ' + value + '\n');
+}
+
+/** `--format json`: the whole payload as one JSON document on stdout, never coloured. */
+export function json(value: unknown): void {
+  process.stdout.write(JSON.stringify(value, null, 2) + '\n');
 }
 
 export function heading(text: string): void {

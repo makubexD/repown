@@ -41,19 +41,21 @@ function environmentHelp(): string[] {
     '    ' + 'REPOWN_CONFIG_DIR'.padEnd(20) + 'where the per-machine account registry lives',
     '    ' + 'NO_COLOR'.padEnd(20) + 'disable colored output when set to a non-empty value',
     '    ' + 'FORCE_COLOR'.padEnd(20) + 'colored output even when not a terminal; 0 or false turns it off (wins over NO_COLOR)',
+    '    ' + 'TERM'.padEnd(20) + 'set to dumb, disables colored output (FORCE_COLOR still wins)',
     '',
   ];
 }
 
 export function renderCommandHelp(path: readonly string[], command: Command): string[] {
-  const lines = ['', '  ' + usageFor(path, command), ''];
+  const lines = ['', '  ' + usageFor(path, command), '', '  ' + command.summary, ''];
   if (optionsOf(command).length > 0) lines.push(...optionsHelp(command), '');
+  lines.push('  Global options:', ...GLOBAL_OPTIONS.map((option) => '    ' + optionHelp(option)), '');
   if (command.examples && command.examples.length > 0) lines.push(...examplesHelp(command.examples), '');
   return lines;
 }
 
 export function renderGroupHelp(path: readonly string[], group: CommandGroup): string[] {
-  const lines = ['', '  repown ' + path.join(' ') + ' <action> [options]', '', '  Actions:'];
+  const lines = ['', '  repown ' + path.join(' ') + ' <action>', '', '  Actions:'];
   for (const [name, action] of Object.entries(group.actions)) {
     const marker = name === group.defaultAction ? '  (default)' : '';
     lines.push('    ' + name.padEnd(10) + action.summary + marker);
@@ -98,6 +100,6 @@ function examplesHelp(examples: readonly string[]): string[] {
 function optionHelp(option: OptionSpec): string {
   const value = option.kind === 'boolean' ? '' : ' <value>';
   const choices = option.choices ? ' (' + option.choices.join('|') + ')' : '';
-  const fallback = option.default !== undefined ? '  [default: ' + option.default + ']' : '';
+  const fallback = option.default !== undefined && option.default !== '' ? '  [default: ' + option.default + ']' : '';
   return ('--' + option.name + value).padEnd(20) + option.help + choices + fallback;
 }

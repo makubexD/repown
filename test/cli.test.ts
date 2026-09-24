@@ -10,10 +10,14 @@ import { once } from 'node:events';
 import { readFileSync, existsSync, mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join, resolve } from 'node:path';
 import { sandbox, type Sandbox } from './helpers.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
+
+// Assertions read plain text. A shell that exports FORCE_COLOR (some terminals and
+// CI runners do) would otherwise colour every spawned run's output.
+for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name];
 
 interface Run {
   readonly status: number;
@@ -96,6 +100,18 @@ describe('usage errors', () => {
     assert.match(run.stderr, /unknown option --emial/);
   });
 
+  test('a usage error names the help that would have avoided it', () => {
+    assert.match(repown(['use', '--gg', 'octocat']).stderr, /repown help use/);
+    assert.match(repown(['guard', 'on', '--gg']).stderr, /repown help guard on/);
+  });
+
+  test('a leading unknown option is blamed on repown, not on a command nobody typed', () => {
+    const run = repown(['-x']);
+    assert.equal(run.status, 2);
+    assert.match(run.stderr, /^FAIL\s+repown\s+unknown option -x/m);
+    assert.doesNotMatch(run.stderr, /FAIL\s+status/);
+  });
+
   test('an unknown command is refused and corrected', () => {
     const run = repown(['statuss']);
     assert.equal(run.status, 2);
@@ -153,6 +169,35 @@ describe('repown help <command> / <group> <action>', () => {
     assert.equal(run.status, 2);
     assert.match(run.stderr, /Unknown action: bogus/);
   });
+
+  test('`repown help <typo>` corrects it the way `repown <typo>` does', () => {
+    const run = repown(['help', 'stauts']);
+    assert.equal(run.status, 2);
+    assert.match(run.stderr, /did you mean 'status'\?/);
+    assert.match(run.stderr, /known: status, use/);
+    assert.match(repown(['help', 'guard', 'stauts']).stderr, /did you mean 'status'\?/);
+  });
+
+  test('command help says what the command does, under its usage', () => {
+    const lines = repown(['help', 'off']).stdout.split('\n').map((line) => line.trim());
+    assert.equal(lines[1], 'repown off');
+    assert.equal(lines[3], 'unpin this clone (leaves global config alone)');
+  });
+
+  test('command help lists the global --cwd, since every command takes it', () => {
+    assert.match(repown(['help', 'status']).stdout, /--cwd <value>\s+run as if started in this directory/);
+  });
+
+  test('group usage promises no options, because groups take none of their own', () => {
+    const usage = repown(['help', 'guard']).stdout.split('\n')[1]!.trim();
+    assert.equal(usage, 'repown guard <action>');
+  });
+
+  test('an empty default is not shown as "[default: ]"', () => {
+    const run = repown(['help', 'guard', 'check']);
+    assert.doesNotMatch(run.stdout, /\[default: \]/);
+    assert.match(run.stdout, /\[default: origin\]/);
+  });
 });
 
 describe('hidden aliases resolve to the same action as their canonical name', () => {
@@ -197,7 +242,7 @@ describe('accounts add --host', () => {
   });
 });
 
-describe('`accounts remove` (alias) reaches the same action as `accounts rm`', () => {
+describe('`accounts remove`, and `accounts rm` (hidden alias) reaching the same action', () => {
   let configDir: string;
   before(() => { configDir = mkdtempSync(join(tmpdir(), 'repown-registry-')); });
   after(() => rmSync(configDir, { recursive: true, force: true }));
@@ -218,6 +263,89 @@ describe('`accounts remove` (alias) reaches the same action as `accounts rm`', (
 
     const list = run(['accounts', 'list']);
     assert.doesNotMatch(list.stdout, /octocat/);
+
+    run(['accounts', 'add', 'octocat', '--name', 'Octo Cat', '--email', 'octocat@example.invalid']);
+    assert.match(run(['accounts', 'rm', 'octocat']).stdout, /removed octocat/);
+  });
+
+  test('help advertises `remove`, never the `rm` alias', () => {
+    const run = repown(['help', 'accounts']);
+    assert.match(run.stdout, /^ {4}remove\s/m);
+    assert.doesNotMatch(run.stdout, /\brm\b/);
+    assert.match(repown(['help', 'accounts', 'rm']).stdout, /repown accounts remove <account>/);
+  });
+});
+
+describe('accounts list --format json', () => {
+  let configDir: string;
+  beforeEach(() => { configDir = mkdtempSync(join(tmpdir(), 'repown-registry-')); });
+  afterEach(() => rmSync(configDir, { recursive: true, force: true }));
+  const run = (args: readonly string[]) =>
+    spawnSync(process.execPath, [CLI, ...args], { env: { ...process.env, REPOWN_CONFIG_DIR: configDir }, encoding: 'utf8' });
+
+  test('an empty registry is an empty array, and nothing else on stdout', () => {
+    const listed = run(['accounts', 'list', '--format', 'json']);
+    assert.equal(listed.status, 0);
+    assert.deepEqual(JSON.parse(listed.stdout), []);
+  });
+
+  test('each account is one object, sorted, with its host', () => {
+    run(['accounts', 'add', 'octo-work', '--name', 'Octo Work', '--email', 'work@example.invalid', '--host', 'azdo']);
+    run(['accounts', 'add', 'octocat', '--name', 'Octo Cat', '--email', 'octocat@example.invalid']);
+    const listed = run(['accounts', 'list', '--format=json']);
+    assert.deepEqual(JSON.parse(listed.stdout), [
+      { account: 'octo-work', name: 'Octo Work', email: 'work@example.invalid', host: 'azdo' },
+      { account: 'octocat', name: 'Octo Cat', email: 'octocat@example.invalid', host: 'github' },
+    ]);
+  });
+
+  test('the default stays the human text', () => {
+    assert.match(run(['accounts', 'list']).stdout, /No accounts recorded yet/);
+  });
+
+  test('an unknown format is a usage error', () => {
+    const listed = run(['accounts', 'list', '--format', 'yaml']);
+    assert.equal(listed.status, 2);
+    assert.match(listed.stderr, /--format must be one of: text, json/);
+  });
+});
+
+// A shell script cannot stand in for gh on Windows (exec never uses a shell), so
+// this runs where CI has one: Linux and macOS.
+describe('accounts add without a terminal', { skip: process.platform === 'win32' }, () => {
+  let root: string;
+  beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'repown-nogh-')); });
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  test('fails before asking gh for a suggestion nobody can accept', () => {
+    const bin = join(root, 'bin');
+    mkdirSync(bin);
+    const marker = join(root, 'gh-was-called');
+    writeFileSync(join(bin, 'gh'), '#!/bin/sh\ntouch "' + marker + '"\n', { mode: 0o755 });
+    const run = spawnSync(process.execPath, [CLI, 'accounts', 'add', 'octocat', '--name', 'Octo Cat'], {
+      env: { ...process.env, REPOWN_CONFIG_DIR: root, PATH: bin + delimiter + (process.env['PATH'] ?? '') },
+      encoding: 'utf8', input: '',
+    });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /interactive terminal/);
+    assert.equal(existsSync(marker), false, 'gh was asked for a profile first');
+  });
+});
+
+// "off" is an answer about a repository. Outside one there is nothing to answer
+// about, and printing "off" anyway made a mistyped --cwd look like a real result.
+describe('guard status outside a repository', () => {
+  let empty: string;
+  before(() => { empty = mkdtempSync(join(tmpdir(), 'repown-not-a-repo-')); });
+  after(() => rmSync(empty, { recursive: true, force: true }));
+
+  test('fails, exit 1, and says why -- never "off"', () => {
+    for (const run of [repown(['guard', 'status'], { cwd: empty }), repown(['guard'], { cwd: empty }),
+                       repown(['guard', 'status', '--cwd', join(empty, 'no-such-dir')])]) {
+      assert.equal(run.status, 1);
+      assert.equal(run.stdout, '');
+      assert.match(run.stderr, /FAIL\s+guard\s+Not a git repository/);
+    }
   });
 });
 
@@ -399,6 +527,31 @@ describe('repown scan', () => {
     assert.match(run.stdout, /work\.example\.invalid=2/);
     assert.doesNotMatch(run.stdout, /someone@/);
     assert.match(repown(['scan', join(box.dir, '..'), '--emails']).stdout, /someone@work\.example\.invalid/);
+  });
+
+  test('--format json: one object per clone, domains only, and no prose on stdout', () => {
+    const run = repown(['scan', join(box.dir, '..'), '--format', 'json']);
+    assert.equal(run.status, 0);
+    const rows = JSON.parse(run.stdout) as Array<Record<string, unknown>>;
+    assert.equal(rows.length, 1);
+    assert.deepEqual(rows[0], {
+      repo: rows[0]!['repo'], path: resolve(box.dir), remote: false, owner: null, host: null,
+      identity: 'commits-only', guard: 'off', mirrorExcluded: false,
+      history: [{ domain: 'work.example.invalid', count: 2 }],
+    });
+    assert.doesNotMatch(run.stdout, /someone@/);
+    const withEmails = JSON.parse(repown(['scan', join(box.dir, '..'), '--format', 'json', '--emails']).stdout);
+    assert.deepEqual(withEmails[0].history, [{ email: 'someone@work.example.invalid', count: 2 }]);
+  });
+
+  test('--format json with nothing found is an empty array, the warning on stderr', () => {
+    const empty = mkdtempSync(join(tmpdir(), 'repown-empty-'));
+    try {
+      const run = repown(['scan', empty, '--format', 'json']);
+      assert.equal(run.status, 0);
+      assert.deepEqual(JSON.parse(run.stdout), []);
+      assert.match(run.stderr, /no git repositories found/);
+    } finally { rmSync(empty, { recursive: true, force: true }); }
   });
 
   test('a mirror branch that does not exist does not turn the history into "unknown"', () => {

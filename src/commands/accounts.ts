@@ -5,15 +5,16 @@
 
 import { loadRegistry, saveAccount, removeAccount, registryPath, type Account } from '../core/registry.ts';
 import { providers } from '../core/hosts/index.ts';
-import { ask } from '../ui/prompt.ts';
-import { flagString, type Args } from '../ui/args.ts';
+import { ask, interactive } from '../ui/prompt.ts';
+import { flagString, wantsJson, FORMAT_OPTION, type Args } from '../ui/args.ts';
 import type { Command, CommandGroup } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
-async function list(): Promise<number> {
+async function list(args: Args): Promise<number> {
   const loaded = await loadRegistry();
   if (!loaded.ok) { out.fail('accounts', loaded.error); return 1; }
   const names = Object.keys(loaded.value.accounts).sort();
+  if (wantsJson(args)) return listJson(names, loaded.value.accounts, loaded.value.unreadable);
 
   out.line();
   if (names.length === 0) { printNoneYet(); return 0; }
@@ -27,6 +28,16 @@ async function list(): Promise<number> {
   out.line();
   out.line(out.dim('  ' + registryPath()));
   out.line();
+  return 0;
+}
+
+/** One object per account, `[]` when none; an unreadable entry is still a warning on stderr. */
+function listJson(names: readonly string[], accounts: Readonly<Record<string, Account>>, unreadable: readonly string[]): number {
+  out.json(names.map((account) => {
+    const entry = accounts[account]!;
+    return { account, name: entry.name, email: entry.email, host: entry.host ?? 'github' };
+  }));
+  for (const key of unreadable) out.warn('accounts', key + ': an entry repown cannot read; it is kept, and blocks saving until fixed.');
   return 0;
 }
 
@@ -45,9 +56,10 @@ function hostSuffix(entry: Account): string {
 async function add(args: Args): Promise<number> {
   const account = args.positional[0]!;
   const hostId = flagString(args, 'host') ?? 'github';
-  // Only when something is left to ask: the suggestion is a network call.
+  // Only when something is left to ask, and someone is there to answer: the
+  // suggestion is a network call.
   const complete = flagString(args, 'name') !== null && flagString(args, 'email') !== null;
-  const suggested = complete ? {} : await suggestProfile(hostId, account);
+  const suggested = complete || !interactive() ? {} : await suggestProfile(hostId, account);
 
   const name = flagString(args, 'name') ?? await askFor('Commit name', suggested.name ?? account);
   if (name === null) return 1;
@@ -95,7 +107,9 @@ async function remove(args: Args): Promise<number> {
 
 const listAction: Command = {
   summary: 'list the accounts this machine knows',
-  run: () => list(),
+  options: [FORMAT_OPTION],
+  examples: ['repown accounts list', 'repown accounts list --format json'],
+  run: list,
 };
 
 const addAction: Command = {
@@ -114,16 +128,17 @@ const addAction: Command = {
   run: add,
 };
 
-const rmAction: Command = {
+const removeAction: Command = {
   summary: 'forget a recorded account (clones already pinned to it are unaffected)',
   positionals: { min: 1, max: 1, label: '<account>' },
-  examples: ['repown accounts rm octocat'],
+  examples: ['repown accounts remove octocat'],
   run: remove,
 };
 
 export default {
   summary: 'list or record the accounts this machine knows',
   defaultAction: 'list',
-  actions: { list: listAction, add: addAction, rm: rmAction },
-  aliases: { remove: 'rm' },
+  actions: { list: listAction, add: addAction, remove: removeAction },
+  // `rm` was the advertised name first; it keeps working, unadvertised.
+  aliases: { rm: 'remove' },
 } satisfies CommandGroup;

@@ -15,9 +15,11 @@ test('a missing binary resolves as not installed, and leaves nothing holding the
     `const { run, notInstalled } = await import(${JSON.stringify(EXEC)});` +
     `console.log(notInstalled(await run('repown-definitely-missing-binary', [])));`;
   const started = Date.now();
+  // console.log colours `true` when the shell running the tests exports FORCE_COLOR.
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
     encoding: 'utf8',
     timeout: 20_000,
+    env: { ...process.env, FORCE_COLOR: '0' },
   });
   const elapsed = Date.now() - started;
 

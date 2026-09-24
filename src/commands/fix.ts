@@ -46,7 +46,7 @@ async function confirmed(args: Args): Promise<boolean> {
     return false;
   }
   if (await confirm('Remove these entries?')) return true;
-  out.line('  Nothing was changed.');
+  out.warn('fix', 'declined; nothing was changed.');
   return false;
 }
 

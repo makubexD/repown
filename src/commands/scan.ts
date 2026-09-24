@@ -17,12 +17,12 @@
 // the repositories worth looking at.
 
 import { readdir } from 'node:fs/promises';
-import { join, relative, sep } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { existsSync, statSync } from 'node:fs';
 import { Git } from '../core/git.ts';
 import { inspectRepo, type RepoState } from '../core/inspect.ts';
 import { ok, err, type Result } from '../core/result.ts';
-import { flagBool, flagString, type Args } from '../ui/args.ts';
+import { flagBool, flagString, wantsJson, FORMAT_OPTION, type Args } from '../ui/args.ts';
 import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
@@ -31,14 +31,19 @@ interface Found {
   readonly path: string;
 }
 
+/** What was found, before any formatting: the text table and `--format json` both read this. */
 interface Row {
   readonly name: string;
-  readonly owner: string;
-  readonly host: string;
-  readonly identity: string;
+  readonly path: string;
+  readonly remote: boolean;
+  /** Null with a remote means the owner could not be read from its URL. */
+  readonly owner: string | null;
+  readonly host: string | null;
+  readonly identity: 'pinned' | 'commits-only' | 'inherited';
   readonly guard: string;
-  readonly identities: string;
-  /** True when a mirror branch was excluded, so the column counts local work only. */
+  /** Commits per domain (or per address with --emails); null when the history could not be read. */
+  readonly history: ReadonlyMap<string, number> | null;
+  /** True when a mirror branch was excluded, so the history counts local work only. */
   readonly mirrored: boolean;
 }
 
@@ -48,8 +53,9 @@ export default {
   options: [
     { name: 'emails', kind: 'boolean', help: 'show exact addresses instead of domains and counts' },
     { name: 'depth', kind: 'string', default: '3', help: 'how many directories deep to look for a clone' },
+    FORMAT_OPTION,
   ],
-  examples: ['repown scan', 'repown scan ~/code ~/work --emails'],
+  examples: ['repown scan', 'repown scan ~/code ~/work --emails', 'repown scan ~/code --format json'],
 
   async run(args: Args): Promise<number> {
     const target = scanTarget(args);
@@ -61,12 +67,14 @@ export default {
     for (const path of unreadable) out.warn('scan', 'could not read ' + path + ' -- not scanned');
     if (found.length === 0) {
       out.warn('scan', 'no git repositories found under: ' + roots.join(', '));
+      if (wantsJson(args)) out.json([]);
       return 0;
     }
 
     const showEmails = flagBool(args, 'emails');
     const rows = await mapLimited(found, CONCURRENCY, (entry) => describe(entry, showEmails));
     rows.sort((a, b) => a.name.localeCompare(b.name));
+    if (wantsJson(args)) { out.json(rows.map((row) => asJson(row, showEmails))); return 0; }
     render(rows);
     return summarise(rows);
   },
@@ -143,32 +151,49 @@ async function describe(found: Found, showEmails: boolean): Promise<Row> {
 
   return {
     name: relative(found.root, found.path).split(sep).join('/') || found.path,
-    owner: repo.owner ?? (repo.originUrl ? '?' : 'no remote'),
-    host: repo.url ? repo.provider.id : '-',
-    identity: identityLabel(repo),
+    path: resolve(found.path),
+    remote: repo.originUrl !== null,
+    owner: repo.owner,
+    host: repo.url ? repo.provider.id : null,
+    identity: identityOf(repo),
     guard: repo.guard,
-    identities: counts.ok ? summariseIdentities(counts.value, showEmails) : 'unknown -- history could not be read',
+    history: counts.ok ? grouped(counts.value, showEmails) : null,
     mirrored: mirror !== null,
   };
 }
 
-function identityLabel(repo: RepoState): string {
-  if (!repo.identity.name || !repo.identity.email) return 'INHERITED';
-  return repo.identity.account || repo.identity.owner ? 'pinned' : 'commits only';
+function identityOf(repo: RepoState): Row['identity'] {
+  if (!repo.identity.name || !repo.identity.email) return 'inherited';
+  return repo.identity.account || repo.identity.owner ? 'pinned' : 'commits-only';
 }
 
-function summariseIdentities(counts: ReadonlyMap<string, number>, showEmails: boolean): string {
-  const grouped = new Map<string, number>();
+/** Commits per domain (or address), most first. */
+function grouped(counts: ReadonlyMap<string, number>, showEmails: boolean): ReadonlyMap<string, number> {
+  const totals = new Map<string, number>();
   for (const [address, count] of counts) {
     const key = showEmails ? address : domainOf(address);
-    grouped.set(key, (grouped.get(key) ?? 0) + count);
+    totals.set(key, (totals.get(key) ?? 0) + count);
   }
-  if (grouped.size === 0) return '-';
+  return new Map([...totals.entries()].sort((a, b) => b[1] - a[1]));
+}
 
-  const ranked = [...grouped.entries()].sort((a, b) => b[1] - a[1]);
+function historyText(history: Row['history']): string {
+  if (history === null) return 'unknown -- history could not be read';
+  if (history.size === 0) return '-';
+  const ranked = [...history.entries()];
   const shown = ranked.slice(0, 3).map(([key, count]) => key + '=' + count);
   if (ranked.length > shown.length) shown.push('+' + (ranked.length - shown.length) + ' more');
   return shown.join(' ');
+}
+
+/** The --format json shape (ADR-014): `history` is null when unread, never an empty guess. */
+function asJson(row: Row, showEmails: boolean): Record<string, unknown> {
+  const key = showEmails ? 'email' : 'domain';
+  return {
+    repo: row.name, path: row.path, remote: row.remote, owner: row.owner, host: row.host,
+    identity: row.identity, guard: row.guard, mirrorExcluded: row.mirrored,
+    history: row.history && [...row.history].map(([value, count]) => ({ [key]: value, count })),
+  };
 }
 
 /** Malformed addresses do occur in old history; they are reported, not hidden. */
@@ -185,13 +210,17 @@ function render(rows: readonly Row[]): void {
   out.line('    ' + '-'.repeat(width + 52));
   for (const row of rows) {
     out.line('    ' + [
-      row.name.padEnd(width), row.owner.padEnd(14), row.host.padEnd(7),
-      row.identity.padEnd(12), row.guard.padEnd(7),
-      row.identities + (row.mirrored ? out.dim('  (excl. mirror)') : ''),
+      row.name.padEnd(width), (row.owner ?? (row.remote ? '?' : 'no remote')).padEnd(14),
+      (row.host ?? '-').padEnd(7), IDENTITY_TEXT[row.identity].padEnd(12), row.guard.padEnd(7),
+      historyText(row.history) + (row.mirrored ? out.dim('  (excl. mirror)') : ''),
     ].join(' '));
   }
   out.line();
 }
+
+const IDENTITY_TEXT: Record<Row['identity'], string> = {
+  'pinned': 'pinned', 'commits-only': 'commits only', 'inherited': 'INHERITED',
+};
 
 function header(width: number): string {
   return ['repo'.padEnd(width), 'owner'.padEnd(14), 'host'.padEnd(7),
@@ -199,7 +228,7 @@ function header(width: number): string {
 }
 
 function summarise(rows: readonly Row[]): number {
-  const unpinned = rows.filter((row) => row.identity === 'INHERITED');
+  const unpinned = rows.filter((row) => row.identity === 'inherited');
   const unguarded = rows.filter((row) => row.guard !== 'on');
 
   out.field('repositories', String(rows.length), 16);

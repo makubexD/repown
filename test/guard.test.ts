@@ -365,6 +365,11 @@ describe('the installed hook, when its recorded CLI is gone', () => {
     });
   };
 
+  test('passes the remote and URL inline, so neither can ever be read as a flag', () => {
+    const body = hookBody('/cli.js', '/node');
+    assert.match(body, /--remote="\$1" --url="\$2"/);
+  });
+
   test('refuses when a `repown` on PATH is not repown, even if it exits 0', () => {
     const run = pushWith('#!/bin/sh\necho "some other tool 1.0"\nexit 0\n');
     assert.notEqual(run.status, 0, 'an impostor that exits 0 must not pass the push');
@@ -375,6 +380,30 @@ describe('the installed hook, when its recorded CLI is gone', () => {
     const run = pushWith('#!/bin/sh\n[ "$1" = --version ] && { echo "repown 9.9.9"; exit 0; }\necho refused-by-fake >&2\nexit 1\n');
     assert.notEqual(run.status, 0);
     assert.match(String(run.stderr), /refused-by-fake/);
+  });
+});
+
+// The whole path, as a user meets it: `guard on`, then a real `git push`. Every
+// other real-push test uses a MISSING CLI, so a hook that ignored the check's
+// verdict (`|| true`) would have passed the suite.
+describe('an installed guard, end to end', () => {
+  test('`guard on`, then a real push of a foreign-authored commit, is refused', async () => {
+    const box = sandbox();
+    try {
+      const remote = join(box.dir, '..', 'remote.git');
+      box.git('init', '-q', '--bare', remote);
+      box.git('remote', 'add', 'origin', remote);
+      box.git('config', '--local', 'user.email', OURS);
+      box.git('commit', '-q', '--allow-empty', '-m', 'ours');
+      box.git('-c', `user.email=${THEIRS}`, 'commit', '-q', '--allow-empty', '-m', 'theirs');
+      assert.ok((await installGuard(new Git(box.dir))).ok);
+
+      const run = spawnSync('git', ['push', '-q', 'origin', 'HEAD:refs/heads/main'], { cwd: box.dir, encoding: 'utf8' });
+      assert.notEqual(run.status, 0, 'the push went through');
+      assert.match(run.stderr, /not authored as/);
+    } finally {
+      box.dispose();
+    }
   });
 });
 

@@ -248,6 +248,18 @@ describe('guard check (the hook contract every installed hook already calls)', (
     assert.match(run.stderr, /not authored as/);
   });
 
+  // Every hook already on disk calls `--remote "$1" --url "$2"`, and a remote can
+  // be NAMED `-h`. Read as a help flag, the check printed help and exited 0.
+  test('a remote named -h is a value, never a request for help', () => {
+    const tree = box.git('rev-parse', 'HEAD^{tree}');
+    const sha = box.git('-c', 'user.email=someone@example.invalid',
+      'commit-tree', tree, '-p', box.git('rev-parse', 'HEAD'), '-m', 'foreign');
+    const stdin = `refs/heads/main ${sha} refs/heads/main ${'0'.repeat(40)}\n`;
+    const run = repown(['guard', 'check', '--remote', '-h', '--url', ORIGIN], { cwd: box.dir, input: stdin });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /not authored as/);
+  });
+
   // `git push 2>&1 | true`: git hands the hook its own stderr, and a reader that
   // stops early turns the refusal's first write into EPIPE. That must never
   // become exit 0 -- the hook's exit code is the only thing git obeys.

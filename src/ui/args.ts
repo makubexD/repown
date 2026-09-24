@@ -129,11 +129,22 @@ function splitFlag(token: string): [string, string | null] {
   return equals === -1 ? [body, null] : [body.slice(0, equals), body.slice(equals + 1)];
 }
 
-/** True when `--help`/`-h` appears before any `--` end-of-options marker. */
-export function hasHelpFlag(tokens: readonly string[]): boolean {
-  for (const token of tokens) {
+/**
+ * True when `--help`/`-h` appears before any `--` end-of-options marker -- and
+ * is not the VALUE of a string option. Every installed hook calls
+ * `guard check --remote "$1" --url "$2"`, and a remote may be named `-h`: read as
+ * help, the check printed usage and exited 0, and git pushed.
+ */
+export function hasHelpFlag(tokens: readonly string[], options: readonly OptionSpec[] = []): boolean {
+  const takesValue = (token: string): boolean => {
+    const [name, inline] = splitFlag(token);
+    return inline === null && [...GLOBAL_OPTIONS, ...options].some((o) => o.name === name && o.kind === 'string');
+  };
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]!;
     if (token === '--') return false;
     if (token === '--help' || token === '-h') return true;
+    if (token.startsWith('--') && takesValue(token)) index += 1;
   }
   return false;
 }

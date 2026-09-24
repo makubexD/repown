@@ -93,8 +93,9 @@ function resolveAction(group: CommandGroup, rest: readonly string[]): Result<Pic
 }
 
 async function runLeaf(path: readonly string[], command: Command, rest: readonly string[]): Promise<number> {
-  if (hasHelpFlag(rest)) { printHelp(path, command); return 0; }
-  const parsed = parseArgs(rest, specFor(command));
+  const spec = specFor(command);
+  if (hasHelpFlag(rest, spec.options)) { printHelp(path, command); return 0; }
+  const parsed = parseArgs(rest, spec);
   if (!parsed.ok) { reportUsageError(path.join(' '), parsed.error); return 2; }
   return command.run(parsed.value);
 }

@@ -86,7 +86,7 @@ function samePath(a: string, b: string): boolean {
 function redirectMessage(dirs: HookDirs): string {
   return 'core.hooksPath makes git run hooks from ' + dirs.effective + ', a directory repown ' +
          'does not own -- leaving it alone. Unset core.hooksPath, or have that tool\'s ' +
-         'pre-push hook run: repown guard check --remote "$1" --url "$2"';
+         'pre-push hook run: repown guard check --remote="$1" --url="$2"';
 }
 
 export async function guardState(git: Git): Promise<GuardState> {
@@ -122,9 +122,9 @@ export function hookBody(entry: string, nodePath: string): string {
     '',
     ...PATH_FALLBACK_CHECK,
     'if [ -f "$repown_entry" ] && [ -x "$repown_node" ]; then',
-    '    "$repown_node" "$repown_entry" guard check --remote "$1" --url "$2"',
+    '    "$repown_node" "$repown_entry" guard check --remote="$1" --url="$2"',
     'elif repown_on_path; then',
-    '    repown guard check --remote "$1" --url "$2"',
+    '    repown guard check --remote="$1" --url="$2"',
     'else',
     '    echo "" >&2',
     '    echo "repown: the identity guard is installed but repown cannot be found," >&2',

@@ -10,7 +10,7 @@
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": true,
     "declaration": false,
-    "sourceMap": true,
+    "sourceMap": false,
     "skipLibCheck": true,
     "lib": [
       "ES2023"

@@ -4,7 +4,7 @@
 // the checker inside .git/ adds two states -- `stale` (a copy is missing, so the
 // check cannot load) and `drifted` (the copy is older than the tool). Calling the
 // installed entry point removes both: there is only ever one implementation, and
-// it is current by construction (DECISIONS §3).
+// it is current by construction (ADR-003).
 //
 // The absolute path is baked in at install time AND a PATH lookup is kept as a
 // fallback, so neither a PATH change nor a reinstall elsewhere can quietly

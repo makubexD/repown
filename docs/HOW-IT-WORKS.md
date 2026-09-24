@@ -2,7 +2,7 @@
 
 Every scenario, one card each. Read the headline, and click **Show how** when you want
 the diagram and the detail. The reasons behind each rule are in
-[DECISIONS.md](DECISIONS.md).
+[decisions/](decisions/README.md), one ADR each.
 
 **In three lines:** each clone is pinned **once** to one account. Moving between
 accounts is just `cd`. A `pre-push` guard checks every commit before it leaves.
@@ -73,7 +73,7 @@ flowchart TD
 | Setting in the system scope | re-run `repown fix` in an elevated shell |
 
 **Why:** switching gh's account moves the password prompt to your other account's
-clones rather than fixing it ([§1](DECISIONS.md#1-git-credentials-come-from-the-credential-manager-gh-is-for-the-cli)).
+clones rather than fixing it ([ADR-001](decisions/ADR-001-credential-manager-not-gh.md)).
 </details>
 
 ### 2. Remember an account
@@ -126,7 +126,7 @@ sequenceDiagram
 | `--gh` | also runs `gh auth switch`, so `gh pr create` acts as the same account |
 | No terminal and no record | 🔴 stops and tells you to run `repown accounts add <account> …` |
 | SSH remote | no credential key is written, because your SSH key decides |
-| Azure DevOps or another host | identity and guard work; 🟡 credentials are not pinned ([§6](DECISIONS.md#6-hosts-are-a-strategy-and-only-claim-what-was-measured)) |
+| Azure DevOps or another host | identity and guard work; 🟡 credentials are not pinned ([ADR-009](decisions/ADR-009-hosts-claim-only-measured.md)) |
 | Repo owned by an organisation | 🟡 prints `git config --local --add repown.allowOwner octo-org` |
 | gh is still the credential helper | 🟡 `fix: repown fix` |
 | No stored credential yet | the first push signs in once ([card 6](#6-commit-and-first-push)) |
@@ -260,7 +260,7 @@ flowchart TD
 reported together, so one push shows everything to fix. Each 🔴 is explained in
 [card 8](#8-push-refused-and-the-fix). Credential problems never
 block a push, because a failed login publishes nothing; `repown` and `repown doctor`
-report those instead ([§8](DECISIONS.md#8-what-refuses-and-what-only-warns)).
+report those instead ([ADR-011](decisions/ADR-011-refuse-vs-warn.md)).
 </details>
 
 ### 8. Push refused, and the fix

@@ -476,7 +476,7 @@ describe('status in a clone pushing to an organisation', () => {
     assert.doesNotMatch(run.stderr, /Enable it: repown guard on/);
   });
 
-  // DECISIONS §6: where credentials are not pinned, `repown` says so rather than
+  // ADR-009: where credentials are not pinned, `repown` says so rather than
   // implying otherwise.
   test('on a host whose credentials repown does not pin, it says so rather than "honours it"', () => {
     const azure = sandbox();

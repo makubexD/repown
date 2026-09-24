@@ -1,17 +1,30 @@
-// Keeps README.md honest about the command surface. Commands and each group's
-// actions come from the real `repown --help` / `repown help <group>`, not a copy, so
-// adding one without documenting it -- or documenting one that does not exist,
-// hidden aliases included -- fails here rather than in a reader's terminal.
+// Keeps the docs honest. Commands and each group's actions come from the real
+// `repown --help` / `repown help <group>`, not a copy, so adding one without
+// documenting it -- or documenting one that does not exist, hidden aliases
+// included -- fails here rather than in a reader's terminal. Every relative link
+// and anchor must resolve, and decisions are cited by ADR id, never by section.
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
-const README = readFileSync(fileURLToPath(new URL('../README.md', import.meta.url)), 'utf8');
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const CLI = join(ROOT, 'src', 'cli.ts');
+const README = readFileSync(join(ROOT, 'README.md'), 'utf8');
 const WORD = /^[a-z][\w-]*$/;
+
+/** Files under `dir` (relative to the repo root) whose name ends in `ext`. */
+function filesIn(dir: string, ext: string): string[] {
+  return readdirSync(join(ROOT, dir), { recursive: true, encoding: 'utf8' })
+    .filter((name) => name.endsWith(ext)).map((name) => join(ROOT, dir, name));
+}
+
+const DOCS = [join(ROOT, 'README.md'), join(ROOT, 'CLAUDE.md'), ...filesIn('docs', '.md')];
+const read = (path: string): string => readFileSync(path, 'utf8');
+const name = (path: string): string => relative(ROOT, path).replaceAll('\\', '/');
 
 const helpCache = new Map<string, string>();
 
@@ -153,5 +166,72 @@ describe('README.md documents the real command surface', () => {
     const fixture = 'Run `repown accounts delete x` or:\n```\nrepown guard enable\n```\n';
     const groups = new Map([['guard', ['on', 'off', 'status']], ['accounts', ['list', 'add', 'rm']]]);
     assert.deepEqual(unknownActions(fixture, groups).sort(), ['accounts delete', 'guard enable']);
+  });
+});
+
+describe('every other doc runs only real commands, actions and options', () => {
+  const commands = listed(help(['--help']), 2);
+  const groups = groupActions(commands);
+  const known = new Set([...commands, 'help']);
+
+  for (const path of DOCS.filter((doc) => !doc.endsWith('README.md'))) {
+    test(name(path), () => {
+      const text = read(path);
+      const words = invocations(text).map(([word = '']) => word).filter((word) => WORD.test(word) && !known.has(word));
+      assert.deepEqual([...new Set(words)], [], 'examples naming no real command');
+      assert.deepEqual(unknownActions(text, groups), [], 'examples naming no real action');
+      assert.deepEqual(unknownOptions(text), [], 'examples using options help does not list');
+    });
+  }
+});
+
+/** GitHub's heading anchor: lowercase, punctuation and emoji dropped, spaces to hyphens. */
+function slug(heading: string): string {
+  return heading.trim().toLowerCase().replace(/[^\p{L}\p{N}\p{M} _-]/gu, '').replaceAll(' ', '-');
+}
+
+/** Every anchor a markdown file offers, outside code fences, with GitHub's -1, -2 for repeats. */
+function anchors(markdown: string): Set<string> {
+  const seen = new Map<string, number>();
+  const prose = markdown.split('```').filter((_, index) => index % 2 === 0).join('\n');
+  return new Set([...prose.matchAll(/^#{1,6}\s+(.+)$/gm)].map((match) => {
+    const base = slug(match[1]!);
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    return count === 0 ? base : base + '-' + count;
+  }));
+}
+
+/** Relative `[text](target)` links in `path` whose file or anchor does not exist. */
+function brokenLinks(path: string): string[] {
+  const prose = read(path).split('```').filter((_, index) => index % 2 === 0).join('\n');
+  return [...prose.matchAll(/\]\(([^)\s]+)\)/g)].map((match) => match[1]!)
+    .filter((target) => !/^[a-z]+:/i.test(target))
+    .filter((target) => {
+      const [file = '', anchor] = target.split('#');
+      const resolved = file ? join(dirname(path), file) : path;
+      if (!existsSync(resolved)) return true;
+      return anchor !== undefined && resolved.endsWith('.md') && !anchors(read(resolved)).has(anchor);
+    });
+}
+
+describe('links and decision references', () => {
+  test('slug and anchors follow GitHub, repeats and fenced headings included', () => {
+    assert.equal(slug('7. Push: what the `guard` checks'), '7-push-what-the-guard-checks');
+    assert.deepEqual([...anchors('# A\n## A\n```\n# B\n```\n')], ['a', 'a-1']);
+  });
+
+  for (const path of DOCS) {
+    test('every relative link in ' + name(path) + ' resolves', () => {
+      assert.deepEqual(brokenLinks(path), [], 'links to a missing file or heading');
+    });
+  }
+
+  test('decisions are cited as ADR-0NN, never by section sign or the old single file', () => {
+    const sources = [...DOCS, ...filesIn('src', '.ts'), ...filesIn('test', '.ts')];
+    // Built from its code point, so this file does not match itself.
+    const cited = new RegExp(String.fromCharCode(0xa7) + '|DECISIONS\\.md');
+    const stale = sources.filter((path) => cited.test(read(path))).map(name);
+    assert.deepEqual(stale, [], 'files still citing the old decisions document');
   });
 });

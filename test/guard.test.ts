@@ -629,7 +629,7 @@ describe('only a hook repown wrote is repown\'s', () => {
 // The pinned account used to come only from the credential key -- which Azure
 // DevOps, generic hosts and every SSH remote do not have. With no account the
 // destination check returned nothing, silently: a push to another organisation
-// passed on exactly the hosts DECISIONS §6 says it must not.
+// passed on exactly the hosts ADR-009 says it must not.
 describe('guard check, the destination on hosts with no credential key', () => {
   let box: Sandbox;
   let git: Git;
@@ -694,7 +694,7 @@ describe('guard check, the destination on hosts with no credential key', () => {
     }
   });
 
-  // "Per repository, explicitly" (DECISIONS §3): a global allowOwner would
+  // "Per repository, explicitly" (ADR-004): a global allowOwner would
   // silently widen every clone on the machine.
   test('repown.allowOwner in GLOBAL config does not widen this clone', async () => {
     box.git('config', '--local', 'repown.account', 'pinned-account');

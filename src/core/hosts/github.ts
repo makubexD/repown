@@ -1,5 +1,5 @@
 // GitHub. The one host whose mechanics were established empirically rather than
-// assumed -- see docs/DECISIONS.md §1.
+// assumed -- see ADR-001.
 //
 // The pin is `credential.https://github.com.username`, which Git Credential
 // Manager reads to choose between the credentials it stores, one per account,

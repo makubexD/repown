@@ -199,7 +199,7 @@ interface Pushed {
  * The mirror exemption is OPT-IN, per repository, via repown.mirrorBranch. A branch
  * that only ever fast-forwards to upstream commits nobody here authored would
  * otherwise be refused for carrying their addresses -- but defaulting to an
- * exemption is how the previous design left five of six branches unguarded, so
+ * exemption is how the previous design silently exempted every feature branch, so
  * an unset key means no exemption at all.
  *
  * EVEN THEN THE MIRROR IS CHECKED, just against a wider exclusion: a commit on

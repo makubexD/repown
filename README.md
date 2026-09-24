@@ -26,7 +26,7 @@ repown guard on        # refuse any push that carries another identity
 - `gh auth switch` changes the account machine-wide. While `gh` is git's
   credential helper, every switch breaks the *other* account's repositories, and
   an SSO-only account has no password to type at the prompt.
-  ([DECISIONS §1](docs/DECISIONS.md#1-git-credentials-come-from-the-credential-manager-gh-is-for-the-cli))
+  ([ADR-001](docs/decisions/ADR-001-credential-manager-not-gh.md))
 
 ## How repown solves it
 
@@ -48,7 +48,7 @@ Every scenario, with diagrams: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
 | `git config user.email` by hand in each repo | yes, if you never forget | no | no | Forgetting once publishes the wrong address permanently |
 | `includeIf "gitdir:~/work/"` in global config | yes, by folder | only if you also add the credential key per folder | no | Depends on where a repo happens to be cloned; a clone anywhere else inherits the default |
 | SSH host aliases (`git@github-work:...`) | no | yes | no | Every remote URL has to be rewritten, and keys managed per account |
-| `gh auth switch` | no | while gh is the helper, only the *active* account | no | Machine-wide: it breaks the other account's repos ([§1](docs/DECISIONS.md#1-git-credentials-come-from-the-credential-manager-gh-is-for-the-cli)) |
+| `gh auth switch` | no | while gh is the helper, only the *active* account | no | Machine-wide: it breaks the other account's repos ([ADR-001](docs/decisions/ADR-001-credential-manager-not-gh.md)) |
 | **repown** | yes, per clone | yes, per clone (GitHub) | yes, once `repown guard on`: every commit the push would publish | `use` and `guard on` once per clone; credential pinning is GitHub-only today ([Hosts](#hosts)) |
 
 repown doesn't replace these tools. It writes plain repo-local git config, uses the
@@ -112,7 +112,7 @@ OK    guard      on -- every push is checked before it leaves
 `repown use` takes the account's commit name and email from this machine's registry.
 The first time, if they aren't recorded, it asks for them. When gh is installed and
 signed in, it suggests the account's GitHub noreply address
-([§5](docs/DECISIONS.md#5-no-names-or-addresses-live-in-any-repository)).
+([ADR-008](docs/decisions/ADR-008-no-identifiers-in-repos.md)).
 It then records them for every other clone. Without a terminal it can't ask, so
 record the account up front:
 `repown accounts add octocat --name "Octo Cat" --email octocat@users.noreply.github.com`.
@@ -221,7 +221,7 @@ the author and the committer of every commit the push would publish. So it also
 catches a commit made before setup, on another branch, or brought in by a merge,
 rebase or cherry-pick. Commits the remote already has are skipped, because
 pushing them again publishes nothing new
-([§2](docs/DECISIONS.md#2-the-guard-verifies-commits-not-configuration)).
+([ADR-002](docs/decisions/ADR-002-guard-checks-commits.md)).
 
 ```
 $ git push
@@ -257,11 +257,11 @@ It also refuses:
   doesn't already have instead;
 - **itself being unrunnable.** If `repown` can't be found, the hook refuses rather
   than passing. A `repown` found on PATH is trusted only if `repown --version` says
-  it is repown ([§3](docs/DECISIONS.md#3-the-hook-calls-the-installed-cli-and-refuses-when-it-cannot)).
+  it is repown ([ADR-003](docs/decisions/ADR-003-hook-calls-installed-cli.md)).
 
 It ignores credential problems, because a failed authentication publishes
 nothing; `repown` and `repown doctor` warn about those instead
-([§8](docs/DECISIONS.md#8-what-refuses-and-what-only-warns)). If a `pre-push` hook
+([ADR-011](docs/decisions/ADR-011-refuse-vs-warn.md)). If a `pre-push` hook
 that repown didn't write already exists, `repown guard on` and `repown guard off` leave it
 alone. `core.hooksPath` (husky sets it, for example) can send git to another hooks
 directory. repown then reports the hook git will actually run, and
@@ -317,7 +317,7 @@ the right control.
 | Host | Commit identity | Guard | Credential pinning |
 | --- | --- | --- | --- |
 | GitHub | yes | yes | yes over https (over SSH, your SSH key decides) |
-| Azure DevOps | yes | yes | **no** ([§6](docs/DECISIONS.md#6-hosts-are-a-strategy-and-only-claim-what-was-measured)) |
+| Azure DevOps | yes | yes | **no** ([ADR-009](docs/decisions/ADR-009-hosts-claim-only-measured.md)) |
 | anything else | yes | yes | no |
 
 An author address is the same fact on every host, so pinning and the guard work
@@ -360,7 +360,7 @@ account name. `repown use` and `repown` print the exact
 
 **My organisation uses SSO and the push failed with an authorization error.** A
 credential can be valid and still not authorized for an SSO organisation. Nothing
-can see that in advance ([residual risks](docs/DECISIONS.md#residual-risks-stated-plainly)).
+can see that in advance ([residual risks](docs/decisions/README.md#residual-risks)).
 Authorize that credential for the organisation on GitHub, then push again.
 
 **Does it work with Azure DevOps or another host?** Commit identity and the guard
@@ -376,12 +376,12 @@ npm run build     # tsc, also the typecheck
 ```
 
 Developing needs Node 22.18+, even though running needs only 20
-([§7](docs/DECISIONS.md#7-typescript-on-node-and-what-that-cost)). Zero runtime
+([ADR-010](docs/decisions/ADR-010-typescript-on-node.md)). Zero runtime
 dependencies, by choice. `demo/demo.tape` is a [VHS](https://github.com/charmbracelet/vhs)
 script for a demo recording, run with `vhs demo/demo.tape`. It uses placeholder
 identities in a throwaway sandbox. No GIF is committed yet, because VHS hasn't
 rendered on the machines tried so far. [CLAUDE.md](CLAUDE.md) has the contributor rules;
-[docs/DECISIONS.md](docs/DECISIONS.md) explains why every non-obvious choice was
+[docs/decisions/](docs/decisions/README.md) explains why every non-obvious choice was
 made.
 
 ## License

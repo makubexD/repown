@@ -91,7 +91,7 @@ function diagnoseHealthy(auth: AuthState, providerLabel: string): number {
   return 0;
 }
 
-// Not a check -- repown cannot see this coming (docs/DECISIONS.md, "Deliberately
+// Not a check -- repown cannot see this coming (ADR-013, "Deliberately
 // not done"). A credential that is otherwise healthy still fails the moment
 // it touches an org it is not SSO-authorized for, and that failure looks
 // identical to a bad token. Printed unconditionally so it is there before it

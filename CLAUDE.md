@@ -4,9 +4,14 @@
 to its own account (repo-local `user.name`, `user.email`, `repown.account`,
 `credential.<host>.username` where measured, `user.useConfigOnly`), and a `pre-push` hook
 refuses commits authored or committed by anyone else.
-README.md is the user view. **docs/DECISIONS.md holds the reasons, many of them measured
-empirically; read the relevant section before changing behaviour.** docs/HOW-IT-WORKS.md
-walks through every scenario with diagrams; update its card when behaviour or output changes.
+Docs, one purpose each:
+- README.md: the user view (what, why, install, commands). test/docs.test.ts keeps it and
+  every other doc honest.
+- docs/HOW-IT-WORKS.md: every scenario with diagrams; update its card when behaviour or
+  output changes.
+- **docs/decisions/: one ADR per decision, many measured empirically. Read the relevant
+  ADR before changing behaviour.** Cite them as `ADR-0NN`. A new decision is a new ADR;
+  a reversed one is superseded, never deleted or rewritten.
 
 ## Commands
 
@@ -16,7 +21,7 @@ walks through every scenario with diagrams; update its card when behaviour or ou
     npm run build                        # tsc -> dist/, then type-checks test/ too; the only static check (no lint)
     node src/cli.ts <args>               # run from source, no build needed
 
-Developing needs Node 22.18+; the package targets Node 20+ (DECISIONS §7). CI runs Linux,
+Developing needs Node 22.18+; the package targets Node 20+ (ADR-010). CI runs Linux,
 Windows and macOS, so watch path separators, `.exe`, `process.platform` and line endings.
 
 ## Hard rules
@@ -34,12 +39,12 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   it merely found, and their config can set `gpg.program`.
 - **A skipped check must never look like a passed one.** Failures that are answers
   ("gh could not be queried") are a `Result` (`src/core/result.ts`), never null or empty.
-- **Severity (DECISIONS §8):** the guard refuses only what's irreversible (a foreign author,
+- **Severity (ADR-011):** the guard refuses only what's irreversible (a foreign author,
   committer or tagger, a wrong destination owner, no pinned identity, commits it can't
   read, `GH_TOKEN`/`GIT_*_EMAIL` set). It ignores credential and gh problems; `repown` and
   `repown doctor` report those.
 - **Credential pinning is claimed only where it was measured.** An empty `credentialKeys()`
-  means "can't pin", never a guess. Azure DevOps is deliberately unpinned (DECISIONS §6).
+  means "can't pin", never a guess. Azure DevOps is deliberately unpinned (ADR-009).
 - `.claude/rules/code-quality.md` applies: functions ≤20 lines, ≤4 params, no
   commented-out code.
 

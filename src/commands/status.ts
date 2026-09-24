@@ -38,7 +38,7 @@ export default {
   },
 } satisfies Command;
 
-/** "Honours it" only where the helper is GCM, the one measured to read the pin (DECISIONS §1). */
+/** "Honours it" only where the helper is GCM, the one measured to read the pin (ADR-001). */
 function verdict(repo: RepoState, auth: AuthState, problems: readonly Problem[]): number {
   if (problems.length === 0) {
     out.pass('identity', repo.credentialKeys.length > 0 && auth.helperIsGcm

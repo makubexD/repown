@@ -30,9 +30,14 @@ export interface GhState {
   readonly active: string | null;
 }
 
-/** A credential-helper value that `gh auth setup-git` wrote: `!<path>/gh auth git-credential`. */
+/**
+ * A credential-helper value that `gh auth setup-git` wrote -- `!gh auth
+ * git-credential`, or with gh's path, quoted on Windows -- and nothing more. A
+ * composite (`... | manager`) or another CLI's helper (`glab auth git-credential`)
+ * is not gh's, and `repown fix` must not remove it.
+ */
 export function isGh(helper: string | null): boolean {
-  return helper !== null && /auth\s+git-credential/.test(helper);
+  return helper !== null && /^!(?:.*[\\/'\s])?gh(?:\.exe)?'?\s+auth\s+git-credential\s*$/.test(helper.trim());
 }
 
 export async function ghInstalled(): Promise<boolean> {

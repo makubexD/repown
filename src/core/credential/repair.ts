@@ -52,20 +52,34 @@ export async function planRepair(git: Git): Promise<RemovalOutcome[]> {
       const key = 'credential.' + host + '.helper';
       const values = await git.getAllConfigRaw(key, scope);
       if (!values.some(isGh)) continue;
-      const ghs = values.filter((value) => isGh(value) || value.trim().length === 0);
-      found.push({ scope, key, values: ghs, removed: false });
+      found.push({ scope, key, values: ghEntries(values), removed: false });
     }
   }
   return found;
 }
 
+/** gh's value, or an empty reset sitting directly before one -- the pair gh writes. */
+function isGhEntry(values: readonly string[], index: number): boolean {
+  const value = values[index]!;
+  return isGh(value) || (value.trim().length === 0 && isGh(values[index + 1] ?? null));
+}
+
+function ghEntries(values: readonly string[]): string[] {
+  return values.filter((_, index) => isGhEntry(values, index));
+}
+
+/**
+ * git can remove a value by PATTERN, not by position -- and two empty resets are
+ * the same pattern, only one of them gh's. So the key is rewritten: unset, then
+ * every value that is not gh's added back, in its original order.
+ */
 export async function repair(git: Git): Promise<RemovalOutcome[]> {
   const results: RemovalOutcome[] = [];
   for (const entry of await planRepair(git)) {
-    let removed = true;
-    for (const value of new Set(entry.values)) {
-      removed = await git.unsetConfigValue(entry.key, value, entry.scope) && removed;
-    }
+    const all = await git.getAllConfigRaw(entry.key, entry.scope);
+    const kept = all.filter((_, index) => !isGhEntry(all, index));
+    let removed = await git.unsetConfig(entry.key, entry.scope);
+    for (const value of kept) removed = await git.addConfig(entry.key, value, entry.scope) && removed;
     results.push({ ...entry, removed });
   }
   return results;

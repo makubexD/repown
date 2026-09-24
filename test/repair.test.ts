@@ -18,8 +18,11 @@ describe('repown fix: what it plans and what it removes', () => {
   beforeEach(() => { box = sandbox(); git = new Git(box.dir); });
   afterEach(() => box.dispose());
 
-  const helpers = (...values: string[]): void => box.writeGlobalConfig(
-    '[credential "https://github.com"]\n' + values.map((value) => '\thelper = ' + value + '\n').join(''));
+  /** Written through git itself, so values with backslashes or quotes are stored exactly. */
+  const helpers = (...values: string[]): void => {
+    box.writeGlobalConfig('');
+    for (const value of values) box.git('config', '--global', '--add', KEY, value);
+  };
   const remaining = (): Promise<string[]> => git.getAllConfigRaw(KEY, 'global');
 
   test('what `gh auth setup-git` wrote -- the reset and gh -- is planned and removed', async () => {
@@ -35,6 +38,26 @@ describe('repown fix: what it plans and what it removes', () => {
   test('a per-host helper that is not gh is not planned at all', async () => {
     helpers('manager');
     assert.deepEqual(await planRepair(git), []);
+  });
+
+  test('only gh itself counts: a composite helper or another CLI is left alone', async () => {
+    helpers('!gh auth git-credential | manager');
+    assert.deepEqual(await planRepair(git), [], 'a composite helper is not what gh wrote');
+    helpers('!glab auth git-credential');
+    assert.deepEqual(await planRepair(git), []);
+  });
+
+  test('the path form gh writes on Windows is recognised', async () => {
+    helpers('', "!'C:\\Program Files\\GitHub CLI\\gh.exe' auth git-credential");
+    assert.equal((await planRepair(git)).length, 1);
+  });
+
+  test('an empty reset NOT directly before gh is not gh\'s, and stays', async () => {
+    helpers('', '!/opt/corp/helper', '', GH);
+    const planned = await planRepair(git);
+    assert.deepEqual(planned[0]!.values, ['', GH]);
+    await repair(git);
+    assert.deepEqual(await remaining(), ['', '!/opt/corp/helper']);
   });
 
   test('beside gh, another helper on the same key survives the repair', async () => {

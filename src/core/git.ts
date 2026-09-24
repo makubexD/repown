@@ -124,15 +124,9 @@ export class Git {
   }
 
   /** True when the key is gone afterwards -- including when it was never set. */
-  /**
-   * Removes only the values of `key` equal to `value`, leaving its other values.
-   * An anchored, escaped value-pattern rather than `--fixed-value`, which needs
-   * git 2.30.
-   */
-  async unsetConfigValue(key: string, value: string, scope: ConfigScope): Promise<boolean> {
-    const pattern = '^' + value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$';
-    const result = await this.exec(this.scoped(scope, ['--unset-all', key, pattern]));
-    return succeeded(result) || result.code === 5; // 5 = no such value
+  /** Appends one more value to a multi-valued key. */
+  async addConfig(key: string, value: string, scope: ConfigScope): Promise<boolean> {
+    return succeeded(await this.exec(this.scoped(scope, ['--add', key, value])));
   }
 
   async unsetConfig(key: string, scope: ConfigScope = 'local'): Promise<boolean> {

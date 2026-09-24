@@ -50,6 +50,8 @@ export interface CheckInput {
   readonly remote: string;
   readonly url: string;
   readonly stdin: string;
+  /** Told about a check that could not run -- which must never look like one that passed. */
+  readonly onNote?: (note: string) => void;
 }
 
 export function parsePushRefs(stdin: string): PushRef[] {
@@ -64,11 +66,10 @@ export async function check(input: CheckInput): Promise<Refusal[]> {
   const hostile = checkEnvironment();
   if (hostile.length > 0) return hostile;
 
-  const { git } = input;
   const url = parseGitUrl(input.url);
   const provider = providerFor(url);
   const credentialKey = url ? provider.credentialKeys(url)[0] ?? null : null;
-  const identity = await readIdentity(git, credentialKey);
+  const identity = await readIdentity(input.git, credentialKey);
 
   if (!identity.email) {
     return [{
@@ -77,12 +78,10 @@ export async function check(input: CheckInput): Promise<Refusal[]> {
       detail: ['fix: repown use <account>'],
     }];
   }
-
   const owner = url ? provider.ownerOf(url) : null;
-  const allowed = await allowedOwners(git, identity.account);
-  const destination = checkDestination(url, owner, allowed);
-  const commits = await checkCommits(input, identity.email);
-  return [...destination, ...commits];
+  const allowed = await allowedOwners(input.git, identity.owner ?? identity.account);
+  const destination = checkDestination({ url, owner, allowed }, input.onNote);
+  return [...destination, ...await checkCommits(input, identity.email)];
 }
 
 function checkEnvironment(): Refusal[] {
@@ -110,7 +109,8 @@ function checkEnvironment(): Refusal[] {
  * failed push. An explicit local list is offline, instant, and readable.
  */
 export async function allowedOwners(git: Git, account: string | null): Promise<string[]> {
-  const extra = await git.getAllConfig(ALLOW_OWNER_KEY);
+  // LOCAL only: "per repository, explicitly". A global entry would widen every clone.
+  const extra = await git.getAllConfig(ALLOW_OWNER_KEY, 'local');
   return [...(account ? [account] : []), ...extra].map((owner) => owner.toLowerCase());
 }
 
@@ -121,17 +121,23 @@ export async function allowedOwners(git: Git, account: string | null): Promise<s
  * `https://octocat@github.com/SomeoneElse/repo` contains the pinned account in
  * its USERINFO and passed on that alone, while pushing somewhere else entirely.
  */
-function checkDestination(
-  url: ReturnType<typeof parseGitUrl>,
-  owner: string | null,
-  allowed: readonly string[],
-): Refusal[] {
-  if (!url || !owner || allowed.length === 0) return [];
-  if (allowed.includes(owner.toLowerCase())) return [];
+interface Destination {
+  readonly url: ReturnType<typeof parseGitUrl>;
+  readonly owner: string | null;
+  readonly allowed: readonly string[];
+}
+
+function checkDestination({ url, owner, allowed }: Destination, onNote?: (note: string) => void): Refusal[] {
+  const skipped = !url ? 'the remote is not a URL (a local path?)'
+    : !owner ? 'no owner can be read from ' + url.host + ' URLs'
+    : allowed.length === 0 ? 'no account is recorded for this clone -- run: repown use <account>'
+    : null;
+  if (skipped) { onNote?.('destination not checked: ' + skipped); return []; }
+  if (allowed.includes(owner!.toLowerCase())) return [];
   return [{
     reason: 'This push goes to "' + owner + '", which this clone is not pinned to.',
     detail: [
-      'destination: ' + url.raw,
+      'destination: ' + url!.raw,
       'allowed here: ' + allowed.join(', '),
       'if that owner is legitimate -- an organisation you belong to, say:',
       '  git config --local --add ' + ALLOW_OWNER_KEY + ' ' + owner,
@@ -140,7 +146,7 @@ function checkDestination(
 }
 
 async function checkCommits(input: CheckInput, expected: string): Promise<Refusal[]> {
-  const mirror = await input.git.getConfig(MIRROR_KEY);
+  const mirror = await input.git.getConfig(MIRROR_KEY, 'local');
   const refusals: Refusal[] = [];
 
   for (const ref of parsePushRefs(input.stdin)) {

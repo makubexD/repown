@@ -163,13 +163,19 @@ push unguarded.
 
 ### Organisations are not accounts
 
-The destination check compares the repository's owner against the pinned
-account. An organisation's name is never an account name, so on its own that
+The destination check compares the repository's owner against the clone's
+account, `repown.account`, which `repown use` writes on every host. It used to
+come only from the credential key, which Azure DevOps, generic hosts and every SSH
+remote don't have. There the check had nothing to compare and returned nothing,
+silently. A check that can't run now says `destination not checked` in the guard's
+output. An organisation's name is never an account name, so on its own that
 check refuses every push to every organisation repository -- which is most
 working repositories in most jobs, and would be discovered on the first push
 rather than in review.
 
 `repown.allowOwner` lists additional legitimate owners, per repository, explicitly.
+It's read from the clone's own config only, and so is `repown.mirrorBranch`. A
+global entry would silently widen every clone on the machine.
 Resolving organisation membership from the host API was the alternative and was
 rejected: it puts a network call and an auth dependency in the pre-push path,
 where a rate limit or an offline laptop turns into a failed push. An explicit
@@ -261,7 +267,7 @@ like configuration while selecting nothing.
 
 | Host | Commit identity | Guard | Credential pinning |
 | --- | --- | --- | --- |
-| GitHub | yes | yes | yes — the mechanics in §1 |
+| GitHub | yes | yes | yes over https — the mechanics in §1. Not over SSH, where the SSH key decides and no helper is consulted |
 | Azure DevOps | yes | yes | **no** |
 | anything else | yes | yes | no |
 
@@ -273,6 +279,8 @@ not merely incomplete. Its two URL forms disagree about the first path segment:
 ```
 https://<org>.visualstudio.com/<project>/_git/<repo>    organisation is the SUBDOMAIN
 https://dev.azure.com/<org>/<project>/_git/<repo>       organisation is the PATH
+git@ssh.dev.azure.com:v3/<org>/<project>/<repo>         organisation follows v3/
+<org>@vs-ssh.visualstudio.com:v3/<org>/<project>/<repo> organisation follows v3/
 ```
 
 A generic "first segment is the owner" reports the *project* as the owner on the

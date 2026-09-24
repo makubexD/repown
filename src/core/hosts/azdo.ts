@@ -38,6 +38,8 @@ import { err, type Result } from '../result.ts';
 
 const MODERN_HOST = 'dev.azure.com';
 const LEGACY_SUFFIX = '.visualstudio.com';
+/** SSH remotes: `git@ssh.dev.azure.com:v3/<org>/...` and `<org>@vs-ssh.visualstudio.com:v3/<org>/...`. */
+const SSH_HOSTS = ['ssh.dev.azure.com', 'vs-ssh.visualstudio.com'];
 
 export function azureDevOpsProvider(): HostProvider {
   return {
@@ -53,11 +55,12 @@ export function azureDevOpsProvider(): HostProvider {
 }
 
 function matches(url: GitUrl): boolean {
-  return url.host === MODERN_HOST || url.host.endsWith(LEGACY_SUFFIX);
+  return url.host === MODERN_HOST || url.host.endsWith(LEGACY_SUFFIX) || SSH_HOSTS.includes(url.host);
 }
 
-/** The ORGANISATION, which is the subdomain in one URL form and a path segment in the other. */
+/** The ORGANISATION: the subdomain in one URL form, a path segment in the others. */
 function ownerOf(url: GitUrl): string | null {
+  if (SSH_HOSTS.includes(url.host)) return url.segments[0] === 'v3' ? url.segments[1] ?? null : null;
   if (url.host === MODERN_HOST) return url.segments[0] ?? null;
   const subdomain = url.host.slice(0, -LEGACY_SUFFIX.length);
   return subdomain.length > 0 ? subdomain : null;

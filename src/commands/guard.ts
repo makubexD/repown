@@ -39,6 +39,7 @@ async function runCheck(args: Args): Promise<number> {
     remote: flagString(args, 'remote') ?? 'origin',
     url: flagString(args, 'url') ?? '',
     stdin: await readStdin(),
+    onNote: (note) => out.warn('guard', note),
   });
 
   if (refusals.length === 0) {

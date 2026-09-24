@@ -475,8 +475,77 @@ describe('only a hook repown wrote is repown\'s', () => {
   });
 });
 
+// The pinned account used to come only from the credential key -- which Azure
+// DevOps, generic hosts and every SSH remote do not have. With no account the
+// destination check returned nothing, silently: a push to another organisation
+// passed on exactly the hosts DECISIONS §6 says it must not.
+describe('guard check, the destination on hosts with no credential key', () => {
+  let box: Sandbox;
+  let git: Git;
+  let sha: string;
+
+  before(() => {
+    box = sandbox();
+    git = new Git(box.dir);
+    box.git('config', '--local', 'user.name', 'Pinned');
+    box.git('config', '--local', 'user.email', OURS);
+    box.git('commit', '--allow-empty', '-m', 'base');
+    sha = box.git('rev-parse', 'HEAD');
+  });
+  after(() => box.dispose());
+
+  const pushTo = (url: string, notes: string[] = []) => check({
+    git, remote: 'origin', url, onNote: (note) => notes.push(note),
+    stdin: `refs/heads/main ${sha} refs/heads/main ${'0'.repeat(40)}\n`,
+  });
+
+  test('with no account pinned, the skipped destination check SAYS so', async () => {
+    const notes: string[] = [];
+    assert.deepEqual(await pushTo('https://dev.azure.com/other-org/p/_git/r', notes), []);
+    assert.equal(notes.length, 1);
+    assert.match(notes[0]!, /destination not checked/);
+  });
+
+  test('repown.account makes an Azure DevOps push to another organisation REFUSED', async () => {
+    box.git('config', '--local', 'repown.account', 'pinned-account');
+    try {
+      const refusals = await pushTo('https://dev.azure.com/other-org/p/_git/r');
+      assert.equal(refusals.length, 1);
+      assert.match(refusals[0]!.reason, /goes to "other-org"/);
+      box.git('config', '--local', '--add', 'repown.allowOwner', 'our-org');
+      assert.deepEqual(await pushTo('git@ssh.dev.azure.com:v3/our-org/p/r'), []);
+    } finally {
+      box.git('config', '--local', '--unset-all', 'repown.allowOwner');
+      box.git('config', '--local', '--unset', 'repown.account');
+    }
+  });
+
+  test('an SSH remote is compared too', async () => {
+    box.git('config', '--local', 'repown.account', 'pinned-account');
+    try {
+      assert.equal((await pushTo('git@github.com:someone-else/repo.git')).length, 1);
+      assert.deepEqual(await pushTo('git@github.com:pinned-account/repo.git'), []);
+    } finally {
+      box.git('config', '--local', '--unset', 'repown.account');
+    }
+  });
+
+  // "Per repository, explicitly" (DECISIONS §3): a global allowOwner would
+  // silently widen every clone on the machine.
+  test('repown.allowOwner in GLOBAL config does not widen this clone', async () => {
+    box.git('config', '--local', 'repown.account', 'pinned-account');
+    box.git('config', '--global', '--add', 'repown.allowOwner', 'someone-else');
+    try {
+      assert.equal((await pushTo('https://github.com/someone-else/repo.git')).length, 1);
+    } finally {
+      box.git('config', '--global', '--unset-all', 'repown.allowOwner');
+      box.git('config', '--local', '--unset', 'repown.account');
+    }
+  });
+});
+
 describe('pinning writes every key', () => {
-  test('all four keys land -- they are written one at a time, never concurrently', async () => {
+  test('all five keys land -- they are written one at a time, never concurrently', async () => {
     const box = sandbox();
     try {
       const git = new Git(box.dir);
@@ -486,7 +555,7 @@ describe('pinning writes every key', () => {
       const outcomes = await pinIdentity(
         git, { name: 'A Name', email: 'a@example.invalid', account: 'anaccount' }, [key]);
 
-      assert.equal(outcomes.length, 4);
+      assert.equal(outcomes.length, 5);
       assert.deepEqual(outcomes.filter((o) => !o.written), [],
         'git config writes through a .lock file; run in parallel they race and lose');
 
@@ -494,6 +563,7 @@ describe('pinning writes every key', () => {
       assert.equal(identity.name, 'A Name');
       assert.equal(identity.email, 'a@example.invalid');
       assert.equal(identity.account, 'anaccount');
+      assert.equal(identity.owner, 'anaccount', 'repown.account: whose clone it is, on any host');
       assert.equal(identity.useConfigOnly, 'true');
     } finally {
       box.dispose();

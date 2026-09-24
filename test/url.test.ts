@@ -63,6 +63,15 @@ describe('provider resolution', () => {
     assert.equal(owner('https://dev.azure.com/contoso/Proj/_git/repo'), 'contoso');
   });
 
+  // Azure's SSH remotes carry a `v3/` prefix ahead of the organisation, on two
+  // different hosts. Reading `v3` (or the `vs-ssh` subdomain) as the owner
+  // refuses legitimate pushes the moment an owner is compared.
+  test('azure devops SSH remotes: the organisation follows v3/, on both SSH hosts', () => {
+    assert.equal(providerId('git@ssh.dev.azure.com:v3/octo-org/Proj/repo'), 'azdo');
+    assert.equal(owner('git@ssh.dev.azure.com:v3/octo-org/Proj/repo'), 'octo-org');
+    assert.equal(owner('octo-org@vs-ssh.visualstudio.com:v3/octo-org/Proj/repo'), 'octo-org');
+  });
+
   test('the generic provider would get the legacy form wrong -- hence azdo exists', () => {
     const url = parseGitUrl('https://contoso.visualstudio.com/Proj/_git/repo')!;
     assert.equal(url.segments[0], 'Proj');          // what a naive owner check sees
@@ -86,6 +95,16 @@ describe('provider resolution', () => {
     const url = parseGitUrl('https://github.com/octocat/repo.git')!;
     assert.deepEqual(providerFor(url).credentialKeys(url),
                      ['credential.https://github.com.username']);
+  });
+
+  // SSH never consults a credential helper, so a `credential.ssh://...` key
+  // would read as "pushes as octocat" while selecting nothing at all.
+  test('github over SSH pins no credential key: SSH picks its key, not a helper', () => {
+    for (const raw of ['git@github.com:octocat/repo.git', 'ssh://git@ssh.github.com:443/octocat/repo.git']) {
+      const url = parseGitUrl(raw)!;
+      assert.equal(providerFor(url).id, 'github', raw);
+      assert.deepEqual(providerFor(url).credentialKeys(url), [], raw);
+    }
   });
 });
 

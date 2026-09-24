@@ -91,7 +91,7 @@ async function reportWarnings(repo: RepoState, auth: AuthState): Promise<void> {
 
   // An organisation is never an account name, so a bare owner-vs-account
   // comparison warns on every org repository -- which is most of them at work.
-  const allowed = await allowedOwners(repo.git, account);
+  const allowed = await allowedOwners(repo.git, repo.identity.owner ?? account);
   if (repo.owner && allowed.length > 0 && !allowed.includes(repo.owner.toLowerCase())) {
     out.warn('origin', 'origin belongs to "' + repo.owner + '", which is not an owner this clone pushes to.');
     out.detail('if that is an organisation you belong to:');

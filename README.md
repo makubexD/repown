@@ -96,12 +96,14 @@ and records them for every other clone. Without a terminal it can't ask, so
 record the account up front:
 `repown accounts add octocat --name "Octo Cat" --email octocat@users.noreply.github.com`.
 
-`repown use` writes these repo-local keys and nothing else (the credential key only
-where the host's credentials can be pinned, which today means GitHub):
+`repown use` writes these repo-local keys and nothing else. The credential key is
+written only where the host's credentials can be pinned, which today means GitHub
+over https:
 
 | Key | What it decides |
 | --- | --- |
 | `user.name`, `user.email` | who **authored** the commit |
+| `repown.account` | whose clone this is: the guard's destination check compares against it, on every host |
 | `credential.<host>.username` | which stored credential serves the **push** |
 | `user.useConfigOnly` | git refuses to invent an identity from the hostname |
 
@@ -203,9 +205,12 @@ Override this one push with: git push --no-verify
 
 It also refuses:
 
-- a destination owned by someone other than the pinned account, parsed from the
-  URL, so `https://octocat@github.com/someone-else/repo` doesn't pass on its
-  userinfo;
+- a destination owned by someone other than the clone's account
+  (`repown.account`), on every host and over https or SSH. The owner is parsed
+  from the URL, so `https://octocat@github.com/someone-else/repo` doesn't pass on
+  its userinfo. When the owner can't be compared (a local path, a clone pinned
+  before `repown.account` existed), the guard prints `destination not checked`
+  rather than staying silent;
 - `GH_TOKEN` / `GITHUB_TOKEN`, or `GIT_AUTHOR_EMAIL` / `GIT_COMMITTER_EMAIL`,
   because each silently outranks the identity it just checked;
 - an annotated tag whose tagger isn't the pinned address (the tagger is
@@ -229,7 +234,8 @@ directory. repown then reports the hook git will actually run, and
 clone, have that tool's `pre-push` hook run
 `repown guard check --remote "$1" --url "$2"`.
 
-Two repo-local keys adjust it:
+Two repo-local keys adjust it. They count only in the clone's own config, never
+global:
 
 ```
 git config --local repown.mirrorBranch master        # a branch that only mirrors upstream
@@ -252,7 +258,7 @@ for a team.
 
 | Host | Commit identity | Guard | Credential pinning |
 | --- | --- | --- | --- |
-| GitHub | yes | yes | yes |
+| GitHub | yes | yes | yes over https (over SSH, your SSH key decides) |
 | Azure DevOps | yes | yes | **no** ([§6](docs/DECISIONS.md#6-hosts-are-a-strategy-and-only-claim-what-was-measured)) |
 | anything else | yes | yes | no |
 

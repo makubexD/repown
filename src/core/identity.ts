@@ -18,6 +18,12 @@ import type { Git, ConfigScope } from './git.ts';
 export const NAME_KEY = 'user.name';
 export const EMAIL_KEY = 'user.email';
 export const USE_CONFIG_ONLY_KEY = 'user.useConfigOnly';
+/**
+ * The account this clone belongs to, on ANY host. The credential key names it
+ * too, but only on a host whose credentials repown pins (GitHub over https);
+ * the guard's destination check needs it everywhere.
+ */
+export const ACCOUNT_KEY = 'repown.account';
 
 export interface IdentityValues {
   readonly name: string;
@@ -29,7 +35,10 @@ export interface RepoIdentity {
   /** Set on this clone. */
   readonly name: string | null;
   readonly email: string | null;
+  /** The credential key's account: who pushes authenticate as. */
   readonly account: string | null;
+  /** repown.account: whose clone this is, whatever the host. */
+  readonly owner: string | null;
   readonly useConfigOnly: string | null;
   /**
    * What git would EFFECTIVELY use, global config included. The difference
@@ -47,10 +56,11 @@ export function isPinned(identity: RepoIdentity): boolean {
 }
 
 export async function readIdentity(git: Git, credentialKey: string | null): Promise<RepoIdentity> {
-  const [name, email, useConfigOnly] = await Promise.all([
+  const [name, email, useConfigOnly, owner] = await Promise.all([
     git.getConfig(NAME_KEY, 'local'),
     git.getConfig(EMAIL_KEY, 'local'),
     git.getConfig(USE_CONFIG_ONLY_KEY, 'local'),
+    git.getConfig(ACCOUNT_KEY, 'local'),
   ]);
   const [inheritedName, inheritedEmail] = await Promise.all([
     git.getConfig(NAME_KEY),
@@ -60,7 +70,7 @@ export async function readIdentity(git: Git, credentialKey: string | null): Prom
   const inheritedAccount = credentialKey ? await git.getConfig(credentialKey) : null;
 
   return {
-    name, email, account, useConfigOnly,
+    name, email, account, owner, useConfigOnly,
     inheritedName, inheritedEmail, inheritedAccount,
   };
 }
@@ -87,6 +97,7 @@ export async function pinIdentity(
     [NAME_KEY, values.name],
     [EMAIL_KEY, values.email],
     [USE_CONFIG_ONLY_KEY, 'true'],
+    [ACCOUNT_KEY, values.account],
     ...credentialKeys.map((key): [string, string] => [key, values.account]),
   ];
   return writeAll(writes, (key, value) => git.setConfig(key, value, scope));
@@ -97,7 +108,7 @@ export async function clearIdentity(
   credentialKeys: readonly string[],
   scope: ConfigScope = 'local',
 ): Promise<PinOutcome[]> {
-  const keys = [NAME_KEY, EMAIL_KEY, USE_CONFIG_ONLY_KEY, ...credentialKeys];
+  const keys = [NAME_KEY, EMAIL_KEY, USE_CONFIG_ONLY_KEY, ACCOUNT_KEY, ...credentialKeys];
   return writeAll(keys.map((key): [string, string] => [key, '']),
                   (key) => git.unsetConfig(key, scope));
 }

@@ -20,7 +20,8 @@ import { parseGitUrl } from '../url.ts';
 import { providerFor } from '../hosts/index.ts';
 import { readIdentity } from '../identity.ts';
 
-const ZERO = '0'.repeat(40);
+/** The null object id: 40 zeros, or 64 in a SHA-256 repository. */
+const isZero = (sha: string): boolean => /^0+$/.test(sha);
 const MIRROR_KEY = 'repown.mirrorBranch';
 const ALLOW_OWNER_KEY = 'repown.allowOwner';
 
@@ -143,7 +144,7 @@ async function checkCommits(input: CheckInput, expected: string): Promise<Refusa
   const refusals: Refusal[] = [];
 
   for (const ref of parsePushRefs(input.stdin)) {
-    if (ref.localSha === ZERO) continue;              // a deletion publishes nothing
+    if (isZero(ref.localSha)) continue;              // a deletion publishes nothing
     const exclude = mirror && ref.remoteRef === 'refs/heads/' + mirror
       ? ['--not', '--remotes']                          // mirror: on any remote, upstream included
       : ['--not', '--remotes=' + input.remote];
@@ -220,7 +221,7 @@ async function checkRange(input: CheckInput, { ref, exclude }: Pushed, expected:
   const refusal = foreignRefusal(ref, foreign, expected);
   // The remote's tip was not here, so every commit it lacks locally was checked;
   // some of those may well be on the remote already.
-  const widened = ref.remoteSha !== ZERO && range[0] === ref.localSha;
+  const widened = !isZero(ref.remoteSha) && range[0] === ref.localSha;
   return [widened ? { ...refusal, detail: [...refusal.detail, 'if they are already on the remote: git fetch, then push again'] } : refusal];
 }
 
@@ -231,7 +232,7 @@ async function checkRange(input: CheckInput, { ref, exclude }: Pushed, expected:
  * tracking refs do not already carry.
  */
 async function rangeFor(git: Git, ref: PushRef, exclude: readonly string[]): Promise<string[]> {
-  const known = ref.remoteSha !== ZERO && await git.hasCommit(ref.remoteSha);
+  const known = !isZero(ref.remoteSha) && await git.hasCommit(ref.remoteSha);
   return known ? [ref.remoteSha + '..' + ref.localSha, ...exclude] : [ref.localSha, ...exclude];
 }
 

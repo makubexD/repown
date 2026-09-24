@@ -177,6 +177,14 @@ describe('guard check', () => {
     }), []);
   });
 
+  test('a deletion in a SHA-256 repository (64 zeros) publishes nothing either', async () => {
+    const zero64 = '0'.repeat(64);
+    assert.deepEqual(await check({
+      git, remote: 'origin', url: ORIGIN,
+      stdin: `(delete) ${zero64} refs/heads/old ${'a'.repeat(64)}\n`,
+    }), []);
+  });
+
   test('an unpinned clone REFUSES rather than guessing what is foreign', async () => {
     const bare = sandbox();
     try {

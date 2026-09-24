@@ -211,7 +211,9 @@ The exemption is narrower than skipping the branch. On the mirror branch, a comm
 already on **any** remote-tracking ref, upstream's included, doesn't count, because
 it's public already. A commit on no remote was made here, and it's still checked.
 Skipping the branch outright let `git push origin feature:master` publish anything.
-So fetch upstream before pushing the mirror. The known gap is a **private**
+So fetch upstream before pushing the mirror. On such a clone, tag pushes use
+the same wider exclusion for their commits; their taggers are still checked
+(`repown.allowTagger`, §8). The known gap is a **private**
 remote: a commit only a private remote carries isn't public, yet on the mirror
 branch it doesn't count. Naming the upstream remote in its own key would close
 that gap, but at the cost of one more setting for a case no user has.
@@ -376,7 +378,7 @@ in fact perfectly safe.
 | Condition | `guard check` | `repown` | Why |
 | --- | --- | --- | --- |
 | A commit in the pushed range has a foreign author | **refuse** | not its job | Irreversible once published |
-| A pushed annotated tag has a foreign tagger | **refuse** | not its job | Same: `git log` peels past the tag, so it's read separately |
+| A pushed annotated tag has a foreign tagger | **refuse** | not its job | Same: `git log` peels past the tag, so it's read separately. A fork names upstream's taggers in `repown.allowTagger`, because a tag sitting on a public commit may still have been made here |
 | No identity pinned in this clone | **refuse** | **fail** | The next commit inherits the machine's identity |
 | The pushed commits cannot be read | **refuse** | — | An empty answer would read as "nothing foreign"; a remote tip this clone never fetched is checked as a new branch instead |
 | `GH_TOKEN`, `GITHUB_TOKEN`, `GIT_AUTHOR_EMAIL` or `GIT_COMMITTER_EMAIL` set | **refuse** | — | Silently outranks the config just validated |

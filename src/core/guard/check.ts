@@ -24,6 +24,7 @@ import { readIdentity, legacyAccountKey } from '../identity.ts';
 const isZero = (sha: string): boolean => /^0+$/.test(sha);
 const MIRROR_KEY = 'repown.mirrorBranch';
 const ALLOW_OWNER_KEY = 'repown.allowOwner';
+const ALLOW_TAGGER_KEY = 'repown.allowTagger';
 
 /** Variables that override the identity the guard just validated, or bypass the check gh performs. */
 const HOSTILE = [
@@ -152,8 +153,9 @@ async function checkCommits(input: CheckInput, expected: string): Promise<Refusa
 
   for (const ref of parsePushRefs(input.stdin)) {
     if (isZero(ref.localSha)) continue;              // a deletion publishes nothing
-    const exclude = mirror && ref.remoteRef === 'refs/heads/' + mirror
-      ? ['--not', '--remotes']                          // mirror: on any remote, upstream included
+    const upstreamShaped = ref.remoteRef === 'refs/heads/' + mirror || ref.remoteRef.startsWith('refs/tags/');
+    const exclude = mirror && upstreamShaped
+      ? ['--not', '--remotes']                          // fork: on any remote, upstream included
       : ['--not', '--remotes=' + input.remote];
     refusals.push(...await checkTaggers(input.git, ref, expected));
     refusals.push(...await checkRange(input, { ref, exclude }, expected));
@@ -161,7 +163,13 @@ async function checkCommits(input: CheckInput, expected: string): Promise<Refusa
   return refusals;
 }
 
-/** An annotated tag's tagger is published with it, as permanently as an author. */
+/**
+ * An annotated tag's tagger is published with it, as permanently as an author.
+ * Whether a tag OBJECT is already public cannot be told offline -- its commit
+ * being on a remote proves nothing, since a tag made here under the wrong
+ * identity can sit on an upstream commit too. So a fork pushing upstream's tags
+ * names upstream's taggers explicitly, repo-locally: repown.allowTagger.
+ */
 async function checkTaggers(git: Git, ref: PushRef, expected: string): Promise<Refusal[]> {
   const taggers = await git.taggersOf(ref.localSha);
   if (!taggers.ok) {
@@ -170,12 +178,14 @@ async function checkTaggers(git: Git, ref: PushRef, expected: string): Promise<R
       detail: ['git said: ' + taggers.error],
     }];
   }
-  const foreign = taggers.value.filter((tagger) => !matches(tagger, expected));
+  const allowed = [expected, ...await git.getAllConfig(ALLOW_TAGGER_KEY, 'local')];
+  const foreign = taggers.value.filter((tagger) => !allowed.some((address) => matches(tagger, address)));
   if (foreign.length === 0) return [];
   return [{
     reason: 'The tag bound for ' + ref.remoteRef + ' was not tagged as ' + expected + '.',
-    detail: [...foreign.map((tagger) => '  tagger  ' + (tagger || '(none)')), '',
-      'The tagger address becomes permanent once pushed.'],
+    detail: [...foreign.map((tagger) => '  tagger  ' + (printable(tagger) || '(none)')), '',
+      'The tagger address becomes permanent once pushed.',
+      'an upstream tag on a fork? allow its tagger: git config --local --add ' + ALLOW_TAGGER_KEY + ' <address>'],
   }];
 }
 

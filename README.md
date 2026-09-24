@@ -252,13 +252,18 @@ directory. repown then reports the hook git will actually run, and
 clone, have that tool's `pre-push` hook run
 `repown guard check --remote="$1" --url="$2"`.
 
-Two repo-local keys adjust it. They count only in the clone's own config, never
+Three repo-local keys adjust it. They count only in the clone's own config, never
 global:
 
 ```
 git config --local repown.mirrorBranch master        # a branch that only mirrors upstream
 git config --local --add repown.allowOwner octo-org    # another owner you may push to (repeatable)
+git config --local --add repown.allowTagger maintainer@example.invalid   # an upstream tagger (repeatable)
 ```
+
+`repown.allowTagger` is for a fork that pushes upstream's tags (`git push --tags`
+after a sync). Whether a tag is already public can't be told offline, so upstream's
+taggers are accepted only when named.
 
 Unset `repown.mirrorBranch` means no exemption. On the mirror branch, commits
 already on any remote (fetched from upstream, say) don't count, but a commit made

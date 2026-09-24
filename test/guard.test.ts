@@ -141,6 +141,64 @@ describe('guard check', () => {
     assert.deepEqual(await push(box.git('rev-parse', 'v-ours'), 'refs/tags/v-ours'), []);
   });
 
+  test('B5a a tag pointing at a tag checks the INNER tagger too', async () => {
+    const commit = commitAs(OURS, 'ours');
+    box.git('-c', `user.email=${THEIRS}`, 'tag', '-a', 'inner-foreign', '-m', 'inner', commit);
+    box.git('-c', `user.email=${OURS}`, 'tag', '-a', 'outer-ours', '-m', 'outer', 'inner-foreign');
+    const refusals = await push(box.git('rev-parse', 'outer-ours'), 'refs/tags/outer-ours');
+    assert.ok(refusals.some((refusal) => refusal.detail.some((row) => row.includes(THEIRS))));
+  });
+
+  test('B5b a lightweight tag on a foreign commit is refused by the commit check', async () => {
+    const sha = commitAs(THEIRS, 'theirs');
+    assert.equal((await push(sha, 'refs/tags/light')).length, 1);
+  });
+
+  // A fork that syncs upstream then runs `git push --tags` pushes upstream's
+  // tags, carrying upstream's taggers. Whether a TAG OBJECT is already public
+  // cannot be told offline -- its commit being public says nothing, since a tag
+  // made HERE under the wrong identity can sit on an upstream commit too. So
+  // upstream taggers are accepted only when named: repown.allowTagger.
+  test('B5c on a fork, an upstream-looking tag is refused until its tagger is allowed by name', async () => {
+    const upstream = commitAs(THEIRS, 'upstream release');
+    box.git('update-ref', 'refs/remotes/upstream/main', upstream);
+    box.git('-c', `user.email=${THEIRS}`, 'tag', '-a', 'v-upstream', '-m', 'release', upstream);
+    const tag = box.git('rev-parse', 'v-upstream');
+    box.git('config', '--local', 'repown.mirrorBranch', 'master');
+    try {
+      const refused = await push(tag, 'refs/tags/v-upstream');
+      assert.ok(refused.some((refusal) => /tag/.test(refusal.reason)), 'a public commit does not make the tag public');
+      box.git('config', '--local', '--add', 'repown.allowTagger', THEIRS);
+      assert.deepEqual(await push(tag, 'refs/tags/v-upstream'), []);
+    } finally {
+      box.git('config', '--local', '--unset-all', 'repown.allowTagger');
+      box.git('config', '--local', '--unset', 'repown.mirrorBranch');
+      box.git('update-ref', '-d', 'refs/remotes/upstream/main');
+    }
+  });
+
+  test('B5e repown.allowTagger in GLOBAL config does not count', async () => {
+    const commit = commitAs(OURS, 'ours');
+    box.git('-c', `user.email=${THEIRS}`, 'tag', '-a', 'v-global', '-m', 'x', commit);
+    box.git('config', '--global', '--add', 'repown.allowTagger', THEIRS);
+    try {
+      assert.equal((await push(box.git('rev-parse', 'v-global'), 'refs/tags/v-global')).length, 1);
+    } finally {
+      box.git('config', '--global', '--unset-all', 'repown.allowTagger');
+    }
+  });
+
+  test('B5d on a fork, a foreign-tagged tag on a commit NO remote has is still refused', async () => {
+    const local = commitAs(OURS, 'made here');
+    box.git('-c', `user.email=${THEIRS}`, 'tag', '-a', 'v-local', '-m', 'x', local);
+    box.git('config', '--local', 'repown.mirrorBranch', 'master');
+    try {
+      assert.equal((await push(box.git('rev-parse', 'v-local'), 'refs/tags/v-local')).length, 1);
+    } finally {
+      box.git('config', '--local', '--unset', 'repown.mirrorBranch');
+    }
+  });
+
   test('B6 a foreign COMMITTER is named in the refusal, not the correct author', async () => {
     const tree = box.git('rev-parse', 'HEAD^{tree}');
     const sha = box.git('-c', `user.email=${OURS}`, '-c', 'committer.name=Other', '-c', `committer.email=${THEIRS}`,

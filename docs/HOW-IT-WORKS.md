@@ -232,7 +232,7 @@ flowchart TD
   E -->|no| I{clone has a pinned email?}
   I -->|no| X2[🔴 not pinned]
   I -->|yes| O{"destination owner = repown.account<br/>or a repown.allowOwner?"}
-  O -->|"can't tell: local path, no owner"| N[⚪ destination not checked] --> C
+  O -->|"can't tell: local path, no owner in URL, no account pinned"| N[⚪ destination not checked] --> C
   O -->|no| X3[🔴 wrong owner]
   O -->|yes| C["for each pushed ref, the commits the remote<br/>does NOT already have"]
   C --> T{"annotated tag's tagger = you<br/>or a repown.allowTagger?"}
@@ -256,7 +256,9 @@ flowchart TD
 - re-pushing commits the remote already has, on any of its branches: pulled work, merged
   branches.
 
-Each 🔴 is explained in [card 8](#8-push-refused-and-the-fix). Credential problems never
+`env` and `not pinned` stop at once. Wrong owner, tagger and commit refusals are all
+reported together, so one push shows everything to fix. Each 🔴 is explained in
+[card 8](#8-push-refused-and-the-fix). Credential problems never
 block a push, because a failed login publishes nothing; `repown` and `repown doctor`
 report those instead ([§8](DECISIONS.md#8-what-refuses-and-what-only-warns)).
 </details>
@@ -280,7 +282,8 @@ Override this one push with: git push --no-verify
 
 | 🔴 Refusal | Typical cause | Fix |
 | --- | --- | --- |
-| **foreign commit** | committed before pinning, or someone else's commit cherry-picked or rebased in | `git commit --amend --reset-author` (older commits: `git rebase -i` then amend each), then push again |
+| **foreign commit**, yours | committed before pinning, under the machine default | `git commit --amend --reset-author` (older commits: `git rebase -i`, amending each), then push again |
+| **foreign commit**, a teammate's | cherry-picked, rebased or fetched from their fork, and not on the remote yet | let them push it, then pull; don't re-author their work ([card 9](#9-a-teammate-without-repown)) |
 | **wrong owner** `push goes to "…"` | an organisation repository, or the wrong remote | organisation: `git config --local --add repown.allowOwner octo-org` |
 | **env** `GH_TOKEN is set` | a token or email variable overrides the identity | unset it, then push again |
 | **not pinned** | the clone has no identity, e.g. after `repown off` | `repown use <account>`, or `repown guard off` |
@@ -292,8 +295,8 @@ Override this one push with: git push --no-verify
 `git config --local repown.mirrorBranch master` and upstream's commits there stop
 counting, while a commit made here is still refused.
 
-**Skip the guard for one push:** `git push --no-verify`. The push is still recorded
-in the reflog.
+**Skip the guard for one push:** `git push --no-verify`. Only do this when you mean to
+publish those addresses.
 </details>
 
 ### 9. A teammate without repown

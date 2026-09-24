@@ -31,7 +31,8 @@ const ANY: RowFilter = () => true;
 const USER_FACING: RowFilter = (summary) => !summary.includes('not for direct use');
 
 function listed(text: string, indent: number, keep: RowFilter = ANY): string[] {
-  const row = new RegExp('^ {' + indent + '}([a-z]+) {2,}(\\S.*)$');
+  // [\w-]*: a hyphenated or digit-bearing name must not silently drop out of every check.
+  const row = new RegExp('^ {' + indent + '}([a-z][\\w-]*) {2,}(\\S.*)$');
   return text.split('\n').flatMap((line) => {
     const match = row.exec(line.trimEnd());
     return match && keep(match[2]!) ? [match[1]!] : [];
@@ -52,7 +53,7 @@ function groupActions(commands: readonly string[], keep: RowFilter = ANY): Map<s
 /** An action counts as documented as `repown <group> <action>` or in a `<group> a \| b` list. */
 function undocumentedActions(markdown: string, groups: ReadonlyMap<string, readonly string[]>): string[] {
   return [...groups].flatMap(([group, actions]) => actions
-    .filter((action) => !new RegExp('repown ' + group + ' (?:[a-z-]+ \\\\?\\| )*' + action + '\\b').test(markdown))
+    .filter((action) => !new RegExp('repown ' + group + ' (?:[a-z-]+ \\\\?\\| )*' + action + '(?![\\w-])').test(markdown))
     .map((action) => group + ' ' + action));
 }
 
@@ -62,10 +63,28 @@ function invocations(markdown: string): string[][] {
   const fenced = parts.filter((_, index) => index % 2 === 1).flatMap((block) => block.split('\n'));
   const prose = parts.filter((_, index) => index % 2 === 0).join('\n');
   const inline = [...prose.matchAll(/`([^`\n]+)`/g)].map((match) => match[1]!);
-  return [...fenced, ...inline].flatMap((text) => {
-    const run = /^(?:\$ )?repown (.+)/.exec(text.trim());
-    return run ? [run[1]!.split(/\s+/)] : [];
+  // Wherever repown is RUN: at the start, after `$ `, `&&`, `;` or `npx`.
+  const run = /(?:^|&&|;|\bnpx\b)\s*(?:\$\s+)?repown\s+([^&;`]+)/g;
+  return [...fenced, ...inline].flatMap((text) =>
+    [...text.trim().matchAll(run)].map((match) => match[1]!.trim().split(/\s+/)));
+}
+
+/** Help declares these on every command. */
+const GLOBAL_FLAGS = ['--cwd', '--help', '--version'];
+
+/** `<command> --flag` pairs in the README that the command's (or action's) help does not declare. */
+function unknownOptions(markdown: string): string[] {
+  const commands = listed(help(['--help']), 2);
+  const groups = groupActions(commands);
+  const unknown = invocations(markdown).flatMap(([command = '', action = '', ...rest]) => {
+    if (!commands.includes(command)) return [];
+    const path = groups.get(command)?.includes(action) ? [command, action] : [command];
+    const declared = help(['help', ...path]) + ' ' + GLOBAL_FLAGS.join(' ');
+    return [action, ...rest].filter((word) => /^--[a-z]/.test(word)).map((word) => word.split('=')[0]!)
+      .filter((flag) => !new RegExp(flag + '(?![\\w-])').test(declared))
+      .map((flag) => command + ' ' + flag);
   });
+  return [...new Set(unknown)];
 }
 
 function unknownActions(markdown: string, groups: ReadonlyMap<string, readonly string[]>): string[] {
@@ -110,6 +129,24 @@ describe('README.md documents the real command surface', () => {
     const fixture = '| `repown guard on \\| off` | ... |\n```\nrepown accounts list\nrepown accounts add x\nrepown accounts rm x\n```\n';
     const groups = new Map([['guard', ['on', 'off', 'status']], ['accounts', ['list', 'add', 'rm']]]);
     assert.deepEqual(undocumentedActions(fixture, groups), ['guard status']);
+  });
+
+  test('every --option the README passes to a command is one that command declares', () => {
+    assert.deepEqual(unknownOptions(README), [], 'README examples using options help does not list');
+  });
+
+  test('unknownOptions catches a misspelt or invented option, wherever repown is run', () => {
+    const fixture = 'Try `cd x && repown scan --no-such-flag` or\n```\nnpx repown use octocat --emial x\nrepown scan --emails\n```\n';
+    assert.deepEqual(unknownOptions(fixture).sort(), ['scan --no-such-flag', 'use --emial']);
+  });
+
+  test('invocations finds repown after &&, ; and npx, not only at the start of a line', () => {
+    assert.deepEqual(invocations('`cd x && repown frobnicate`').map((words) => words[0]), ['frobnicate']);
+  });
+
+  test('undocumentedActions does not count `on-demand` as documenting `on`', () => {
+    const groups = new Map([['guard', ['on']]]);
+    assert.deepEqual(undocumentedActions('`repown guard on-demand`', groups), ['guard on']);
   });
 
   test('unknownActions catches a wrong action and a hidden alias', () => {

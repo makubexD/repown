@@ -199,6 +199,20 @@ describe('guard check', () => {
     }
   });
 
+  // `git replace` changes what git SHOWS for an object, not what a push SENDS.
+  // "Fixing" an author with `git replace --edit` made the guard read the clean
+  // replacement while the foreign original was published.
+  test('B5f a replace ref cannot hide the foreign commit a push actually sends', async () => {
+    const foreign = commitAs(THEIRS, 'theirs');
+    const clean = commitAs(OURS, 'ours');
+    box.git('replace', foreign, clean);
+    try {
+      assert.equal((await push(foreign, 'refs/heads/feat/x')).length, 1);
+    } finally {
+      box.git('replace', '-d', foreign);
+    }
+  });
+
   test('B6 a foreign COMMITTER is named in the refusal, not the correct author', async () => {
     const tree = box.git('rev-parse', 'HEAD^{tree}');
     const sha = box.git('-c', `user.email=${OURS}`, '-c', 'committer.name=Other', '-c', `committer.email=${THEIRS}`,

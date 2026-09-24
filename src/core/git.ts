@@ -41,10 +41,16 @@ export class Git {
     this.cwd = cwd;
   }
 
+  /**
+   * --no-replace-objects on every call: `git replace` changes what git SHOWS for
+   * an object, never what a push SENDS, so a replaced foreign commit read as the
+   * clean replacement while the original was published.
+   */
   private exec(args: readonly string[], input?: string): Promise<ExecResult> {
+    const full = ['--no-replace-objects', ...args];
     return input === undefined
-      ? run('git', args, { cwd: this.cwd })
-      : run('git', args, { cwd: this.cwd, input });
+      ? run('git', full, { cwd: this.cwd })
+      : run('git', full, { cwd: this.cwd, input });
   }
 
   // ---- location -----------------------------------------------------------

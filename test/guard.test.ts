@@ -598,6 +598,19 @@ describe('guard check, the destination on hosts with no credential key', () => {
     }
   });
 
+  // Before repown.account, `use` pinned `credential.ssh://github.com.username` on
+  // an SSH remote, and the guard read the account from it. Those clones must keep
+  // their destination check after an upgrade, not quietly lose it.
+  test('an SSH clone pinned by an older repown keeps its destination check', async () => {
+    box.git('config', '--local', 'credential.ssh://github.com.username', 'pinned-account');
+    try {
+      assert.equal((await pushTo('git@github.com:someone-else/repo.git')).length, 1);
+      assert.deepEqual(await pushTo('git@github.com:pinned-account/repo.git'), []);
+    } finally {
+      box.git('config', '--local', '--unset', 'credential.ssh://github.com.username');
+    }
+  });
+
   // "Per repository, explicitly" (DECISIONS §3): a global allowOwner would
   // silently widen every clone on the machine.
   test('repown.allowOwner in GLOBAL config does not widen this clone', async () => {

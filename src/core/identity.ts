@@ -14,6 +14,7 @@
 // NO NAMES OR ADDRESSES APPEAR IN THIS FILE.
 
 import type { Git, ConfigScope } from './git.ts';
+import { credentialPrefix, type GitUrl } from './url.ts';
 
 export const NAME_KEY = 'user.name';
 export const EMAIL_KEY = 'user.email';
@@ -24,6 +25,16 @@ export const USE_CONFIG_ONLY_KEY = 'user.useConfigOnly';
  * the guard's destination check needs it everywhere.
  */
 export const ACCOUNT_KEY = 'repown.account';
+
+/**
+ * `credential.<scheme>://<host>.username`, which repown used to write for EVERY
+ * remote -- SSH included -- before repown.account existed. Read as the account
+ * when repown.account is missing, so clones pinned back then keep their
+ * destination check; removed by `off`.
+ */
+export function legacyAccountKey(url: GitUrl): string {
+  return 'credential.' + credentialPrefix(url) + '.username';
+}
 
 export interface IdentityValues {
   readonly name: string;

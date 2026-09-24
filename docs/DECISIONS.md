@@ -459,9 +459,12 @@ back and exits 0, which would make a path nobody runs hooks from look installed.
   side. A commit fetched from a private `url` is then excluded when pushing to a
   public `pushurl`. The same holds for a stale ref (`git fetch --prune` corrects
   it) and, on a mirror branch, for any private remote (§3).
-- **A clone pinned before `repown.account` existed** has no account for the
-  destination check on hosts without a credential key. The guard prints
-  `destination not checked` until `repown use` runs again there.
+- **A clone pinned before `repown.account` existed.** Older versions wrote
+  `credential.<scheme>://<host>.username` for every remote, SSH included. The guard
+  still reads that as the account when `repown.account` is missing, and `off`
+  removes it. A clone with neither key (Azure DevOps, generic hosts) has no account
+  to compare. The guard prints `destination not checked` until `repown use` runs
+  again there.
 - **git versions.** CI tests the runners' current git; older versions are not
   tested, and no minimum is claimed. `--path-format` (git 2.31) was removed
   because older git echoes an unknown flag back and exits 0. The test suite

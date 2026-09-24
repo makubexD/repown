@@ -18,7 +18,7 @@
 import type { Git, CommitIdentity } from '../git.ts';
 import { parseGitUrl } from '../url.ts';
 import { providerFor } from '../hosts/index.ts';
-import { readIdentity } from '../identity.ts';
+import { readIdentity, legacyAccountKey } from '../identity.ts';
 
 /** The null object id: 40 zeros, or 64 in a SHA-256 repository. */
 const isZero = (sha: string): boolean => /^0+$/.test(sha);
@@ -79,7 +79,8 @@ export async function check(input: CheckInput): Promise<Refusal[]> {
     }];
   }
   const owner = url ? provider.ownerOf(url) : null;
-  const allowed = await allowedOwners(input.git, identity.owner ?? identity.account);
+  const legacy = !identity.owner && url ? await input.git.getConfig(legacyAccountKey(url), 'local') : null;
+  const allowed = await allowedOwners(input.git, identity.owner ?? identity.account ?? legacy);
   const destination = checkDestination({ url, owner, allowed }, input.onNote);
   return [...destination, ...await checkCommits(input, identity.email)];
 }

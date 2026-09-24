@@ -427,6 +427,13 @@ describe('repown off', () => {
     assert.doesNotMatch(run.stdout, /octocat@example\.invalid/, 'that is the identity it just removed');
   });
 
+  test('also removes the SSH credential key an older repown pinned', () => {
+    box.git('remote', 'set-url', 'origin', 'git@github.com:octocat/project.git');
+    box.git('config', '--local', 'credential.ssh://github.com.username', 'octocat');
+    assert.equal(repown(['off'], { cwd: box.dir }).status, 0);
+    assert.equal(local('credential.ssh://github.com.username'), '');
+  });
+
   test('with the guard on, it says every push will now be refused', () => {
     repown(['guard', 'on'], { cwd: box.dir });
     const run = repown(['off'], { cwd: box.dir });

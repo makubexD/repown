@@ -6,7 +6,7 @@
 // without being able to break anything else.
 
 import { inspectRepo, type RepoState } from '../core/inspect.ts';
-import { clearIdentity } from '../core/identity.ts';
+import { clearIdentity, legacyAccountKey } from '../core/identity.ts';
 import { gitFor, type Args } from '../ui/args.ts';
 import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
@@ -21,8 +21,11 @@ export default {
     if (!repo.isRepo) { out.fail('off', 'Not a git repository: ' + git.cwd); return 1; }
 
     const id = repo.identity;
-    const had = id.name ?? id.email ?? id.owner ?? id.account;
-    const failed = (await clearIdentity(git, repo.credentialKeys)).filter((outcome) => !outcome.written);
+    const legacy = repo.url ? [legacyAccountKey(repo.url)] : [];
+    const had = id.name ?? id.email ?? id.owner ?? id.account ??
+      (legacy[0] ? await git.getConfig(legacy[0], 'local') : null);
+    const keys = [...new Set([...repo.credentialKeys, ...legacy])];
+    const failed = (await clearIdentity(git, keys)).filter((outcome) => !outcome.written);
     if (failed.length > 0) {
       out.fail('off', 'could not remove ' + failed.map((outcome) => outcome.key).join(', '));
       out.detail('this clone is still (partly) pinned -- is .git/config locked by another git?');

@@ -295,6 +295,15 @@ describe('repown status, doctor and fix: exit codes and what they change', () =>
     assert.equal(repown([], { cwd: box.dir }).status, 0);
   });
 
+  // A submodule is its own clone, with its own config and hooks: this clone's
+  // guard never sees its commits, even when `git push --recurse-submodules`
+  // publishes them.
+  test('status says that submodules need pinning and guarding of their own', () => {
+    writeFileSync(join(box.dir, '.gitmodules'), '[submodule "lib"]\n\tpath = lib\n\turl = https://github.com/octocat/lib.git\n');
+    const run = repown([], { cwd: box.dir });
+    assert.match(run.stderr, /submodule/);
+  });
+
   test('doctor exits 1 and names `repown fix` when gh is the credential helper', () => {
     box.writeGlobalConfig(GH_HELPER);
     const run = repown(['doctor'], { cwd: box.dir });

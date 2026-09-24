@@ -12,6 +12,8 @@
 import { inspectRepo, inspectAuth, activeAccountLabel, type RepoState, type AuthState } from '../core/inspect.ts';
 import { isPinned } from '../core/identity.ts';
 import { allowedOwners, shellWord } from '../core/guard/check.ts';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { gitFor, type Args } from '../ui/args.ts';
 import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
@@ -92,7 +94,19 @@ function identityProblems(repo: RepoState): Problem[] {
 async function reportWarnings(repo: RepoState, auth: AuthState): Promise<void> {
   await ownerWarning(repo);
   guardWarning(repo);
+  submoduleWarning(repo);
   ghWarning(repo.identity.account, auth);
+}
+
+/**
+ * A submodule is a clone of its own, with its own config and hooks. This clone's
+ * guard never sees its commits -- not even when `git push --recurse-submodules`
+ * publishes them from here.
+ */
+function submoduleWarning(repo: RepoState): void {
+  if (!repo.root || !existsSync(join(repo.root, '.gitmodules'))) return;
+  out.warn('submodule', 'this clone has submodules; each is a separate clone with its own identity and hook.');
+  out.detail('pin and guard each one too:  git submodule foreach "repown use <account> && repown guard on"');
 }
 
 /**

@@ -30,7 +30,7 @@ export default {
     out.field('stored accounts', storedAccountsLabel(auth), 18);
     out.field('gh accounts', ghAccountsLabel(auth), 18);
     out.field('gh active', activeAccountLabel(auth), 18);
-    if (auth.gcmPath) out.line(out.dim('  ' + ' '.repeat(18) + ' ' + auth.gcmPath));
+    out.field('GCM', auth.gcmPath ?? 'not found', 18);
     out.line();
 
     if (auth.ghIsHelper) return diagnoseGhHelper(auth);

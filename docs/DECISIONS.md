@@ -452,7 +452,8 @@ back and exits 0, which would make a path nobody runs hooks from look installed.
 - **Submodules are separate clones.** A submodule has its own config and hooks. If it
   isn't pinned and guarded itself, `git push --recurse-submodules` (or
   `push.recurseSubmodules`) publishes its commits unchecked, while the
-  superproject's guard reports `on`. Pin and guard each submodule like any clone.
+  superproject's guard reports `on`. `repown` warns when a clone has submodules;
+  pin and guard each one like any clone.
 - **"Already on the remote" is read from the remote-tracking refs.** With a
   `pushurl` pointing somewhere other than `url`, those refs describe the fetch
   side. A commit fetched from a private `url` is then excluded when pushing to a

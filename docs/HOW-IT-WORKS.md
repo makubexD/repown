@@ -36,9 +36,11 @@ changed only by `repown fix`, and only after it shows you what it removes.
 | Set up a new machine | [1](#1-set-up-the-machine) |
 | Save an account once, use it everywhere | [2](#2-remember-an-account) |
 | Make a clone belong to an account | [3](#3-pin-a-clone) |
+| Use Azure DevOps, SSH or another host | [3](#3-pin-a-clone) |
 | Work in account X, then Y, then Z | [4](#4-switch-accounts) |
 | Check who I am in this clone | [5](#5-check-where-you-are) |
 | Get asked for a password, or do my first push | [6](#6-commit-and-first-push) |
+| Push failed right after signing in (SSO) | [6](#6-commit-and-first-push) |
 | Understand what the guard checks | [7](#7-push-what-the-guard-checks) |
 | Fix a push the guard refused | [8](#8-push-refused-and-the-fix) |
 | Work with a teammate who doesn't use repown | [9](#9-a-teammate-without-repown) |
@@ -84,16 +86,16 @@ after that is one word.
 <details><summary>Show how</summary>
 
 ```
-repown accounts add octocat              # asks, suggesting gh's name and noreply address
+repown accounts add octocat              # asks; with gh signed in, suggests <id>+octocat@users.noreply.github.com
 repown accounts add octocat --name "Octo Cat" --email octocat@users.noreply.github.com
 repown accounts add octo-work --host azdo
 repown accounts list
 repown accounts rm octocat               # clones already pinned keep their identity
 ```
 
-The registry is `%APPDATA%\repown\accounts.json` on Windows and `~/.config/repown` on
-Linux and macOS. `REPOWN_CONFIG_DIR` overrides both. It stores only a name and an
-email, never a secret.
+The registry is `%APPDATA%\repown\accounts.json` on Windows and
+`$XDG_CONFIG_HOME/repown` (default `~/.config/repown`) on Linux and macOS.
+`REPOWN_CONFIG_DIR` overrides both. It stores only a name and an email, never a secret.
 </details>
 
 ### 3. Pin a clone
@@ -282,18 +284,23 @@ Override this one push with: git push --no-verify
 
 | 🔴 Refusal | Typical cause | Fix |
 | --- | --- | --- |
-| **foreign commit**, yours | committed before pinning, under the machine default | `git commit --amend --reset-author` (older commits: `git rebase -i`, amending each), then push again |
+| **foreign commit**, yours | committed before pinning, or by an IDE with its own identity | last commit: `git commit --amend --reset-author --no-edit`; older ones: `git rebase <last-good> --exec "git commit --amend --reset-author --no-edit"`; then push again |
 | **foreign commit**, a teammate's | cherry-picked, rebased or fetched from their fork, and not on the remote yet | let them push it, then pull; don't re-author their work ([card 9](#9-a-teammate-without-repown)) |
 | **wrong owner** `push goes to "…"` | an organisation repository, or the wrong remote | organisation: `git config --local --add repown.allowOwner octo-org` |
 | **env** `GH_TOKEN is set` | a token or email variable overrides the identity | unset it, then push again |
 | **not pinned** | the clone has no identity, e.g. after `repown off` | `repown use <account>`, or `repown guard off` |
 | **tagger** | an annotated tag made under another address | re-tag; for a fork pushing upstream's tags: `git config --local --add repown.allowTagger <address>` |
 | **unreadable** | a force-push over a tip you never fetched, or a missing object | `git fetch`, then push again |
-| ⚪ `destination not checked` | a local path, or a host with no owner in its URL | nothing: a note, not a refusal |
+| ⚪ `destination not checked` | a local path, a URL with no owner, or no account pinned | nothing: a note, not a refusal; `repown use` again pins the account |
 
 **A fork's mirror branch** is a branch that only fast-forwards to upstream. Set
-`git config --local repown.mirrorBranch master` and upstream's commits there stop
-counting, while a commit made here is still refused.
+`git config --local repown.mirrorBranch master` and commits already on any remote stop
+counting there, while a commit made here is still refused. Fetch upstream first, and
+don't set it on a clone with a private remote.
+
+`repown.allowOwner`, `repown.allowTagger` and `repown.mirrorBranch` count only in the
+clone's own config, never global. A tag's tagger is checked even on a public commit,
+because whether the tag itself is public can't be told offline.
 
 **Skip the guard for one push:** `git push --no-verify`. Only do this when you mean to
 publish those addresses.
@@ -341,6 +348,7 @@ whole team, use a server-side rule on author addresses.
 | --- | --- |
 | A `pre-push` hook repown didn't write already exists | `guard on` and `guard off` leave it alone and say so |
 | `core.hooksPath` is set (husky, lefthook…) | never writes or deletes there; `repown` warns and prints the line below |
+| A repown hook left in `.git/hooks` while `core.hooksPath` is set | `guard off` still removes it, so it can't come back when `core.hooksPath` is unset |
 
 To guard such a clone, call repown from that tool's `pre-push` hook, passing stdin through:
 
@@ -369,10 +377,22 @@ repown off && repown use octo-work   # re-point this clone to another account
 | registry: name and email per account | ✅ on this machine (copy it to a new one) |
 | OS credential store: one credential per account | ✅ on this machine |
 | global `.gitconfig`: helper, default identity | ✅ untouched by repown, except `repown fix` |
+| gh's `hosts.yml`: accounts and the active one (gh CLI only, not git) | ✅ untouched by repown, except `use --gh` |
 
-`scan`'s identity column: `pinned` · `INHERITED` (not pinned) · `commits only`
-(name and email, no account). The guard stops **new** wrong addresses; it can't
-rewrite history.
+`scan` looks 3 levels deep by default (`--depth`), and scans the current directory when
+given none. It shows email domains and counts rather than addresses, because its output
+gets pasted into chats. A count is how often an address appears as author or committer
+across every branch, not a number of commits.
+
+| Column | Can read |
+| --- | --- |
+| identity | `pinned` · `INHERITED` (not pinned) · `commits only` (name and email, no account) |
+| owner | `?` (no owner in the URL) · `no remote` (then host is `-`) |
+| identities in history | `-` (empty history) · `unknown` (git couldn't read it) |
+
+A directory `scan` can't open is reported, not skipped. The identity column is a fact,
+not a verdict: a shared repository carries many addresses. The guard stops **new** wrong
+addresses; it can't rewrite history.
 </details>
 
 ### 12. Uninstall, or repown missing
@@ -399,7 +419,9 @@ To uninstall cleanly:
 repown scan <dir>        # the "guard" column shows where it's on
 repown guard off         # in each of those clones
 repown off               # optional: also drop the pinned identity
-npm uninstall -g repown  # or: npm unlink -g repown
+npm unlink -g repown     # or: npm uninstall -g repown
 ```
+
+repown writes nothing else to a clone: no tracked file, nothing that gets committed.
 
 </details>

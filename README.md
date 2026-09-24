@@ -289,10 +289,26 @@ clone with a private remote shouldn't set a mirror branch. An organisation is ne
 name, so organisation repositories need `repown.allowOwner`; `repown use` prints the
 exact command when it sees an unknown owner.
 
-**Leave the guard off on shared repositories.** It refuses *any* foreign author,
-and pushing a colleague's commit is ordinary work there. `repown use` alone still
-pins your identity; a server-side ruleset on author addresses is the right control
-for a team.
+### Working with people who don't use repown
+
+repown changes only your clone's `.git/config` and `.git/hooks`, and git never
+pushes either of them. A collaborator's clone of the same repository sees nothing
+of it and needs nothing installed. Commits carry each author's own address,
+exactly as without repown.
+
+Your guard skips every commit the remote already has on any branch. So pulling a
+collaborator's pushed work, merging their pushed branch, and pushing the result
+all pass. What it refuses is a commit of theirs that the remote has never seen:
+- one you cherry-picked;
+- one you rebased (rebasing gives it a new identity);
+- one you fetched straight from their clone or their fork.
+
+That commit would be published by you, carrying their address.
+
+**Leave the guard off on shared repositories where that is your normal work**, for
+example a maintainer who applies contributors' patches locally. `repown use` alone
+still pins your identity. For a team, a server-side ruleset on author addresses is
+the right control.
 
 ## Hosts
 

@@ -510,3 +510,88 @@ describe('help shows an optional positional as optional', () => {
     assert.match(run.stdout, /repown scan \[<dir>\.\.\.\]/);
   });
 });
+
+// One shared repository, two people: A pinned and guarded by repown, B with plain
+// git and no repown at all. Nothing repown does may reach B, and A must be able to
+// push work that already contains B's pushed commits.
+describe('two collaborators, only one using repown', () => {
+  const A = 'alice@example.invalid';
+  const B = 'bob@example.invalid';
+  let box: Sandbox;
+  let root: string;
+  const savedConfigDir = process.env['REPOWN_CONFIG_DIR'];
+  const at = (dir: string) => (...args: string[]): string => {
+    const run = spawnSync('git', args, { cwd: join(root, dir), encoding: 'utf8' });
+    if (run.status !== 0) throw new Error('git ' + args.join(' ') + ' in ' + dir + ': ' + run.stderr);
+    return run.stdout.trim();
+  };
+  const push = (dir: string, ...args: string[]) =>
+    spawnSync('git', ['push', '-q', 'origin', ...args], { cwd: join(root, dir), encoding: 'utf8' });
+
+  before(() => {
+    box = sandbox();
+    root = join(box.dir, '..');
+    process.env['REPOWN_CONFIG_DIR'] = join(root, 'repown-config');
+    box.git('init', '-q', '--bare', '-b', 'main', join(root, 'shared.git'));
+    for (const [dir, email] of [['a', A], ['b', B]] as const) {
+      box.git('clone', '-q', join(root, 'shared.git'), join(root, dir));
+      at(dir)('config', '--local', 'user.name', dir);
+      at(dir)('config', '--local', 'user.email', email);
+    }
+    writeFileSync(join(root, 'b', 'README'), 'project\n');
+    at('b')('add', 'README');
+    at('b')('commit', '-q', '-m', 'B starts the project');
+    assert.equal(push('b', 'HEAD:main').status, 0);
+
+    assert.equal(repown(['use', 'alice', '--name', 'a', '--email', A], { cwd: join(root, 'a') }).status, 0);
+    assert.equal(repown(['guard', 'on'], { cwd: join(root, 'a') }).status, 0);
+    at('a')('pull', '-q', 'origin', 'main');
+  });
+  after(() => {
+    if (savedConfigDir === undefined) delete process.env['REPOWN_CONFIG_DIR'];
+    else process.env['REPOWN_CONFIG_DIR'] = savedConfigDir;
+    box.dispose();
+  });
+
+  test('repown leaves A\'s working tree clean, so nothing of it can be committed', () => {
+    assert.equal(at('a')('status', '--porcelain'), '');
+  });
+
+  test('A pushes own work on top of B\'s pushed commits', () => {
+    at('a')('commit', '-q', '--allow-empty', '-m', 'A adds a feature');
+    const run = push('a', 'HEAD:main');
+    assert.equal(run.status, 0, run.stderr);
+  });
+
+  test('A merges B\'s pushed branch and pushes the merge', () => {
+    at('b')('pull', '-q', 'origin', 'main');
+    at('b')('checkout', '-q', '-b', 'feature');
+    at('b')('commit', '-q', '--allow-empty', '-m', 'B works on a branch');
+    assert.equal(push('b', 'feature').status, 0);
+    at('a')('fetch', '-q', 'origin');
+    at('a')('merge', '-q', '--no-ff', '-m', 'A merges B', 'origin/feature');
+    const run = push('a', 'HEAD:main');
+    assert.equal(run.status, 0, run.stderr);
+  });
+
+  test('B, without repown, pulls and pushes as usual and receives nothing of it', () => {
+    at('b')('checkout', '-q', 'main');
+    at('b')('pull', '-q', 'origin', 'main');
+    at('b')('commit', '-q', '--allow-empty', '-m', 'B again');
+    assert.equal(push('b', 'HEAD:main').status, 0);
+    assert.equal(at('b')('ls-tree', '-r', '--name-only', 'HEAD'), 'README');
+    assert.equal(at('b')('config', '--local', '--get-regexp', '^(user|repown|credential)\\.'),
+      'user.name b\nuser.email ' + B);
+    assert.equal(existsSync(join(root, 'b', '.git', 'hooks', 'pre-push')), false);
+  });
+
+  test('A pushing a copy of B\'s commit that the remote never had is refused, by design', () => {
+    at('a')('pull', '-q', '--no-rebase', 'origin', 'main');
+    at('b')('commit', '-q', '--allow-empty', '-m', 'B, never pushed');
+    at('a')('fetch', '-q', join(root, 'b'), 'main');
+    at('a')('cherry-pick', '--allow-empty', 'FETCH_HEAD');
+    const run = push('a', 'HEAD:main');
+    assert.notEqual(run.status, 0);
+    assert.match(run.stderr, /bob@example\.invalid/);
+  });
+});

@@ -35,4 +35,5 @@ push unguarded.
 - There is only ever one implementation, and it's always current.
 - Changing the `PATH` or reinstalling somewhere else can't quietly disable the guard.
 - Removing repown before running `repown guard off` leaves hooks that refuse every push.
-  The refusal prints the way out: delete the hook, or use `git push --no-verify` once.
+  The refusal prints three ways out: reinstall and run `repown guard on`, delete the
+  hook, or use `git push --no-verify` once.

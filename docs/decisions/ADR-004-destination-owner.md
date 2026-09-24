@@ -8,9 +8,9 @@ A push can carry the right identity to the wrong repository. The guard compares 
 destination's owner, parsed from the URL, with the clone's account, `repown.account`.
 `repown use` writes that key on every host.
 
-Before `repown.account` existed, the account came only from the credential key. Azure
-DevOps and generic hosts never had that key. On those hosts the check had nothing to
-compare, and it passed silently.
+Before `repown.account` existed, the guard looked for the account only in the host's
+credential key, which only GitHub over https is pinned with. On Azure DevOps, generic
+hosts and SSH remotes the check had nothing to compare, and it passed silently.
 
 An organisation's name is never an account name. On its own, the check would refuse
 every push to an organisation's repository, which covers most repositories at work.
@@ -31,7 +31,7 @@ every push to an organisation's repository, which covers most repositories at wo
 
 | Option | Why not |
 | --- | --- |
-| Look up organisation membership from the host API | Puts a network call and an auth dependency in the push path, where a rate limit or an offline laptop becomes a failed push. |
+| Look up organisation membership from the host API | Puts a network call and an auth dependency in the push path, where a rate limit or an offline laptop becomes a failed push. An explicit local list is offline, instant and readable. |
 | Read `allowOwner` from global config | Widens every clone at once. |
 
 ## Consequences
@@ -40,7 +40,10 @@ every push to an organisation's repository, which covers most repositories at wo
 - `repown use` and `repown` print the exact `git config --local --add repown.allowOwner <org>`
   to run when they see an owner that isn't allowed.
 - The check compares the owner, not the host. A clone pinned to `octocat` passes a push
-  to `gitlab.com/octocat/...`. Commit identity is still checked there.
+  to `gitlab.com/octocat/...` or to an Enterprise host's `octocat`. Commit identity is
+  still checked there.
 - Clones pinned by older versions still keep their destination check. Those versions
   wrote `credential.<scheme>://<host>.username` for every remote, SSH included. The guard
-  reads that as the account when `repown.account` is missing.
+  reads that as the account when `repown.account` is missing, and `repown off` removes it.
+  `repown` (status) does not read it, so on such a clone it can stay quiet about an owner
+  the guard refuses. Running `repown use` again removes the difference.

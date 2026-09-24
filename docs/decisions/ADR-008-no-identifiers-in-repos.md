@@ -11,18 +11,12 @@ A repository may be public, and anything committed to one is published permanent
 - The tool contains no identifiers.
 - Everything personal lives in `.git/config`, which git can't track, or in the
   per-machine registry ([ADR-007](ADR-007-no-profile-store.md)).
-- Examples use `octocat`, `octo-org` and `*.example.invalid`.
+- Examples use `octocat`, `octo-org`, `octo-work` and `*.example.invalid`.
 - `repown scan` prints domains and counts by default, not addresses, because its output
   gets pasted into chats. `--emails` shows the addresses.
 - On GitHub, `repown use` suggests the account's noreply address,
   `<id>+<login>@users.noreply.github.com`. That address is meant to be published and
   still links the commit to the account.
-
-## Alternatives considered
-
-| Option | Why not |
-| --- | --- |
-| A tracked per-repo identity file | Publishes the address with the repository. |
 
 ## Consequences
 

@@ -31,7 +31,8 @@ another branch publishes nothing new. Without this, a fork that merges upstream 
 release branch would be refused for every upstream commit.
 
 The guard also refuses when:
-- `GH_TOKEN` or `GITHUB_TOKEN` is set: gh's helper then skips its username check entirely;
+- `GH_TOKEN` or `GITHUB_TOKEN` is set: gh's helper then sets `gotUser = "x-access-token"`
+  and skips its username check entirely;
 - `GIT_AUTHOR_EMAIL` or `GIT_COMMITTER_EMAIL` is set: each quietly overrides the config
   that was just checked.
 

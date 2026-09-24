@@ -18,7 +18,7 @@ where that was measured:
 
 | Host | Commit identity | Guard | Credential pinning |
 | --- | --- | --- | --- |
-| GitHub | yes | yes | yes over https ([ADR-001](ADR-001-credential-manager-not-gh.md)); over SSH, the SSH key decides |
+| GitHub | yes | yes | yes over https ([ADR-001](ADR-001-credential-manager-not-gh.md)); over SSH, the SSH key decides and no helper is consulted |
 | Azure DevOps | yes | yes | **no** |
 | anything else | yes | yes | no |
 
@@ -38,7 +38,8 @@ on the legacy form. The guard would then let a push to another organisation pass
 Its credentials are left alone because what was probed didn't support pinning:
 - `credential.https://dev.azure.com.usehttppath=true` ships in Git for Windows' system
   config, but doesn't apply to a `*.visualstudio.com` remote.
-- With `credential.azreposcredentialtype=pat`, GCM's `azure-repos` namespace stays empty.
+- With `credential.azreposcredentialtype=pat`, GCM's `azure-repos` namespace stays empty:
+  the PAT is stored under the generic credential key and never appears there.
 
 ## Alternatives considered
 

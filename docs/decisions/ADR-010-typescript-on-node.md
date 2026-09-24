@@ -5,7 +5,8 @@
 ## Context
 
 The predecessor was PowerShell. The case for keeping it: the logic is mostly running
-subprocesses and formatting, and the hook needed only `sh` and `pwsh`.
+subprocesses and formatting, and the hook needed only `sh` and `pwsh`, both guaranteed
+on a Windows git machine.
 
 The case that won: an npm package is a much better answer to "available on every
 machine, in every project". The extra dependency the hook would have mostly disappears,
@@ -19,8 +20,9 @@ because a machine that installed the tool already has Node.
   runs under plain `node` with no build step, and the tests import `src/` directly.
 - **Zero runtime dependencies.** The tool reads credential configuration, so the
   smallest possible supply chain is part of its job.
-- **Evidence carried over.** Each finding measured in the PowerShell version was proven
-  again in TypeScript before that version was deleted:
+- **Evidence carried over.** The real cost of the move was that about 900 lines of
+  measured logic lost their proof. Each finding was proven again in TypeScript before
+  the PowerShell version was deleted:
 
   | Finding | Proven by |
   | --- | --- |
@@ -36,15 +38,17 @@ because a machine that installed the tool already has Node.
 | Option | Why not |
 | --- | --- |
 | Keep PowerShell | A shell module is harder to distribute than an npm package. |
-| Full TypeScript with a build step for tests | Loses the ability to run tests on `src/` directly. |
 
 ## Consequences
 
 **Two Node versions.**
 - **Running** needs Node 20, because the package ships compiled JavaScript.
 - **Developing** needs 22.18+:
-  - the tests need type stripping without a flag, which 22.18 is the first 22.x to ship;
-  - `npm test` passes a glob to `node --test`, which Node 20 doesn't expand.
+  - the tests need type stripping without a flag, which 22.18 is the first 22.x to ship
+    (22.6–22.17 strip types only behind `--experimental-strip-types`, which `npm test`
+    doesn't pass);
+  - `npm test` passes a glob to `node --test`, which Node 20 doesn't expand (it reports
+    `Could not find 'test/*.test.ts'`).
 
 **`engines` stays at `>=20`.** CI's install job proves it:
 - it packs the tarball;

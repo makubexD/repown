@@ -6,7 +6,8 @@ GitHub accounts and five Azure Repos clones. Where something wasn't measured, th
 says so.
 
 **The name:** repo + own. Each repository owns its identity, so any clone, on any
-account, host or sign-in method, can be returned to without switching anything.
+account, host or sign-in method, can be returned to without switching anything. The
+name is also free on npm.
 
 | ADR | Decision |
 | --- | --- |
@@ -44,16 +45,21 @@ rewrite an accepted ADR. To reverse one, write a new ADR and mark the old one
   SSO-authorized for an organisation looks fine until a push or fetch against that
   organisation fails ([ADR-013](ADR-013-deliberately-not-done.md)).
 - **Submodules are separate clones.** Unless each one is pinned and guarded,
-  `git push --recurse-submodules` publishes its commits unchecked while the
+  `git push --recurse-submodules` (or `push.recurseSubmodules`) publishes its commits unchecked while the
   superproject's guard reads `on`. `repown` warns when a clone has submodules.
 - **"Already on the remote" is read from remote-tracking refs.** With a `pushurl`
   pointing somewhere other than `url`, those refs describe the fetch side. A commit
   fetched from a private `url` is then treated as already public when pushing to a
   public `pushurl`. The same applies to stale refs ([ADR-002](ADR-002-guard-checks-commits.md))
   and to a mirror branch ([ADR-006](ADR-006-mirror-exemption.md)).
-- **A clone with no account to compare** prints `destination not checked` until
-  `repown use` runs again there. That covers Azure DevOps and generic hosts pinned
-  before `repown.account` existed ([ADR-004](ADR-004-destination-owner.md)).
+- **A clone with nothing to compare the destination against** (no `repown.account`, no
+  legacy credential key, no `repown.allowOwner`) prints `destination not checked` until
+  `repown use` runs again there ([ADR-004](ADR-004-destination-owner.md)).
+- **Only email addresses are compared, never names.** A commit carrying the right address
+  under another name passes.
+- **Pushing to a URL instead of a remote name** (`git push https://… main`) matches no
+  remote-tracking refs, so a new branch has its whole history checked and any foreign
+  ancestor is refused.
 - **The destination check compares the owner, not the host.**
 - **What git's parser shows is what gets checked.**
   - An object crafted with `hash-object --literally` can carry a second

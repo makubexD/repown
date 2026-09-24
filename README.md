@@ -68,7 +68,8 @@ git clone https://github.com/makubexD/repown.git
 cd repown && npm install && npm run build && npm link
 ```
 
-`npm link` puts `repown` on your PATH. To uninstall, run `repown guard off` in each
+`npm link` puts `repown` on your PATH. The package is marked `private` and kept off npm
+until its commands settle. To uninstall, run `repown guard off` in each
 guarded clone **first**: a guard that can't find repown refuses every push
 ([the steps](docs/HOW-IT-WORKS.md#12-uninstall-or-repown-missing)).
 
@@ -178,8 +179,9 @@ npm run build     # tsc, also the typecheck
 - **Node:** developing needs Node 22.18+, though running needs only 20
   ([ADR-010](docs/decisions/ADR-010-typescript-on-node.md)).
 - **Dependencies:** zero at runtime, by choice.
-- **Demo:** `demo/demo.tape` is a [VHS](https://github.com/charmbracelet/vhs) script
-  using placeholder identities. No GIF is committed yet.
+- **Demo:** `vhs demo/demo.tape` runs a [VHS](https://github.com/charmbracelet/vhs)
+  script with placeholder identities in a throwaway sandbox. No GIF is committed yet,
+  because VHS hasn't rendered on the machines tried so far.
 - **Further reading:**
   - [CLAUDE.md](CLAUDE.md) has the contributor rules.
   - [docs/decisions/](docs/decisions/README.md) explains every non-obvious choice.

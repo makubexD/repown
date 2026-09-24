@@ -174,7 +174,7 @@ describe('every other doc runs only real commands, actions and options', () => {
   const groups = groupActions(commands);
   const known = new Set([...commands, 'help']);
 
-  for (const path of DOCS.filter((doc) => !doc.endsWith('README.md'))) {
+  for (const path of DOCS.filter((doc) => doc !== join(ROOT, 'README.md'))) {
     test(name(path), () => {
       const text = read(path);
       const words = invocations(text).map(([word = '']) => word).filter((word) => WORD.test(word) && !known.has(word));
@@ -185,16 +185,28 @@ describe('every other doc runs only real commands, actions and options', () => {
   }
 });
 
-/** GitHub's heading anchor: lowercase, punctuation and emoji dropped, spaces to hyphens. */
+/** GitHub's heading anchor: closing #s, punctuation and emoji dropped, lowercase, spaces to hyphens. */
 function slug(heading: string): string {
-  return heading.trim().toLowerCase().replace(/[^\p{L}\p{N}\p{M} _-]/gu, '').replaceAll(' ', '-');
+  return heading.replace(/\s+#+\s*$/, '').trim().toLowerCase()
+    .replace(/[^\p{L}\p{N}\p{M} _-]/gu, '').replaceAll(' ', '-');
 }
 
-/** Every anchor a markdown file offers, outside code fences, with GitHub's -1, -2 for repeats. */
+/** The markdown outside fenced code blocks (``` or ~~~, three or more). */
+function prose(markdown: string): string {
+  let fence: string | null = null;
+  return markdown.split('\n').filter((line) => {
+    const marker = /^\s{0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence === null && marker) fence = marker[0]!.repeat(marker.length);
+    else if (fence !== null && marker?.startsWith(fence)) fence = null;
+    else return fence === null;
+    return false;
+  }).join('\n');
+}
+
+/** Every anchor a markdown file offers, with GitHub's -1, -2 for repeats. */
 function anchors(markdown: string): Set<string> {
   const seen = new Map<string, number>();
-  const prose = markdown.split('```').filter((_, index) => index % 2 === 0).join('\n');
-  return new Set([...prose.matchAll(/^#{1,6}\s+(.+)$/gm)].map((match) => {
+  return new Set([...prose(markdown).matchAll(/^#{1,6}\s+(.+)$/gm)].map((match) => {
     const base = slug(match[1]!);
     const count = seen.get(base) ?? 0;
     seen.set(base, count + 1);
@@ -202,23 +214,38 @@ function anchors(markdown: string): Set<string> {
   }));
 }
 
-/** Relative `[text](target)` links in `path` whose file or anchor does not exist. */
+/**
+ * Link targets: inline `[a](b)`, `[a](<b>)` and `[a](b "title")`, and reference
+ * definitions `[a]: b`. Raw HTML `<a href>` is not used in these docs, so not read.
+ */
+function linkTargets(markdown: string): string[] {
+  const inline = /\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g;
+  const reference = /^\s{0,3}\[[^\]]+\]:\s*<?([^\s>]+)>?/gm;
+  const text = prose(markdown);
+  return [...text.matchAll(inline), ...text.matchAll(reference)].map((match) => match[1]!);
+}
+
+/** Relative links in `path` whose file or anchor does not exist. Case is only enforced on Linux CI. */
 function brokenLinks(path: string): string[] {
-  const prose = read(path).split('```').filter((_, index) => index % 2 === 0).join('\n');
-  return [...prose.matchAll(/\]\(([^)\s]+)\)/g)].map((match) => match[1]!)
-    .filter((target) => !/^[a-z]+:/i.test(target))
-    .filter((target) => {
-      const [file = '', anchor] = target.split('#');
-      const resolved = file ? join(dirname(path), file) : path;
-      if (!existsSync(resolved)) return true;
-      return anchor !== undefined && resolved.endsWith('.md') && !anchors(read(resolved)).has(anchor);
-    });
+  return linkTargets(read(path)).filter((target) => !/^[a-z]+:/i.test(target)).filter((target) => {
+    const [file = '', anchor] = target.split('#');
+    const resolved = file ? join(dirname(path), decodeURIComponent(file)) : path;
+    if (!existsSync(resolved)) return true;
+    return anchor !== undefined && resolved.endsWith('.md') && !anchors(read(resolved)).has(anchor);
+  });
 }
 
 describe('links and decision references', () => {
   test('slug and anchors follow GitHub, repeats and fenced headings included', () => {
     assert.equal(slug('7. Push: what the `guard` checks'), '7-push-what-the-guard-checks');
-    assert.deepEqual([...anchors('# A\n## A\n```\n# B\n```\n')], ['a', 'a-1']);
+    assert.equal(slug('🟢 Pass'), '-pass');
+    assert.equal(slug('Foo ##'), 'foo');
+    assert.deepEqual([...anchors('# A\n## A\n```\n# B\n```\n~~~~\n# C\n```\n~~~~\n')], ['a', 'a-1']);
+  });
+
+  test('linkTargets reads titled, angle-bracket and reference links', () => {
+    const fixture = '[a](x.md "t") [b](<y.md>) [c](z.md#h)\n[d]: w.md\n```\n[e](skip.md)\n```\n';
+    assert.deepEqual(linkTargets(fixture), ['x.md', 'y.md', 'z.md#h', 'w.md']);
   });
 
   for (const path of DOCS) {

@@ -22,7 +22,6 @@ that refuses ordinary work gets switched off, and the identity pin often goes wi
 | Option | Why not |
 | --- | --- |
 | Turn on the guard with `repown use` | Refuses ordinary work in shared repositories, so it gets switched off. |
-| A per-author allowlist | Grows without bound, and turns the guard into access control. |
 
 ## Consequences
 

@@ -5,8 +5,9 @@ to its own account (repo-local `user.name`, `user.email`, `repown.account`,
 `credential.<host>.username` where measured, `user.useConfigOnly`), and a `pre-push` hook
 refuses commits authored or committed by anyone else.
 Docs, one purpose each:
-- README.md: the user view (what, why, install, commands). test/docs.test.ts keeps it and
-  every other doc honest.
+- README.md: the user view (what, why, install, commands). test/docs.test.ts checks the
+  commands, options, links and ADR citations in every doc, but not sample output or
+  behaviour claims: check those against the code yourself.
 - docs/HOW-IT-WORKS.md: every scenario with diagrams; update its card when behaviour or
   output changes.
 - **docs/decisions/: one ADR per decision, many measured empirically. Read the relevant
@@ -29,7 +30,7 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - **Strip-only TypeScript:** no enums, namespaces or parameter properties. Relative imports
   end in `.ts`.
 - **Zero runtime dependencies.**
-- **No names or email addresses in the repo.** Use `octocat` and `*.example.invalid`. The
+- **No names or email addresses in the repo.** Use `octocat`, `octo-org`, `octo-work` and `*.example.invalid`. The
   one exception is the owner's GitHub handle, which a public repo's URL, package.json
   and LICENSE can't avoid.
 - **`src/core/exec.ts` is the only place that spawns processes.** It never writes to the
@@ -41,7 +42,7 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   ("gh could not be queried") are a `Result` (`src/core/result.ts`), never null or empty.
 - **Severity (ADR-011):** the guard refuses only what's irreversible (a foreign author,
   committer or tagger, a wrong destination owner, no pinned identity, commits it can't
-  read, `GH_TOKEN`/`GIT_*_EMAIL` set). It ignores credential and gh problems; `repown` and
+  read, `GH_TOKEN`/`GITHUB_TOKEN`/`GIT_*_EMAIL` set). It ignores credential and gh problems; `repown` and
   `repown doctor` report those.
 - **Credential pinning is claimed only where it was measured.** An empty `credentialKeys()`
   means "can't pin", never a guess. Azure DevOps is deliberately unpinned (ADR-009).
@@ -78,4 +79,7 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   `repown <group> <action>` or in a `repown <group> a \| b` list), or when the README shows
   one help doesn't advertise, hidden aliases like `guard enable` included, or passes an
   `--option` that command's help doesn't declare. An action whose help summary says
-  "not for direct use" (`guard check`) is exempt.
+  "not for direct use" (`guard check`) is exempt. The same command/action/option check
+  runs on every other doc, and every relative link and `#anchor` in README.md, CLAUDE.md
+  and docs/ must resolve. It also fails on any section-sign or `DECISIONS` file citation
+  left in docs, src/ or test/.

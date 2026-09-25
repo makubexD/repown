@@ -10,6 +10,9 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 - `repown guard on` warns when it runs from npx's cache: the hook would call that
   temporary copy, and once that is deleted it refuses every push unless another repown
   is on PATH. Install globally, then run `repown guard on` again.
+- One optional runtime dependency, `@clack/prompts` 1.8.1, for interactive prompts. It's
+  pinned exactly, its tree is locked by the `npm-shrinkwrap.json` that now ships in the
+  package, and no command loads it yet; the pre-push hook never will.
 
 ## [0.1.1] - 2026-09-25
 

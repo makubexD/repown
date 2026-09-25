@@ -113,3 +113,7 @@ Corrections of fact, dated; the decision itself stands.
   actions and the dev dependencies, weekly, with a week's cooldown. The npm version the
   publish job installs is pinned inside release.yml, which Dependabot doesn't read, so it
   is still bumped by hand.
+- **2026-09-25, runtime dependency.** Since [ADR-016](ADR-016-clack-for-the-setup-wizard.md)
+  the npm updates Dependabot proposes include one runtime dependency, `@clack/prompts`,
+  kept exact by `versioning-strategy: increase`. The lockfile is `npm-shrinkwrap.json`,
+  which ships in the tarball; `npm version` bumps it.

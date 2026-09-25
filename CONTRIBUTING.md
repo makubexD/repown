@@ -81,8 +81,8 @@ with an installed repown.
   there is no linter). CI repeats both on Linux, Windows and macOS, so watch path
   separators and line endings.
 - **The hard rules** are in [CLAUDE.md](CLAUDE.md#hard-rules): strip-only TypeScript,
-  zero runtime dependencies, one place that spawns processes, and no names or email
-  addresses in the repository.
+  one optional runtime dependency that only the wizard loads (ADR-016), one place that
+  spawns processes, and no names or email addresses in the repository.
 - **Docs change with the behaviour**, in the same commit:
   - README for what users see;
   - the matching [HOW-IT-WORKS](docs/HOW-IT-WORKS.md) card when output changes;
@@ -98,7 +98,7 @@ Open an issue first for anything larger than a fix, so the approach can be agree
 the work. The issue forms ask for `repown --version`, your OS and the output of `repown`
 and `repown doctor`, with placeholders for names and addresses. Pull requests run CI on
 all three operating systems, and the template's checklist is the list above. Dependabot
-proposes updates to the pinned actions and dev dependencies weekly; they go through CI
+proposes updates to the pinned actions and the npm dependencies weekly; they go through CI
 and review like any other pull request.
 
 Found a security problem? Don't open an issue: see [SECURITY.md](SECURITY.md).

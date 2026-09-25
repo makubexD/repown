@@ -20,12 +20,13 @@ name was free on npm, and is now this package.
 | [007](ADR-007-no-profile-store.md) | No profile store; a per-machine account registry instead |
 | [008](ADR-008-no-identifiers-in-repos.md) | No names or addresses live in any repository |
 | [009](ADR-009-hosts-claim-only-measured.md) | Hosts are a strategy, and claim only what was measured |
-| [010](ADR-010-typescript-on-node.md) | Strip-only TypeScript on Node, with zero runtime dependencies |
+| [010](ADR-010-typescript-on-node.md) | Strip-only TypeScript on Node, with zero runtime dependencies (that line superseded by 016) |
 | [011](ADR-011-refuse-vs-warn.md) | The guard refuses only what's irreversible; the rest is a warning |
 | [012](ADR-012-hook-ownership.md) | Which pre-push hooks count as repown's, and where they are |
 | [013](ADR-013-deliberately-not-done.md) | Deliberately not done |
 | [014](ADR-014-json-for-scripts.md) | `--format json` is the contract for scripts; text is for people |
 | [015](ADR-015-releases-from-tags.md) | Releases are tag-driven and published from CI by trusted publishing |
+| [016](ADR-016-clack-for-the-setup-wizard.md) | One optional runtime dependency, @clack/prompts, for the setup wizard |
 
 **Adding one:** create the next number, using the same sections: Status, Context,
 Decision, Alternatives considered, Consequences. Cite it as `ADR-0NN`. Never delete or

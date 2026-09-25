@@ -49,7 +49,7 @@ and removing or renaming one is `major`. Before 1.0, a breaking change is a `min
    - runs `preversion`: `npm run release:check`, `npm run test:quiet` (the full suite,
      one dot per test, failures in full), `npm run build`, `npm run pack:check`. Any
      failure stops it with nothing changed;
-   - bumps `package.json` and `package-lock.json`;
+   - bumps `package.json` and `npm-shrinkwrap.json` (the lockfile, which ships in the tarball);
    - runs `version`: moves Unreleased under `## [x.y.z] - <today>`, adds the compare
      links, and stages CHANGELOG.md;
    - commits `x.y.z` and creates the annotated tag `vx.y.z`, both local;
@@ -102,7 +102,7 @@ anything is published, so a refusal leaves both the repository and npm as they w
 | `check repo` · upstream | *skipped* (warned, not passed) when there's no upstream | `git push -u origin main` |
 | `check repo` · changelog | Unreleased is empty | `npm run changelog`, then edit |
 | tests / build | anything red | fix it |
-| `check package` | the tarball lacks `package.json`, `dist/cli.js`, README, LICENSE or CHANGELOG, or ships a source map, a `.tgz`, `.env*` or `.npmrc`, or anything under `src/`, `test/`, `scripts/`, `docs/`, `demo/`, `tasks/`, `_Others/`, `.github/` or `.claude/`. It's a required list plus a blocklist, not an allowlist: `files` in package.json is what keeps everything else out | fix `files` in package.json |
+| `check package` | the tarball lacks `package.json`, `npm-shrinkwrap.json`, `dist/cli.js`, README, LICENSE or CHANGELOG, or ships a source map, a `.tgz`, `.env*` or `.npmrc`, or anything under `src/`, `test/`, `scripts/`, `docs/`, `demo/`, `tasks/`, `_Others/`, `.github/` or `.claude/`. It's a required list plus a blocklist, not an allowlist: `files` in package.json is what keeps everything else out | fix `files` in package.json |
 | `check tag` (npm's `prepublishOnly`) | a manual `npm publish` from a commit that isn't the `v<version>` tag, or with uncommitted changes. The tag proves `preversion` already ran the tests and build, so publish doesn't run them again | cut the version with `npm run release:*` first |
 | release.yml | the tag isn't `v` + package.json's version | cut the tag with `npm run release:*`, never by hand |
 | release.yml | the tagged commit isn't on `main` | release from `main` |

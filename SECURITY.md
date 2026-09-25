@@ -32,6 +32,9 @@ reason for each, is under
 
 Every version from 0.1.1 on is built and published by GitHub Actions through npm trusted
 publishing: no npm token exists in CI, and npm shows the commit and workflow that built
-each version (provenance). The package has no runtime dependencies. Details:
+each version (provenance). Its one runtime dependency, `@clack/prompts`, is optional,
+pinned exactly with its whole tree locked by `npm-shrinkwrap.json`, and loaded only by the
+interactive wizard, never by the hook
+([ADR-016](docs/decisions/ADR-016-clack-for-the-setup-wizard.md)). Details:
 [docs/RELEASING.md](docs/RELEASING.md) and
 [ADR-015](docs/decisions/ADR-015-releases-from-tags.md).

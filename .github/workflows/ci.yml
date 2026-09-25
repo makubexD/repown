@@ -101,7 +101,7 @@ jobs:
 
       # `npm pack` runs prepare, so this is the exact tarball a publish would
       # produce. pack:check (scripts/release/pack.ts) refuses it unless it holds
-      # package.json, dist/cli.js, README, LICENSE and CHANGELOG, and no source maps (they
+      # package.json, npm-shrinkwrap.json, dist/cli.js, README, LICENSE and CHANGELOG, and no source maps (they
       # would point at src/, which is not shipped), sources or tests.
       - name: Pack
         run: |

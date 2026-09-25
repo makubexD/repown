@@ -1,6 +1,7 @@
-# Keeps the pinned actions (commit SHAs, ADR-015) and the dev dependencies current.
+# Keeps the pinned actions (commit SHAs, ADR-015) and the npm dependencies current.
 # Each update is a pull request that runs CI like any other; nothing merges itself.
-# repown has no runtime dependencies, so every npm update here is a dev tool.
+# The one runtime dependency, @clack/prompts (ADR-016), is pinned exactly; `increase`
+# keeps it exact rather than widening it to a range.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -15,6 +16,7 @@ updates:
 
   - package-ecosystem: npm
     directory: /
+    versioning-strategy: increase
     schedule:
       interval: weekly
     cooldown:

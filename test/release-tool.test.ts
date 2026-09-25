@@ -5,7 +5,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -178,7 +178,7 @@ describe('release tool: changelog against a repository', () => {
 
 describe('pack contents', () => {
   const files = (...paths: string[]): string => JSON.stringify([{ name: 'repown', version: '0.1.0', size: 2048, files: paths.map((path) => ({ path, size: 1 })) }]);
-  const good = ['package.json', 'README.md', 'LICENSE', 'CHANGELOG.md', 'dist/cli.js', 'dist/ui/help.js'];
+  const good = ['package.json', 'npm-shrinkwrap.json', 'README.md', 'LICENSE', 'CHANGELOG.md', 'dist/cli.js', 'dist/ui/help.js'];
 
   test('a tarball with the entry point, readme, licence and changelog, and nothing else, passes', () => {
     const result = inspectPack(files(...good));
@@ -190,7 +190,7 @@ describe('pack contents', () => {
     const result = inspectPack(files('package.json', 'README.md', 'dist/cli.js.map', 'src/cli.ts', 'scripts/release.ts', 'test/a.test.ts'));
     assert.equal(result.ok, false);
     if (result.ok) return;
-    for (const expected of ['LICENSE', 'CHANGELOG.md', 'dist/cli.js', 'dist/cli.js.map', 'src/cli.ts', 'scripts/release.ts', 'test/a.test.ts']) {
+    for (const expected of ['npm-shrinkwrap.json', 'LICENSE', 'CHANGELOG.md', 'dist/cli.js', 'dist/cli.js.map', 'src/cli.ts', 'scripts/release.ts', 'test/a.test.ts']) {
       assert.ok(result.error.some((problem) => problem.includes(expected)), expected + ' not reported');
     }
   });
@@ -278,7 +278,24 @@ describe('release tool: check repo', () => {
 describe('package.json is publishable', () => {
   const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')) as {
     private?: boolean; publishConfig?: { access?: string }; scripts: Record<string, string>;
+    dependencies?: Record<string, string>; optionalDependencies?: Record<string, string>;
+    engines?: { node?: string }; files?: string[];
   };
+
+  // ADR-016: the one runtime dependency is optional, so an install where it can't
+  // run (an older Node) skips it rather than failing, and it's pinned exactly, with
+  // the whole tree locked by a shrinkwrap that ships in the tarball.
+  test('the wizard\'s prompt library is the only dependency: optional, exact, and locked', () => {
+    assert.equal(pkg.dependencies, undefined);
+    assert.deepEqual(pkg.optionalDependencies, { '@clack/prompts': '1.8.1' });
+    assert.equal(pkg.engines?.node, '>=20');
+    assert.ok(pkg.files?.includes('npm-shrinkwrap.json'), 'files must ship the shrinkwrap');
+    const root = fileURLToPath(new URL('..', import.meta.url));
+    const lock = JSON.parse(readFileSync(join(root, 'npm-shrinkwrap.json'), 'utf8')) as { packages: Record<string, { version?: string; optional?: boolean }> };
+    assert.equal(lock.packages['node_modules/@clack/prompts']?.version, '1.8.1');
+    assert.equal(lock.packages['node_modules/@clack/prompts']?.optional, true);
+    assert.equal(existsSync(join(root, 'package-lock.json')), false, 'one lockfile: the shrinkwrap');
+  });
 
   test('it is not marked private, and publishes publicly', () => {
     assert.notEqual(pkg.private, true);
@@ -393,7 +410,7 @@ describe('release tool: bad input fails cleanly', () => {
   });
 
   test('check package reads a file relative to --cwd, and reports one it cannot read', () => {
-    writeFileSync(join(box.dir, 'pack.json'), JSON.stringify([{ size: 1, files: ['package.json', 'README.md', 'LICENSE', 'CHANGELOG.md', 'dist/cli.js'].map((path) => ({ path })) }]));
+    writeFileSync(join(box.dir, 'pack.json'), JSON.stringify([{ size: 1, files: ['package.json', 'npm-shrinkwrap.json', 'README.md', 'LICENSE', 'CHANGELOG.md', 'dist/cli.js'].map((path) => ({ path })) }]));
     assert.equal(tool(['check', 'package', 'pack.json', '--cwd', box.dir]).status, 0);
     const missing = tool(['check', 'package', 'missing.json', '--cwd', box.dir]);
     assert.equal(missing.status, 1);

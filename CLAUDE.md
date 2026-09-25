@@ -35,7 +35,9 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 
 - **Strip-only TypeScript:** no enums, namespaces or parameter properties. Relative imports
   end in `.ts`.
-- **Zero runtime dependencies.**
+- **One runtime dependency, optional:** `@clack/prompts`, imported only by `src/wizard/clack.ts`
+  through a dynamic `import()` (ADR-016). Nothing else may load it; `guard check` never does.
+  Add no other.
 - **No names or email addresses in the repo.** Use `octocat`, `octo-org`, `octo-work` and `*.example.invalid`. The
   one exception is the owner's GitHub handle, which a public repo's URL, package.json
   and LICENSE can't avoid.

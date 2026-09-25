@@ -98,8 +98,9 @@ temporary copy (`guard on` warns; [card 12](docs/HOW-IT-WORKS.md#12-uninstall-or
 
 **Update** with `npm install -g repown@latest`. A guarded clone keeps working, because
 its hook calls the installed CLI ([ADR-003](docs/decisions/ADR-003-hook-calls-installed-cli.md)).
-No runtime dependencies, and published from CI with provenance
-([how](SECURITY.md#how-the-package-is-published)).
+One optional dependency, for interactive prompts, pinned exactly
+([ADR-016](docs/decisions/ADR-016-clack-for-the-setup-wizard.md)), and published from CI
+with provenance ([how](SECURITY.md#how-the-package-is-published)).
 
 ## Quickstart
 

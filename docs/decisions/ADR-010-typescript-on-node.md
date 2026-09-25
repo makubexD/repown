@@ -1,6 +1,6 @@
 # ADR-010: Strip-only TypeScript on Node, with zero runtime dependencies
 
-**Status:** Accepted
+**Status:** Accepted. Superseded in part by [ADR-016](ADR-016-clack-for-the-setup-wizard.md): the "zero runtime dependencies" line only.
 
 ## Context
 
@@ -57,3 +57,10 @@ because a machine that installed the tool already has Node.
   and `off`.
 
 The full test suite runs on Node 22 and 24.
+
+## Amendments
+
+- **2026-09-25, runtime dependencies.** The "zero runtime dependencies" decision is
+  superseded by [ADR-016](ADR-016-clack-for-the-setup-wizard.md): one optional, exactly
+  pinned dependency, `@clack/prompts`, loaded only by the setup wizard. Every other command,
+  and the hook, still runs with no dependency loaded.

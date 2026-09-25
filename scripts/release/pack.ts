@@ -9,7 +9,7 @@ export interface PackSummary {
   readonly size: number;
 }
 
-const REQUIRED = ['package.json', 'README.md', 'LICENSE', 'CHANGELOG.md', 'dist/cli.js'];
+const REQUIRED = ['package.json', 'npm-shrinkwrap.json', 'README.md', 'LICENSE', 'CHANGELOG.md', 'dist/cli.js'];
 const FORBIDDEN: readonly RegExp[] = [
   /\.map$/, /\.tgz$/, /(^|\/)\.env/, /(^|\/)\.npmrc$/,
   /^(src|test|scripts|docs|demo|tasks|_Others|\.github|\.claude)\//,

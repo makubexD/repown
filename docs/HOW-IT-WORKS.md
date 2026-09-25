@@ -27,8 +27,9 @@ flowchart LR
 
 In a clone, repown writes only `.git/config` and `.git/hooks/pre-push`. Git never pushes
 either, so nothing reaches the repository or your teammates. Outside the clone it writes
-only its own account registry. Global git config is changed only by `repown fix`, after
-it shows you what it removes. gh's active account is changed only by `repown use --gh`.
+only its own account registry. Git config beyond the clone's own is changed only by
+`repown fix`, which removes gh's helper entries from whichever scope holds them (local,
+global or system), after showing you what it removes. gh's active account is changed only by `repown use --gh`.
 
 ## Find your case
 
@@ -74,6 +75,7 @@ flowchart TD
 | No terminal, or a script | `repown fix --yes` |
 | Undo `fix` | `gh auth setup-git` |
 | Setting in the system scope | re-run `repown fix` in an elevated shell |
+| `GCM` shows `not found` | install [Git Credential Manager](https://github.com/git-ecosystem/git-credential-manager/blob/main/docs/install.md) (Git for Windows includes it), then run `repown doctor` again |
 
 **Why:** switching gh's account moves the password prompt to your other account's
 clones rather than fixing it ([ADR-001](decisions/ADR-001-credential-manager-not-gh.md)).

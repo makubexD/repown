@@ -7,6 +7,8 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-25
+
 - Fixed: `repown use -` (and `accounts add -`, `accounts remove -`, `scan -`) is a
   usage error again. 0.1.0 read the bare `-` as a name and pinned an account called
   "-".
@@ -29,5 +31,6 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   contract for scripts.
 - Runs on Node 20+ on Windows, macOS and Linux, with zero runtime dependencies.
 
-[Unreleased]: https://github.com/makubexD/repown/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/makubexD/repown/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/makubexD/repown/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/makubexD/repown/releases/tag/v0.1.0

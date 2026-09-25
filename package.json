@@ -1,6 +1,6 @@
 {
   "name": "repown",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Use several git accounts on one machine: each repo owns its identity, so you move between repos with no switch command and never push the wrong one.",
   "repository": {
     "type": "git",

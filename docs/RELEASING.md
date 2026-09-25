@@ -116,6 +116,11 @@ A published version number can never be reused. The fix is always a new version.
   patch. Don't `npm unpublish`: it's limited to 72 hours, it can't free the number, and
   it breaks anyone who already installed that version.
 - **Wrong dist-tag:** `npm dist-tag add repown@<good> latest`.
+- **`publish` failed with `ENEEDAUTH`:** npm refused the OIDC exchange, so nothing
+  was published. Look for the `oidc` line in the job log. Usually the trusted
+  publisher is missing or doesn't match: `npx npm@11 trust list repown` must show
+  `makubexD/repown`, `release.yml`, environment `npm`. Fix it on npm, then re-run
+  the failed jobs; the workflow itself needs no change.
 - **The workflow failed on something outside the repository** (npm or GitHub down, a
   flaky runner): re-run the failed jobs of the Release run. It skips anything already
   done (a published version, an existing GitHub Release).

@@ -135,11 +135,15 @@ jobs:
         with:
           name: release
 
+      # --loglevel verbose: when the OIDC exchange is refused (no trusted
+      # publisher, or one that doesn't match this repo, file or environment),
+      # npm logs the reason only at verbose and then fails with a bare
+      # ENEEDAUTH. 0.1.1's first run failed exactly that way.
       - name: Publish the packed tarball
         env:
           VERSION: ${{ needs.build.outputs.version }}
           DIST_TAG: ${{ needs.build.outputs.dist-tag }}
-        run: npm publish "./repown-$VERSION.tgz" --ignore-scripts --tag "$DIST_TAG"
+        run: npm publish "./repown-$VERSION.tgz" --ignore-scripts --tag "$DIST_TAG" --loglevel verbose
 
   github-release:
     needs: [build, publish]

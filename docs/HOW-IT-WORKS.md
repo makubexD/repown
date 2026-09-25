@@ -76,6 +76,7 @@ flowchart TD
 | Undo `fix` | `gh auth setup-git` |
 | Setting in the system scope | re-run `repown fix` in an elevated shell |
 | `GCM` shows `not found` | install [Git Credential Manager](https://github.com/git-ecosystem/git-credential-manager/blob/main/docs/install.md) (Git for Windows includes it), then run `repown doctor` again |
+| `helper` shows `none configured` | `git-credential-manager configure` makes GCM git's helper, then run `repown doctor` again |
 
 **Why:** switching gh's account moves the password prompt to your other account's
 clones rather than fixing it ([ADR-001](decisions/ADR-001-credential-manager-not-gh.md)).
@@ -131,7 +132,7 @@ sequenceDiagram
 | --- | --- |
 | `--gh` | also runs `gh auth switch`, so `gh pr create` acts as the same account |
 | No terminal and no record | 🔴 stops and tells you to run `repown accounts add <account> …` |
-| SSH remote | no credential key is written, because your SSH key decides; 🟡 `use` says so |
+| SSH remote | no credential key is written, because your SSH key decides; 🟡 `use` says credentials are not pinned for this remote |
 | Azure DevOps or another host | identity and guard work; 🟡 credentials are not pinned ([ADR-009](decisions/ADR-009-hosts-claim-only-measured.md)) |
 | Repo owned by an organisation | 🟡 prints `git config --local --add repown.allowOwner octo-org` |
 | gh is still the credential helper | 🟡 `fix: repown fix` |

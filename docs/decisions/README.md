@@ -39,6 +39,10 @@ rewrite an accepted ADR. To reverse one, write a new ADR and mark the old one
 - **Environment variables outrank config.** The guard refuses when it can **see** them
   set. That's a check, not a guarantee.
 - **A fresh clone has no hook** until `repown guard on` runs.
+- **A hook turned on through `npx` calls a temporary copy.** `guard on` warns when that
+  copy is in npm's `_npx` cache (not pnpm's, yarn's or bun's), but `repown` and `repown
+  doctor` don't recheck a hook already installed that way
+  ([ADR-003](ADR-003-hook-calls-installed-cli.md)).
 - **`gh pr create` and `gh api` act as gh's active account,** and no git config affects
   them. `repown` warns when that account is different; nothing can enforce it.
 - **Commits already made with the wrong author** must be rewritten by hand.

@@ -19,7 +19,7 @@ only reports follows one rule: refuse what can't be undone once pushed, report t
 | The `pre-push` guard refuses | `repown` and `repown doctor` report |
 | --- | --- |
 | a commit authored or committed by another address, or a tag by another tagger | the credential helper, and which account it would use |
-| a push to a destination owned by another account | gh's active account, when it differs |
+| a push to a destination owned by another account, where the URL names an owner | gh's active account, when it differs |
 | a clone with no pinned identity, or commits it can't read | a guard that is off, or a hook another tool owns |
 | `GH_TOKEN`, `GITHUB_TOKEN` or `GIT_*_EMAIL` set in the environment | submodules, which need their own pin and guard |
 

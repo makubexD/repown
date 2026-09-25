@@ -27,12 +27,13 @@ npm test
 | As `repown` on PATH | `npm link`, then `npm run watch` in another terminal | trying it the way users do; `npm link` runs `dist/`, so it needs the watch (or `npm run build`) after each edit |
 | Exactly what npm ships | `npm pack`, then `npm install -g ./repown-<version>.tgz` | checking the package itself |
 
-Undo `npm link` with `npm rm -g repown`.
+Undo `npm link` with `npm unlink -g repown`.
 
 ## Try it without touching your real accounts
 
 `use`, `accounts add`, `fix` and `guard on` change real git config and the account
-registry. To try them safely, source [demo/setup.sh](demo/setup.sh) in a **new** bash:
+registry. To try them safely, source [demo/setup.sh](demo/setup.sh) in a **new** bash
+(on Windows, open Git Bash: from PowerShell, `bash` may start WSL instead):
 
 ```
 bash                      # a throwaway shell: setup.sh changes HOME, PATH and the prompt
@@ -55,7 +56,8 @@ rebuilt on every run:
 - its own `HOME`, an empty global git config, no system config (`GIT_CONFIG_NOSYSTEM`);
 - its own account registry (`REPOWN_CONFIG_DIR`), with `octocat` already added;
 - a clone whose "GitHub" origin is a local bare repository, so a push goes nowhere real;
-- a `PATH` with node and git only, so no gh login is reachable.
+- a `PATH` without gh (node and git, plus Git Bash's own `/usr/bin` on Windows), so no gh
+  login is reachable.
 
 Placeholders only (octocat, `*.example.invalid`): never put a real name or address in an
 example, a test or a commit to this repository.

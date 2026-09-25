@@ -73,8 +73,7 @@ credential manager you already have, and leaves `gh` in charge of the GitHub CLI
 
 **You need:**
 
-- **Node 20+** and **git**, on Windows, macOS or Linux. CI runs Node 22 and 24 on Linux
-  and Windows, Node 24 on macOS, and installs the package on Node 20 (Linux).
+- **Node 20+** and **git**, on Windows, macOS or Linux.
 - **Git Credential Manager** for per-account sign-in on GitHub. Git for Windows includes
   it; on macOS and Linux, follow
   [GCM's install guide](https://github.com/git-ecosystem/git-credential-manager/blob/main/docs/install.md).
@@ -94,15 +93,13 @@ npx repown scan ~/code # every clone under a folder
 npm install -g repown
 ```
 
-The guard's hook calls the repown that turned it on. Through `npx`, that is a copy in
-npm's cache: `guard on` warns about it, and the hook refuses every push once that folder
-is deleted ([card 12](docs/HOW-IT-WORKS.md#12-uninstall-or-repown-missing)).
+The guard's hook calls the repown that turned it on, and through `npx` that is a
+temporary copy (`guard on` warns; [card 12](docs/HOW-IT-WORKS.md#12-uninstall-or-repown-missing)).
 
 **Update** with `npm install -g repown@latest`. A guarded clone keeps working, because
 its hook calls the installed CLI ([ADR-003](docs/decisions/ADR-003-hook-calls-installed-cli.md)).
-The package has no runtime dependencies. From 0.1.1 on, each version is published from CI
-with [provenance](https://docs.npmjs.com/generating-provenance-statements): npm shows the
-commit and workflow that built it.
+No runtime dependencies, and published from CI with provenance
+([how](SECURITY.md#how-the-package-is-published)).
 
 ## Quickstart
 
@@ -112,7 +109,7 @@ commit and workflow that built it.
 $ repown doctor
 
   helper             manager
-  stored accounts    octocat, octo-work
+  stored accounts    none stored yet
   gh accounts        octocat, octo-work
   gh active          octo-work
   GCM                git-credential-manager
@@ -121,13 +118,18 @@ $ repown doctor
   account and picks per repository from credential.<url>.username. No
   switching is needed for git, and `gh auth switch` affects the CLI only.
 
+WARN  store      no accounts stored yet -- the first push will sign in once.
+
   If a push or fetch still fails right after this, the credential may
   be valid but not yet SSO-authorized for that organisation. Re-authorize it:
   gh auth refresh -h <host>, or via the org's SSO settings.
 ```
 
-If it says gh is the helper instead, run `repown fix`: it shows what it removes, and the
-undo, before changing anything. If `GCM` says `not found`, install it first (above).
+- **gh is the helper:** run `repown fix`. It shows what it removes, and the undo, before
+  changing anything.
+- **`GCM` says `not found`:** install it (above).
+- **`helper` says `none configured`:** run `git-credential-manager configure`, then
+  `repown doctor` again.
 
 ### 2. Record your accounts, once
 
@@ -139,8 +141,9 @@ OK    accounts   octocat  Octo Cat <octocat@users.noreply.github.com>
 ```
 
 Repeat for each account (`octo-work` below). Or skip this: on a terminal, the first
-`repown use` of an account asks for its name and email, and on GitHub suggests them from
-the account's public profile (through gh).
+`repown use` of an account asks for its name and email. Without `--name` and `--email`,
+both `use` and `accounts add` suggest them on GitHub from the account's public profile
+(through gh).
 
 ### 3. Pin and guard each clone, once
 
@@ -161,12 +164,13 @@ OK    guard      on -- every push is checked before it leaves
 
 Then the same in a work clone, with `repown use octo-work`. If that repository belongs to
 an organisation (`octo-org`), `use` says so and prints the one line that lets the guard
-accept it: `git config --local --add repown.allowOwner octo-org`.
+accept it: `git config --local --add repown.allowOwner octo-org`. Until then the guard
+refuses pushes there.
 
 **The first push from each account signs in once.** GCM opens a browser: sign in as
 *that* clone's account, not whichever you used last.
 
-It writes these repo-local keys and nothing else:
+`repown use` writes these repo-local keys and nothing else:
 
 | Key | What it decides |
 | --- | --- |
@@ -199,9 +203,8 @@ OK    identity   this clone is pinned, and its credential mechanism honours it
 ```
 
 It prints all three things that decide who you are: the commit identity, the push
-credential, and gh's active account. The one you can't see is the one that catches
-you out. Here git is right, and only `gh` commands would act as another account:
-`repown use octocat --gh` also switches gh when you pin.
+credential, and gh's active account. Here git is right and only `gh` commands would act
+as another account; `repown use octocat --gh` also switches gh when you pin.
 
 **Audit every clone you have:** `repown scan ~/code ~/work` lists each clone's owner,
 host, identity and guard. It also shows which email domains appear in its history, and
@@ -247,13 +250,12 @@ how often. It never changes anything.
 | Variable | Effect |
 | --- | --- |
 | `REPOWN_CONFIG_DIR` | where the account registry lives |
-| `NO_COLOR` | no colour when set to a non-empty value |
-| `FORCE_COLOR` | colour even when not a terminal; `0` or `false` turns it off (wins over `NO_COLOR`) |
-| `TERM=dumb` | no colour (`FORCE_COLOR` still wins) |
+| `NO_COLOR`, `FORCE_COLOR`, `TERM=dumb` | colour off or on, as `repown --help` describes |
 | `GH_TOKEN`, `GITHUB_TOKEN`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_EMAIL` | not settings: the guard **refuses** a push while any is set, because they override the pinned identity or credential ([card 7](docs/HOW-IT-WORKS.md#7-push-what-the-guard-checks)) |
 
 **The account registry** is one file, `accounts.json`, holding each account's name,
-email and host (no credentials). `repown accounts list` prints its path:
+email and host (no credentials). Once one is recorded, `repown accounts list` prints
+its path:
 
 | OS | Folder |
 | --- | --- |
@@ -271,8 +273,8 @@ doesn't count. `repown`, `repown use` and the guard's refusals print the exact
 | `repown.mirrorBranch` | a fork's branch that only fast-forwards to upstream: commits already on a remote stop counting there | [8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
 
 **Scripts:** `repown scan --format json` and `repown accounts list --format json` print
-one JSON document on stdout. Those fields are stable; the text layout isn't
-([ADR-014](docs/decisions/ADR-014-json-for-scripts.md)):
+one JSON document on stdout. Those fields are stable; the text layout isn't. Every
+field of both is listed in [ADR-014](docs/decisions/ADR-014-json-for-scripts.md):
 
 ```
 $ repown accounts list --format json
@@ -322,9 +324,9 @@ is a safety net, not a lock
 ([SECURITY.md](SECURITY.md#what-repown-protects-and-what-it-doesnt)).
 
 **What does it send over the network?** Nothing of its own, and no telemetry. It runs
-`git` and `gh`: gh may contact GitHub when repown asks for its accounts, and the first
-`repown use` of an account on a terminal asks gh for the public profile to suggest a
-name and noreply address.
+`git` and `gh`: gh may contact GitHub when repown asks for its accounts, and on a
+terminal, `repown use` or `repown accounts add` without `--name` and `--email` asks gh
+for the account's public profile to suggest a name and noreply address.
 
 ## Contributing and security
 

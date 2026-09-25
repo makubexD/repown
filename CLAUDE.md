@@ -89,6 +89,6 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   one help doesn't advertise, hidden aliases like `guard enable` included, or passes an
   `--option` that command's help doesn't declare. An action whose help summary says
   "not for direct use" (`guard check`) is exempt. The same command/action/option check
-  runs on every other doc, and every relative link and `#anchor` in README.md, CLAUDE.md
-  and docs/ must resolve. It also fails on any section-sign or `DECISIONS` file citation
+  runs on every other doc, and every relative link and `#anchor` in README.md, CLAUDE.md,
+  CONTRIBUTING.md, SECURITY.md and docs/ must resolve. It also fails on any section-sign or `DECISIONS` file citation
   left in docs, src/ or test/.

@@ -46,3 +46,6 @@ push unguarded.
   installs the hook (refusing would protect nothing, [ADR-011](ADR-011-refuse-vs-warn.md)),
   and warns with the fix: install globally, then run `repown guard on` again. Only npm's
   layout was measured, so pnpm, yarn and bun runners aren't recognised.
+  The check runs only at `guard on`: `repown` and `repown doctor` don't read the entry a
+  hook already records, so a hook installed through npx before this warning existed
+  still reports as `on` until a push is refused.

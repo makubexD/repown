@@ -815,7 +815,8 @@ describe('guard on from npx\'s cache', () => {
     assert.match(run.stdout, /guard +on -- every push is checked/);
     assert.match(run.stderr, /npx's cache/);
     assert.match(run.stderr, /npm install -g repown/);
-    assert.equal(existsSync(join(box.dir, '.git', 'hooks', 'pre-push')), true);
+    const hook = readFileSync(join(box.dir, '.git', 'hooks', 'pre-push'), 'utf8');
+    assert.match(hook, /_npx/, 'the hook records the copy the warning is about');
   });
 
   test('an installed or source copy gets no such warning', () => {

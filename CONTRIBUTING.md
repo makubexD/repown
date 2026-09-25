@@ -93,7 +93,11 @@ with an installed repown.
 ## Pull requests and issues
 
 Open an issue first for anything larger than a fix, so the approach can be agreed before
-the work. Pull requests run CI on all three operating systems.
+the work. The issue forms ask for `repown --version`, your OS and the output of `repown`
+and `repown doctor`, with placeholders for names and addresses. Pull requests run CI on
+all three operating systems, and the template's checklist is the list above. Dependabot
+proposes updates to the pinned actions and dev dependencies weekly; they go through CI
+and review like any other pull request.
 
 Found a security problem? Don't open an issue: see [SECURITY.md](SECURITY.md).
 

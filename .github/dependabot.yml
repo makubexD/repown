@@ -1,0 +1,24 @@
+# Keeps the pinned actions (commit SHAs, ADR-015) and the dev dependencies current.
+# Each update is a pull request that runs CI like any other; nothing merges itself.
+# repown has no runtime dependencies, so every npm update here is a dev tool.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7        # let a new release age a week before proposing it
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      dev-dependencies:
+        dependency-type: development

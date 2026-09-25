@@ -108,3 +108,8 @@ Corrections of fact, dated; the decision itself stands.
   release" holds for the `build` and `publish` jobs, which use `--ignore-scripts`. The
   first job re-runs the CI workflow, whose plain `npm ci` does run them. That job has only
   `contents: read`: no npm credential and no `id-token` permission.
+- **2026-09-25, Dependabot.** The Consequence "pinned actions and npm need bumping by hand
+  (or by Dependabot)": Dependabot is now configured (`.github/dependabot.yml`) for the
+  actions and the dev dependencies, weekly, with a week's cooldown. The npm version the
+  publish job installs is pinned inside release.yml, which Dependabot doesn't read, so it
+  is still bumped by hand.

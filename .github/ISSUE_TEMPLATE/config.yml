@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/makubexD/repown/security/advisories/new
+    about: Privately, never as a public issue. See SECURITY.md.
+  - name: How repown works, every scenario
+    url: https://github.com/makubexD/repown/blob/main/docs/HOW-IT-WORKS.md
+    about: Most "why did it refuse / ask for a password" questions are answered here.

@@ -1,0 +1,52 @@
+name: Bug report
+description: repown did something wrong, or said something untrue.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before pasting any output, replace real account names, email addresses, paths
+        and tokens with placeholders such as octocat, octo-org and you@example.invalid.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. repown use octocat
+        2. git push
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: repown --version
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS, git --version and node --version
+      placeholder: Windows 11, git 2.51.0, node 22.18.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How repown was run
+      options:
+        - npm install -g
+        - npx
+        - from a clone (node src/cli.ts or npm link)
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output of `repown` and `repown doctor` in that clone (placeholders only)
+      render: text

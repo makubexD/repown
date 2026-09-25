@@ -14,7 +14,7 @@ name was free on npm, and is now this package.
 | [001](ADR-001-credential-manager-not-gh.md) | Git credentials come from the credential manager; gh is for the CLI |
 | [002](ADR-002-guard-checks-commits.md) | The guard checks commits, not configuration |
 | [003](ADR-003-hook-calls-installed-cli.md) | The hook calls the installed CLI, and refuses when it cannot |
-| [004](ADR-004-destination-owner.md) | The destination owner is checked; organisations are listed explicitly |
+| [004](ADR-004-destination-owner.md) | The destination owner is checked, and organisations are listed explicitly |
 | [005](ADR-005-guard-opt-in-per-clone.md) | The guard is opt-in per clone, and suits single-author repositories |
 | [006](ADR-006-mirror-exemption.md) | The mirror exemption is opt-in, and narrower than skipping the branch |
 | [007](ADR-007-no-profile-store.md) | No profile store; a per-machine account registry instead |

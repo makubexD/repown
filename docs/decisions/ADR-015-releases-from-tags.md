@@ -95,3 +95,16 @@ What was checked before deciding, in September 2026:
 - The npm package page lists the npm account and its email as maintainer, which is
   registry metadata, not repository content ([ADR-008](ADR-008-no-identifiers-in-repos.md)
   still holds for the repository).
+
+## Amendments
+
+Corrections of fact, dated; the decision itself stands.
+
+- **2026-09-25, rollback.** The last Consequence overstated `npm deprecate`. The fix for a
+  bad release is a patch release, which becomes `latest`. Deprecating is a courtesy: it
+  needs an interactive login with 2FA, and the registry refused it for `repown@0.1.0`
+  ([docs/RELEASING.md](../RELEASING.md#4-a-release-went-wrong)).
+- **2026-09-25, install scripts.** "No dependency install scripts run anywhere in the
+  release" holds for the `build` and `publish` jobs, which use `--ignore-scripts`. The
+  first job re-runs the CI workflow, whose plain `npm ci` does run them. That job has only
+  `contents: read`: no npm credential and no `id-token` permission.

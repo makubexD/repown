@@ -44,7 +44,7 @@ jobs:
         # Linux and Windows on Node 22 and 24, because those are where this
         # actually runs. macOS gets one job rather than a full
         # row: what it adds over Linux is a different filesystem and path
-        # case-sensitivity, which one configuration exercises just as well as four.
+        # case-sensitivity, which one configuration exercises just as well as two.
         # 22, not 20. The SOURCE needs a newer Node than the shipped package
         # does, and the two requirements are genuinely different:
         #   - running the tests needs glob support in `node --test`, and type
@@ -101,7 +101,7 @@ jobs:
 
       # `npm pack` runs prepare, so this is the exact tarball a publish would
       # produce. pack:check (scripts/release/pack.ts) refuses it unless it holds
-      # dist/cli.js, README, LICENSE and CHANGELOG, and no source maps (they
+      # package.json, dist/cli.js, README, LICENSE and CHANGELOG, and no source maps (they
       # would point at src/, which is not shipped), sources or tests.
       - name: Pack
         run: |

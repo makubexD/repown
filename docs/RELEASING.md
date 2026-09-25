@@ -52,7 +52,8 @@ and removing or renaming one is `major`. Before 1.0, a breaking change is a `min
    - bumps `package.json` and `package-lock.json`;
    - runs `version`: moves Unreleased under `## [x.y.z] - <today>`, adds the compare
      links, and stages CHANGELOG.md;
-   - commits `x.y.z` and creates the annotated tag `vx.y.z`, both local.
+   - commits `x.y.z` and creates the annotated tag `vx.y.z`, both local;
+   - runs `postversion`, which prints the next step: `git push --follow-tags`.
 3. `git push --follow-tags` pushes the commit and the tag. The tag starts
    `.github/workflows/release.yml`.
 4. Watch the **Release** run in GitHub Actions. When it's green, the GitHub Release
@@ -72,8 +73,8 @@ dist-tag. `npm install -g repown` doesn't pick it up; `npm install -g repown@nex
 
 <details><summary>Show how</summary>
 
-- The first `release:beta` after `0.1.0` makes `0.1.1-beta.0`, and the next makes
-  `0.1.1-beta.1`. For a beta of a minor, run `npm version preminor --preid=beta` once,
+- `release:beta` from a stable version bumps the patch: from `0.1.1` it makes
+  `0.1.2-beta.0`, and the next makes `0.1.2-beta.1`. For a beta of a minor, run `npm version preminor --preid=beta` once,
   then `release:beta`.
 - The workflow picks the dist-tag from the version: anything containing `-` goes to
   `next` and becomes a GitHub **prerelease**. It never becomes `latest`.
@@ -125,7 +126,8 @@ A published version number can never be reused. The fix is always a new version.
   `--loglevel silly`. So treat it as optional, not as the fix.
 - **Wrong dist-tag:** `npm dist-tag add repown@<good> latest`.
 - **`publish` failed with `ENEEDAUTH`:** npm refused the OIDC exchange, so nothing
-  was published. Look for the `oidc` line in the job log. Usually the trusted
+  was published. Look for the `oidc` line in the job log (releases after 0.1.1 log it;
+  a re-run of an older tag uses that tag's workflow, which doesn't). Usually the trusted
   publisher is missing or doesn't match: `npx npm@11 trust list repown` must show
   `makubexD/repown`, `release.yml`, environment `npm`. Fix it on npm, then re-run
   the failed jobs; the workflow itself needs no change.
@@ -134,19 +136,22 @@ A published version number can never be reused. The fix is always a new version.
   done (a published version, an existing GitHub Release).
 - **The workflow itself was wrong:** a re-run uses the tagged commit's `release.yml`,
   so a fix on `main` isn't picked up. Fix it on `main` and cut the next version. If
-  nothing was published, you can instead move the tag (see the last item).
+  nothing was published, you can instead cut the tag again (see the last item).
 - **A fix for an older line (a backport):** not supported. Every stable release becomes
   `latest`, and tags must be on `main`, so a 0.1.x after 0.2.0 would move `latest`
   backwards. Release the fix as the next version on `main` instead.
 - **The tag was pushed at the wrong commit, and nothing published yet:** delete the tag
-  locally and remotely, then cut it again with `npm run release:*`.
+  locally and remotely, then cut it again with `npm run release:*`. The tag ruleset
+  (card 5) lets only a repository admin delete or re-create a `v*` tag, so this needs
+  the owner's bypass.
 
 </details>
 
 ## 5. One-time setup
 
-Done once per package. It needs doing again only if the workflow file or the `npm`
-environment is renamed, or the package moves.
+Done once per package, and done for repown: 0.1.0 was published by hand, and 0.1.1 went
+out through the trusted publisher. It needs doing again only if the workflow file or the
+`npm` environment is renamed, or the package moves. Read it as a record of what is set.
 
 <details><summary>Show how</summary>
 
@@ -165,8 +170,12 @@ environment is renamed, or the package moves.
 2. **Gate publishing on GitHub** (repository settings, as the repo owner):
    - an environment **`npm`** whose deployment branch-and-tag policy allows only tags
      matching `v*`;
-   - a tag ruleset on `refs/tags/v*` that blocks updating and deleting release tags,
-     with only the owner able to bypass.
+   - a tag ruleset on `refs/tags/v*` that blocks creating, updating and deleting release
+     tags, with only repository admins (the owner) able to bypass.
+
+   Both were read back through the GitHub API in September 2026: the `release tags`
+   ruleset is active with those three rules, and the `npm` environment's only
+   deployment policy is the tag pattern `v*`.
 
    These live outside the repository, so no commit can remove them. The "tag is on
    `main`" check inside release.yml can't do that on its own, because a tag runs the

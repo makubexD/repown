@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The release tool: repown's maintainer commands for cutting a version. Never
-// shipped (package.json `files` holds only dist/), run from source with
+// shipped (package.json `files` holds only dist/ and CHANGELOG.md), run from source with
 // `node scripts/release.ts`, and normally reached through the npm scripts in
 // package.json (see docs/RELEASING.md).
 //

@@ -347,3 +347,62 @@ describe('release tool: check tag', () => {
     assert.match(checkTag().stderr, /FAIL .*uncommitted/);
   });
 });
+
+describe('release tool: bad input fails cleanly', () => {
+  let box: Sandbox;
+  const file = (): string => join(box.dir, 'CHANGELOG.md');
+
+  beforeEach(() => {
+    box = sandbox();
+    writeFileSync(join(box.dir, 'package.json'), JSON.stringify({ version: '0.2.0', repository: { url: `git+${REPO}.git` } }));
+    writeFileSync(file(), changelog('\n- A change\n', '\n## [0.1.0] - 2026-09-24\n\n- one\n'));
+  });
+  afterEach(() => box.dispose());
+
+  test('a version that is not x.y.z[-pre] is a usage error, and nothing is written', () => {
+    const before = readFileSync(file(), 'utf8');
+    for (const args of [['changelog', 'release', 'v0.2.0'], ['changelog', 'notes', 'latest']]) {
+      const run = tool([...args, '--cwd', box.dir]);
+      assert.equal(run.status, 2, args.join(' '));
+      assert.match(run.stderr, /not a version/);
+    }
+    assert.equal(readFileSync(file(), 'utf8'), before);
+  });
+
+  test('release --dry-run prints the dated file and writes nothing', () => {
+    const before = readFileSync(file(), 'utf8');
+    const run = tool(['changelog', 'release', '--dry-run', '--cwd', box.dir]);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout, /## \[0\.2\.0\] - \d{4}-\d{2}-\d{2}\n\n- A change\n/);
+    assert.equal(readFileSync(file(), 'utf8'), before);
+  });
+
+  test('a CRLF changelog (autocrlf on Windows) keeps its layout and comes back LF', () => {
+    writeFileSync(file(), readFileSync(file(), 'utf8').replace(/\n/g, '\r\n'));
+    assert.equal(tool(['changelog', 'release', '--cwd', box.dir]).status, 0);
+    const text = readFileSync(file(), 'utf8');
+    assert.doesNotMatch(text, /\r/);
+    assert.match(text, /## \[Unreleased\]\n\n## \[0\.2\.0\] - [\d-]+\n\n- A change\n\n## \[0\.1\.0\]/);
+  });
+
+  test('a package.json that is not JSON is a failure with a reason, not a crash', () => {
+    writeFileSync(join(box.dir, 'package.json'), '{ nope');
+    const run = tool(['changelog', 'release', '--cwd', box.dir]);
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /FAIL\s+changelog\s+package\.json is not valid JSON/);
+  });
+
+  test('check package reads a file relative to --cwd, and reports one it cannot read', () => {
+    writeFileSync(join(box.dir, 'pack.json'), JSON.stringify([{ size: 1, files: ['package.json', 'README.md', 'LICENSE', 'CHANGELOG.md', 'dist/cli.js'].map((path) => ({ path })) }]));
+    assert.equal(tool(['check', 'package', 'pack.json', '--cwd', box.dir]).status, 0);
+    const missing = tool(['check', 'package', 'missing.json', '--cwd', box.dir]);
+    assert.equal(missing.status, 1);
+    assert.match(missing.stderr, /FAIL\s+package\s+cannot read .*missing\.json/);
+  });
+});
+
+test('draft treats a subject as present only when a line is exactly that entry', () => {
+  const result = draft(changelog('\n- Fix the parser and more\n'), ['Fix the parser']);
+  assert.ok(result.ok);
+  assert.equal(result.value.added, 1);
+});

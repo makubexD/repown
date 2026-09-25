@@ -2,3 +2,7 @@
 # core.autocrlf would otherwise give it one.
 *.sh    text eol=lf
 *.tape  text eol=lf
+
+# The release tool rewrites CHANGELOG.md with LF, and reads it as LF either way;
+# pinning it keeps a Windows checkout from showing every line as changed.
+CHANGELOG.md  text eol=lf

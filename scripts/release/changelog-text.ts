@@ -22,7 +22,12 @@ export interface Drafted {
 const UNRELEASED = 'Unreleased';
 const LINK_REF = /^\[[^\]]+\]: /m;
 const VERSION_HEADING = /^## \[(\d+\.\d+\.\d+[^\]]*)\]/m;
-const VERSION_SUBJECT = /^v?\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+
+/** A version as npm writes it: x.y.z or x.y.z-pre, no leading v. */
+export function isVersion(text: string): boolean {
+  return VERSION.test(text);
+}
 
 /** Where one `## [name]` section's body starts and ends (the next heading or the link references). */
 interface Section {
@@ -54,14 +59,14 @@ function withBody(text: string, section: Section, lines: readonly string[]): str
 
 /** Commit subjects worth a changelog line: not planning commits, not `npm version` commits. */
 export function releasable(subjects: readonly string[]): string[] {
-  return subjects.filter((subject) => !subject.startsWith('Plan: ') && !VERSION_SUBJECT.test(subject));
+  return subjects.filter((subject) => !subject.startsWith('Plan: ') && !isVersion(subject.replace(/^v/, '')));
 }
 
 export function draft(text: string, subjects: readonly string[]): Result<Drafted> {
   const section = findSection(text, UNRELEASED);
   if (!section) return err('CHANGELOG.md has no "## [Unreleased]" heading');
   const existing = entriesOf(text.slice(section.bodyStart, section.end));
-  const fresh = [...new Set(subjects)].filter((subject) => !existing.some((line) => line.includes(subject)));
+  const fresh = [...new Set(subjects)].filter((subject) => !existing.includes('- ' + subject));
   if (fresh.length === 0) return ok({ text, added: 0 });
   return ok({ text: withBody(text, section, [...existing, ...fresh.map((subject) => '- ' + subject)]), added: fresh.length });
 }

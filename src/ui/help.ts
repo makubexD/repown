@@ -46,7 +46,7 @@ function environmentHelp(): string[] {
   ];
 }
 
-export function renderCommandHelp(path: readonly string[], command: Command, program = 'repown'): string[] {
+export function renderCommandHelp(path: readonly string[], command: Command, program: string): string[] {
   const lines = ['', '  ' + usageFor(program, path, command), '', '  ' + command.summary, ''];
   if (optionsOf(command).length > 0) lines.push(...optionsHelp(command), '');
   lines.push('  Global options:', ...GLOBAL_OPTIONS.map((option) => '    ' + optionHelp(option)), '');
@@ -54,7 +54,7 @@ export function renderCommandHelp(path: readonly string[], command: Command, pro
   return lines;
 }
 
-export function renderGroupHelp(path: readonly string[], group: CommandGroup, program = 'repown'): string[] {
+export function renderGroupHelp(path: readonly string[], group: CommandGroup, program: string): string[] {
   const lines = ['', '  ' + program + ' ' + path.join(' ') + ' <action>', '', '  Actions:'];
   for (const [name, action] of Object.entries(group.actions)) {
     const marker = name === group.defaultAction ? '  (default)' : '';
@@ -64,7 +64,7 @@ export function renderGroupHelp(path: readonly string[], group: CommandGroup, pr
   return lines;
 }
 
-export function renderHelpFor(path: readonly string[], entry: Command | CommandGroup, program = 'repown'): string[] {
+export function renderHelpFor(path: readonly string[], entry: Command | CommandGroup, program: string): string[] {
   return isGroup(entry) ? renderGroupHelp(path, entry, program) : renderCommandHelp(path, entry, program);
 }
 

@@ -10,8 +10,6 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 - Fixed: `repown use -` (and `accounts add -`, `accounts remove -`, `scan -`) is a
   usage error again. 0.1.0 read the bare `-` as a name and pinned an account called
   "-".
-- Fixed: `-h` passed as the value of an option (`repown guard --remote -h`) is read as
-  that value, not as a request for help.
 - Unknown commands and actions now say which `repown help` to run.
 
 ## [0.1.0] - 2026-09-25

@@ -3,14 +3,14 @@
 // build), and before it is published. A check that could not run is reported as
 // skipped, never as passed.
 
-import { readFileSync } from 'node:fs';
 import { run, output, succeeded, lines } from '../../src/core/exec.ts';
+import { ok, type Result } from '../../src/core/result.ts';
 import { flagString, type Args } from '../../src/ui/args.ts';
 import type { Command, CommandGroup } from '../../src/ui/command.ts';
 import * as out from '../../src/ui/format.ts';
 import { unreleased } from './changelog-text.ts';
 import { inspectPack } from './pack.ts';
-import { projectDir, readChangelog, readPackage } from './project.ts';
+import { projectDir, projectFile, readChangelog, readPackage, readText } from './project.ts';
 
 interface Outcome {
   readonly tag: string;
@@ -76,7 +76,7 @@ function report(outcomes: readonly Outcome[]): number {
 }
 
 const repoCommand = {
-  summary: 'the repository is ready to cut a version: branch, clean tree, upstream, Unreleased entries',
+  summary: 'the repository is ready to cut a version: branch, clean tree, level with upstream (runs git fetch), Unreleased entries',
   options: [{ name: 'branch', kind: 'string', default: 'main', help: 'the branch releases are cut from' }],
   examples: ['node scripts/release.ts check repo'],
 
@@ -97,21 +97,24 @@ const tagCommand = {
   },
 } satisfies Command;
 
-async function readInput(source: string): Promise<string> {
-  if (source !== '-') return readFileSync(source, 'utf8');
+/** `-` is stdin; anything else is a file, relative to --cwd. */
+async function readInput(args: Args, source: string): Promise<Result<string>> {
+  if (source !== '-') return readText(projectFile(args, source));
   let text = '';
   process.stdin.setEncoding('utf8');
   for await (const chunk of process.stdin) text += chunk as string;
-  return text;
+  return ok(text);
 }
 
 const packageCommand = {
-  summary: 'a tarball list (npm pack --dry-run --json) holds dist/, README, LICENSE, CHANGELOG and nothing else',
+  summary: 'a tarball list (npm pack --dry-run --json) holds package.json, dist/cli.js, README, LICENSE and CHANGELOG, and no source maps, sources, tests, docs or secrets',
   positionals: { min: 1, max: 1, label: '<file|->', stdin: true },
   examples: ['npm pack --dry-run --json | node scripts/release.ts check package -'],
 
   async run(args: Args): Promise<number> {
-    const result = inspectPack(await readInput(args.positional[0]!));
+    const input = await readInput(args, args.positional[0]!);
+    if (!input.ok) return report([outcome('package', 'fail', input.error)]);
+    const result = inspectPack(input.value);
     if (!result.ok) return report(result.error.map((problem) => outcome('package', 'fail', problem)));
     const kilobytes = (result.value.size / 1024).toFixed(1);
     return report([outcome('package', 'pass', `${result.value.files} files, ${kilobytes} kB packed`)]);

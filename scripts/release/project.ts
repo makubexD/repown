@@ -1,9 +1,10 @@
 // What the release tool reads from the project it runs in: package.json,
 // CHANGELOG.md and git history. Every git call goes through src/core/exec.ts
-// (shell: false), and every `git log` passes --no-show-signature.
+// (shell: false), and every `git log` passes --no-show-signature. Nothing here
+// throws for bad input: an unreadable file or invalid JSON is a Result.
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { run, lines, output } from '../../src/core/exec.ts';
 import { ok, err, type Result } from '../../src/core/result.ts';
 import { flagString, type Args } from '../../src/ui/args.ts';
@@ -19,7 +20,12 @@ export function projectDir(args: Args): string {
   return flagString(args, 'cwd') ?? process.cwd();
 }
 
-function readText(path: string): Result<string> {
+/** A file named on the command line, resolved against the project directory. */
+export function projectFile(args: Args, name: string): string {
+  return resolve(projectDir(args), name);
+}
+
+export function readText(path: string): Result<string> {
   try {
     return ok(readFileSync(path, 'utf8'));
   } catch (error) {
@@ -27,10 +33,20 @@ function readText(path: string): Result<string> {
   }
 }
 
+function parseJson(text: string, name: string): Result<unknown> {
+  try {
+    return ok(JSON.parse(text) as unknown);
+  } catch (error) {
+    return err(`${name} is not valid JSON: ${(error as Error).message}`);
+  }
+}
+
 export function readPackage(dir: string): Result<Package> {
   const text = readText(join(dir, 'package.json'));
   if (!text.ok) return text;
-  const pkg = JSON.parse(text.value) as { version?: unknown; repository?: unknown };
+  const parsed = parseJson(text.value, 'package.json');
+  if (!parsed.ok) return parsed;
+  const pkg = (parsed.value ?? {}) as { version?: unknown; repository?: unknown };
   const repoUrl = repoWebUrl(pkg.repository);
   if (typeof pkg.version !== 'string') return err('package.json has no version');
   if (!repoUrl) return err('package.json has no repository url');
@@ -41,8 +57,10 @@ export function changelogPath(dir: string): string {
   return join(dir, 'CHANGELOG.md');
 }
 
+/** CHANGELOG.md with LF line endings, whatever a Windows checkout (autocrlf) gave it. */
 export function readChangelog(dir: string): Result<string> {
-  return readText(changelogPath(dir));
+  const text = readText(changelogPath(dir));
+  return text.ok ? ok(text.value.replace(/\r\n/g, '\n')) : text;
 }
 
 export function writeChangelog(dir: string, text: string): void {

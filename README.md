@@ -184,12 +184,14 @@ Cutting a version (maintainers):
 ```
 npm run changelog       # draft CHANGELOG.md's Unreleased section from git history, then edit it
 npm run release:patch   # or release:minor | release:major | release:beta
+git push --follow-tags  # CI publishes to npm (trusted publishing) and creates the GitHub Release
 ```
 
 `release:*` runs `npm version`, which refuses unless the repository is ready
 (`npm run release:check`), the tests and build pass, and the tarball holds only what
 it should (`npm run pack:check`). It then dates the changelog, commits and tags
-`v<version>` locally.
+`v<version>` locally. The whole routine is in [docs/RELEASING.md](docs/RELEASING.md);
+what changed in each version is in [CHANGELOG.md](CHANGELOG.md).
 
 - **Node:** developing needs Node 22.18+, though running needs only 20
   ([ADR-010](docs/decisions/ADR-010-typescript-on-node.md)).

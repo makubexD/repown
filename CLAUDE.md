@@ -22,6 +22,9 @@ Docs, one purpose each:
     npm run build                        # tsc -> dist/, then type-checks test/ too; the only static check (no lint)
     node src/cli.ts <args>               # run from source, no build needed
 
+Releasing: [docs/RELEASING.md](docs/RELEASING.md). Bump versions only through `npm run release:*`,
+never by editing package.json: the hooks date CHANGELOG.md and the tag must match (ADR-015).
+
 Developing needs Node 22.18+; the package targets Node 20+ (ADR-010). CI runs Linux,
 Windows and macOS, so watch path separators, `.exe`, `process.platform` and line endings.
 

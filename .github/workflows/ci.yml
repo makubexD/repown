@@ -24,6 +24,8 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # release.yml runs this whole workflow before it publishes a tag.
+  workflow_call:
 
 permissions:
   contents: read
@@ -98,13 +100,14 @@ jobs:
       - run: npm ci
 
       # `npm pack` runs prepare, so this is the exact tarball a publish would
-      # produce -- including whether `files` actually ships dist/. Source maps
-      # would point at src/, which is not shipped, so none may be in it.
+      # produce. pack:check (scripts/release/pack.ts) refuses it unless it holds
+      # dist/cli.js, README, LICENSE and CHANGELOG, and no source maps (they
+      # would point at src/, which is not shipped), sources or tests.
       - name: Pack
         run: |
           npm pack
           ls -l repown-*.tgz
-          if tar -tzf repown-*.tgz | grep '\.map$'; then echo "source maps in the package"; exit 1; fi
+          npm run pack:check
 
       # ...then switch to the oldest supported Node, so everything below runs
       # against the version a user on the stated minimum would actually have.

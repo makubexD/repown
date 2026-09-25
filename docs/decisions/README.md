@@ -25,6 +25,7 @@ name is also free on npm.
 | [012](ADR-012-hook-ownership.md) | Which pre-push hooks count as repown's, and where they are |
 | [013](ADR-013-deliberately-not-done.md) | Deliberately not done |
 | [014](ADR-014-json-for-scripts.md) | `--format json` is the contract for scripts; text is for people |
+| [015](ADR-015-releases-from-tags.md) | Releases are tag-driven and published from CI by trusted publishing |
 
 **Adding one:** create the next number, using the same sections: Status, Context,
 Decision, Alternatives considered, Consequences. Cite it as `ADR-0NN`. Never delete or

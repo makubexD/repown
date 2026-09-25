@@ -107,7 +107,7 @@ async function readInput(source: string): Promise<string> {
 
 const packageCommand = {
   summary: 'a tarball list (npm pack --dry-run --json) holds dist/, README, LICENSE, CHANGELOG and nothing else',
-  positionals: { min: 1, max: 1, label: '<file|->' },
+  positionals: { min: 1, max: 1, label: '<file|->', stdin: true },
   examples: ['npm pack --dry-run --json | node scripts/release.ts check package -'],
 
   async run(args: Args): Promise<number> {

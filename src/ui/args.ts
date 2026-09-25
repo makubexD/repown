@@ -32,6 +32,8 @@ export interface PositionalSpec {
   readonly max: number;
   /** Shown in usage, e.g. "<account>" or "<dir>...". */
   readonly label?: string;
+  /** A bare `-` is a positional (read stdin) only when this is set; elsewhere it is an unknown option. */
+  readonly stdin?: boolean;
 }
 
 export interface Spec {
@@ -70,7 +72,8 @@ export function parseArgs(tokens: readonly string[], spec: Spec): Result<Args> {
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!;
-    if (optionsEnded || token === '-' || !token.startsWith('-')) { positional.push(token); continue; }
+    const stdinDash = token === '-' && spec.positionals.stdin === true;
+    if (optionsEnded || stdinDash || !token.startsWith('-')) { positional.push(token); continue; }
     if (token === '--') { optionsEnded = true; continue; }
     if (!token.startsWith('--')) return err(`unknown option ${token}`);
 

@@ -105,10 +105,10 @@ async function dispatch(program: Program, top: Resolved): Promise<number> {
   if (!isGroup(entry)) return runLeaf(program, { path: [name], command: entry, rest, tag: top.implicit ? program.name : name });
 
   const picked = resolveAction(entry, rest);
-  if (!picked.ok) { reportUsageError(name, picked.error); return 2; }
+  if (!picked.ok) { reportUsageError(name, picked.error + helpPointer(program, [name])); return 2; }
   const { command, action, remaining, explicit } = picked.value;
 
-  if (!explicit && hasHelpFlag(remaining)) { printHelp(program, [name], entry); return 0; }
+  if (!explicit && hasHelpFlag(remaining, specFor(command).options)) { printHelp(program, [name], entry); return 0; }
   return runLeaf(program, { path: [name, action], command, rest: remaining, tag: name + ' ' + action });
 }
 
@@ -142,7 +142,7 @@ export async function runProgram(program: Program, argv: readonly string[]): Pro
   if (argv.length === 0 && program.defaultCommand === undefined) return runHelp(program, []);
 
   const top = await resolveTop(program, argv);
-  if (!top.ok) { reportUsageError(program.name, top.error); return 2; }
+  if (!top.ok) { reportUsageError(program.name, top.error + helpPointer(program, [])); return 2; }
   return dispatch(program, top.value);
 }
 

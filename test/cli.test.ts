@@ -131,6 +131,12 @@ describe('usage errors', () => {
     assert.match(run.stderr, /FAIL/);
   });
 
+  test('`use -` is a usage error, never an account named "-"', () => {
+    const run = repown(['use', '-']);
+    assert.equal(run.status, 2);
+    assert.match(run.stderr, /unknown option -/);
+  });
+
   test('scan rejects a non-numeric --depth before touching the filesystem', () => {
     const run = repown(['scan', '--depth', 'abc']);
     assert.equal(run.status, 2);

@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { sandbox, type Sandbox } from './helpers.ts';
 import { draft, release, notes, releasable, repoWebUrl } from '../scripts/release/changelog-text.ts';
 import { inspectPack } from '../scripts/release/pack.ts';
@@ -110,6 +111,23 @@ describe('release tool: command surface', () => {
     assert.equal(run.stdout, '');
     assert.match(run.stderr, /did you mean 'changelog'/);
     assert.equal(tool(['changelog', 'draft', '--nope']).status, 2);
+  });
+});
+
+describe('release tool: dispatch edge cases', () => {
+  test('-h as the VALUE of the default action\'s option runs the action, not the group help', () => {
+    const run = tool(['check', '--branch', '-h', '--cwd', tmpdir()]);
+    assert.doesNotMatch(run.stdout, /Actions:/);
+    assert.equal(run.status, 1);
+  });
+
+  test('unknown commands and actions point at help', () => {
+    assert.match(tool(['chek']).stderr, /run `node scripts\/release\.ts help` for usage/);
+    assert.match(tool(['check', 'nope']).stderr, /run `node scripts\/release\.ts help check` for usage/);
+  });
+
+  test('--version is not something the release tool has: usage error', () => {
+    assert.equal(tool(['--version']).status, 2);
   });
 });
 

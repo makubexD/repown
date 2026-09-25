@@ -25,10 +25,17 @@ describe('parseArgs', () => {
     assert.match(result.ok ? '' : result.error, /unknown option -x/);
   });
 
-  test('a bare - is a positional (stdin, by convention), not an option', () => {
-    const result = parseArgs(['-'], spec({ positionals: { min: 1, max: 1 } }));
+  test('a bare - is a positional only where the command declares it reads stdin', () => {
+    const result = parseArgs(['-'], spec({ positionals: { min: 1, max: 1, stdin: true } }));
     assert.ok(result.ok);
     assert.deepEqual(result.value.positional, ['-']);
+  });
+
+  // 0.1.0 accepted a bare - everywhere, so `repown use -` pinned an account named "-".
+  test('elsewhere a bare - is still an unknown option', () => {
+    const result = parseArgs(['-'], spec({ positionals: { min: 1, max: 1 } }));
+    assert.equal(result.ok, false);
+    assert.match(result.ok ? '' : result.error, /unknown option -/);
   });
 
   test('after --, a dash-led value is still a positional', () => {

@@ -7,6 +7,8 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-25
+
 - First release on npm: `npm install -g repown`.
 - `repown use <account>` pins a clone to one account: repo-local `user.name`,
   `user.email`, `repown.account`, `user.useConfigOnly`, and the credential username
@@ -20,3 +22,6 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 - `repown scan` audits every clone under a directory; `--format json` is a stable
   contract for scripts.
 - Runs on Node 20+ on Windows, macOS and Linux, with zero runtime dependencies.
+
+[Unreleased]: https://github.com/makubexD/repown/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/makubexD/repown/releases/tag/v0.1.0

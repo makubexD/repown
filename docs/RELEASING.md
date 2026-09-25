@@ -116,9 +116,13 @@ A published version number can never be reused. The fix is always a new version.
 
 <details><summary>Show how</summary>
 
-- **Broken on npm:** `npm deprecate repown@x.y.z "broken: use x.y.(z+1)"`, then cut a
-  patch. Don't `npm unpublish`: it's limited to 72 hours, it can't free the number, and
-  it breaks anyone who already installed that version.
+- **Broken on npm:** cut a patch. It becomes `latest`, so installs and `npm update` move
+  past the broken version. Don't `npm unpublish`: it's limited to 72 hours, it can't
+  free the number, and it breaks anyone who already installed that version.
+  `npm deprecate repown@x.y.z "broken: use x.y.(z+1)"` would warn anyone pinned to it.
+  It needs an interactive `npm login` with 2FA, and in September 2026 the registry
+  refused it for `repown@0.1.0` with a bare `422 Unprocessable Entity`, even at
+  `--loglevel silly`. So treat it as optional, not as the fix.
 - **Wrong dist-tag:** `npm dist-tag add repown@<good> latest`.
 - **`publish` failed with `ENEEDAUTH`:** npm refused the OIDC exchange, so nothing
   was published. Look for the `oidc` line in the job log. Usually the trusted

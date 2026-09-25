@@ -56,7 +56,7 @@ export interface Prompter {
   /** "Change an answer": one of the steps that were asked. */
   pickStep(steps: readonly Step<never>[]): Promise<string | typeof CANCEL>;
   note(message: string): void;
-  /** Releases the terminal; called once, after the wizard ends. */
+  /** Releases the terminal once the questions are over; safe to call more than once. */
   close(): void;
   /** Optional framing a richer prompter can draw: a title, a closing line, a spinner. */
   intro?(title: string): void;
@@ -163,6 +163,7 @@ interface Return {
 async function restartAt<C>(flow: Flow<C>, context: C, how: Return, prompter: Prompter): Promise<number | typeof CANCEL> {
   if (how.choice === 'back') return how.walk.asked.at(-1) ?? flow.steps.length;
   const steps = reachable(flow, how.walk.answers, context, how.given);
+  if (steps.length === 0) { prompter.note('every answer came from a flag: there is nothing here to change'); return flow.steps.length; }
   const id = await prompter.pickStep(steps as Step<never>[]);
   if (id === CANCEL) return CANCEL;
   const index = flow.steps.findIndex((step) => step.id === id);

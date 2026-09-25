@@ -124,6 +124,12 @@ describe('wizard engine', () => {
     assert.deepEqual(await wizard(FLOW, NONE, {}, atPick), { status: 'cancelled' });
   });
 
+  test('with every value given, Change an answer has nothing to offer and shows the review again', async () => {
+    const prompter = scripted([['review', 'edit'], ['review', 'run']]);
+    const outcome = await wizard(FLOW, NONE, { account: 'octocat', name: 'x', guard: true }, prompter);
+    assert.equal(outcome.status, 'run');
+  });
+
   test('with every value given, Back at the review shows the review again', async () => {
     const prompter = scripted([['review', 'back'], ['review', 'run']]);
     const outcome = await wizard(FLOW, NONE, { account: 'octocat', name: 'x', guard: true }, prompter);

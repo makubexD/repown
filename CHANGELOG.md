@@ -11,7 +11,8 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   (recording a new one), whether to switch gh, allow an organisation, turn the guard on and
   stop gh being the credential helper; shows the exact commands; and runs them only when
   you choose Run. Every answer is also a flag, and `--no-input` runs it from a script.
-  Existing commands are unchanged.
+  The other commands' output is unchanged (tests lock `fix --dry-run`, `use`'s hints and
+  the help's exit codes).
 
 - `repown guard on` warns when it runs from npx's cache: the hook would call that
   temporary copy, and once that is deleted it refuses every push unless another repown

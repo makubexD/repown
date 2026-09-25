@@ -93,9 +93,10 @@ describe('the prompt library stays inside the wizard', () => {
     const box = sandbox();
     try {
       for (const args of [['--help'], ['help', 'guard'], ['help', 'setup'], ['setup'], [], ['doctor'], ['guard', 'status'], ['accounts', 'list'],
-        ['guard', 'check', '--remote', 'origin', '--url', 'https://github.com/octocat/x.git']]) {
+        ['guard', 'check', '--remote', 'origin', '--url', 'https://github.com/octocat/x.git'],
+        ['scan'], ['fix', '--dry-run'], ['use', 'octocat'], ['guard', 'on'], ['guard', 'off'], ['off']]) {
         const run = spawnSync(process.execPath, ['--import', NO_CLACK, CLI, ...args],
-          { cwd: box.dir, input: '', env: process.env, encoding: 'utf8' });
+          { cwd: box.dir, input: '', env: { ...process.env, REPOWN_CONFIG_DIR: join(box.dir, '..', 'registry') }, encoding: 'utf8' });
         assert.doesNotMatch(run.stderr, /clack was resolved/, args.join(' '));
       }
     } finally {

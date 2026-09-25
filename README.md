@@ -105,8 +105,8 @@ with provenance ([how](SECURITY.md#how-the-package-is-published)).
 ## Quickstart
 
 **Prefer to be guided?** In the clone, run `repown setup`. It asks which account owns it
-(and records a new one), whether to allow an organisation, turn the guard on and hand the
-credential helper back, then shows the exact commands and runs them only when you choose
+(and records a new one), whether to switch gh too, allow an organisation, turn the guard
+on and hand the credential helper back, then shows the exact commands and runs them only when you choose
 Run ([card 13](docs/HOW-IT-WORKS.md#13-guided-setup)). The steps below are those commands.
 
 <details><summary>What it looks like</summary>
@@ -114,17 +114,20 @@ Run ([card 13](docs/HOW-IT-WORKS.md#13-guided-setup)). The steps below are those
 ```
 ┌  repown setup
 │
-◇  Read this clone and this machine
+◇  Reading this clone and this machine
 │
 ◇  Which account owns this clone?
+│  its commits and pushes go out as this account
 │  octocat
 │
 ◇  Allow pushes to "octo-org" from this clone?
+│  an organisation you belong to; one repo-local key
 │  Yes
 │
 ●  only your address is in this clone's history
 │
 ◇  Check every push before it leaves?
+│  undo any time: repown guard off
 │  Yes
 │
 ◇  Review: nothing has changed yet ───────────────────────╮
@@ -148,9 +151,10 @@ Run ([card 13](docs/HOW-IT-WORKS.md#13-guided-setup)). The steps below are those
 └
 ```
 
-Arrow keys choose, Enter confirms, Esc cancels, and every choice has a **← Back**. With
-`NO_COLOR`, `TERM=dumb` or no colour on stderr, the same questions come as numbered
-choices instead.
+Arrow keys choose, Enter confirms, Esc or Ctrl-C cancels. Every question's list has a
+**← Back** (at a text question, type `<`), and the review has **Back** and **Change an
+answer**. When stderr gets no colour (`NO_COLOR` or `TERM=dumb`, unless `FORCE_COLOR`
+says otherwise, or stderr isn't a terminal), the same questions come as numbered choices.
 
 </details>
 
@@ -293,7 +297,9 @@ how often. It never changes anything.
 - **Every command:** `--cwd <dir>` works on all of them.
 - **Version:** `repown --version` (or `-v`).
 - **Exit codes:** `0` success, `1` failure or refusal, `2` usage error. `scan` exits `0`
-  whatever it finds; read its output, or its JSON, for the problems.
+  whatever it finds; read its output, or its JSON, for the problems. `setup` also exits
+  `130` when cancelled or interrupted, and when one of its commands fails, that
+  command's own code.
 
 ## Configuration
 

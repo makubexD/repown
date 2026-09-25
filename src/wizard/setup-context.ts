@@ -4,17 +4,24 @@
 
 import type { Git } from '../core/git.ts';
 import { inspectRepo, inspectAuth } from '../core/inspect.ts';
-import { loadRegistry, type Registry } from '../core/registry.ts';
+import { loadRegistry, type Account, type Registry } from '../core/registry.ts';
 import { planRepair } from '../core/credential/repair.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { ok, err, type Result } from '../core/result.ts';
 import { previewLines } from '../commands/fix.ts';
 import type { SetupContext } from './setup-flow.ts';
 
-/** The registry, refused when saving to it would drop entries it can't read. */
+/**
+ * The registry, refused when saving to it would drop entries it can't read. An entry
+ * with an empty name or email counts as not recorded: `use` would stop and ask for it.
+ */
 export async function readRegistry(): Promise<Result<Registry>> {
   const registry = await loadRegistry();
-  if (!registry.ok || registry.value.unreadable.length === 0) return registry;
+  if (!registry.ok) return registry;
+  // No prototype, as in the registry itself: an account named like a built-in must not collide.
+  const accounts = Object.assign(Object.create(null) as Record<string, Account>,
+    Object.fromEntries(Object.entries(registry.value.accounts).filter(([, entry]) => entry.name && entry.email)));
+  if (registry.value.unreadable.length === 0) return ok({ ...registry.value, accounts });
   return err('the account registry has entries repown cannot read (' + registry.value.unreadable.join(', ') +
              ') -- fix or remove them first');
 }
@@ -23,12 +30,14 @@ export async function readContext(git: Git, cwd: string | null): Promise<Result<
   const registry = await readRegistry();
   if (!registry.ok) return registry;
   const repo = await inspectRepo(git);
+  // The history is read only for the guard question, which needs it; it can be long.
+  const guardAsked = repo.guard === 'off' && !repo.hook?.redirected;
   const [auth, pinned, allowed, planned, addresses] = await Promise.all([
     inspectAuth(git, repo.originUrl ?? undefined),
     git.getConfig('repown.account', 'local'),
     git.getAllConfig('repown.allowOwner', 'local'),
     planRepair(git),
-    git.emailCounts(),
+    guardAsked ? git.emailCounts() : Promise.resolve(ok(new Map<string, number>())),
   ]);
   return ok({
     cwd, recorded: registry.value.accounts, pinned,

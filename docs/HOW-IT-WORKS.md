@@ -467,22 +467,25 @@ flowchart TD
   T -->|neither| X2["🔴 exit 2: names the flags to pass"]
   T -->|yes| R{"a git repository?"}
   R -->|no| X1["🔴 exit 1"]
-  R -->|yes| A["account: a recorded one, or a new one<br/>(host, name, email; suggested from the profile)"]
+  R -->|yes| F{"flags consistent with this clone?"}
+  F -->|no| X3["🔴 exit 2 (or 1): nothing written"]
+  F -->|yes| A["account: a recorded one, or a new one<br/>(host, name, email; suggested from the profile)"]
   A --> Q["only what applies here:<br/>switch gh · allow the organisation · the guard · gh as helper"]
   Q --> V["review: the summary and the exact commands"]
-  V -->|Run| C["accounts add → allowOwner → fix → use → guard on"]
-  V -->|Back / Change an answer| Q
-  V -->|Decline, or Ctrl-C| N["⚪ nothing changed (exit 1, or 130)"]
+  V -->|Run| C["accounts add → allowOwner → fix → use → guard on<br/>stops at the first failure, listing what didn't run"]
+  V -->|Back / Change an answer| A
+  V -->|Decline, Esc or Ctrl-C| N["⚪ nothing changed (exit 1, or 130)"]
+  C -->|Ctrl-C while running| I["🟡 the running command reacts as usual;<br/>nothing after it runs (exit 130)"]
 ```
 
 | It asks | Only when | Becomes |
 | --- | --- | --- |
 | Which account owns this clone? | an account is recorded (default: the one pinned here) | `use <account>` |
 | Login, host, name, email | "a new account"; refused if already recorded | `accounts add <account> --name --email --host` |
-| Switch the GitHub CLI too? | a GitHub clone, gh knows the account, another is active | `use --gh` |
-| Allow pushes to the organisation? | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
-| Check every push? (default Yes) | the guard is off, and no other tool owns the hook | `guard on` |
-| Stop gh being the credential helper? (default No) | a GitHub clone, and gh is the helper | `fix --yes` |
+| Switch the GitHub CLI too? (default No) | a GitHub clone, gh knows the account, another is active | `use --gh` |
+| Allow pushes to the organisation? (default Yes) | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
+| Check every push? (default Yes) | the guard is off, no other tool owns the hook, and `core.hooksPath` doesn't redirect hooks | `guard on` |
+| Stop gh being the credential helper? (default No) | a GitHub clone, gh is the helper, and `fix` finds its entries | `fix --yes` |
 
 Before the guard question it says how many other addresses are in this clone's history:
 the guard suits clones where you push only your own commits (ADR-005).
@@ -490,7 +493,7 @@ the guard suits clones where you push only your own commits (ADR-005).
 | Variant | Command |
 | --- | --- |
 | Go back | pick **Back** at any choice, or type `<` at a text question |
-| No terminal (CI, a script) | `repown setup octocat --guard --no-input`: runs with the flags, or exits 2 naming what's missing |
+| No terminal (CI, a script) | `repown setup octocat --guard --no-input`: runs with the flags, or exits 2 naming what's missing. Every question not given as a flag counts as No, including the two that default to Yes; `--fix` does nothing where gh isn't the helper |
 | A new account from a script | `repown setup octo-work --name "Octo Work" --email octo-work@users.noreply.github.com --no-input` |
 
 </details>

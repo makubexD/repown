@@ -33,11 +33,12 @@ changing that, in September 2026:
   choices, words instead of symbols). `engines` stays `>=20`.
 - **The whole tree is locked by `npm-shrinkwrap.json`**, which ships in the tarball
   (`files`, and `check package` requires it). It replaces package-lock.json.
-- **Only `src/wizard/clack.ts` imports it, and only through a dynamic `import()`** after
-  `setup` has decided to prompt. No other command, and above all not `guard check`, which
-  the pre-push hook runs ([ADR-003](ADR-003-hook-calls-installed-cli.md)), can load it:
-  test/characterization.test.ts runs every other command under a resolver that fails if
-  clack is asked for.
+- **Only `src/wizard/clack.ts` imports it, and that file is loaded only through a dynamic
+  `import()`** once `setup` has decided to prompt. No other command, and above all not
+  `guard check`, which the pre-push hook runs ([ADR-003](ADR-003-hook-calls-installed-cli.md)),
+  can load it: test/characterization.test.ts finds no import of `@clack` outside that file,
+  and runs `guard check`, the help, and the other commands it can run safely under a
+  resolver that fails if clack is asked for.
 - **The plain prompter is used whenever repown's own colour rule says no colour**
   (`NO_COLOR`, `TERM=dumb`, stderr not a terminal), so clack's own colour decision never
   overrides it.
@@ -59,8 +60,9 @@ changing that, in September 2026:
   shrinkwrap and resolve clack's own `^` ranges.
 - **Exposure is limited, not zero.** During a `setup` run, clack's code runs in the same
   process as the commands it drives, with the user's environment.
-- **Dependabot proposes clack updates** as separate pull requests; `versioning-strategy:
-  increase` keeps the exact pin exact. The transitive packages move only with a clack
-  update or a security update.
+- **Dependabot is configured to propose clack updates** as separate pull requests, with
+  `versioning-strategy: increase` so the pin stays exact. The transitive packages are
+  locked by the shrinkwrap, so they change when clack is updated or a security update
+  bumps them.
 - **Node 20 is end-of-life** (April 2026). On 20.0–20.11 the dependency is skipped and the
   wizard uses the plain prompter; nothing else changes.

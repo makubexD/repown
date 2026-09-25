@@ -27,9 +27,7 @@ export function plainPrompter(streams: Streams): Prompter {
   // SIGINT event (a cancel) instead of ending the process with a signal.
   const terminal = (streams.input as { isTTY?: boolean }).isTTY === true;
   const rl = createInterface({ input: streams.input, output: streams.output, terminal });
-  const lines = queue(rl);
-  const write = (text: string): void => { streams.output.write(text); };
-  const io: Io = { lines, write, say: (text) => write(text + '\n') };
+  const io = ioFor(rl, streams.output, terminal);
   return {
     ask: (step, initial, choices, detail) => askStep(io, step, { initial, choices, detail }),
     review: (review) => showReview(io, review),
@@ -47,8 +45,23 @@ type Next = () => Promise<string | null>;
 
 interface Io {
   readonly lines: Next;
+  /** Shows the text the answer is typed after; readline redraws it while the line is edited. */
   readonly write: (text: string) => void;
   readonly say: (text: string) => void;
+}
+
+/** On a terminal, readline shows the prompt, so it can redraw it while the line is edited. */
+function ioFor(rl: Interface, output: Writable, terminal: boolean): Io {
+  const lines = queue(rl);
+  let closed = false;
+  rl.on('close', () => { closed = true; });
+  const write = (text: string): void => { output.write(text); };
+  const show = (text: string): void => {
+    if (!terminal || closed) { write(text); return; }
+    rl.setPrompt(text);
+    rl.prompt();
+  };
+  return { lines, write: show, say: (text) => write(text + '\n') };
 }
 
 /** The input as a queue of lines; null once it has ended or Ctrl-C was pressed. */

@@ -30,10 +30,14 @@ test('the clack prompter answers the engine through its own keys, on the given s
   const realWrite = process.stdout.write.bind(process.stdout);
   process.stdout.write = ((chunk: string) => { writes.push(String(chunk)); return true; }) as typeof process.stdout.write;
   try {
+    // No spinner: clack's takes over Ctrl-C and exits 0, where a cancel must be 130.
+    const done = prompter.busy?.('Reading this clone');
+    done?.('Read');
+    assert.doesNotMatch(shown, /[◒◐◓◑]/);
     press(input, ENTER);
     assert.equal(await prompter.ask(guard, true, [], 'only your address is in this history'), true);
     press(input, ENTER);
-    assert.equal(await prompter.ask(name, 'Octo Cat', []), 'Octo Cat');
+    assert.equal(await prompter.ask(name, '  Octo Cat ', []), 'Octo Cat', 'answers are trimmed, as in the plain prompter');
     press(input, DOWN, DOWN, ENTER);
     assert.equal(await prompter.ask(guard, true, []), BACK);
     press(input, ESC);
@@ -44,6 +48,8 @@ test('the clack prompter answers the engine through its own keys, on the given s
     process.stdout.write = realWrite;
   }
   assert.match(shown, /Check every push\?/);
+  assert.match(shown, /undo: repown guard off/, 'the hint shows under the question');
+  assert.match(shown, /shown on every commit · type < to go back/, 'a text question shows its hint even with a default');
   assert.match(shown, /only your address is in this history/);
   assert.match(shown, /repown use octocat/);
   assert.deepEqual(writes.filter((text) => /Check every push|repown use/.test(text)), [], 'nothing drawn on stdout');

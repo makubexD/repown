@@ -23,7 +23,7 @@ export interface SetupContext {
   readonly recorded: Readonly<Record<string, Account>>;
   /** `repown.account` in this clone, if it is pinned already. */
   readonly pinned: string | null;
-  /** The provider of origin's host (`generic` without an origin), and who owns origin. */
+  /** The provider of origin's host (`github`, only as a default, without an origin), and who owns origin. */
   readonly host: string;
   readonly owner: string | null;
   /** `repown.allowOwner` entries in this clone, lowercased. */
@@ -92,7 +92,7 @@ function choiceSteps(ctx: SetupContext): Step<SetupContext>[] {
       hint: 'for gh pr create and gh api; git does not need it', initial: () => false,
       when: (answers) => ghOffered(accountOf(answers), ctx) },
     { id: 'allowOwner', kind: 'confirm', flag: '--allow-owner', initial: () => true,
-      message: 'Allow pushes to "' + (ctx.owner ?? '') + '" from this clone?',
+      message: 'Allow pushes to "' + printable(ctx.owner ?? '') + '" from this clone?',
       hint: 'an organisation you belong to; one repo-local key',
       when: (answers) => ownerForeign(accountOf(answers), ctx) },
     { id: 'guard', kind: 'confirm', flag: '--guard', message: 'Check every push before it leaves?',
@@ -119,10 +119,14 @@ function required(value: unknown): string | null {
   return String(value).trim() ? null : 'a value is required';
 }
 
+/** A login as hosts spell them: it also becomes part of a profile lookup's URL. */
+const LOGIN = /^[\w.@-]+$/;
+
 function newAccountProblem(value: string, ctx: SetupContext): string | null {
   if (!value.trim()) return 'a value is required';
-  const clash = Object.keys(ctx.recorded).find((account) => lower(account) === lower(value.trim()));
-  return clash ? '"' + clash + '" is already recorded: pick it from the list instead' : null;
+  if (!LOGIN.test(value)) return 'use letters, digits and . _ @ - only';
+  const clash = Object.keys(ctx.recorded).find((account) => lower(account) === lower(value));
+  return clash ? '"' + clash + '" is already recorded: use that account by that name' : null;
 }
 
 function hostOf(answers: Answers, ctx: SetupContext): string {
@@ -181,7 +185,7 @@ function allowOwnerLine(ctx: SetupContext): string[] {
  * as `--name value`, and `--host github` left out because it's the default.
  */
 export function formatCommand(argv: readonly string[]): string {
-  if (argv[0] === 'git') return argv.map(shellWord).join(' ');
+  if (argv[0] === 'git') return printable(argv.map(shellWord).join(' '));
   const end = argv.indexOf('--');
   const head = end < 0 ? argv : argv.slice(0, end);
   const positional = end < 0 ? [] : argv.slice(end + 1);
@@ -189,25 +193,33 @@ export function formatCommand(argv: readonly string[]): string {
   const options = head.filter((token) => token.startsWith('-') && token !== '--host=github').flatMap(splitOption);
   const dashed = positional.some((value) => value.startsWith('-'));
   const words = dashed ? [...path, ...options, '--', ...positional] : [...path, ...positional, ...options];
-  return ['repown', ...words.map(shellWord)].join(' ');
+  return printable(['repown', ...words.map(shellWord)].join(' '));
 }
 
+/** Control characters as visible escapes: a value read from a remote URL must not redraw the screen. */
+export function printable(text: string): string {
+  return text.replace(/[\x00-\x1f\x7f]/g, (char) => '\\x' + char.charCodeAt(0).toString(16).padStart(2, '0'));
+}
+
+/** `--name=value` as `--name value`, unless the value starts with a dash and would read as an option. */
 function splitOption(token: string): string[] {
   const at = token.indexOf('=');
-  return at < 0 ? [token] : [token.slice(0, at), token.slice(at + 1)];
+  return at < 0 || token[at + 1] === '-' ? [token] : [token.slice(0, at), token.slice(at + 1)];
 }
 
 /** What `--no-input` still needs, as the flags that would supply it. */
 export function missingFlags(given: Answers, recorded: Readonly<Record<string, unknown>>): string[] {
-  if (given['account'] === undefined && given['newAccount'] === undefined) return ['<account>'];
-  if (!isNew(given) || Object.hasOwn(recorded, accountOf(given))) return [];
-  return (['name', 'email'] as const).filter((key) => given[key] === undefined).map((key) => '--' + key);
+  if (given['account'] === undefined) return ['<account>'];
+  if (!isNew(given)) return [];
+  if (accountOf(given) && Object.hasOwn(recorded, accountOf(given))) return [];
+  const login = accountOf(given) ? [] : ['<account>'];
+  return [...login, ...(['name', 'email'] as const).filter((key) => given[key] === undefined).map((key) => '--' + key)];
 }
 
 // ---------------------------------------------------------------- the review
 
 function review(answers: Answers, ctx: SetupContext): Review {
-  return { summary: summary(answers, ctx), commands: planCommands(answers, ctx).map((command) => formatCommand(command.argv)) };
+  return { summary: summary(answers, ctx).map(printable), commands: planCommands(answers, ctx).map((command) => formatCommand(command.argv)) };
 }
 
 function summary(answers: Answers, ctx: SetupContext): string[] {

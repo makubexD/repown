@@ -160,12 +160,54 @@ describe('setup flow', () => {
     assert.deepEqual(argvOf(outcome.answers, ctx), [['use', '--cwd=/work/project', '--', 'octocat'], ['guard', 'on', '--cwd=/work/project']]);
   });
 
+  test('a value that starts with a dash stays attached to its option in the shown command', () => {
+    assert.equal(formatCommand(['accounts', 'add', '--name=-dash', '--email=a@example.invalid', '--host=github', '--', 'octocat']),
+      "repown accounts add octocat '--name=-dash' --email a@example.invalid");
+  });
+
+  test('every shown command parses back to the argv that runs', async () => {
+    const { parseArgs } = await import('../src/ui/args.ts');
+    const { specFor } = await import('../src/ui/command.ts');
+    const commands: Record<string, () => Promise<import('../src/ui/command.ts').Command>> = {
+      use: async () => (await import('../src/commands/use.ts')).default,
+      'accounts add': async () => (await import('../src/commands/accounts.ts')).default.actions['add']!,
+    };
+    for (const [path, argv] of [['use', ['use', '--gh', '--', 'octocat']],
+      ['accounts add', ['accounts', 'add', '--name=Octo Cat', '--email=a@example.invalid', '--host=azdo', '--', 'octo-work']]] as const) {
+      const words = shellSplit(formatCommand(argv)).slice(1 + path.split(' ').length);
+      const shown = parseArgs(words, specFor(await commands[path]!()));
+      const run = parseArgs(argv.slice(path.split(' ').length), specFor(await commands[path]!()));
+      assert.ok(shown.ok && run.ok);
+      if (shown.ok && run.ok) assert.deepEqual(shown.value, run.value);
+    }
+  });
+
   test('the equivalent commands are shown quoted, the way you would type them', () => {
     assert.equal(formatCommand(['accounts', 'add', '--name=Octo Cat', '--email=a@example.invalid', '--host=github', '--', 'octocat']),
       "repown accounts add octocat --name 'Octo Cat' --email a@example.invalid");
     assert.equal(formatCommand(['use', '--gh', '--', '-odd']), 'repown use --gh -- -odd');
     assert.equal(formatCommand(['git', 'config', '--local', '--add', 'repown.allowOwner', 'octo-org']),
       'git config --local --add repown.allowOwner octo-org');
+  });
+
+  test('control characters are shown escaped, so nothing can redraw the review', () => {
+    const shown = formatCommand(['use', '--', 'octo\x1b[2Jcat']);
+    assert.doesNotMatch(shown, /\x1b/);
+    assert.match(shown, /\\x1b/);
+    const ctx = context({ owner: 'octo\x1b]0;x\x07org' });
+    for (const line of setupFlow(ctx).review({ account: 'octocat', guard: true }, ctx).summary) {
+      assert.doesNotMatch(line, /[\x00-\x1f\x7f]/);
+    }
+  });
+
+  test('a new account login must be a plain name: no spaces, slashes, ? or #', () => {
+    const newAccount = setupFlow(context()).steps.find((step) => step.id === 'newAccount')!;
+    for (const bad of [' octo-work', 'octo work', 'octo/work', '../user', 'a?b', 'a#b', 'a\x1bb']) {
+      assert.ok(newAccount.validate?.(bad), bad);
+    }
+    for (const good of ['octo-work', 'octo.work', 'octo_work', 'octo@example.invalid']) {
+      assert.equal(newAccount.validate?.(good), null, good);
+    }
   });
 
   test('back and change an answer re-plan from the new answers', async () => {
@@ -196,6 +238,12 @@ describe('setup flow', () => {
     assert.match(guard.detail?.({ account: 'octocat' }, context({ addresses: err('git log failed') })) ?? '', /could not be read/);
   });
 });
+
+/** A POSIX shell's word splitting, for the single-quoted words formatCommand produces. */
+function shellSplit(line: string): string[] {
+  return [...line.matchAll(/'((?:[^']|'\\'')*)'|(\S+)/g)].map((match) =>
+    match[1] !== undefined ? match[1].replaceAll("'\\''", "'") : match[2]!);
+}
 
 // ---------------------------------------------------------------- the command
 
@@ -280,6 +328,29 @@ describe('repown setup, without a terminal', () => {
     const run = repown(['setup', 'octocat', '--name', 'Other', '--email', 'other@example.invalid', '--no-input'], at.box.dir);
     assert.equal(run.status, 2);
     assert.match(readFileSync(join(at.registry, 'accounts.json'), 'utf8'), /octocat@example\.invalid/);
+  });
+
+  test('a recorded entry missing its name or email counts as not recorded, so nothing runs half-way', () => {
+    writeFileSync(join(at.registry, 'accounts.json'), JSON.stringify({ accounts: { octocat: { name: '', email: '' } } }));
+    at.box.git('remote', 'add', 'origin', 'https://github.com/octo-org/project.git');
+    const run = repown(['setup', 'octocat', '--allow-owner', 'octo-org', '--no-input'], at.box.dir);
+    assert.equal(run.status, 2);
+    assert.match(run.stderr, /--name/);
+    assert.doesNotMatch(localConfig(at), /allowOwner/);
+  });
+
+  test('--name and --email without an account still describe a new one, and --no-input asks for the login', () => {
+    record(at, 'octocat', 'octocat@example.invalid');
+    const run = repown(['setup', '--name', 'Octo Work', '--email', 'work@example.invalid', '--no-input'], at.box.dir);
+    assert.equal(run.status, 2);
+    assert.match(run.stderr, /<account>/);
+  });
+
+  test('--fix where gh is not the helper says there is nothing to undo', () => {
+    record(at, 'octocat', 'octocat@example.invalid');
+    const run = repown(['setup', 'octocat', '--fix', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /nothing to undo/);
   });
 
   test('--allow-owner writes the owner repo-locally, once, however often setup runs', () => {

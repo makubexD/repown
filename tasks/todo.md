@@ -1,6 +1,6 @@
 # repown setup wizard
 
-Status: Phase 4 done; Phase 5 review next
+Status: Phase 5 done; Phase 6 close-out waits on GATE 6
 
 - [x] 1. Characterization tests (fix --dry-run snapshot, use org hint, help exit codes, no clack in the static import graph) - Docs: none (tests only)
 - [x] 2. Export fix's preview lines (byte-identical) - Docs: none (no behaviour change)
@@ -8,7 +8,7 @@ Status: Phase 4 done; Phase 5 review next
 - [x] 4. Engine + plain prompter + scripted tests - Docs: none (no user surface yet)
 - [x] 5. ⚠ repown setup flow + command - Docs: README, HOW-IT-WORKS, help, CHANGELOG, ADR-005 amendment
 - [x] 6. clack adapter + smoke test + Windows check - Docs: ADR-016, CONTRIBUTING, README
-- [ ] Phase 5 review (incl. wizard-auditor)
+- [x] Phase 5 review (incl. wizard-auditor)
 - [ ] Phase 6 close-out (GATE 6)
 
 ## No business rule changes (each a test)

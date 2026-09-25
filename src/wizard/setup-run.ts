@@ -16,7 +16,7 @@ import fixCommand from '../commands/fix.ts';
 import guardGroup from '../commands/guard.ts';
 import accountsGroup from '../commands/accounts.ts';
 import { wizard, refusedGiven, type Answers, type Prompter } from './engine.ts';
-import { setupFlow, planCommands, formatCommand, missingFlags, NEW_ACCOUNT, type PlannedCommand, type SetupContext } from './setup-flow.ts';
+import { setupFlow, planCommands, formatCommand, missingFlags, printable, NEW_ACCOUNT, type PlannedCommand, type SetupContext } from './setup-flow.ts';
 import { readContext, readRegistry } from './setup-context.ts';
 import { plainPrompter } from './plain.ts';
 
@@ -77,6 +77,9 @@ function givenFrom(args: Args, recorded: Recorded): Result<Answers> {
   const account = args.positional[0];
   const known = account !== undefined && Object.hasOwn(recorded, account);
   if (account !== undefined) Object.assign(answers, known ? { account } : { account: NEW_ACCOUNT, newAccount: account });
+  // --name, --email and --host describe a new account: with them, the account is a new one.
+  const describesNew = ['name', 'email', 'host'].some((key) => flagString(args, key) !== null);
+  if (account === undefined && describesNew) answers['account'] = NEW_ACCOUNT;
   for (const key of ['name', 'email', 'host']) {
     const value = flagString(args, key);
     if (value !== null) answers[key] = value;
@@ -113,7 +116,7 @@ function checkAgainst(given: Answers, ctx: SetupContext, allowOwner: string | nu
   const answers = { ...given };
   if (allowOwner !== null) {
     if (!ctx.owner || allowOwner.toLowerCase() !== ctx.owner.toLowerCase()) {
-      return err(usage('--allow-owner ' + allowOwner + ': origin belongs to ' + (ctx.owner ? '"' + ctx.owner + '"' : 'no owner repown can read')));
+      return err(usage(printable('--allow-owner ' + allowOwner + ': origin belongs to ' + (ctx.owner ? '"' + ctx.owner + '"' : 'no owner repown can read'))));
     }
   }
   const refused = refusedGiven(setupFlow(ctx), answers);
@@ -123,7 +126,10 @@ function checkAgainst(given: Answers, ctx: SetupContext, allowOwner: string | nu
     out.detail('see: repown guard status');
     return err(1);
   }
-  if (answers['fix'] === true && ctx.fixLines === null) answers['fix'] = false;
+  if (answers['fix'] === true && ctx.fixLines === null) {
+    out.detail('--fix: gh is not the credential helper for this clone, so there is nothing to undo');
+    answers['fix'] = false;
+  }
   return ok(answers);
 }
 
@@ -168,7 +174,8 @@ async function choosePrompter(): Promise<Prompter> {
 
 /**
  * Runs the plan in order and stops at the first failure. Ctrl-C while a command runs
- * reaches that command as it would if you had typed it; nothing after it runs.
+ * reaches the git and gh processes it has started; the command itself finishes what it
+ * is doing, and nothing after it runs (exit 130).
  */
 async function execute(plan: readonly PlannedCommand[], git: Git): Promise<number> {
   let interrupted = false;
@@ -217,13 +224,13 @@ function commandFor(argv: readonly string[]): [Command, readonly string[]] {
 async function allowOwner(owner: string, git: Git): Promise<number> {
   const present = await git.getAllConfig('repown.allowOwner', 'local');
   if (present.some((value) => value.toLowerCase() === owner.toLowerCase())) {
-    out.pass('origin', owner + ' is already allowed in this clone');
+    out.pass('origin', printable(owner) + ' is already allowed in this clone');
     return 0;
   }
   if (!(await git.addConfig('repown.allowOwner', owner, 'local'))) {
-    out.fail('origin', 'could not write repown.allowOwner ' + owner);
+    out.fail('origin', 'could not write repown.allowOwner ' + printable(owner));
     return 1;
   }
-  out.pass('origin', 'pushes to ' + owner + ' allowed in this clone');
+  out.pass('origin', 'pushes to ' + printable(owner) + ' allowed in this clone');
   return 0;
 }

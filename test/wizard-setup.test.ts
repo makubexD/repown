@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { sandbox, type Sandbox } from './helpers.ts';
+import { setupContext as context } from './setup-fixtures.ts';
 import { ok, err } from '../src/core/result.ts';
 import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type ReviewChoice } from '../src/wizard/engine.ts';
 import { setupFlow, planCommands, formatCommand, missingFlags, NEW_ACCOUNT, type SetupContext } from '../src/wizard/setup-flow.ts';
@@ -20,25 +21,6 @@ const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name];
 
 // ---------------------------------------------------------------- the flow
-
-function context(overrides: Partial<SetupContext> = {}): SetupContext {
-  return {
-    cwd: null,
-    recorded: { octocat: { name: 'Octo Cat', email: 'octocat@example.invalid', host: 'github' } },
-    pinned: null,
-    host: 'github',
-    owner: 'octocat',
-    allowed: [],
-    credentialPinned: true,
-    gh: null,
-    guard: 'off',
-    redirected: false,
-    fixLines: null,
-    addresses: ok(new Map()),
-    suggest: async () => ({}),
-    ...overrides,
-  };
-}
 
 type Entry = readonly [string, Reply | ReviewChoice];
 

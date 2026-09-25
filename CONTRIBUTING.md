@@ -81,6 +81,10 @@ with an installed repown.
   [test/helpers.ts](test/helpers.ts), which isolates git config and clears the variables
   that would leak your identity into a test. `node --test test/guard.test.ts` runs one
   file; `node --test --test-name-pattern="<regex>" test/guard.test.ts` one test.
+- **Changing what `repown setup` shows?** [test/wizard-screens.test.ts](test/wizard-screens.test.ts)
+  plays it as a newcomer would, pressing arrows, Enter, typed text and Esc on the real
+  screens (`play()` in [test/setup-fixtures.ts](test/setup-fixtures.ts)), in one scenario
+  per situation. Add one for a new situation.
 - **Before you push:** `npm test` and `npm run build` (the build is also the type check;
   there is no linter). CI repeats both on Linux, Windows and macOS, so watch path
   separators and line endings.

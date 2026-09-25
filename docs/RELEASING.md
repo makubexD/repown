@@ -55,9 +55,13 @@ and removing or renaming one is `major`. Before 1.0, a breaking change is a `min
    - commits `x.y.z` and creates the annotated tag `vx.y.z`, both local.
 3. `git push --follow-tags` pushes the commit and the tag. The tag starts
    `.github/workflows/release.yml`.
-4. Watch the **Release** run in GitHub Actions. When it's green,
-   `npm view repown version` shows the new version, and the GitHub Release has the
-   CHANGELOG notes.
+4. Watch the **Release** run in GitHub Actions. When it's green, the GitHub Release
+   has the CHANGELOG notes. The registry takes a few minutes to show the version: for
+   0.1.1, the version appeared after about 100 seconds, then its attestations, then
+   `latest`. A 404 right after a green run is that delay, not a failed publish (the
+   job log's `+ repown@x.y.z` line is the proof). Then
+   `npm view repown version --prefer-online` shows it, and `npm audit signatures` in a
+   project that installs it reports a verified attestation.
 
 </details>
 

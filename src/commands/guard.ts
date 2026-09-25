@@ -4,7 +4,7 @@
 // into every hook already on disk (src/core/guard/hook.ts) -- `--remote` and
 // `--url` on this action are a frozen contract, not just today's flags.
 
-import { installGuard, uninstallGuard, guardState } from '../core/guard/hook.ts';
+import { installGuard, uninstallGuard, guardState, fromNpxCache } from '../core/guard/hook.ts';
 import { check, type Refusal } from '../core/guard/check.ts';
 import { flagString, gitFor, type Args } from '../ui/args.ts';
 import type { Command, CommandGroup } from '../ui/command.ts';
@@ -24,7 +24,15 @@ async function enable(args: Args): Promise<number> {
 
   out.pass('guard', 'on -- every push is checked before it leaves');
   out.line(out.dim('  ' + installed.value.path));
+  if (fromNpxCache(installed.value.entry)) warnNpxCache();
   return 0;
+}
+
+/** The hook is installed, but it calls a copy that nothing keeps (ADR-003, amended). */
+function warnNpxCache(): void {
+  out.warn('guard', 'repown ran from npx\'s cache, and this hook calls that copy. If that folder is ' +
+    'deleted, every push is refused unless another repown is on PATH.');
+  out.detail('fix: npm install -g repown, then run: repown guard on');
 }
 
 async function disable(args: Args): Promise<number> {

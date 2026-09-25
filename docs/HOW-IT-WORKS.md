@@ -430,6 +430,11 @@ flowchart TD
   class X bad
 ```
 
+**Turned on through npx?** Then the hook records a copy in npm's `_npx` cache, and
+`guard on` warns about it. When that folder is deleted, the hook refuses unless a
+`repown` is on the PATH. Install it globally (`npm install -g repown`) and run
+`repown guard on` again in that clone.
+
 To uninstall cleanly:
 
 ```

@@ -44,6 +44,15 @@ export function entryPoint(): string {
   return join(dirname(here), '..', '..', 'cli' + here.slice(here.lastIndexOf('.')));
 }
 
+/**
+ * True when `entry` sits in a folder of npm's `_npx` cache, where `npx repown` runs a
+ * package that isn't installed. A hook pointing there loses its entry point when that
+ * folder is deleted. Only npm's layout was measured; other runners aren't recognised.
+ */
+export function fromNpxCache(entry: string): boolean {
+  return entry.split(/[\\/]/).slice(0, -1).includes('_npx');
+}
+
 /** This clone's own hooks directory, and the one git actually runs hooks from. */
 interface HookDirs {
   readonly own: string;
@@ -159,6 +168,8 @@ export function hookBody(entry: string, nodePath: string): string {
 
 export interface InstallOutcome {
   readonly path: string;
+  /** The CLI entry point written into the hook. */
+  readonly entry: string;
 }
 
 const NO_GIT_DIR = 'could not locate the git directory for this repository';
@@ -177,10 +188,11 @@ export async function installGuard(git: Git): Promise<Result<InstallOutcome>> {
     return err('a pre-push hook this tool did not write already exists at ' + path + ' -- leaving it alone');
   }
 
+  const entry = entryPoint();
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, hookBody(entryPoint(), process.execPath), 'utf8');
+  await writeFile(path, hookBody(entry, process.execPath), 'utf8');
   await chmod(path, 0o755).catch(() => { /* Windows filesystems carry no mode */ });
-  return ok({ path });
+  return ok({ path, entry });
 }
 
 /**

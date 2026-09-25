@@ -37,3 +37,12 @@ push unguarded.
 - Removing repown before running `repown guard off` leaves hooks that refuse every push.
   The refusal prints three ways out: reinstall and run `repown guard on`, delete the
   hook, or use `git push --no-verify` once.
+
+## Amendments
+
+- **2026-09-25, npx.** `npx repown guard on` without a global install records a copy in
+  npm's `_npx` cache as the entry point. Nothing keeps that folder: once it is deleted,
+  and with no `repown` on the `PATH`, the hook refuses every push. `guard on` still
+  installs the hook (refusing would protect nothing, [ADR-011](ADR-011-refuse-vs-warn.md)),
+  and warns with the fix: install globally, then run `repown guard on` again. Only npm's
+  layout was measured, so pnpm, yarn and bun runners aren't recognised.

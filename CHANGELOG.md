@@ -7,6 +7,10 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+- `repown guard on` warns when it runs from npx's cache: the hook would call that
+  temporary copy, and refuse every push once it's deleted. Install globally, then run
+  `repown guard on` again.
+
 ## [0.1.1] - 2026-09-25
 
 - Fixed: `repown use -` (and `accounts add -`, `accounts remove -`, `scan -`) is a

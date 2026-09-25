@@ -7,7 +7,7 @@ import { test, describe, before, after, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict';
 import { spawnSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { readFileSync, existsSync, mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, rmSync, mkdirSync, writeFileSync, cpSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
@@ -790,5 +790,37 @@ describe('two collaborators, only one using repown', () => {
     const run = push('a', 'HEAD:main');
     assert.notEqual(run.status, 0);
     assert.match(run.stderr, /bob@example\.invalid/);
+  });
+});
+
+describe('guard on from npx\'s cache', () => {
+  let box: Sandbox;
+  let root: string;
+  before(() => {
+    box = sandbox();
+    // npx runs a package from <cache>/_npx/<hash>/node_modules/<name>. Node refuses to
+    // strip types under node_modules, so the copy of the sources drops that level;
+    // the _npx folder is what the check looks for.
+    root = mkdtempSync(join(tmpdir(), 'repown-npx-'));
+    const copy = join(root, '_npx', '0a1b2c', 'repown');
+    cpSync(fileURLToPath(new URL('../src', import.meta.url)), join(copy, 'src'), { recursive: true });
+    cpSync(fileURLToPath(new URL('../package.json', import.meta.url)), join(copy, 'package.json'));
+  });
+  after(() => { box.dispose(); rmSync(root, { recursive: true, force: true }); });
+
+  test('installs the hook, then warns that it depends on that copy', () => {
+    const cli = join(root, '_npx', '0a1b2c', 'repown', 'src', 'cli.ts');
+    const run = spawnSync(process.execPath, [cli, 'guard', 'on'], { cwd: box.dir, env: process.env, encoding: 'utf8' });
+    assert.equal(run.status, 0);
+    assert.match(run.stdout, /guard +on -- every push is checked/);
+    assert.match(run.stderr, /npx's cache/);
+    assert.match(run.stderr, /npm install -g repown/);
+    assert.equal(existsSync(join(box.dir, '.git', 'hooks', 'pre-push')), true);
+  });
+
+  test('an installed or source copy gets no such warning', () => {
+    const run = repown(['guard', 'on'], { cwd: box.dir });
+    assert.equal(run.status, 0);
+    assert.doesNotMatch(run.stderr, /npx/);
   });
 });

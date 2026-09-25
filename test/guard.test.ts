@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { sandbox, type Sandbox } from './helpers.ts';
 import { Git } from '../src/core/git.ts';
 import { check, parsePushRefs } from '../src/core/guard/check.ts';
-import { hookBody, MARKER, guardState, installGuard, uninstallGuard } from '../src/core/guard/hook.ts';
+import { hookBody, MARKER, guardState, installGuard, uninstallGuard, fromNpxCache } from '../src/core/guard/hook.ts';
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join, delimiter } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -805,5 +805,20 @@ describe('organisation repositories', () => {
     } finally {
       box.dispose();
     }
+  });
+});
+
+describe('fromNpxCache: is the running CLI a copy in npx\'s cache?', () => {
+  test('npm\'s _npx folder counts, with either separator', () => {
+    assert.equal(fromNpxCache('/home/u/.npm/_npx/0a1b2c/node_modules/repown/dist/cli.js'), true);
+    assert.equal(fromNpxCache(String.raw`C:\Users\u\AppData\Local\npm-cache\_npx\0a1b2c\node_modules\repown\dist\cli.js`), true);
+    assert.equal(fromNpxCache('C:/Users/u/AppData/Local/npm-cache/_npx/0a1b2c/node_modules/repown/dist/cli.js'), true);
+  });
+
+  test('a global install, a clone, or a name that merely contains _npx does not', () => {
+    assert.equal(fromNpxCache('/usr/local/lib/node_modules/repown/dist/cli.js'), false);
+    assert.equal(fromNpxCache(String.raw`C:\Users\u\AppData\Roaming\npm\node_modules\repown\dist\cli.js`), false);
+    assert.equal(fromNpxCache('/home/u/code/my_npx_tool/src/cli.ts'), false);
+    assert.equal(fromNpxCache('/home/u/code/repown/_npx'), false, 'the file itself is not a folder');
   });
 });

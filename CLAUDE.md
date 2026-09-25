@@ -10,6 +10,8 @@ Docs, one purpose each:
   behaviour claims: check those against the code yourself.
 - docs/HOW-IT-WORKS.md: every scenario with diagrams; update its card when behaviour or
   output changes.
+- CONTRIBUTING.md: the human contributor guide (running from a clone, the demo sandbox).
+  SECURITY.md: reporting, and what the guard refuses vs reports.
 - docs/RELEASING.md: how a version reaches npm. CHANGELOG.md: what changed, for users.
 - **docs/decisions/: one ADR per decision, many measured empirically. Read the relevant
   ADR before changing behaviour.** Cite them as `ADR-0NN`. A new decision is a new ADR;

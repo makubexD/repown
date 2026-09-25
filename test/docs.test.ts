@@ -22,7 +22,10 @@ function filesIn(dir: string, ext: string): string[] {
     .filter((name) => name.endsWith(ext)).map((name) => join(ROOT, dir, name));
 }
 
-const DOCS = [join(ROOT, 'README.md'), join(ROOT, 'CLAUDE.md'), ...filesIn('docs', '.md')];
+const DOCS = [
+  ...['README.md', 'CLAUDE.md', 'CONTRIBUTING.md', 'SECURITY.md'].map((file) => join(ROOT, file)),
+  ...filesIn('docs', '.md'),
+];
 const read = (path: string): string => readFileSync(path, 'utf8');
 const name = (path: string): string => relative(ROOT, path).replaceAll('\\', '/');
 

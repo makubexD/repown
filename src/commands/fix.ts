@@ -51,17 +51,20 @@ async function confirmed(args: Args): Promise<boolean> {
 }
 
 function preview(planned: readonly RemovalOutcome[]): void {
-  out.line();
-  out.line('  These entries make gh the credential helper, and will be removed:');
-  out.line();
-  for (const entry of planned) {
-    out.line('    ' + entry.scope + ':  ' + entry.key);
-    for (const value of entry.values) out.line('        = ' + describeValue(value));
-  }
-  out.line();
-  out.line('  Nothing else in your config is touched.');
-  out.line('  Undo at any time:  gh auth setup-git');
-  out.line();
+  for (const text of previewLines(planned)) out.line(text);
+}
+
+/** What `fix` would remove, and the undo. `repown setup` shows the same lines in its review. */
+export function previewLines(planned: readonly RemovalOutcome[]): string[] {
+  const entries = planned.flatMap((entry) => [
+    '    ' + entry.scope + ':  ' + entry.key,
+    ...entry.values.map((value) => '        = ' + describeValue(value)),
+  ]);
+  return [
+    '', '  These entries make gh the credential helper, and will be removed:', '',
+    ...entries,
+    '', '  Nothing else in your config is touched.', '  Undo at any time:  gh auth setup-git', '',
+  ];
 }
 
 async function apply(results: readonly RemovalOutcome[], git: Git): Promise<number> {

@@ -82,3 +82,21 @@ describe('the prompt library stays inside the wizard', () => {
     assert.deepEqual(found.map((file) => relative('.', file)), []);
   });
 });
+
+describe('fix preview lines', () => {
+  test('are the dry-run preview, one string per line, for the wizard to show on stderr', async () => {
+    const { previewLines } = await import('../src/commands/fix.ts');
+    const lines = previewLines([{ scope: 'global', key: 'credential.https://github.com.helper', values: ['!gh auth git-credential'], removed: false }]);
+    assert.deepEqual(lines, [
+      '',
+      '  These entries make gh the credential helper, and will be removed:',
+      '',
+      '    global:  credential.https://github.com.helper',
+      '        = !gh auth git-credential',
+      '',
+      '  Nothing else in your config is touched.',
+      '  Undo at any time:  gh auth setup-git',
+      '',
+    ]);
+  });
+});

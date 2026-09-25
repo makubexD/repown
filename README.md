@@ -179,6 +179,18 @@ npm test          # node's own test runner, no framework
 npm run build     # tsc, also the typecheck
 ```
 
+Cutting a version (maintainers):
+
+```
+npm run changelog       # draft CHANGELOG.md's Unreleased section from git history, then edit it
+npm run release:patch   # or release:minor | release:major | release:beta
+```
+
+`release:*` runs `npm version`, which refuses unless the repository is ready
+(`npm run release:check`), the tests and build pass, and the tarball holds only what
+it should (`npm run pack:check`). It then dates the changelog, commits and tags
+`v<version>` locally.
+
 - **Node:** developing needs Node 22.18+, though running needs only 20
   ([ADR-010](docs/decisions/ADR-010-typescript-on-node.md)).
 - **Dependencies:** zero at runtime, by choice.

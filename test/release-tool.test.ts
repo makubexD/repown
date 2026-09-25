@@ -250,3 +250,29 @@ describe('release tool: check repo', () => {
     assert.match(check().stderr, /FAIL .*Unreleased/);
   });
 });
+
+describe('package.json is publishable', () => {
+  const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')) as {
+    private?: boolean; publishConfig?: { access?: string }; scripts: Record<string, string>;
+  };
+
+  test('it is not marked private, and publishes publicly', () => {
+    assert.notEqual(pkg.private, true);
+    assert.equal(pkg.publishConfig?.access, 'public');
+  });
+
+  test('npm version runs the checks first and dates the changelog', () => {
+    assert.match(pkg.scripts['preversion'] ?? '', /release:check/);
+    assert.match(pkg.scripts['version'] ?? '', /changelog release/);
+    assert.match(pkg.scripts['version'] ?? '', /git add CHANGELOG\.md/);
+  });
+
+  test('the real tarball passes check package', () => {
+    const pack = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+      cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', shell: process.platform === 'win32',
+    });
+    assert.equal(pack.status, 0, pack.stderr);
+    const run = tool(['check', 'package', '-'], undefined, pack.stdout);
+    assert.equal(run.status, 0, run.stderr);
+  });
+});

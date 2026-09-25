@@ -20,13 +20,25 @@
   },
   "files": [
     "dist",
-    "!dist/**/*.map"
+    "!dist/**/*.map",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsc && tsc -p tsconfig.test.json",
     "watch": "tsc --watch",
     "test": "node --test \"test/*.test.ts\"",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "changelog": "node scripts/release.ts changelog draft",
+    "release:check": "node scripts/release.ts check repo",
+    "pack:check": "npm pack --dry-run --json --ignore-scripts | node scripts/release.ts check package -",
+    "release:patch": "npm version patch",
+    "release:minor": "npm version minor",
+    "release:major": "npm version major",
+    "release:beta": "npm version prerelease --preid=beta",
+    "preversion": "npm run release:check && npm test && npm run build && npm run pack:check",
+    "version": "node scripts/release.ts changelog release && git add CHANGELOG.md",
+    "postversion": "node -e \"console.error('next: git push --follow-tags')\"",
+    "prepublishOnly": "npm test"
   },
   "keywords": [
     "git",
@@ -36,7 +48,9 @@
     "multi-account"
   ],
   "license": "MIT",
-  "private": true,
+  "publishConfig": {
+    "access": "public"
+  },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "typescript": "^5.7.0"

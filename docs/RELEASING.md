@@ -159,10 +159,11 @@ environment is renamed, or the package moves.
    `main`" check inside release.yml can't do that on its own, because a tag runs the
    workflow file stored at the tagged commit.
 3. **Trust the workflow.** This needs 2FA on the npm account. The `npm trust` command
-   needs npm ≥ 11.15, which is newer than the 11.5.1 that publishing through OIDC needs:
+   needs npm ≥ 11.15, which is newer than the 11.5.1 that publishing through OIDC needs.
+   Use `npm@11`, not `npm@latest`: npm 12 refuses to run on Node 25.
 
    ```
-   npx npm@latest trust github repown --repo makubexD/repown --file release.yml --env npm --allow-publish
+   npx npm@11 trust github repown --repo makubexD/repown --file release.yml --env npm --allow-publish
    ```
 
    Or go to npmjs.com → the package → Settings → Trusted Publisher → GitHub Actions:

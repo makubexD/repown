@@ -1,8 +1,8 @@
 # repown setup wizard
 
-Status: Phase 4, task 1 next
+Status: Phase 4, task 2 next
 
-- [ ] 1. Characterization tests (fix --dry-run snapshot, use org hint, help exit codes, no clack in the static import graph) - Docs: none (tests only)
+- [x] 1. Characterization tests (fix --dry-run snapshot, use org hint, help exit codes, no clack in the static import graph) - Docs: none (tests only)
 - [ ] 2. Export fix's preview lines (byte-identical) - Docs: none (no behaviour change)
 - [ ] 3. ⚠ ADR-016 + @clack/prompts (exact pin, shrinkwrap) - Docs: ADR-016, ADR-010, CLAUDE.md, README, SECURITY, CONTRIBUTING, CHANGELOG
 - [ ] 4. Engine + plain prompter + scripted tests - Docs: none (no user surface yet)

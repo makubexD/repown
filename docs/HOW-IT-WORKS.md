@@ -436,7 +436,7 @@ To uninstall cleanly:
 repown scan <dir>        # the "guard" column shows where it's on (submodules aren't listed)
 repown guard off         # in each of those clones, and each guarded submodule
 repown off               # optional: also drop the pinned identity
-npm unlink -g repown     # or: npm uninstall -g repown
+npm uninstall -g repown  # or, for a from-source install: npm unlink -g repown
 ```
 
 repown writes nothing else to a clone: no tracked file, nothing that gets committed.

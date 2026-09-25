@@ -1,9 +1,10 @@
 # repown
 
+[![npm](https://img.shields.io/npm/v/repown.svg)](https://www.npmjs.com/package/repown)
 [![CI](https://github.com/makubexD/repown/actions/workflows/ci.yml/badge.svg)](https://github.com/makubexD/repown/actions/workflows/ci.yml)
+[![Release](https://github.com/makubexD/repown/actions/workflows/release.yml/badge.svg)](https://github.com/makubexD/repown/actions/workflows/release.yml)
+[![Node](https://img.shields.io/node/v/repown.svg)](package.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Node >= 20](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)
-![Status: pre-1.0](https://img.shields.io/badge/status-pre--1.0-orange.svg)
 
 **Use several git accounts on one machine, and move between their repositories
 with no switch command.** Each repo owns its identity (that's the name: *repo
@@ -17,7 +18,8 @@ repown use octocat     # once per clone: this clone is octocat's
 repown guard on        # refuse any push that carries another identity
 ```
 
-> **Status:** pre-1.0. The commands may still change, and it isn't on npm yet.
+> **Status:** pre-1.0: the commands may still change. What changed in each version is in
+> [CHANGELOG.md](CHANGELOG.md).
 
 ## The problem
 
@@ -60,17 +62,21 @@ credential manager you already have, and leaves `gh` in charge of the GitHub CLI
 
 ## Install
 
-Needs Node 20+ and git, on Windows, macOS or Linux. It is not on npm yet, so
-install it from the repository:
+Needs Node 20+ and git, on Windows, macOS or Linux.
 
 ```
-git clone https://github.com/makubexD/repown.git
-cd repown && npm install && npm run build && npm link
+npm install -g repown
 ```
 
-`npm link` puts `repown` on your PATH. The package is marked `private` and kept off npm
-until its commands settle. To uninstall, run `repown guard off` in each
-guarded clone **first**: a guard that can't find repown refuses every push
+To try it without installing, run `npx repown doctor`. The package has no runtime
+dependencies, and each version is published from CI with
+[provenance](https://docs.npmjs.com/generating-provenance-statements), so npm shows the
+commit and workflow that built it. Update with `npm install -g repown@latest`; a guarded
+clone keeps working, because its hook calls the installed CLI
+([ADR-003](docs/decisions/ADR-003-hook-calls-installed-cli.md)).
+
+To uninstall, run `repown guard off` in each guarded clone **first**: a guard that can't
+find repown refuses every push
 ([the steps](docs/HOW-IT-WORKS.md#12-uninstall-or-repown-missing)).
 
 ## Quickstart
@@ -173,8 +179,11 @@ how often. It never changes anything.
 
 ## Development
 
+From a clone (`npm link` puts your working copy on PATH as `repown`):
+
 ```
-npm install
+git clone https://github.com/makubexD/repown.git
+cd repown && npm install && npm run build && npm link
 npm test          # node's own test runner, no framework
 npm run build     # tsc, also the typecheck
 ```

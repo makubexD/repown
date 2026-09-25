@@ -86,7 +86,7 @@ was.
 | Check | Refuses when | Fix |
 | --- | --- | --- |
 | `check repo` · branch | not on `main` | `git switch main` |
-| `check repo` · tree | uncommitted changes | commit or stash |
+| `check repo` · tree | uncommitted changes to tracked files (untracked files are ignored, as `npm version` ignores them) | commit or stash |
 | `check repo` · upstream | `main` is behind its upstream after a fetch | `git pull` |
 | `check repo` · upstream | *skipped* (warned, not passed) when there's no upstream | `git push -u origin main` |
 | `check repo` · changelog | Unreleased is empty | `npm run changelog`, then edit |

@@ -27,7 +27,7 @@ async function onBranch(dir: string, branch: string): Promise<Outcome> {
 }
 
 async function cleanTree(dir: string): Promise<Outcome> {
-  const status = await git(dir, ['status', '--porcelain']);
+  const status = await git(dir, ['status', '--porcelain', '--untracked-files=no']);
   if (!succeeded(status)) return outcome('tree', 'fail', 'git status failed: ' + status.stderr.trim());
   if (status.stdout.trim() === '') return outcome('tree', 'pass', 'no uncommitted changes');
   return outcome('tree', 'fail', 'uncommitted changes: commit or stash them first');

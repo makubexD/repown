@@ -215,11 +215,17 @@ describe('release tool: check repo', () => {
     assert.equal(tool(['check', '--cwd', box.dir]).status, 0);
   });
 
-  test('a dirty tree fails', () => {
-    writeFileSync(join(box.dir, 'stray.txt'), 'x');
+  test('a modified tracked file fails', () => {
+    writeFileSync(join(box.dir, 'CHANGELOG.md'), changelog('\n- Edited but not committed\n'));
     const run = check();
     assert.equal(run.status, 1);
     assert.match(run.stderr, /FAIL .*uncommitted/);
+  });
+
+  test('untracked files do not count as uncommitted changes, as with npm version', () => {
+    writeFileSync(join(box.dir, 'scratch.txt'), 'x');
+    const run = check();
+    assert.equal(run.status, 0, run.stderr);
   });
 
   test('another branch fails', () => {

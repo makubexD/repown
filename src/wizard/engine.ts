@@ -58,6 +58,10 @@ export interface Prompter {
   note(message: string): void;
   /** Releases the terminal; called once, after the wizard ends. */
   close(): void;
+  /** Optional framing a richer prompter can draw: a title, a closing line, a spinner. */
+  intro?(title: string): void;
+  outro?(message: string): void;
+  busy?(message: string): (done: string) => void;
 }
 
 export type Outcome =

@@ -109,6 +109,51 @@ with provenance ([how](SECURITY.md#how-the-package-is-published)).
 credential helper back, then shows the exact commands and runs them only when you choose
 Run ([card 13](docs/HOW-IT-WORKS.md#13-guided-setup)). The steps below are those commands.
 
+<details><summary>What it looks like</summary>
+
+```
+┌  repown setup
+│
+◇  Read this clone and this machine
+│
+◇  Which account owns this clone?
+│  octocat
+│
+◇  Allow pushes to "octo-org" from this clone?
+│  Yes
+│
+●  only your address is in this clone's history
+│
+◇  Check every push before it leaves?
+│  Yes
+│
+◇  Review: nothing has changed yet ───────────────────────╮
+│                                                         │
+│  account    octocat                                     │
+│  pushes as  octocat                                     │
+│  guard      turned on                                   │
+│                                                         │
+│  This runs:                                             │
+│    git config --local --add repown.allowOwner octo-org  │
+│    repown use octocat                                   │
+│    repown guard on                                      │
+│                                                         │
+├─────────────────────────────────────────────────────────╯
+│
+◆  Run these commands?
+│  ● Run these commands
+│  ○ Back
+│  ○ Change an answer
+│  ○ Decline
+└
+```
+
+Arrow keys choose, Enter confirms, Esc cancels, and every choice has a **← Back**. With
+`NO_COLOR`, `TERM=dumb` or no colour on stderr, the same questions come as numbered
+choices instead.
+
+</details>
+
 ### 1. Check the machine, once
 
 ```

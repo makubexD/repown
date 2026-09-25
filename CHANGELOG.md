@@ -18,7 +18,8 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   is on PATH. Install globally, then run `repown guard on` again.
 - One optional runtime dependency, `@clack/prompts` 1.8.1, for interactive prompts. It's
   pinned exactly, its tree is locked by the `npm-shrinkwrap.json` that now ships in the
-  package, and no command loads it yet; the pre-push hook never will.
+  package, and only `repown setup` loads it; the pre-push hook never does. Where it can't
+  load, `repown setup` asks with plain numbered prompts.
 
 ## [0.1.1] - 2026-09-25
 

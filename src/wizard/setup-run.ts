@@ -10,6 +10,7 @@ import type { Git } from '../core/git.ts';
 import { flagBool, flagString, gitFor, parseArgs, type Args } from '../ui/args.ts';
 import { specFor, type Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
+import { useColour } from '../ui/format.ts';
 import useCommand from '../commands/use.ts';
 import fixCommand from '../commands/fix.ts';
 import guardGroup from '../commands/guard.ts';
@@ -38,11 +39,32 @@ export async function runSetup(args: Args, deps: SetupDeps): Promise<number> {
 
   const git = gitFor(args);
   if (!(await git.isRepo())) { out.fail('setup', 'Not a git repository: ' + git.cwd); return 1; }
+  const prompter = unattended ? null : deps.prompter ?? await choosePrompter();
+  try {
+    return await continueSetup({ args, git, given: given.value, prompter });
+  } finally {
+    prompter?.close();
+  }
+}
+
+interface Setup {
+  readonly args: Args;
+  readonly git: Git;
+  readonly given: Answers;
+  /** Null with --no-input: nothing is asked. */
+  readonly prompter: Prompter | null;
+}
+
+async function continueSetup({ args, git, given, prompter }: Setup): Promise<number> {
+  prompter?.intro?.('repown setup');
+  const done = prompter?.busy?.('Reading this clone and this machine');
   const ctx = await readContext(git, flagString(args, 'cwd'));
+  done?.(ctx.ok ? 'Read this clone and this machine' : 'Could not read everything');
   if (!ctx.ok) { out.fail('setup', ctx.error); return 1; }
-  const answers = checkAgainst(given.value, ctx.value, flagString(args, 'allow-owner'));
+  const answers = checkAgainst(given, ctx.value, flagString(args, 'allow-owner'));
   if (!answers.ok) return answers.error;
-  return unattended ? runUnattended(answers.value, ctx.value, git) : runGuided(answers.value, ctx.value, { git, deps });
+  if (!prompter) return runUnattended(answers.value, ctx.value, git);
+  return runGuided(answers.value, ctx.value, { git, prompter });
 }
 
 // ------------------------------------------------------------ flags -> answers
@@ -115,24 +137,33 @@ async function runUnattended(answers: Answers, ctx: SetupContext, git: Git): Pro
 
 interface Guided {
   readonly git: Git;
-  readonly deps: SetupDeps;
+  readonly prompter: Prompter;
 }
 
-async function runGuided(given: Answers, ctx: SetupContext, { git, deps }: Guided): Promise<number> {
-  const prompter = deps.prompter ?? choosePrompter();
-  let outcome;
-  try {
-    outcome = await wizard(setupFlow(ctx), ctx, given, prompter);
-  } finally {
-    prompter.close();
-  }
-  if (outcome.status === 'cancelled') { out.warn('setup', 'cancelled; nothing was changed.'); return CANCELLED; }
-  if (outcome.status === 'declined') { out.warn('setup', 'declined; nothing was changed.'); return 1; }
+async function runGuided(given: Answers, ctx: SetupContext, { git, prompter }: Guided): Promise<number> {
+  const outcome = await wizard(setupFlow(ctx), ctx, given, prompter);
+  if (outcome.status === 'cancelled') { prompter.outro?.('Cancelled'); out.warn('setup', 'cancelled; nothing was changed.'); return CANCELLED; }
+  if (outcome.status === 'declined') { prompter.outro?.('Declined'); out.warn('setup', 'declined; nothing was changed.'); return 1; }
+  prompter.outro?.('Running the commands');
+  // The commands own the terminal from here: none of them may find it held.
+  prompter.close();
   return execute(planCommands(outcome.answers, ctx), git);
 }
 
-function choosePrompter(): Prompter {
-  return plainPrompter({ input: process.stdin, output: process.stderr });
+/**
+ * @clack/prompts when colour is on for stderr and the terminal can draw it; the plain
+ * prompter otherwise, and whenever the optional dependency is absent or fails to load
+ * (an older Node skips installing it, ADR-016) -- said once, then carried on.
+ */
+async function choosePrompter(): Promise<Prompter> {
+  const streams = { input: process.stdin, output: process.stderr };
+  if (!useColour(process.stderr) || process.env['TERM'] === 'dumb') return plainPrompter(streams);
+  try {
+    return (await import('./clack.ts')).clackPrompter(streams);
+  } catch (cause) {
+    out.detail('plain prompts: the richer prompter could not load (' + (cause instanceof Error ? cause.message : String(cause)) + ')');
+    return plainPrompter(streams);
+  }
 }
 
 /**

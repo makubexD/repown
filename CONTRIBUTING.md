@@ -50,6 +50,10 @@ exit                      # back to your own shell and config
 Each push also warns `destination not checked`: the origin is a local path, so there is
 no owner to compare.
 
+To try the guided setup there, run `repown setup` in the sandbox's clone. The sandbox's
+`PATH` has no gh, so the gh questions don't appear; `NO_COLOR=1 repown setup` shows the
+plain, numbered prompter instead of the arrow-key one.
+
 What it sets up, under `/tmp/repown-demo` (`C:\repown-demo` in Git Bash), deleted and
 rebuilt on every run:
 

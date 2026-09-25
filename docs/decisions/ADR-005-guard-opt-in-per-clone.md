@@ -29,3 +29,11 @@ that refuses ordinary work gets switched off, and the identity pin often goes wi
   such as commits you cherry-picked or rebased, or fetched from their clone.
 - For a team, the right control is a server-side ruleset on author addresses
   ([ADR-013](ADR-013-deliberately-not-done.md)).
+
+## Amendments
+
+- **2026-09-25, guided setup.** `repown setup` asks about the guard as its own question,
+  per clone, defaulting to Yes and saying first how many other addresses are in the
+  clone's history. It is still a separate, explicit step: shown in the review before
+  anything runs, and never taken for granted without a terminal, where `--guard` must be
+  passed. `repown use` still pins the identity only.

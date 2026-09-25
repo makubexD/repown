@@ -27,6 +27,7 @@ const COMMANDS: Record<string, Loader> = {
   guard: async () => (await import('./commands/guard.ts')).default,
   accounts: async () => (await import('./commands/accounts.ts')).default,
   scan: async () => (await import('./commands/scan.ts')).default,
+  setup: async () => (await import('./commands/setup.ts')).default,
 };
 
 function version(): string {

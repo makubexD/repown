@@ -30,7 +30,10 @@ export interface Step<C> {
   /** The option or positional this answer becomes, shown in help and in errors. */
   readonly flag: string;
   choices?(answers: Answers, context: C): Choice[];
-  initial?(answers: Answers, context: C): Answer | undefined;
+  /** The default; may be looked up (a profile suggestion), so it may be a promise. */
+  initial?(answers: Answers, context: C): Answer | undefined | Promise<Answer | undefined>;
+  /** A line of context shown with the question, worked out from earlier answers. */
+  detail?(answers: Answers, context: C): string | undefined;
   /** The same rule the command applies; a message when the value is refused. */
   validate?(value: Answer): string | null;
   /** Asked only when this holds; absent means always. */
@@ -48,7 +51,7 @@ export interface Flow<C> {
 }
 
 export interface Prompter {
-  ask(step: Step<never>, initial: Answer | undefined, choices: readonly Choice[]): Promise<Reply>;
+  ask(step: Step<never>, initial: Answer | undefined, choices: readonly Choice[], detail?: string): Promise<Reply>;
   review(review: Review): Promise<ReviewChoice>;
   /** "Change an answer": one of the steps that were asked. */
   pickStep(steps: readonly Step<never>[]): Promise<string | typeof CANCEL>;
@@ -91,9 +94,10 @@ export async function runFlow<C>(flow: Flow<C>, context: C, pass: Pass, prompter
   return { status: 'answered', answers: prune(flow, answers, context, pass.given), asked };
 }
 
-function ask<C>(step: Step<C>, answers: Answers, context: C, prompter: Prompter): Promise<Reply> {
-  const initial = answers[step.id] ?? step.initial?.(answers, context);
-  return prompter.ask(step as Step<never>, initial, step.choices?.(answers, context) ?? []);
+async function ask<C>(step: Step<C>, answers: Answers, context: C, prompter: Prompter): Promise<Reply> {
+  const initial = answers[step.id] ?? await step.initial?.(answers, context);
+  const choices = step.choices?.(answers, context) ?? [];
+  return prompter.ask(step as Step<never>, initial, choices, step.detail?.(answers, context));
 }
 
 function askable<C>(step: Step<C>, answers: Answers, context: C, given: ReadonlySet<string>): boolean {
@@ -109,6 +113,15 @@ export function prune<C>(flow: Flow<C>, answers: Answers, context: C, given: Rea
     if (given.has(step.id) || (step.when?.(kept, context) ?? true)) kept[step.id] = value;
   }
   return kept;
+}
+
+/** A value given as a flag passes the same check a typed answer would: one message per refusal. */
+export function refusedGiven<C>(flow: Flow<C>, given: Answers): string[] {
+  return flow.steps.flatMap((step) => {
+    const value = given[step.id];
+    const problem = value === undefined ? null : step.validate?.(value) ?? null;
+    return problem ? [step.flag + ': ' + problem] : [];
+  });
 }
 
 /** Steps the user can return to from the review: reachable, and not given as a flag. */

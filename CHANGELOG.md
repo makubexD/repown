@@ -7,6 +7,12 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+- New: `repown setup`, a guided setup of the clone you're in. It asks which account owns it
+  (recording a new one), whether to switch gh, allow an organisation, turn the guard on and
+  stop gh being the credential helper; shows the exact commands; and runs them only when
+  you choose Run. Every answer is also a flag, and `--no-input` runs it from a script.
+  Existing commands are unchanged.
+
 - `repown guard on` warns when it runs from npx's cache: the hook would call that
   temporary copy, and once that is deleted it refuses every push unless another repown
   is on PATH. Install globally, then run `repown guard on` again.

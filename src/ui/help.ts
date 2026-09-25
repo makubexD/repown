@@ -101,5 +101,7 @@ function optionHelp(option: OptionSpec): string {
   const value = option.kind === 'boolean' ? '' : ' <value>';
   const choices = option.choices ? ' (' + option.choices.join('|') + ')' : '';
   const fallback = option.default !== undefined && option.default !== '' ? '  [default: ' + option.default + ']' : '';
-  return ('--' + option.name + value).padEnd(20) + option.help + choices + fallback;
+  const head = '--' + option.name + value;
+  // A name too long for the column still gets a gap before its help.
+  return (head.length >= 20 ? head + '  ' : head.padEnd(20)) + option.help + choices + fallback;
 }

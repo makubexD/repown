@@ -23,12 +23,15 @@ const REVIEW: readonly (readonly [ReviewChoice, string])[] = [
 ];
 
 export function plainPrompter(streams: Streams): Prompter {
-  const rl = createInterface({ input: streams.input, output: streams.output, terminal: false });
+  // On a real terminal, readline must own it: only then does Ctrl-C arrive as its
+  // SIGINT event (a cancel) instead of ending the process with a signal.
+  const terminal = (streams.input as { isTTY?: boolean }).isTTY === true;
+  const rl = createInterface({ input: streams.input, output: streams.output, terminal });
   const lines = queue(rl);
   const write = (text: string): void => { streams.output.write(text); };
   const io: Io = { lines, write, say: (text) => write(text + '\n') };
   return {
-    ask: (step, initial, choices) => askStep(io, step, initial, choices),
+    ask: (step, initial, choices, detail) => askStep(io, step, { initial, choices, detail }),
     review: (review) => showReview(io, review),
     pickStep: async (steps) => {
       io.say('Which answer do you want to change?');
@@ -62,8 +65,15 @@ function queue(rl: Interface): Next {
   };
 }
 
-async function askStep(io: Io, step: Step<never>, initial: Answer | undefined, choices: readonly Choice[]): Promise<Reply> {
+interface Asked {
+  readonly initial: Answer | undefined;
+  readonly choices: readonly Choice[];
+  readonly detail: string | undefined;
+}
+
+async function askStep(io: Io, step: Step<never>, { initial, choices, detail }: Asked): Promise<Reply> {
   io.say(step.message + (step.hint ? '  (' + step.hint + ')' : ''));
+  if (detail) io.say('  ' + detail);
   if (step.kind === 'select') return askSelect(io, choices, initial);
   if (step.kind === 'confirm') return askConfirm(io, initial === true);
   const shown = typeof initial === 'string' && initial ? ' [' + initial + ']' : '';

@@ -35,6 +35,7 @@ global or system), after showing you what it removes. gh's active account is cha
 
 | I want to… / What happened? | Card |
 | --- | --- |
+| Be guided through it, one question at a time | [13](#13-guided-setup) |
 | Set up a new machine | [1](#1-set-up-the-machine) |
 | Save an account once, use it everywhere | [2](#2-remember-an-account) |
 | Make a clone belong to an account | [3](#3-pin-a-clone) |
@@ -448,5 +449,48 @@ npm uninstall -g repown  # or, for a from-source install: npm unlink -g repown
 ```
 
 repown writes nothing else to a clone: no tracked file, nothing that gets committed.
+
+</details>
+
+### 13. Guided setup
+
+**`repown setup` asks, shows the commands, then runs them.** Nothing it does is special:
+every answer is a flag of `accounts add`, `use`, `guard on` or `fix`, or the one git line
+card 8 uses for an organisation, and the review shows those commands before anything
+changes.
+
+<details><summary>Show how</summary>
+
+```mermaid
+flowchart TD
+  S[repown setup] --> T{"a terminal,<br/>or --no-input?"}
+  T -->|neither| X2["🔴 exit 2: names the flags to pass"]
+  T -->|yes| R{"a git repository?"}
+  R -->|no| X1["🔴 exit 1"]
+  R -->|yes| A["account: a recorded one, or a new one<br/>(host, name, email; suggested from the profile)"]
+  A --> Q["only what applies here:<br/>switch gh · allow the organisation · the guard · gh as helper"]
+  Q --> V["review: the summary and the exact commands"]
+  V -->|Run| C["accounts add → allowOwner → fix → use → guard on"]
+  V -->|Back / Change an answer| Q
+  V -->|Decline, or Ctrl-C| N["⚪ nothing changed (exit 1, or 130)"]
+```
+
+| It asks | Only when | Becomes |
+| --- | --- | --- |
+| Which account owns this clone? | an account is recorded (default: the one pinned here) | `use <account>` |
+| Login, host, name, email | "a new account"; refused if already recorded | `accounts add <account> --name --email --host` |
+| Switch the GitHub CLI too? | a GitHub clone, gh knows the account, another is active | `use --gh` |
+| Allow pushes to the organisation? | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
+| Check every push? (default Yes) | the guard is off, and no other tool owns the hook | `guard on` |
+| Stop gh being the credential helper? (default No) | a GitHub clone, and gh is the helper | `fix --yes` |
+
+Before the guard question it says how many other addresses are in this clone's history:
+the guard suits clones where you push only your own commits (ADR-005).
+
+| Variant | Command |
+| --- | --- |
+| Go back | pick **Back** at any choice, or type `<` at a text question |
+| No terminal (CI, a script) | `repown setup octocat --guard --no-input`: runs with the flags, or exits 2 naming what's missing |
+| A new account from a script | `repown setup octo-work --name "Octo Work" --email octo-work@users.noreply.github.com --no-input` |
 
 </details>

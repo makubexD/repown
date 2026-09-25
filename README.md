@@ -104,6 +104,11 @@ with provenance ([how](SECURITY.md#how-the-package-is-published)).
 
 ## Quickstart
 
+**Prefer to be guided?** In the clone, run `repown setup`. It asks which account owns it
+(and records a new one), whether to allow an organisation, turn the guard on and hand the
+credential helper back, then shows the exact commands and runs them only when you choose
+Run ([card 13](docs/HOW-IT-WORKS.md#13-guided-setup)). The steps below are those commands.
+
 ### 1. Check the machine, once
 
 ```
@@ -235,6 +240,7 @@ how often. It never changes anything.
 | `repown guard on \| off \| status` | install, remove or show the pre-push hook |
 | `repown accounts list \| add \| remove` | the accounts this machine knows (`add` takes `--name`, `--email`, `--host github\|azdo\|generic`) |
 | `repown scan [dir...] [--emails] [--depth <n>] [--format json]` | audit every clone under the given directories (default: the current one) |
+| `repown setup [<account>] [--guard] [--no-input]` | guided setup of this clone: asks, shows the commands, then runs them (every answer has a flag: `--name`, `--email`, `--host`, `--gh`, `--allow-owner`, `--fix`) |
 
 - **Help:** `repown --help` lists the commands. `repown help <command>` (or
   `repown <command> --help`) shows a command's options, and `repown help guard on` goes

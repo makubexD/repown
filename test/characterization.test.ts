@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 import { sandbox, type Sandbox } from './helpers.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
@@ -66,22 +66,52 @@ function sources(): string[] {
     .filter((name) => name.endsWith('.ts')).map((name) => name.replaceAll('\\', '/'));
 }
 
+/** An import of a package under @clack/, in any form: static, side effect, re-export or dynamic. */
+const CLACK_IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s*)['"`]@clack\//m;
+
 describe('the prompt library stays inside the wizard', () => {
-  test('only src/wizard/clack.ts names @clack', () => {
-    const naming = sources().filter((file) => readFileSync(join(SRC, file), 'utf8').includes('@clack/'));
-    assert.deepEqual(naming.filter((file) => file !== 'wizard/clack.ts'), []);
+  test('the pattern recognises every form of import', () => {
+    for (const form of ["import * as p from '@clack/prompts';", 'import "@clack/prompts";',
+      "export { text } from '@clack/prompts';", "await import('@clack/prompts')"]) {
+      assert.ok(CLACK_IMPORT.test(form), form);
+    }
+    assert.ok(!CLACK_IMPORT.test('// drawn with @clack/prompts'), 'a comment is not an import');
   });
 
-  // The hook runs the installed CLI (ADR-003): a broken dependency must never be
-  // able to stop `guard check`, so nothing may load the adapter at import time.
-  test('no file imports the clack adapter statically', () => {
-    const importer = /^\s*(?:import|export)\b[^;]*?from\s+'([^']*clack\.ts)'/m;
-    assert.ok(importer.test("import { clackPrompter } from './clack.ts';"), 'the pattern must catch a static import');
-    assert.ok(!importer.test("const adapter = await import('./clack.ts');"), 'a dynamic import is allowed');
-    const found = sources().filter((file) => importer.test(readFileSync(join(SRC, file), 'utf8')));
-    assert.deepEqual(found.map((file) => relative('.', file)), []);
+  test('only src/wizard/clack.ts imports @clack', () => {
+    const importing = sources().filter((file) => CLACK_IMPORT.test(readFileSync(join(SRC, file), 'utf8')));
+    assert.deepEqual(importing.filter((file) => file !== 'wizard/clack.ts'), []);
+  });
+
+  // The hook runs the installed CLI (ADR-003): a broken or missing dependency must
+  // never be able to stop `guard check` or any other command. So they run here with
+  // a resolver that fails the moment anything asks for the clack adapter or @clack.
+  test('every command but setup runs without resolving clack', () => {
+    const probe = spawnSync(process.execPath, ['--import', NO_CLACK, '--input-type=module', '-e',
+      "await import('./src/wizard/clack.ts').catch((error) => console.error(error.message));"], { encoding: 'utf8' });
+    assert.match(probe.stderr, /clack was resolved/, 'the hook must catch a load of the adapter');
+    const box = sandbox();
+    try {
+      for (const args of [['--help'], ['help', 'guard'], [], ['doctor'], ['guard', 'status'], ['accounts', 'list'],
+        ['guard', 'check', '--remote', 'origin', '--url', 'https://github.com/octocat/x.git']]) {
+        const run = spawnSync(process.execPath, ['--import', NO_CLACK, CLI, ...args],
+          { cwd: box.dir, input: '', env: process.env, encoding: 'utf8' });
+        assert.doesNotMatch(run.stderr, /clack was resolved/, args.join(' '));
+      }
+    } finally {
+      box.dispose();
+    }
   });
 });
+
+/** A module hook, preloaded with --import, that throws when clack is resolved. */
+const NO_CLACK = 'data:text/javascript,' + encodeURIComponent(
+  "import { registerHooks } from 'node:module';" +
+  'registerHooks({ resolve(specifier, context, next) {' +
+  "  if (specifier.startsWith('@clack/') || /(^|[\\\\/])clack\\.ts$/.test(specifier))" +
+  "    throw new Error('clack was resolved: ' + specifier);" +
+  '  return next(specifier, context);' +
+  '} });');
 
 describe('fix preview lines', () => {
   test('are the dry-run preview, one string per line, for the wizard to show on stderr', async () => {

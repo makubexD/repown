@@ -7,7 +7,7 @@ says so.
 
 **The name:** repo + own. Each repository owns its identity, so any clone, on any
 account, host or sign-in method, can be returned to without switching anything. The
-name is also free on npm.
+name was free on npm, and is now this package.
 
 | ADR | Decision |
 | --- | --- |

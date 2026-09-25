@@ -11,6 +11,7 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   usage error again. 0.1.0 read the bare `-` as a name and pinned an account called
   "-".
 - Unknown commands and actions now say which `repown help` to run.
+- Published from GitHub Actions through npm trusted publishing, with provenance.
 
 ## [0.1.0] - 2026-09-25
 

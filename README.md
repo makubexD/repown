@@ -69,9 +69,9 @@ npm install -g repown
 ```
 
 To try it without installing, run `npx repown doctor`. The package has no runtime
-dependencies, and each version is published from CI with
+dependencies. From 0.1.1 on, each version is published from CI with
 [provenance](https://docs.npmjs.com/generating-provenance-statements), so npm shows the
-commit and workflow that built it. Update with `npm install -g repown@latest`; a guarded
+commit and workflow that built it (0.1.0 was published by hand, and has none). Update with `npm install -g repown@latest`; a guarded
 clone keeps working, because its hook calls the installed CLI
 ([ADR-003](docs/decisions/ADR-003-hook-calls-installed-cli.md)).
 
@@ -197,8 +197,8 @@ git push --follow-tags  # CI publishes to npm (trusted publishing) and creates t
 ```
 
 `release:*` runs `npm version`, which refuses unless the repository is ready
-(`npm run release:check`), the tests and build pass, and the tarball holds only what
-it should (`npm run pack:check`). It then dates the changelog, commits and tags
+(`npm run release:check`), the tests and build pass, and the tarball has the files it
+needs and none it mustn't ship (`npm run pack:check`). It then dates the changelog, commits and tags
 `v<version>` locally. The whole routine is in [docs/RELEASING.md](docs/RELEASING.md);
 what changed in each version is in [CHANGELOG.md](CHANGELOG.md).
 

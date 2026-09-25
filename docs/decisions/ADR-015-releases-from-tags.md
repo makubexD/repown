@@ -45,12 +45,23 @@ What was checked before deciding, in September 2026:
   - runs the whole CI workflow;
   - checks that the tag equals `package.json`'s version, and that the tagged commit is
     on `main`;
-  - publishes through OIDC. A version containing `-` goes to dist-tag `next`, never
-    `latest`.
-  - creates the GitHub Release from that version's CHANGELOG section.
+  - builds, packs and checks the tarball, and extracts that version's CHANGELOG notes,
+    in a job that holds no token;
+  - publishes the packed `.tgz` through OIDC, in a job whose only permission is
+    `id-token: write` and which runs in the GitHub environment `npm`. A version
+    containing `-` goes to dist-tag `next`, never `latest`;
+  - creates the GitHub Release in a job whose only permission is `contents: write`.
+- **The real gate lives in repository settings, not in the workflow.** A tag runs the
+  `release.yml` stored at the tagged commit, so any check written there can be removed
+  by whoever tags. The `npm` environment only accepts deployments from `v*` tags, a tag
+  ruleset protects `v*` tags, and the npm trusted publisher names that environment.
 - **No npm token exists in CI.** The one exception was the first publish (0.1.0), made
   from a maintainer machine because trust can't be configured before the package
-  exists. After it, publishing access is set to "require 2FA and disallow tokens".
+  exists. The one-time setup then deletes that token and sets publishing access to
+  "require 2FA and disallow tokens" ([docs/RELEASING.md](../RELEASING.md#5-one-time-setup)).
+  So 0.1.0 has no provenance, and every later version has it.
+- **What runs with the OIDC token is pinned.** Actions are pinned to commit SHAs, and npm
+  to an exact version. No dependency install scripts run anywhere in the release.
 - **The release workflow is idempotent.** A version already on the registry is skipped,
   so re-running a failed release only does what's missing.
 - **The release tool is a second program on repown's own dispatcher**
@@ -71,13 +82,12 @@ What was checked before deciding, in September 2026:
 
 ## Consequences
 
-- **Renaming `release.yml` breaks publishing** until the trusted publisher on npmjs.com
-  is updated.
-- **Whoever can push a `v*` tag can publish**, though only a commit already on `main`.
-  A tag ruleset on GitHub narrows who that is.
-- **The publish job runs no dependency install scripts** (`npm ci --ignore-scripts`, then
-  an explicit build) and keeps no git credentials. It's the one job that can mint an
-  npm OIDC token.
+- **Renaming `release.yml` or the `npm` environment breaks publishing** until the
+  trusted publisher on npmjs.com is updated.
+- **A re-run uses the tagged commit's workflow.** Fixing `release.yml` on `main` helps
+  the next version, not a failed run of this one.
+- **Pinned actions and npm need bumping by hand** (or by Dependabot). The pins are the
+  point: nothing new runs with the OIDC token unless a commit says so.
 - **No backports.** Every stable release becomes `latest`, so versions only move
   forward on `main`.
 - **A bad release can't be withdrawn by reusing its number.** `npm deprecate` it and

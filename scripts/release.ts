@@ -14,6 +14,7 @@ const NAME = 'node scripts/release.ts';
 
 const COMMANDS: Record<string, Loader> = {
   changelog: async () => (await import('./release/changelog.ts')).default,
+  check: async () => (await import('./release/check.ts')).default,
 };
 
 function topHelp(entries: ReadonlyMap<string, Entry>): string[] {

@@ -87,6 +87,13 @@ function withLinks(text: string, target: Release, previous: string | undefined):
   return cleaned.slice(0, at) + refs + cleaned.slice(at);
 }
 
+/** The Unreleased section's lines; an error when the heading is missing. */
+export function unreleased(text: string): Result<string[]> {
+  const section = findSection(text, UNRELEASED);
+  if (!section) return err('CHANGELOG.md has no "## [Unreleased]" heading');
+  return ok(entriesOf(text.slice(section.bodyStart, section.end)));
+}
+
 export function notes(text: string, version: string): Result<string> {
   const section = findSection(text, version);
   if (!section) return err(`CHANGELOG.md has no section for ${version}`);

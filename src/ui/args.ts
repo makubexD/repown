@@ -70,7 +70,7 @@ export function parseArgs(tokens: readonly string[], spec: Spec): Result<Args> {
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!;
-    if (optionsEnded || !token.startsWith('-')) { positional.push(token); continue; }
+    if (optionsEnded || token === '-' || !token.startsWith('-')) { positional.push(token); continue; }
     if (token === '--') { optionsEnded = true; continue; }
     if (!token.startsWith('--')) return err(`unknown option ${token}`);
 

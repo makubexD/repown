@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { sandbox, type Sandbox } from './helpers.ts';
 import { draft, release, notes, releasable, repoWebUrl } from '../scripts/release/changelog-text.ts';
+import { inspectPack } from '../scripts/release/pack.ts';
 
 const TOOL = fileURLToPath(new URL('../scripts/release.ts', import.meta.url));
 for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name];
@@ -154,5 +155,98 @@ describe('release tool: changelog against a repository', () => {
 
   test('notes for a version that is not there fails with exit 1', () => {
     assert.equal(tool(['changelog', 'notes', '9.9.9', '--cwd', box.dir]).status, 1);
+  });
+});
+
+describe('pack contents', () => {
+  const files = (...paths: string[]): string => JSON.stringify([{ name: 'repown', version: '0.1.0', size: 2048, files: paths.map((path) => ({ path, size: 1 })) }]);
+  const good = ['package.json', 'README.md', 'LICENSE', 'CHANGELOG.md', 'dist/cli.js', 'dist/ui/help.js'];
+
+  test('a tarball with the entry point, readme, licence and changelog, and nothing else, passes', () => {
+    const result = inspectPack(files(...good));
+    assert.ok(result.ok);
+    assert.equal(result.value.files, good.length);
+  });
+
+  test('lists every missing required file and every file that must not ship', () => {
+    const result = inspectPack(files('package.json', 'README.md', 'dist/cli.js.map', 'src/cli.ts', 'scripts/release.ts', 'test/a.test.ts'));
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    for (const expected of ['LICENSE', 'CHANGELOG.md', 'dist/cli.js', 'dist/cli.js.map', 'src/cli.ts', 'scripts/release.ts', 'test/a.test.ts']) {
+      assert.ok(result.error.some((problem) => problem.includes(expected)), expected + ' not reported');
+    }
+  });
+
+  test('input that is not npm pack --json output is refused, not passed', () => {
+    assert.equal(inspectPack('> repown@0.1.0 build').ok, false);
+    assert.equal(inspectPack('[]').ok, false);
+  });
+
+  test('check package reads a file or - (stdin), exit 0 on a good list and 1 on a bad one', () => {
+    assert.equal(tool(['check', 'package', '-'], undefined, files(...good)).status, 0);
+    const bad = tool(['check', 'package', '-'], undefined, files('package.json'));
+    assert.equal(bad.status, 1);
+    assert.match(bad.stderr, /dist\/cli\.js/);
+  });
+});
+
+describe('release tool: check repo', () => {
+  let box: Sandbox;
+  let remote: Sandbox;
+
+  beforeEach(() => {
+    remote = sandbox();
+    box = sandbox();
+    writeFileSync(join(box.dir, 'CHANGELOG.md'), changelog('\n- Something changed\n'));
+    box.git('add', 'CHANGELOG.md');
+    box.git('commit', '-q', '-m', 'Start');
+    box.git('init', '-q', '--bare', join(remote.dir, 'origin.git'));
+    box.git('remote', 'add', 'origin', join(remote.dir, 'origin.git'));
+    box.git('push', '-q', '-u', 'origin', 'main');
+  });
+  afterEach(() => { box.dispose(); remote.dispose(); });
+
+  const check = (): Run => tool(['check', 'repo', '--cwd', box.dir]);
+
+  test('a clean main, level with origin, with Unreleased entries passes every check', () => {
+    const run = check();
+    assert.equal(run.status, 0, run.stderr);
+    assert.doesNotMatch(run.stdout + run.stderr, /FAIL|skipped/);
+    assert.equal(tool(['check', '--cwd', box.dir]).status, 0);
+  });
+
+  test('a dirty tree fails', () => {
+    writeFileSync(join(box.dir, 'stray.txt'), 'x');
+    const run = check();
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /FAIL .*uncommitted/);
+  });
+
+  test('another branch fails', () => {
+    box.git('switch', '-q', '-c', 'topic');
+    assert.match(check().stderr, /FAIL .*topic/);
+  });
+
+  test('being behind the upstream fails', () => {
+    box.git('commit', '-q', '--allow-empty', '-m', 'ahead');
+    box.git('push', '-q', 'origin', 'main');
+    box.git('reset', '-q', '--hard', 'HEAD~1');
+    const run = check();
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /FAIL .*behind/);
+  });
+
+  test('no upstream is reported as skipped, never as passed', () => {
+    box.git('branch', '--unset-upstream');
+    const run = check();
+    assert.match(run.stderr, /skipped/);
+    assert.doesNotMatch(run.stdout, /upstream/);
+  });
+
+  test('an empty Unreleased section fails', () => {
+    writeFileSync(join(box.dir, 'CHANGELOG.md'), changelog('\n'));
+    box.git('commit', '-q', '-am', 'Empty it');
+    box.git('push', '-q');
+    assert.match(check().stderr, /FAIL .*Unreleased/);
   });
 });

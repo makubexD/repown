@@ -1,0 +1,100 @@
+// `release check repo | package`: what must be true before a version is cut
+// (np's pre-publish checklist, minus what npm scripts already run: tests and build).
+// A check that could not run is reported as skipped, never as passed.
+
+import { readFileSync } from 'node:fs';
+import { run, output, succeeded } from '../../src/core/exec.ts';
+import { flagString, type Args } from '../../src/ui/args.ts';
+import type { Command, CommandGroup } from '../../src/ui/command.ts';
+import * as out from '../../src/ui/format.ts';
+import { unreleased } from './changelog-text.ts';
+import { inspectPack } from './pack.ts';
+import { projectDir, readChangelog } from './project.ts';
+
+interface Outcome {
+  readonly tag: string;
+  readonly state: 'pass' | 'fail' | 'skip';
+  readonly message: string;
+}
+
+const outcome = (tag: string, state: Outcome['state'], message: string): Outcome => ({ tag, state, message });
+const git = (dir: string, args: readonly string[]) => run('git', args, { cwd: dir });
+
+async function onBranch(dir: string, branch: string): Promise<Outcome> {
+  const current = output(await git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']));
+  if (current === branch) return outcome('branch', 'pass', 'on ' + branch);
+  return outcome('branch', 'fail', `on ${current ?? 'no branch'}, not ${branch}: releases are cut from ${branch}`);
+}
+
+async function cleanTree(dir: string): Promise<Outcome> {
+  const status = await git(dir, ['status', '--porcelain']);
+  if (!succeeded(status)) return outcome('tree', 'fail', 'git status failed: ' + status.stderr.trim());
+  if (status.stdout.trim() === '') return outcome('tree', 'pass', 'no uncommitted changes');
+  return outcome('tree', 'fail', 'uncommitted changes: commit or stash them first');
+}
+
+async function levelWithUpstream(dir: string): Promise<Outcome> {
+  const upstream = output(await git(dir, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']));
+  if (!upstream) return outcome('upstream', 'skip', 'skipped: this branch has no upstream to compare against');
+  const fetched = await git(dir, ['fetch', '--quiet']);
+  if (!succeeded(fetched)) return outcome('upstream', 'fail', 'could not fetch: ' + fetched.stderr.trim());
+  const behind = output(await git(dir, ['rev-list', '--count', 'HEAD..@{u}']));
+  if (behind === '0') return outcome('upstream', 'pass', 'level with ' + upstream);
+  return outcome('upstream', 'fail', `behind ${upstream} by ${behind ?? '?'} commit(s): pull first`);
+}
+
+function changelogFilled(dir: string): Outcome {
+  const text = readChangelog(dir);
+  const entries = text.ok ? unreleased(text.value) : text;
+  if (!entries.ok) return outcome('changelog', 'fail', entries.error);
+  if (entries.value.length === 0) return outcome('changelog', 'fail', 'the Unreleased section is empty: run npm run changelog');
+  return outcome('changelog', 'pass', `${entries.value.length} line(s) under Unreleased`);
+}
+
+function report(outcomes: readonly Outcome[]): number {
+  for (const { tag, state, message } of outcomes) {
+    if (state === 'pass') out.pass(tag, message);
+    else if (state === 'skip') out.warn(tag, message);
+    else out.fail(tag, message);
+  }
+  return outcomes.some((entry) => entry.state === 'fail') ? 1 : 0;
+}
+
+const repoCommand = {
+  summary: 'the repository is ready to cut a version: branch, clean tree, upstream, Unreleased entries',
+  options: [{ name: 'branch', kind: 'string', default: 'main', help: 'the branch releases are cut from' }],
+  examples: ['node scripts/release.ts check repo'],
+
+  async run(args: Args): Promise<number> {
+    const dir = projectDir(args);
+    const branch = flagString(args, 'branch') ?? 'main';
+    return report([await onBranch(dir, branch), await cleanTree(dir), await levelWithUpstream(dir), changelogFilled(dir)]);
+  },
+} satisfies Command;
+
+async function readInput(source: string): Promise<string> {
+  if (source !== '-') return readFileSync(source, 'utf8');
+  let text = '';
+  process.stdin.setEncoding('utf8');
+  for await (const chunk of process.stdin) text += chunk as string;
+  return text;
+}
+
+const packageCommand = {
+  summary: 'a tarball list (npm pack --dry-run --json) holds dist/, README, LICENSE, CHANGELOG and nothing else',
+  positionals: { min: 1, max: 1, label: '<file|->' },
+  examples: ['npm pack --dry-run --json | node scripts/release.ts check package -'],
+
+  async run(args: Args): Promise<number> {
+    const result = inspectPack(await readInput(args.positional[0]!));
+    if (!result.ok) return report(result.error.map((problem) => outcome('package', 'fail', problem)));
+    const kilobytes = (result.value.size / 1024).toFixed(1);
+    return report([outcome('package', 'pass', `${result.value.files} files, ${kilobytes} kB packed`)]);
+  },
+} satisfies Command;
+
+export default {
+  summary: 'preflight checks before a version is cut',
+  defaultAction: 'repo',
+  actions: { repo: repoCommand, package: packageCommand },
+} satisfies CommandGroup;

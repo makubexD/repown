@@ -25,6 +25,12 @@ describe('parseArgs', () => {
     assert.match(result.ok ? '' : result.error, /unknown option -x/);
   });
 
+  test('a bare - is a positional (stdin, by convention), not an option', () => {
+    const result = parseArgs(['-'], spec({ positionals: { min: 1, max: 1 } }));
+    assert.ok(result.ok);
+    assert.deepEqual(result.value.positional, ['-']);
+  });
+
   test('after --, a dash-led value is still a positional', () => {
     const result = parseArgs(['--', '-x'], spec());
     assert.ok(result.ok);

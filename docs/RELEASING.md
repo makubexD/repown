@@ -45,8 +45,9 @@ and removing or renaming one is `major`. Before 1.0, a breaking change is a `min
    already there. Rewrite the entries for users: what changed for them, not how.
    Commit the edit.
 2. `npm run release:patch` (or `:minor`, `:major`) runs `npm version`, which:
-   - runs `preversion`: `npm run release:check`, `npm test`, `npm run build`,
-     `npm run pack:check`. Any failure stops it with nothing changed;
+   - runs `preversion`: `npm run release:check`, `npm run test:quiet` (the full suite,
+     one dot per test, failures in full), `npm run build`, `npm run pack:check`. Any
+     failure stops it with nothing changed;
    - bumps `package.json` and `package-lock.json`;
    - runs `version`: moves Unreleased under `## [x.y.z] - <today>`, adds the compare
      links, and stages CHANGELOG.md;
@@ -92,6 +93,7 @@ was.
 | `check repo` · changelog | Unreleased is empty | `npm run changelog`, then edit |
 | tests / build | anything red | fix it |
 | `check package` | the tarball lacks `dist/cli.js`, README, LICENSE or CHANGELOG, or ships source maps, `src/`, `test/`, `scripts/` or `docs/` | fix `files` in package.json |
+| `check tag` (npm's `prepublishOnly`) | a manual `npm publish` from a commit that isn't the `v<version>` tag, or with uncommitted changes. The tag proves `preversion` already ran the tests and build, so publish doesn't run them again | cut the version with `npm run release:*` first |
 | release.yml | the tag isn't `v` + package.json's version | cut the tag with `npm run release:*`, never by hand |
 | release.yml | the tagged commit isn't on `main` | release from `main` |
 | release.yml | CHANGELOG has no section, or an empty one, for the version | the `version` hook writes it; don't tag by hand |
@@ -170,6 +172,7 @@ grammar and dispatcher, so `--help` works at every level and exit codes are `0` 
 | `node scripts/release.ts changelog release [<version>]` | move Unreleased under a dated heading (default: package.json's version) |
 | `node scripts/release.ts changelog notes [<version>]` | print one version's section on stdout |
 | `node scripts/release.ts check repo [--branch <name>]` | branch, clean tree, upstream, Unreleased (default branch: `main`) |
+| `node scripts/release.ts check tag` | HEAD is the `v<version>` tag and tracked files are unchanged (run by `prepublishOnly`) |
 | `node scripts/release.ts check package <file\|->` | read `npm pack --dry-run --json` output and check the file list |
 
 Every command takes `--cwd <dir>`. `node scripts/release.ts help <command>` shows the

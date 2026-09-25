@@ -1,15 +1,16 @@
-// `release check repo | package`: what must be true before a version is cut
-// (np's pre-publish checklist, minus what npm scripts already run: tests and build).
-// A check that could not run is reported as skipped, never as passed.
+// `release check repo | tag | package`: what must be true before a version is
+// cut (np's pre-publish checklist, minus what npm scripts already run: tests and
+// build), and before it is published. A check that could not run is reported as
+// skipped, never as passed.
 
 import { readFileSync } from 'node:fs';
-import { run, output, succeeded } from '../../src/core/exec.ts';
+import { run, output, succeeded, lines } from '../../src/core/exec.ts';
 import { flagString, type Args } from '../../src/ui/args.ts';
 import type { Command, CommandGroup } from '../../src/ui/command.ts';
 import * as out from '../../src/ui/format.ts';
 import { unreleased } from './changelog-text.ts';
 import { inspectPack } from './pack.ts';
-import { projectDir, readChangelog } from './project.ts';
+import { projectDir, readChangelog, readPackage } from './project.ts';
 
 interface Outcome {
   readonly tag: string;
@@ -43,6 +44,20 @@ async function levelWithUpstream(dir: string): Promise<Outcome> {
   return outcome('upstream', 'fail', `behind ${upstream} by ${behind ?? '?'} commit(s): pull first`);
 }
 
+/**
+ * `npm version` only tags a commit after its preversion hook passed the checks,
+ * the tests and the build, so the tag is the proof a publish needs.
+ */
+async function taggedVersion(dir: string): Promise<Outcome> {
+  const pkg = readPackage(dir);
+  if (!pkg.ok) return outcome('tag', 'fail', pkg.error);
+  const tag = 'v' + pkg.value.version;
+  const tags = await git(dir, ['tag', '--points-at', 'HEAD']);
+  if (!succeeded(tags)) return outcome('tag', 'fail', 'git tag failed: ' + tags.stderr.trim());
+  if (lines(tags).includes(tag)) return outcome('tag', 'pass', 'HEAD is ' + tag);
+  return outcome('tag', 'fail', `HEAD is not tagged ${tag}: cut the version with npm run release:*, then publish`);
+}
+
 function changelogFilled(dir: string): Outcome {
   const text = readChangelog(dir);
   const entries = text.ok ? unreleased(text.value) : text;
@@ -72,6 +87,16 @@ const repoCommand = {
   },
 } satisfies Command;
 
+const tagCommand = {
+  summary: 'HEAD is the v<version> tag npm version made, with no uncommitted changes (run before publishing)',
+  examples: ['node scripts/release.ts check tag'],
+
+  async run(args: Args): Promise<number> {
+    const dir = projectDir(args);
+    return report([await taggedVersion(dir), await cleanTree(dir)]);
+  },
+} satisfies Command;
+
 async function readInput(source: string): Promise<string> {
   if (source !== '-') return readFileSync(source, 'utf8');
   let text = '';
@@ -96,5 +121,5 @@ const packageCommand = {
 export default {
   summary: 'preflight checks before a version is cut',
   defaultAction: 'repo',
-  actions: { repo: repoCommand, package: packageCommand },
+  actions: { repo: repoCommand, tag: tagCommand, package: packageCommand },
 } satisfies CommandGroup;

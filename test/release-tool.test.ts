@@ -269,16 +269,63 @@ describe('package.json is publishable', () => {
 
   test('npm version runs the checks first and dates the changelog', () => {
     assert.match(pkg.scripts['preversion'] ?? '', /release:check/);
+    assert.match(pkg.scripts['preversion'] ?? '', /test:quiet/);
     assert.match(pkg.scripts['version'] ?? '', /changelog release/);
     assert.match(pkg.scripts['version'] ?? '', /git add CHANGELOG\.md/);
   });
 
+  test('npm publish trusts the tag npm version made, instead of re-running the suite', () => {
+    assert.match(pkg.scripts['prepublishOnly'] ?? '', /check tag/);
+    assert.doesNotMatch(pkg.scripts['prepublishOnly'] ?? '', /npm test/);
+    assert.match(pkg.scripts['test:quiet'] ?? '', /--test-reporter=dot/);
+  });
+
   test('the real tarball passes check package', () => {
-    const pack = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
-      cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', shell: process.platform === 'win32',
+    // One command string, not an argument list: npm is npm.cmd on Windows, which
+    // needs a shell, and Node deprecates passing arguments alongside shell: true.
+    const pack = spawnSync('npm pack --dry-run --json --ignore-scripts', {
+      cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', shell: true,
     });
     assert.equal(pack.status, 0, pack.stderr);
     const run = tool(['check', 'package', '-'], undefined, pack.stdout);
     assert.equal(run.status, 0, run.stderr);
+  });
+});
+
+describe('release tool: check tag', () => {
+  let box: Sandbox;
+
+  beforeEach(() => {
+    box = sandbox();
+    writeFileSync(join(box.dir, 'package.json'), JSON.stringify({ version: '0.3.0', repository: { url: `git+${REPO}.git` } }));
+    box.git('add', 'package.json');
+    box.git('commit', '-q', '-m', '0.3.0');
+  });
+  afterEach(() => box.dispose());
+
+  const checkTag = (): Run => tool(['check', 'tag', '--cwd', box.dir]);
+
+  test('HEAD tagged v<package.json version> with a clean tree passes', () => {
+    box.git('tag', '-a', 'v0.3.0', '-m', '0.3.0');
+    const run = checkTag();
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout, /v0\.3\.0/);
+  });
+
+  test('an untagged HEAD fails and says to cut the version with npm run release:*', () => {
+    const run = checkTag();
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /FAIL .*v0\.3\.0.*release:/);
+  });
+
+  test('a tag for another version does not count', () => {
+    box.git('tag', '-a', 'v0.2.9', '-m', '0.2.9');
+    assert.equal(checkTag().status, 1);
+  });
+
+  test('a modified tracked file fails even on the tagged commit', () => {
+    box.git('tag', '-a', 'v0.3.0', '-m', '0.3.0');
+    writeFileSync(join(box.dir, 'package.json'), '{}');
+    assert.match(checkTag().stderr, /FAIL .*uncommitted/);
   });
 });

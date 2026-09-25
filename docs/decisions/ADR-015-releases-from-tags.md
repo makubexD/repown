@@ -35,6 +35,9 @@ What was checked before deciding, in September 2026:
     - the build passes;
     - `check package` passes on the tarball.
   - The `version` hook dates CHANGELOG.md's Unreleased section into the version commit.
+  - `prepublishOnly` runs `check tag`, not the suite again. The `v<version>` tag on
+    HEAD proves `preversion` passed on that commit, and re-running about 300
+    git-spawning tests added minutes to every `npm publish`, dry runs included.
   - The tag is annotated, `v<version>`.
 - **The changelog is drafted from git history** (`npm run changelog`) and edited by
   hand. The commit style stays as it is.

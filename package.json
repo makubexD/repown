@@ -27,6 +27,7 @@
     "build": "tsc && tsc -p tsconfig.test.json",
     "watch": "tsc --watch",
     "test": "node --test \"test/*.test.ts\"",
+    "test:quiet": "node --test --test-reporter=dot \"test/*.test.ts\"",
     "prepare": "npm run build",
     "changelog": "node scripts/release.ts changelog draft",
     "release:check": "node scripts/release.ts check repo",
@@ -35,10 +36,10 @@
     "release:minor": "npm version minor",
     "release:major": "npm version major",
     "release:beta": "npm version prerelease --preid=beta",
-    "preversion": "npm run release:check && npm test && npm run build && npm run pack:check",
+    "preversion": "npm run release:check && npm run test:quiet && npm run build && npm run pack:check",
     "version": "node scripts/release.ts changelog release && git add CHANGELOG.md",
     "postversion": "node -e \"console.error('next: git push --follow-tags')\"",
-    "prepublishOnly": "npm test"
+    "prepublishOnly": "node scripts/release.ts check tag"
   },
   "keywords": [
     "git",

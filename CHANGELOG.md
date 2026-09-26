@@ -7,19 +7,26 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
-- New: `repown setup`, a guided setup of the clone you're in. It asks which account owns it
-  (recording a new one), whether to switch gh, allow an organisation, turn the guard on and
-  stop gh being the credential helper; shows each step in plain words with its exact
-  command; and runs them only when you choose Run. A clone that is already set up says so
-  and offers Done (exit 0, nothing written). Decline exits 1; Esc, Ctrl-C or an interrupt
-  exits 130. Every answer is also a flag, and `--no-input` runs it from a script.
-  The other commands' output is unchanged (tests lock `fix --dry-run`, `use`'s hints and
-  the help's exit codes).
+- New: `repown setup`, a guided setup of the clone you're in. It asks which account owns
+  it (recording a new one), whether to switch gh, whether this clone may push to origin's
+  owner (an organisation or a collaborator), whether to turn the guard on, and whether to
+  stop gh being git's credential helper (machine-wide). It shows each step in plain words
+  with its exact command, and changes nothing until you choose Run. A clone that is
+  already set up says so and offers Done. In a plain terminal (`NO_COLOR`, `TERM=dumb`)
+  it asks with numbered choices.
+- `repown setup` exit codes: 0 when done or already set up, 1 when declined, 2 for flags
+  that don't fit or no terminal without `--no-input`, 130 on Esc or Ctrl-C. A failing step
+  stops the rest, lists what didn't run, and exits with that command's code.
+- Every `repown setup` question is also a flag; add `--no-input` to run it from a script.
+  Nothing else changes: every other command prints what it did before.
 
-- Docs: the README starts with `repown setup` and keeps what a new user needs; the
-  configuration (environment variables, registry, per-clone keys, scripts and JSON) moved
-  to docs/CONFIGURATION.md, and the FAQ and the comparison with other approaches to
-  docs/FAQ.md.
+- Docs: the README starts with `repown setup` and keeps what a new user needs, with one
+  table of commands ordered by when you run them; the configuration (environment
+  variables, registry, per-clone keys, scripts and JSON) moved to docs/CONFIGURATION.md,
+  and the FAQ and the comparison with other approaches to docs/FAQ.md. SECURITY.md
+  explains how to report a vulnerability privately.
+- `repown help scan`: `--emails` shows exact addresses instead of domains; the counts
+  stay (the help said they went).
 - `repown guard on` warns when it runs from npx's cache: the hook would call that
   temporary copy, and once that is deleted it refuses every push unless another repown
   is on PATH. Install globally, then run `repown guard on` again.

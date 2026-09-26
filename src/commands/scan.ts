@@ -51,7 +51,7 @@ export default {
   summary: 'audit every clone under a directory',
   positionals: { min: 0, max: Infinity, label: '<dir>' },
   options: [
-    { name: 'emails', kind: 'boolean', help: 'show exact addresses instead of domains and counts' },
+    { name: 'emails', kind: 'boolean', help: 'show exact addresses instead of domains (counts stay)' },
     { name: 'depth', kind: 'string', default: '3', help: 'how many directories deep to look for a clone' },
     FORMAT_OPTION,
   ],

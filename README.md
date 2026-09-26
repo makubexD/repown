@@ -35,8 +35,9 @@ command. A push carrying the wrong identity is refused before it leaves.
 - **Pins each clone.** It writes the commit identity and the push account into that
   clone's own `.git/config`. That's what *pinned* means here: set once, never switched.
 - **Lets one credential serve each account.** [Git Credential Manager](https://github.com/git-ecosystem/git-credential-manager)
-  (GCM) stores one sign-in per account and picks the one each clone names. repown checks
-  GCM is the helper, and removes gh's helper entries if gh took the job. `gh` stays your
+  (GCM) stores one sign-in per account and picks the one each clone names. `repown doctor`
+  checks GCM is the helper; if gh took the job, `repown fix` removes gh's entries after
+  showing them. `gh` stays your
   account store for `gh pr create` and `gh api`.
 - **Guards every push.** A git `pre-push` hook (a script git runs before every push), the
   *guard*, checks the commits being pushed, not just today's config.
@@ -121,7 +122,7 @@ repown setup           # once per clone: asks which account owns it, shows each 
 
 **Keys:** ↑/↓ choose, Enter confirms, Esc or Ctrl-C stops with nothing changed. From the
 second question on, each list ends with **← Back**; at a typed answer, enter `<`. With
-`NO_COLOR` or `TERM=dumb`, the questions come as numbered choices. Run it again in a clone
+`NO_COLOR`, `FORCE_COLOR=0` or `TERM=dumb`, the questions come as numbered choices. Run it again in a clone
 that's already set up and it says so: choose **Done**. Every screen:
 [card 13](docs/HOW-IT-WORKS.md#13-guided-setup).
 
@@ -135,9 +136,9 @@ then commit and push.
 | Once per machine | `repown doctor` | what serves credentials on this machine, and to whom |
 | | `repown fix [--dry-run] [--yes]` | undo `gh auth setup-git`, so each clone's pinned account is used; shows what it removes, and the undo, first |
 | Once per clone | `repown setup [<account>]` | guided: asks, shows each step and its command, then runs them. Every answer has a flag (`--name`, `--email`, `--host`, `--gh`, `--allow-owner <owner>`, `--guard`, `--fix`); `--no-input` asks nothing ([scripts and CI](docs/CONFIGURATION.md#scripts-and-ci)) |
-| | `repown use <account> [--gh]` | what setup runs: pin this clone to an account; `--gh` also switches gh's active account. `--name` and `--email` skip the registry, the file where repown remembers accounts |
+| | `repown use <account> [--gh]` | what setup runs: pin this clone to an account; `--gh` also switches gh's active account. `--name` with `--email` skips the registry, the file where repown remembers accounts |
 | | `repown guard on \| off \| status` | install, remove or show the pre-push hook (bare `repown guard` shows it) |
-| Any time | `repown` (or `repown status`) | who this clone commits and pushes as; exits 1 if something is wrong |
+| Any time | `repown` (or `repown status`) | who this clone commits and pushes as; exits 1 on a problem (warnings alone exit 0) |
 | | `repown scan [dir...] [--emails] [--depth <n>] [--format json]` | every clone under the folders (default: this one, 3 levels deep): owner, host, identity, guard, and which email domains its history has. Changes nothing |
 | Rarely | `repown accounts list \| add \| remove` | the accounts this machine knows (bare `repown accounts` lists them; `add` takes `--name`, `--email`, `--host github\|azdo\|generic`; `list --format json` for scripts) |
 | | `repown off` | unpin this clone, leaving global config alone; warns if the guard is still on |
@@ -169,9 +170,10 @@ can print: [card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are).
 - **Exit codes:** `0` success, `1` failure or refusal, `2` usage error.
   - `scan` exits `0` whatever it finds (read its output or JSON), `2` for a missing folder
     or a bad `--depth`.
-  - `setup` exits `0` when done (or Done), `1` when you Decline, `130` when cancelled or
-    interrupted, `2` without a terminal unless `--no-input` is given, or when `--no-input`
-    leaves the account incomplete; and a failing step's own code.
+  - `setup` exits `0` when done (or Done); `1` when you Decline or it can't start (not
+    a clone, an unreadable registry, `--guard` where another tool owns the hook); `130` when
+    cancelled or interrupted; `2` for flags that don't fit, or without a terminal unless
+    `--no-input` is given; and a failing step's own code.
 
 ## Troubleshooting
 
@@ -180,13 +182,13 @@ can print: [card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are).
 | `repown doctor` says gh is the helper | `repown fix` ([card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine)) |
 | `repown doctor` shows `GCM  not found` | install Git Credential Manager ([Install](#install)), then `repown doctor` again |
 | `repown doctor` shows `helper  none configured` | `git-credential-manager configure`, then `repown doctor` again |
-| A push asked for a password, or failed after signing in (SSO) | [card 6](docs/HOW-IT-WORKS.md#6-commit-and-first-push) |
+| A push asked for a password | run `repown`: it names the cause (gh as the helper, or no helper) and the fix |
+| A push failed right after signing in (SSO) | [card 6](docs/HOW-IT-WORKS.md#6-commit-and-first-push) |
 | The guard refused a push | it says which commit and the fix. Most often a commit made before pinning: `git commit --amend --reset-author --no-edit` fixes the last one ([card 8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) for older ones, and every other refusal) |
 | The guard said the push goes to another owner | if you're a member or collaborator there: `git config --local --add repown.allowOwner <owner>` |
-| The guard said `GH_TOKEN` (or `GITHUB_TOKEN`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_EMAIL`) is set | unset it, then push again: it overrides the pinned identity |
+| The guard said `GH_TOKEN` (or `GITHUB_TOKEN`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_EMAIL`) is set | unset it, then push again: the email variables override the pinned identity, the token variables which account pushes |
 | husky or another tool owns the pre-push hook | have that hook run `repown guard check --remote="$1" --url="$2"`, passing its stdin through ([card 10](docs/HOW-IT-WORKS.md#10-other-hook-tools)) |
 | "repown cannot be found" on push | [card 12](docs/HOW-IT-WORKS.md#12-uninstall-or-repown-missing) |
-| A teammate doesn't use repown | nothing to do for them ([card 9](docs/HOW-IT-WORKS.md#9-a-teammate-without-repown)) |
 
 To push once without the check: `git push --no-verify`, only when you mean to publish
 those addresses.

@@ -8,23 +8,21 @@ Short answers, each with where to read more. Every scenario, with diagrams, is i
 
 ## Compared with the alternatives
 
-| Approach | Right commit identity | Right push credential | Checked before push | Catch |
+| Approach | Right commit identity | Right push credential | Checked before push | Downside |
 | --- | --- | --- | --- | --- |
 | `git config user.email` by hand in each repo | yes, if you never forget | no | no | Forgetting once publishes the wrong address permanently |
-| `includeIf "gitdir:~/work/"` in global config | yes, by folder | only if you also add the credential key per folder | no | Depends on where a repo happens to be cloned; a clone anywhere else inherits the default |
+| `includeIf "gitdir:~/work/"` in global config | yes, by folder | only if each folder's config also sets `credential.https://github.com.username` | no | Depends on where a repo happens to be cloned; a clone anywhere else inherits the default |
 | SSH host aliases (`git@github-work:...`) | no | yes | no | Every remote URL has to be rewritten, and keys managed per account |
-| `gh auth switch` | no | while gh is the helper, only the *active* account | no | Machine-wide: it breaks the other account's repos |
-| **repown** | yes, per clone | yes, per clone (GitHub) | yes, once `repown guard on`: every commit the push would publish | `use` and `guard on` once per clone, or `repown setup` |
+| `gh auth switch` | no | only gh's *active* account, while gh is git's credential helper | no | Machine-wide: it breaks the other account's repos |
+| **repown** | yes, per clone | yes, per clone (GitHub over https; on SSH, your key decides) | yes, once `repown guard on`: every commit and tag the push would publish, and where it goes | one `repown setup` per clone |
 
 repown doesn't replace these tools. It writes plain repo-local git config, uses the
 credential manager you already have, and leaves `gh` in charge of the GitHub CLI.
 
 ## Questions
 
-**Does it change anything outside the clone?** Its own account registry, and two things
-only on request: `repown fix` removes what `gh auth setup-git` added to git config, after
-showing it, and `repown use --gh` switches gh's active account. Everything else is
-repo-local.
+**Does it change anything outside the clone?** Only its account registry, plus `repown fix`
+and `repown use --gh` when you ask ([full list](CONFIGURATION.md#what-repown-writes)).
 
 **Azure DevOps, GitLab, SSH?** Commit identity and the guard work on any host. The
 credential pin is measured only for GitHub over https, so elsewhere repown says the
@@ -39,12 +37,20 @@ is a safety net, not a lock
 ([SECURITY.md](../SECURITY.md#what-repown-protects-and-what-it-doesnt)).
 
 **I ran `repown setup` again and it said "already set up". Is that right?** Yes: the clone
-is pinned to that account exactly as recorded, git would use those settings, and nothing
-else you asked for is left to do (the guard line shows whether the guard is on). Choose
-**Done**, or **Apply the same settings again** to run `repown use` anyway
-([card 13](HOW-IT-WORKS.md#13-guided-setup)).
+already uses that account exactly as recorded. Choose **Done**, or **Apply the same
+settings again** to re-run `repown use` ([card 13](HOW-IT-WORKS.md#13-guided-setup)).
+
+**Can I run it in CI or a script?** Yes, with flags instead of questions:
+[Scripts and CI](CONFIGURATION.md#scripts-and-ci).
+
+**Where are my accounts stored? Can I edit or delete them?** In one `accounts.json`
+([where](CONFIGURATION.md#the-account-registry)); `repown accounts remove` forgets one.
+
+**I use husky (or `core.hooksPath`).** `repown guard on` refuses there; call the check
+from that tool's hook instead ([card 10](HOW-IT-WORKS.md#10-other-hook-tools)).
 
 **What does it send over the network?** Nothing of its own, and no telemetry. It runs
-`git` and `gh`: gh may contact GitHub when repown asks for its accounts, and on a
-terminal, `repown setup`, `repown use` or `repown accounts add` without `--name` and
-`--email` asks gh for the account's public profile to suggest a name and noreply address.
+`git` and `gh`: gh may contact GitHub when `repown`, `repown doctor` or `repown setup`
+asks for its accounts. For an account that isn't recorded yet, on a terminal, `repown setup`,
+`repown use` or `repown accounts add` (without both `--name` and `--email`) asks gh for
+its public profile to suggest a name and noreply address.

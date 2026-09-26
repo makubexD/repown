@@ -509,7 +509,19 @@ review takes **Decline**.
 | Variant | Command |
 | --- | --- |
 | Go back | pick **← Back**, last in every list once there is a question to go back to, or type `<` at a text question; **← Back to the review** (plain prompts: **Back to the review**) leaves "Change an answer". The "already set up" screen has no Back |
-| Already set up | the clone is pinned to the account you chose, and every key `use` writes holds exactly the recorded value, both in `.git/config` and in what git actually resolves (includes, worktree config, credential entries for the same URL spelt otherwise); no organisation is left unallowed; gh is nowhere in the credential helper list; and your answers add nothing beyond `repown use <that account>`. A username written into a `pushInsteadOf` URL isn't checked |
+| Already set up | only when all of the conditions below hold |
 | No terminal (CI, a script) | see [Scripts and CI](CONFIGURATION.md#scripts-and-ci) |
+
+**"Already set up" is shown only when all of these hold:**
+
+- the clone is pinned to the account you chose;
+- every key `use` writes holds exactly the recorded value, both in `.git/config` and in
+  what git actually resolves (includes, worktree config, credential entries for the same
+  URL spelt otherwise);
+- origin's owner is the account, or is already allowed;
+- gh is nowhere in the credential-helper list;
+- your answers add nothing beyond `repown use <that account>`.
+
+A username written into a `pushInsteadOf` URL isn't checked.
 
 </details>

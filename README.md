@@ -98,18 +98,20 @@ with provenance ([how](SECURITY.md#how-the-package-is-published)).
 
 ### A. Guided
 
-**Once per machine,** run `repown doctor`: it checks that Git Credential Manager will
-handle sign-ins ([what to do if it says otherwise](#1-check-the-machine-once)).
-
-**Once per clone,** run `repown setup` in it. The first time, it asks for the account's
-login, where it's hosted, and the name and email for your commits (on GitHub, use your
-*noreply* address: GitHub's private address for commits, under Settings → Emails). After
-that it lists the accounts it knows; in a clone of your other account, pick **a new
-account**. Then it asks only what applies here: switching gh too, allowing an
-organisation, turning the guard on, handing git's sign-ins back from gh. It shows each
-step in plain words with its exact command, and runs them only when you choose Run.
-Nothing changes before that ([card 13](docs/HOW-IT-WORKS.md#13-guided-setup)). Then
-make [your first push](#the-first-push).
+1. **Once per machine,** run `repown doctor`. It checks that Git Credential Manager will
+   handle sign-ins ([what to do if it says otherwise](#1-check-the-machine-once)).
+2. **Once per clone,** `cd` into it and run `repown setup`.
+   - **The first time,** it asks for the account's user name (login), where it's hosted,
+     and the name and email for your commits. On GitHub, use your *noreply* address,
+     GitHub's private address for commits, shown at github.com/settings/emails.
+   - **After that,** it lists the accounts it knows: pick one, or **a new account** for
+     one it doesn't know yet.
+   - **Then it asks only what applies here:** switching gh too, allowing the repository's
+     owner, turning the guard on, taking git's sign-ins back from gh.
+3. **Check the review, then choose Run.** It lists each step in plain words with its
+   exact command. Nothing changes before you choose Run
+   ([card 13](docs/HOW-IT-WORKS.md#13-guided-setup)).
+4. **Make [your first push](#the-first-push).**
 
 <details><summary>What it looks like</summary>
 

@@ -47,6 +47,9 @@ git push                  # refused: that commit carries another identity
 exit                      # back to your own shell and config
 ```
 
+Skip the first `bash` and `exit` closes the window instead; nothing is lost, since the
+sandbox's settings only ever lived in that shell.
+
 Each push also warns `destination not checked`: the origin is a local path, so there is
 no owner to compare.
 

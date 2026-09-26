@@ -10,14 +10,14 @@ import type { Command } from '../ui/command.ts';
 import { runSetup } from '../wizard/setup-run.ts';
 
 export default {
-  summary: 'guided setup of this clone: asks, shows the commands, then runs them',
+  summary: 'guided setup of this clone: asks, shows each step and its command, then runs them',
   positionals: { min: 0, max: 1, label: '<account>' },
   options: [
     { name: 'name', kind: 'string', help: 'commit name, for an account not yet recorded' },
     { name: 'email', kind: 'string', help: 'commit email, for an account not yet recorded' },
     { name: 'host', kind: 'string', choices: providers().map((provider) => provider.id), help: 'host of an account not yet recorded' },
     { name: 'gh', kind: 'boolean', help: "also switch the GitHub CLI's active account (use --gh)" },
-    { name: 'allow-owner', kind: 'string', help: "allow pushes to origin's owner, an organisation (repown.allowOwner)" },
+    { name: 'allow-owner', kind: 'string', help: "allow pushes to origin's owner: an organisation, or an account you collaborate with (repown.allowOwner)" },
     { name: 'guard', kind: 'boolean', help: 'turn the push guard on (guard on)' },
     { name: 'fix', kind: 'boolean', help: 'stop gh being the credential helper, where it is (fix --yes)' },
     { name: 'no-input', kind: 'boolean', help: 'ask nothing: a question not given as a flag is No; exit 2 if the account is incomplete' },

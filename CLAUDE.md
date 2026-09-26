@@ -84,7 +84,7 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   nothing; `setup-flow.ts` is pure and turns answers into existing commands' argv;
   `setup-context.ts` reads the clone once, read-only; `setup-run.ts` runs each command's
   own `run()`, never a copy; `review-text.ts` holds the words both prompters (`plain.ts`,
-  `clack.ts`) share.
+  `clack.ts`) share, and wraps them to the window (within the widths clack wraps at itself).
 
 ## Tests
 

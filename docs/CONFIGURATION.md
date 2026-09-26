@@ -29,12 +29,13 @@ Once one is recorded, `repown accounts list` prints its path:
 
 Besides the keys `repown use` writes ([README](../README.md#3-pin-and-guard-each-clone-once)), three repo-local
 keys widen what the guard accepts. They are opt-in and global config doesn't count.
-`repown`, `repown use` and the guard's refusals print the `git config` line for
-`allowOwner`, and a template for `allowTagger`; `mirrorBranch` you set yourself (card 8).
+`repown`, `repown use`, `repown setup`'s review and the guard's refusals print the
+`git config` line for `allowOwner`, and the refusals a template for `allowTagger`;
+`mirrorBranch` you set yourself (card 8).
 
 | Key | Allows | Card |
 | --- | --- | --- |
-| `repown.allowOwner` | pushing to an organisation's repositories (`repown setup` asks about it) | [8](HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
+| `repown.allowOwner` | pushing to repositories another owner holds: an organisation you're in, or an account you collaborate with (`repown setup` asks about it) | [8](HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
 | `repown.allowTagger` | pushing another tagger's annotated tags (a fork pushing upstream's tags) | [8](HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
 | `repown.mirrorBranch` | a fork's branch that only fast-forwards to upstream: commits already on a remote stop counting there | [8](HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
 

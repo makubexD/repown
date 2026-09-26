@@ -25,7 +25,7 @@ describe('repown setup, played with key presses', () => {
     assert.match(screen, /Apply the same settings again/);
   });
 
-  test('S2 a new user on an organisation repository reads every hint and a numbered review', { todo: 'task 4' }, async () => {
+  test('S2 a new user on an organisation repository reads every hint and a numbered review', async () => {
     const ctx = setupContext({
       recorded: {}, owner: 'octo-org',
       addresses: ok(new Map([['a@example.invalid', 3], ['b@example.invalid', 1], ['c@example.invalid', 9]])),
@@ -45,7 +45,7 @@ describe('repown setup, played with key presses', () => {
     assert.match(screen, /Run these 4 steps\?/);
   });
 
-  test('S3 gh as the credential helper is explained in plain words', { todo: 'task 4' }, async () => {
+  test('S3 gh as the credential helper is explained in plain words', async () => {
     const ctx = setupContext({ fixLines: ['  global  credential.https://github.com.helper = !gh auth git-credential'] });
     const { screen } = await play(ctx, [[enter], [enter], [up, enter], [esc]]);
     assert.match(screen, /gh answers git's sign-in requests with its active account only/);
@@ -65,9 +65,9 @@ describe('repown setup, played with key presses', () => {
     assert.match(screen, /repown guard check/);
   });
 
-  test('S6 a login already recorded says how to pick it', { todo: 'task 4' }, async () => {
+  test('S6 a login already recorded says how to pick it', async () => {
     const { screen } = await play(setupContext(), [[down, enter], [...typed('OctoCat'), enter], [esc]]);
-    assert.match(screen, /"octocat" is already recorded on this machine: type < to go back and pick it from the list/);
+    assert.ok(screen.includes('"octocat" is already recorded on this machine: use it by that name (at a prompt, type < to go back and pick it)'), screen);
   });
 
   test('S6 a login with a space is refused with the characters allowed', async () => {
@@ -90,20 +90,20 @@ describe('repown setup, played with key presses', () => {
     assert.ok(screen.split('Review: nothing has changed yet').length > 2, 'the review is shown again\n' + screen);
   });
 
-  test('S9 a new GitHub account without a profile gets an example address', { todo: 'task 4' }, async () => {
+  test('S9 a new GitHub account without a profile gets an example address', async () => {
     const ctx = setupContext({ recorded: {}, owner: null });
     const { screen } = await play(ctx, [[...typed('octocat'), enter], [enter], [enter], [esc]]);
     assert.match(screen, /Settings → Emails, like 1234\+octocat@users\.noreply\.github\.com/);
   });
 
-  test('S10 moving a clone to another account says what changes', { todo: 'task 4' }, async () => {
+  test('S10 moving a clone to another account says what changes', async () => {
     const ctx = setupContext({ pinned: 'octo-work', recorded: twoAccounts, addresses: err('git log failed') });
     const { screen } = await play(ctx, [[up, enter], [enter], [esc]]);
     assert.match(screen, /This clone moves from octo-work to octocat/);
     assert.match(screen, /commits could not be read/);
   });
 
-  test('S11 the hosts are named so a newcomer can tell them apart', { todo: 'task 4' }, async () => {
+  test('S11 the hosts are named so a newcomer can tell them apart', async () => {
     const { screen } = await play(setupContext({ recorded: {} }), [[...typed('octocat'), enter], [esc]]);
     assert.match(screen, /another host \(GitLab, Bitbucket, self-hosted\)/);
     assert.doesNotMatch(screen, /this host/);

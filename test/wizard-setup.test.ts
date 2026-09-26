@@ -237,6 +237,10 @@ describe('setup flow', () => {
     assert.match(reviewOf({}).title, /already set up/);
   });
 
+  test('every question carries a hint a newcomer can act on', () => {
+    for (const step of setupFlow(context()).steps) assert.ok(step.hint.trim().length > 10, step.id + ' has no real hint');
+  });
+
   test('missing flags for --no-input are named', () => {
     const recorded = context().recorded;
     assert.deepEqual(missingFlags({}, recorded), ['<account>']);
@@ -358,6 +362,17 @@ describe('repown setup, without a terminal', () => {
     assert.match(run.stderr, /needs a terminal/);
     assert.match(run.stderr, /--no-input/);
     assert.equal(localConfig(at), before);
+  });
+
+  test('outside a repository it says where to run it', () => {
+    const outside = mkdtempSync(join(tmpdir(), 'repown-outside-'));
+    try {
+      const run = repown(['setup', 'octocat', '--no-input'], outside);
+      assert.equal(run.status, 1);
+      assert.ok(run.stderr.includes('run it inside a clone: cd path/to/repo, then repown setup'), run.stderr);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   test('--no-input with everything given runs the commands, and only what was asked for', () => {

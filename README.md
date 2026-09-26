@@ -116,45 +116,75 @@ Run ([card 13](docs/HOW-IT-WORKS.md#13-guided-setup)). The steps below are those
 │
 ◇  Reading this clone and this machine
 │
-◇  Which account owns this clone?
-│  its commits and pushes go out as this account
+●  not pinned by repown yet
+│
+◇  Which account should this clone belong to?
+│  its commits carry that account's name and email; on GitHub, its
+│  pushes sign in as it
 │  octocat
 │
-◇  Allow pushes to "octo-org" from this clone?
-│  an organisation you belong to; one repo-local key
+◇  This repository belongs to "octo-org". Allow pushes to it?
+│  for an organisation you're in: without it the guard refuses these
+│  pushes; stored in this clone only
 │  Yes
 │
-●  only your address is in this clone's history
+●  only your email address is in this repository's commits
 │
-◇  Check every push before it leaves?
-│  undo any time: repown guard off
+◇  Turn on the push guard?
+│  before each push it checks every commit is yours and goes to the
+│  right owner; undo: repown guard off
 │  Yes
 │
-◇  Review: nothing has changed yet ───────────────────────╮
-│                                                         │
-│  account    octocat                                     │
-│  pushes as  octocat                                     │
-│  guard      turned on                                   │
-│                                                         │
-│  This runs:                                             │
-│    git config --local --add repown.allowOwner octo-org  │
-│    repown use octocat                                   │
-│    repown guard on                                      │
-│                                                         │
-├─────────────────────────────────────────────────────────╯
+◇  Review: nothing has changed yet ────────────────────────────────────────╮
+│                                                                          │
+│  This clone will commit and push as octocat.                             │
+│                                                                          │
+│  When you choose Run:                                                    │
+│  1. Allow pushes to octo-org's repositories                              │
+│       git config --local --add repown.allowOwner octo-org                │
+│  2. Pin this clone to octocat: name, email and push account              │
+│       repown use octocat                                                 │
+│  3. Turn on the push guard: each push is checked first                   │
+│       repown guard on                                                    │
+│                                                                          │
+│  These are ordinary repown commands: run them yourself, or in a script.  │
+│  A clone's settings go in its .git/config, which is never pushed.        │
+│                                                                          │
+├──────────────────────────────────────────────────────────────────────────╯
 │
-◆  Run these commands?
-│  ● Run these commands
+◆  Run these 3 steps?
+│  ● Run them
 │  ○ Back
 │  ○ Change an answer
 │  ○ Decline
 └
 ```
 
-Arrow keys choose, Enter confirms, Esc or Ctrl-C cancels. Every question's list has a
-**← Back** (at a text question, type `<`), and the review has **Back** and **Change an
-answer**. When stderr gets no colour (`NO_COLOR` or `TERM=dumb`, unless `FORCE_COLOR`
-says otherwise, or stderr isn't a terminal), the same questions come as numbered choices.
+Run it again in a clone that needs nothing, and it says so instead:
+
+```
+◇  This clone is already set up ───────────────────────────────────────╮
+│                                                                      │
+│  commits as  Octo Cat <octocat@users.noreply.github.com>             │
+│  pushes as   octocat                                                 │
+│  guard       on: every push is checked before it leaves              │
+│                                                                      │
+│  Nothing needs to change.                                            │
+│  ...                                                                 │
+├──────────────────────────────────────────────────────────────────────╯
+│
+◆  What now?
+│  ● Done
+│  ○ Apply the same settings again
+│  ○ Change an answer
+└
+```
+
+Arrow keys choose, Enter confirms, Esc or Ctrl-C cancels. From the second question on,
+each list has a **← Back** (at a text question, type `<`), and the review has **Back** and
+**Change an answer**. When stderr gets no colour (`NO_COLOR` or `TERM=dumb`, unless
+`FORCE_COLOR` says otherwise, or stderr isn't a terminal), the same questions come as
+numbered choices.
 
 </details>
 

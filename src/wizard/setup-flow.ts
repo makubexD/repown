@@ -70,50 +70,76 @@ export function setupFlow(ctx: SetupContext): Flow<SetupContext> {
 
 function steps(ctx: SetupContext): Step<SetupContext>[] {
   return [
-    { id: 'account', kind: 'select', flag: '<account>', message: 'Which account owns this clone?',
-      hint: 'its commits and pushes go out as this account',
+    { id: 'account', kind: 'select', flag: '<account>', message: 'Which account should this clone belong to?',
+      hint: 'its commits carry that account\'s name and email; on GitHub, its pushes sign in as it',
       when: () => Object.keys(ctx.recorded).length > 0,
       choices: () => accountChoices(ctx), initial: () => defaultAccount(ctx),
-      detail: () => (ctx.pinned ? 'currently pinned to ' + ctx.pinned : undefined) },
-    { id: 'newAccount', kind: 'text', flag: '<account>', message: 'Account login',
-      hint: 'your user name on the host, e.g. octocat', when: (answers) => isNew(answers),
+      detail: () => (ctx.pinned ? 'currently pinned to ' + ctx.pinned : 'not pinned by repown yet') },
+    { id: 'newAccount', kind: 'text', flag: '<account>', message: 'The account\'s login',
+      hint: 'the user name you sign in with on the host, e.g. octocat', when: (answers) => isNew(answers),
       validate: (value) => newAccountProblem(String(value), ctx) },
-    { id: 'host', kind: 'select', flag: '--host', message: 'Where is this account?',
-      hint: 'decides how its sign-in is pinned', when: (answers) => isNew(answers),
-      choices: () => providers().map((provider) => ({ value: provider.id, label: provider.label })),
-      initial: () => ctx.host },
-    { id: 'name', kind: 'text', flag: '--name', message: 'Commit name', hint: 'shown on every commit',
-      when: (answers) => isNew(answers), validate: required,
+    { id: 'host', kind: 'select', flag: '--host', message: 'Where is this account hosted?',
+      hint: 'on GitHub, repown also picks the sign-in your pushes use', when: (answers) => isNew(answers),
+      choices: () => hostChoices(), initial: () => ctx.host },
+    { id: 'name', kind: 'text', flag: '--name', message: 'Name on your commits',
+      hint: 'anyone who can see the repository sees it', when: (answers) => isNew(answers), validate: required,
       initial: async (answers) => (await ctx.suggest(accountOf(answers), hostOf(answers, ctx))).name ?? accountOf(answers) },
-    { id: 'email', kind: 'text', flag: '--email', message: 'Commit email',
-      hint: 'a noreply address keeps yours private', when: (answers) => isNew(answers), validate: required,
-      initial: async (answers) => (await ctx.suggest(accountOf(answers), hostOf(answers, ctx))).email },
+    { id: 'email', kind: 'text', flag: '--email', message: 'Email on your commits',
+      hint: 'public once pushed; a noreply address keeps yours private', when: (answers) => isNew(answers), validate: required,
+      initial: async (answers) => (await ctx.suggest(accountOf(answers), hostOf(answers, ctx))).email,
+      detail: (answers) => noreplyExample(answers, ctx) },
     ...choiceSteps(ctx),
   ];
 }
 
 function choiceSteps(ctx: SetupContext): Step<SetupContext>[] {
   return [
-    { id: 'gh', kind: 'confirm', flag: '--gh', message: 'Also switch the GitHub CLI to this account?',
-      hint: 'for gh pr create and gh api; git does not need it', initial: () => false,
-      when: (answers) => ghOffered(accountOf(answers), ctx) },
+    { id: 'gh', kind: 'confirm', flag: '--gh', message: 'Also make this account gh\'s active account?',
+      hint: 'only gh commands (gh pr create, gh api) use it, git doesn\'t; it applies in every terminal', initial: () => false,
+      when: (answers) => ghOffered(accountOf(answers), ctx), detail: () => 'gh\'s active account is ' + ghActive(ctx) },
     { id: 'allowOwner', kind: 'confirm', flag: '--allow-owner', initial: () => true,
-      message: 'Allow pushes to "' + printable(ctx.owner ?? '') + '" from this clone?',
-      hint: 'an organisation you belong to; one repo-local key',
+      message: 'This repository belongs to "' + printable(ctx.owner ?? '') + '". Allow pushes to it?',
+      hint: 'for an organisation you\'re in: without it the guard refuses these pushes; stored in this clone only',
       when: (answers) => ownerForeign(accountOf(answers), ctx) },
-    { id: 'guard', kind: 'confirm', flag: '--guard', message: 'Check every push before it leaves?',
-      hint: 'undo any time: repown guard off', initial: () => true,
-      when: () => ctx.guard === 'off' && !ctx.redirected, detail: (answers) => historyNote(answers, ctx) },
-    { id: 'fix', kind: 'confirm', flag: '--fix', message: 'Stop gh being git\'s credential helper? (machine-wide)',
+    { id: 'guard', kind: 'confirm', flag: '--guard', message: 'Turn on the push guard?',
+      hint: 'before each push it checks every commit is yours and goes to the right owner; undo: repown guard off',
+      initial: () => true, when: () => ctx.guard === 'off' && !ctx.redirected, detail: (answers) => historyNote(answers, ctx) },
+    { id: 'fix', kind: 'confirm', flag: '--fix', message: 'Stop gh answering git\'s sign-in requests? (whole machine)',
       hint: 'undo any time: gh auth setup-git', initial: () => false, when: () => ctx.fixLines !== null,
-      detail: () => 'gh serves only its active account, so other clones get a password prompt' },
+      detail: () => 'gh answers git\'s sign-in requests with its active account only, so clones of your other accounts ' +
+        'get password prompts. Yes hands that job back to Git Credential Manager, for every repository on this machine' },
   ];
+}
+
+/** Labels for a newcomer; the providers' own labels stay as `repown` prints them elsewhere. */
+const HOSTS: Readonly<Record<string, readonly [string, string]>> = {
+  github: ['GitHub', 'name, email and the sign-in for pushes'],
+  azdo: ['Azure DevOps', 'name and email; you sign in as usual'],
+  generic: ['another host (GitLab, Bitbucket, self-hosted)', 'name and email; you sign in as usual'],
+};
+
+function hostChoices(): Choice[] {
+  return providers().map((provider) => {
+    const [label, hint] = HOSTS[provider.id] ?? [provider.label, ''];
+    return { value: provider.id, label, ...(hint ? { hint } : {}) };
+  });
+}
+
+/** Where a GitHub account's private address comes from, for someone who has never looked. */
+function noreplyExample(answers: Answers, ctx: SetupContext): string | undefined {
+  if (hostOf(answers, ctx) !== 'github') return undefined;
+  return 'on GitHub, your private noreply address is under Settings → Emails, like 1234+' +
+    printable(accountOf(answers)) + '@users.noreply.github.com';
+}
+
+function ghActive(ctx: SetupContext): string {
+  return ctx.gh?.ok ? printable(ctx.gh.value.active ?? 'none') : 'unknown';
 }
 
 function accountChoices(ctx: SetupContext): Choice[] {
   const recorded = Object.entries(ctx.recorded).map(([account, entry]) =>
     ({ value: account, label: account, hint: entry.name + ' <' + entry.email + '>' }));
-  return [...recorded, { value: NEW_ACCOUNT, label: 'a new account', hint: 'recorded once for this machine' }];
+  return [...recorded, { value: NEW_ACCOUNT, label: 'a new account', hint: 'record another account on this machine' }];
 }
 
 function defaultAccount(ctx: SetupContext): string {
@@ -132,7 +158,7 @@ function newAccountProblem(value: string, ctx: SetupContext): string | null {
   if (!value.trim()) return 'a value is required';
   if (!LOGIN.test(value)) return 'use letters, digits and . _ @ - only';
   const clash = Object.keys(ctx.recorded).find((account) => lower(account) === lower(value));
-  return clash ? '"' + clash + '" is already recorded: use that account by that name' : null;
+  return clash ? '"' + clash + '" is already recorded on this machine: use it by that name (at a prompt, type < to go back and pick it)' : null;
 }
 
 function hostOf(answers: Answers, ctx: SetupContext): string {
@@ -152,12 +178,15 @@ function ownerForeign(account: string, ctx: SetupContext): boolean {
 
 /** The addresses in history besides this account's, said as a count -- or that it couldn't be read. */
 function historyNote(answers: Answers, ctx: SetupContext): string {
-  if (!ctx.addresses.ok) return 'this clone\'s history could not be read (' + ctx.addresses.error + ')';
+  if (!ctx.addresses.ok) {
+    return 'this repository\'s commits could not be read (' + ctx.addresses.error + '), so repown can\'t say who else committed here';
+  }
   const own = lower(emailOf(answers, ctx) ?? '');
   const others = [...ctx.addresses.value.keys()].filter((address) => lower(address) !== own).length;
-  if (others === 0) return 'only your address is in this clone\'s history';
-  return others + ' other address' + (others === 1 ? ' is' : 'es are') + ' in this history: fine if you push only ' +
-    'your own commits; choose No if you push commits others made here';
+  if (others === 0) return 'only your email address is in this repository\'s commits';
+  return (others === 1 ? '1 other person\'s email address is' : others + ' other people\'s email addresses are') +
+    ' in this repository\'s commits: the guard suits you if you push only your own commits; ' +
+    'choose No if you push commits others made here';
 }
 
 function emailOf(answers: Answers, ctx: SetupContext): string | undefined {
@@ -185,15 +214,12 @@ export function planCommands(answers: Answers, ctx: SetupContext): PlannedComman
 /** What a planned command does, in words for someone who has never used repown. */
 function whatOf(argv: readonly string[], answers: Answers, ctx: SetupContext): string {
   const account = accountOf(answers);
-  if (argv[0] === 'accounts') {
-    return 'Record the account ' + account + ' (' + String(answers['name']) + ' <' + String(answers['email']) + '>) on this machine, for any clone';
-  }
-  if (argv[0] === 'git') return 'Allow pushes to ' + ctx.owner + '\'s repositories from this clone';
-  if (argv[0] === 'fix') return 'Stop gh answering git\'s sign-in requests, on this whole machine (undo: gh auth setup-git)';
-  if (argv[0] === 'guard') return 'Turn on the push guard: a pre-push hook checks every push before it leaves';
-  const what = ctx.credentialPinned ? 'its name, email and push account' : 'its name and email';
-  const gh = answers['gh'] === true ? '; and make ' + account + ' gh\'s active account' : '';
-  return 'Pin this clone to ' + account + ': ' + what + ' go in .git/config, which is never pushed' + gh;
+  if (argv[0] === 'accounts') return 'Record the account ' + account + ' on this machine: ' + String(answers['email']);
+  if (argv[0] === 'git') return 'Allow pushes to ' + ctx.owner + '\'s repositories';
+  if (argv[0] === 'fix') return 'Stop gh answering git\'s sign-in requests (whole machine)';
+  if (argv[0] === 'guard') return 'Turn on the push guard: each push is checked first';
+  if (answers['gh'] === true) return 'Pin this clone to ' + account + ', and make it gh\'s active account';
+  return 'Pin this clone to ' + account + (ctx.credentialPinned ? ': name, email and push account' : ': name and email');
 }
 
 function allowOwnerLine(ctx: SetupContext): string[] {
@@ -247,7 +273,7 @@ function review(answers: Answers, ctx: SetupContext): Review {
   if (settled(answers, ctx, plan)) {
     return { title: 'This clone is already set up', headline: settledLines(answers, ctx).map(printable), steps,
       notes: ['Checked: this clone is pinned to ' + printable(accountOf(answers)) + ', exactly as recorded.',
-        'Check it any time: repown    this machine: repown doctor'], settled: true };
+        'See it any time: repown (this clone), repown doctor (this machine)'], settled: true };
   }
   return { title: 'Review: nothing has changed yet', headline: [printable(headline(answers, ctx))], steps,
     notes: notes(answers, ctx).map(printable), settled: false };

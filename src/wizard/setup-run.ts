@@ -38,7 +38,11 @@ export async function runSetup(args: Args, deps: SetupDeps): Promise<number> {
   if (!deps.interactive && !unattended) return needsTerminal(given.value, registry.value.accounts);
 
   const git = gitFor(args);
-  if (!(await git.isRepo())) { out.fail('setup', 'Not a git repository: ' + git.cwd); return 1; }
+  if (!(await git.isRepo())) {
+    out.fail('setup', 'Not a git repository: ' + git.cwd);
+    out.detail('run it inside a clone: cd path/to/repo, then repown setup');
+    return 1;
+  }
   const prompter = unattended ? null : deps.prompter ?? await choosePrompter();
   try {
     return await continueSetup({ args, git, given: given.value, prompter });
@@ -207,7 +211,7 @@ function finished(plan: readonly PlannedCommand[]): void {
   const pinned = plan.find((planned) => planned.argv[0] === 'use')?.argv.at(-1) ?? '';
   out.line();
   out.line('  done: this clone is set up for ' + printable(pinned));
-  out.line('  check it any time: repown    this machine: repown doctor');
+  out.line('  check it any time: repown (this clone), repown doctor (this machine)');
 }
 
 function stopped(remaining: readonly PlannedCommand[], code: number): number {

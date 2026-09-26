@@ -22,7 +22,8 @@ export function reviewLines(review: Review, command: (text: string) => string = 
     ...step.detail.map((line) => command('     ' + line)),
   ]);
   return [...review.headline, '', 'When you choose Run:', ...steps, ...notesOf(review), '',
-    'These are ordinary repown commands: you can run them yourself, or in a script.'];
+    'These are ordinary repown commands: run them yourself, or in a script.',
+    'A clone\'s settings go in its .git/config, which is never pushed.'];
 }
 
 function notesOf(review: Review): string[] {

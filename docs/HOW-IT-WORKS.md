@@ -482,14 +482,14 @@ flowchart TD
 
 | It asks | Only when | Becomes |
 | --- | --- | --- |
-| Which account owns this clone? | an account is recorded (default: the one pinned here) | `use <account>` |
-| Login, host, name, email | "a new account"; refused if already recorded | `accounts add <account> --name --email --host` |
-| Switch the GitHub CLI too? (default No) | a GitHub clone, gh knows the account, another is active | `use --gh` |
-| Allow pushes to the organisation? (default Yes) | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
-| Check every push? (default Yes) | the guard is off, no other tool owns the hook, and `core.hooksPath` doesn't redirect hooks | `guard on` |
-| Stop gh being the credential helper? (default No) | a GitHub clone, gh is the helper, and `fix` finds its entries | `fix --yes` |
+| Which account should this clone belong to? | an account is recorded (default: the one pinned here) | `use <account>` |
+| Login, where it's hosted, name and email on your commits (on GitHub, with where to find your noreply address) | "a new account"; refused if already recorded | `accounts add <account> --name --email --host` |
+| Also make it gh's active account? (default No) | a GitHub clone, gh knows the account, another is active | `use --gh` |
+| This repository belongs to "octo-org". Allow pushes to it? (default Yes) | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
+| Turn on the push guard? (default Yes) | the guard is off, no other tool owns the hook, and `core.hooksPath` doesn't redirect hooks | `guard on` |
+| Stop gh answering git's sign-in requests? (whole machine, default No) | a GitHub clone, gh is the helper, and `fix` finds its entries | `fix --yes` |
 
-Before the guard question it says how many other addresses are in this clone's history:
+Before the guard question it says how many other people's email addresses are in this repository's commits:
 the guard suits clones where you push only your own commits (ADR-005).
 
 | Variant | Command |

@@ -105,3 +105,6 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   runs on every other doc, and every relative link and `#anchor` in README.md, CLAUDE.md,
   CONTRIBUTING.md, SECURITY.md and docs/ must resolve. It also fails on any section-sign or `DECISIONS` file citation
   left in docs, src/ or test/.
+- Traceability, in the same file: every option help declares must appear in some doc, every
+  variable in help's Environment block in docs/CONFIGURATION.md, and every command/action
+  in CONTRIBUTING.md's "Where each feature lives" map, whose `src/` paths must exist.

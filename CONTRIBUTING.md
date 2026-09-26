@@ -99,9 +99,35 @@ with an installed repown.
   - the matching [HOW-IT-WORKS](docs/HOW-IT-WORKS.md) card when output changes;
   - `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md), written for users.
 
-  `test/docs.test.ts` fails when a doc shows a command or option that help doesn't have.
+  `test/docs.test.ts` fails when a doc shows a command or option that help doesn't have,
+  when an option or environment variable help lists is in no doc, and when a command is
+  missing from the map below.
 - **Commits** are one plain sentence saying what changes and why, like the existing
   history; no prefixes.
+
+## Where each feature lives
+
+Every command, where its code is, and where it's explained. A command declares its options
+and help text in its own file under `src/commands/`, so help can't drift from the parser.
+
+| Command | Code | Explained in |
+| --- | --- | --- |
+| `repown status` (bare `repown`) | `src/commands/status.ts`, `src/core/inspect.ts` | [card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are) |
+| `repown doctor` | `src/commands/doctor.ts`, `src/core/credential/gcm.ts`, `src/core/credential/gh.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
+| `repown fix` | `src/commands/fix.ts`, `src/core/credential/repair.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
+| `repown accounts list`, `repown accounts add`, `repown accounts remove` | `src/commands/accounts.ts`, `src/core/registry.ts` | [card 2](docs/HOW-IT-WORKS.md#2-remember-an-account), [the registry](docs/CONFIGURATION.md#the-account-registry) |
+| `repown use` | `src/commands/use.ts`, `src/core/identity.ts`, `src/core/hosts/index.ts` | [card 3](docs/HOW-IT-WORKS.md#3-pin-a-clone), [per-clone keys](docs/CONFIGURATION.md#per-clone-keys) |
+| `repown off` | `src/commands/off.ts`, `src/core/identity.ts` | [card 12](docs/HOW-IT-WORKS.md#12-uninstall-or-repown-missing) |
+| `repown guard on`, `repown guard off`, `repown guard status` | `src/commands/guard.ts`, `src/core/guard/hook.ts` | [card 7](docs/HOW-IT-WORKS.md#7-push-what-the-guard-checks), [card 10](docs/HOW-IT-WORKS.md#10-other-hook-tools) |
+| `repown guard check` (the hook calls it) | `src/commands/guard.ts`, `src/core/guard/check.ts` | [card 7](docs/HOW-IT-WORKS.md#7-push-what-the-guard-checks), [card 8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
+| `repown scan` | `src/commands/scan.ts` | [card 11](docs/HOW-IT-WORKS.md#11-audit-re-point-move-machines), [JSON](docs/CONFIGURATION.md#scripts-and-ci) |
+| `repown setup` | `src/commands/setup.ts`, `src/wizard/setup-run.ts`, `src/wizard/setup-flow.ts`, `src/wizard/engine.ts` | [card 13](docs/HOW-IT-WORKS.md#13-guided-setup), [scripts and CI](docs/CONFIGURATION.md#scripts-and-ci) |
+
+Shared by all of them:
+- **Parsing, help and dispatch:** `src/cli.ts`, `src/ui/dispatch.ts`, `src/ui/args.ts`, `src/ui/help.ts`.
+- **Output and colour:** `src/ui/format.ts`.
+- **Hosts** (what each one can pin): `src/core/hosts/`.
+- **The one place that runs processes:** `src/core/exec.ts`.
 
 ## Pull requests and issues
 

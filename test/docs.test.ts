@@ -188,6 +188,59 @@ describe('every other doc runs only real commands, actions and options', () => {
   }
 });
 
+/** The rows of one `Heading:` block in help text, e.g. `Options:` or `Environment:`. */
+function helpBlock(text: string, heading: string): string[] {
+  const block = text.split('\n  ' + heading + '\n')[1]?.split('\n\n')[0] ?? '';
+  return block.split('\n').map((line) => line.trim().split(/\s/)[0]!).filter(Boolean);
+}
+
+/** Every command, or for a group every action, help knows; hook-only actions included. */
+function commandPaths(): string[][] {
+  const commands = listed(help(['--help']), 2);
+  const groups = groupActions(commands);
+  return commands.flatMap((command) => groups.get(command)?.map((action) => [command, action]) ?? [[command]]);
+}
+
+/** The body of one `## heading` section, up to the next `## `. */
+function section(markdown: string, heading: string): string {
+  return markdown.split('\n## ' + heading + '\n')[1]?.split('\n## ')[0] ?? '';
+}
+
+const FEATURE_MAP = 'Where each feature lives';
+
+describe('traceability: what the code offers is documented', () => {
+  const everyDoc = DOCS.map(read).join('\n');
+
+  test('every option any command or action declares appears in README.md or docs/', () => {
+    const declared = commandPaths().flatMap((path) => helpBlock(help(['help', ...path]), 'Options:')
+      .map((option) => [path.join(' '), option] as const));
+    assert.ok(declared.length >= 15, 'parsed only ' + declared.length + ' options');
+    const missing = declared.filter(([, option]) => !new RegExp(option + '(?![\\w-])').test(everyDoc))
+      .map(([path, option]) => path + ' ' + option);
+    assert.deepEqual([...new Set(missing)], [], 'options no doc mentions');
+  });
+
+  test('every environment variable help lists is explained in docs/CONFIGURATION.md', () => {
+    const configuration = read(join(ROOT, 'docs', 'CONFIGURATION.md'));
+    const variables = helpBlock(help(['--help']), 'Environment:');
+    assert.ok(variables.length >= 3, 'parsed only: ' + variables.join(', '));
+    assert.deepEqual(variables.filter((variable) => !configuration.includes(variable)), []);
+  });
+
+  test('CONTRIBUTING.md maps every command and action to its source', () => {
+    const map = section(read(join(ROOT, 'CONTRIBUTING.md')), FEATURE_MAP);
+    const unmapped = commandPaths().filter((path) => !map.includes('`repown ' + path.join(' ') + '`'));
+    assert.deepEqual(unmapped.map((path) => path.join(' ')), [], 'rows missing from "' + FEATURE_MAP + '"');
+  });
+
+  test('every src/ path in the feature map exists', () => {
+    const map = section(read(join(ROOT, 'CONTRIBUTING.md')), FEATURE_MAP);
+    const paths = [...map.matchAll(/`(src\/[^`]+)`/g)].map((match) => match[1]!);
+    assert.ok(paths.length > 0, 'no src/ paths in the map');
+    assert.deepEqual(paths.filter((path) => !existsSync(join(ROOT, path))), [], 'map points at missing files');
+  });
+});
+
 /** GitHub's heading anchor: closing #s, punctuation and emoji dropped, lowercase, spaces to hyphens. */
 function slug(heading: string): string {
   return heading.replace(/\s+#+\s*$/, '').trim().toLowerCase()

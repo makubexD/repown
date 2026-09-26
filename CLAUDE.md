@@ -10,6 +10,9 @@ Docs, one purpose each:
   behaviour claims: check those against the code yourself.
 - docs/HOW-IT-WORKS.md: every scenario with diagrams; update its card when behaviour or
   output changes.
+- docs/CONFIGURATION.md: environment variables, the registry, per-clone keys, scripts and
+  JSON. docs/FAQ.md: short answers and the comparison with other approaches. The README
+  keeps only what a new user needs and links to these.
 - CONTRIBUTING.md: the human contributor guide (running from a clone, the demo sandbox).
   SECURITY.md: reporting, and what the guard refuses vs reports.
 - docs/RELEASING.md: how a version reaches npm. CHANGELOG.md: what changed, for users.

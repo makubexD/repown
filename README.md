@@ -12,27 +12,30 @@ repo to a personal one to a client one, on any host or sign-in method, with no s
 command. A push carrying the wrong identity is refused before it leaves.
 
 ```
-repown doctor          # once per machine: is git's credential helper ready?
-repown use octocat     # once per clone: this clone is octocat's
-repown guard on        # refuse any push that carries another identity
+npm install -g repown
+repown doctor          # once per machine: is Git Credential Manager ready for sign-ins?
+cd ~/code/my-repo
+repown setup           # once per clone: asks which account owns it, shows each step, runs it
 ```
+
+Or by hand, instead of `setup`: `repown use <account>` and `repown guard on` in each clone.
 
 > **Status:** pre-1.0: the commands may still change. What changed in each version is in
 > [CHANGELOG.md](CHANGELOG.md).
 
 **Contents:** [Problem](#the-problem) · [How it works](#how-repown-solves-it) ·
-[Alternatives](#compared-with-the-alternatives) · [Install](#install) ·
-[Quickstart](#quickstart) · [Day to day](#day-to-day) · [Commands](#commands) ·
-[Configuration](#configuration) · [Uninstall](#uninstall) · [FAQ](#faq) ·
-[Contributing](#contributing-and-security)
+[Install](#install) · [Quickstart](#quickstart) · [Day to day](#day-to-day) ·
+[Commands](#commands) · [Uninstall](#uninstall) · [More docs](#more-docs) ·
+[Configuration](docs/CONFIGURATION.md) · [FAQ](docs/FAQ.md)
 
 ## The problem
 
 - **Every clone inherits the identity in your global git config.** A commit's author
   address becomes permanent once it's pushed to a public repository.
-- **`gh auth switch` changes the account for the whole machine.** While `gh` is git's
-  credential helper, every switch breaks the *other* account's repositories. An
-  SSO-only account has no password to type at the prompt
+- **`gh auth switch` changes the account for the whole machine.** While `gh` (the GitHub
+  CLI) is git's *credential helper* (the program git asks for a password or token), every
+  switch breaks the *other* account's repositories. An account that signs in through its
+  organisation (SSO) has no password to type at the prompt
   ([ADR-001](docs/decisions/ADR-001-credential-manager-not-gh.md)).
 
 ## How repown solves it
@@ -51,23 +54,12 @@ repown guard on        # refuse any push that carries another identity
   Credential pinning is GitHub-over-https only today. Commit identity and the guard
   work on every host; on SSH, your key decides which account pushes
   ([ADR-009](docs/decisions/ADR-009-hosts-claim-only-measured.md)).
-- **Guard every push:** `repown guard on` installs a git `pre-push` hook, the *guard*.
+- **Guard every push:** `repown guard on` installs a git `pre-push` hook (a script git runs
+  before every push), the *guard*.
   It checks the commits being pushed, not just today's config.
 
-**Every scenario, with diagrams: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).**
-
-## Compared with the alternatives
-
-| Approach | Right commit identity | Right push credential | Checked before push | Catch |
-| --- | --- | --- | --- | --- |
-| `git config user.email` by hand in each repo | yes, if you never forget | no | no | Forgetting once publishes the wrong address permanently |
-| `includeIf "gitdir:~/work/"` in global config | yes, by folder | only if you also add the credential key per folder | no | Depends on where a repo happens to be cloned; a clone anywhere else inherits the default |
-| SSH host aliases (`git@github-work:...`) | no | yes | no | Every remote URL has to be rewritten, and keys managed per account |
-| `gh auth switch` | no | while gh is the helper, only the *active* account | no | Machine-wide: it breaks the other account's repos |
-| **repown** | yes, per clone | yes, per clone (GitHub) | yes, once `repown guard on`: every commit the push would publish | `use` and `guard on` once per clone |
-
-repown doesn't replace these tools. It writes plain repo-local git config, uses the
-credential manager you already have, and leaves `gh` in charge of the GitHub CLI.
+**Every scenario, with diagrams: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).** How it compares
+with `includeIf`, SSH aliases and `gh auth switch`: [docs/FAQ.md](docs/FAQ.md#compared-with-the-alternatives).
 
 ## Install
 
@@ -104,10 +96,20 @@ with provenance ([how](SECURITY.md#how-the-package-is-published)).
 
 ## Quickstart
 
-**Prefer to be guided?** In the clone, run `repown setup`. It asks which account owns it
-(and records a new one), whether to switch gh too, allow an organisation, turn the guard
-on and hand the credential helper back, then shows the exact commands and runs them only when you choose
-Run ([card 13](docs/HOW-IT-WORKS.md#13-guided-setup)). The steps below are those commands.
+### A. Guided
+
+**Once per machine,** run `repown doctor`: it checks that Git Credential Manager will
+handle sign-ins ([what to do if it says otherwise](#1-check-the-machine-once)).
+
+**Once per clone,** run `repown setup` in it. The first time, it asks for the account's
+login, where it's hosted, and the name and email for your commits (on GitHub, use your
+*noreply* address: GitHub's private address for commits, under Settings → Emails). After
+that it lists the accounts it knows; in a clone of your other account, pick **a new
+account**. Then it asks only what applies here: switching gh too, allowing an
+organisation, turning the guard on, handing git's sign-ins back from gh. It shows each
+step in plain words with its exact command, and runs them only when you choose Run.
+Nothing changes before that ([card 13](docs/HOW-IT-WORKS.md#13-guided-setup)). Then
+make [your first push](#the-first-push).
 
 <details><summary>What it looks like</summary>
 
@@ -182,13 +184,31 @@ Run it again in a clone that needs nothing, and it says so instead:
 
 Arrow keys choose, Enter confirms, Esc or Ctrl-C cancels. From the second question on,
 each list has a **← Back** (at a text question, type `<`), and the review has **Back** and
-**Change an answer**. When stderr gets no colour (`NO_COLOR` or `TERM=dumb`, unless
-`FORCE_COLOR` says otherwise, or stderr isn't a terminal), the same questions come as
-numbered choices.
+**Change an answer**. With `NO_COLOR` or `FORCE_COLOR=0`, and always with
+`TERM=dumb`, the same questions come as numbered choices.
+
+When you choose Run, each step prints what it is, then the command and its own output
+(`use` may add its own "Next:" hint; the following step takes care of it):
+
+```
+step 1 of 3: Allow pushes to octo-org's repositories
+> git config --local --add repown.allowOwner octo-org
+...
+step 3 of 3: Turn on the push guard: each push is checked first
+> repown guard on
+OK    guard      on -- every push is checked before it leaves
+
+  done: this clone is set up for octocat
+  check it any time: repown (this clone), repown doctor (this machine)
+```
 
 </details>
 
-### 1. Check the machine, once
+### B. By hand
+
+The same commands `repown setup` runs, one at a time.
+
+#### 1. Check the machine, once
 
 ```
 $ repown doctor
@@ -216,7 +236,7 @@ WARN  store      no accounts stored yet -- the first push will sign in once.
 - **`helper` says `none configured`:** run `git-credential-manager configure`, then
   `repown doctor` again.
 
-### 2. Record your accounts, once
+#### 2. Record your accounts, once
 
 ```
 $ repown accounts add octocat --name "Octo Cat" --email octocat@users.noreply.github.com
@@ -230,7 +250,7 @@ Repeat for each account (`octo-work` below). Or skip this: on a terminal, the fi
 both `use` and `accounts add` suggest them on GitHub from the account's public profile
 (through gh).
 
-### 3. Pin and guard each clone, once
+#### 3. Pin and guard each clone, once
 
 ```
 $ cd ~/code/dotfiles           # a personal repository
@@ -252,9 +272,6 @@ an organisation (`octo-org`), `use` says so and prints the one line that lets th
 accept it: `git config --local --add repown.allowOwner octo-org`. Until then the guard
 refuses pushes there.
 
-**The first push from each account signs in once.** GCM opens a browser: sign in as
-*that* clone's account, not whichever you used last.
-
 `repown use` writes these repo-local keys and nothing else:
 
 | Key | What it decides |
@@ -264,8 +281,15 @@ refuses pushes there.
 | `credential.<host>.username` | which stored credential serves the **push** (GitHub over https only) |
 | `user.useConfigOnly` | git refuses to invent an identity from the hostname |
 
-`.git/config` and `.git/hooks` are never pushed. No name or address reaches the
-repository, and teammates see nothing.
+`.git/config` and `.git/hooks` are never pushed: teammates see nothing of this setup.
+Your commits carry the name and email, as they always did.
+
+### The first push
+
+**The first push from each account signs in once.** GCM opens a browser: sign in as
+*that* clone's account, not whichever you used last. After that, pushes from that clone
+use it without asking. If a push is refused or asks for a password, see the table in
+[Day to day](#day-to-day).
 
 ## Day to day
 
@@ -301,7 +325,7 @@ how often. It never changes anything.
 | --- | --- |
 | A push asked for a password | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine), then [card 6](docs/HOW-IT-WORKS.md#6-commit-and-first-push) |
 | A push failed after signing in (SSO) | [card 6](docs/HOW-IT-WORKS.md#6-commit-and-first-push) |
-| The guard refused a push | [card 8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
+| The guard refused a push | most often a commit made before pinning: `git commit --amend --reset-author --no-edit`, then push again; [card 8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
 | The guard said the push goes to another owner (an organisation) | [card 8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix): `repown.allowOwner` |
 | A teammate doesn't use repown | [card 9](docs/HOW-IT-WORKS.md#9-a-teammate-without-repown) |
 | husky or another hook tool | [card 10](docs/HOW-IT-WORKS.md#10-other-hook-tools): have its pre-push hook run `repown guard check` |
@@ -312,14 +336,14 @@ how often. It never changes anything.
 | Command | What it does |
 | --- | --- |
 | `repown status` (or just `repown`) | the state of this repository and this machine |
-| `repown use <account> [--gh]` | pin this clone to an account (`--name` and `--email` together skip the registry, and don't record the account) |
+| `repown use <account> [--gh]` | pin this clone to an account (`--name` and `--email` together skip the registry, the file where repown remembers accounts, and don't record the account) |
 | `repown off` | unpin this clone, leaving global config alone |
 | `repown doctor` | what serves credentials on this machine, and to whom |
 | `repown fix [--dry-run] [--yes]` | undo `gh auth setup-git` so per-clone pins work again |
 | `repown guard on \| off \| status` | install, remove or show the pre-push hook |
 | `repown accounts list \| add \| remove` | the accounts this machine knows (`add` takes `--name`, `--email`, `--host github\|azdo\|generic`) |
 | `repown scan [dir...] [--emails] [--depth <n>] [--format json]` | audit every clone under the given directories (default: the current one) |
-| `repown setup [<account>] [--guard] [--no-input]` | guided setup of this clone: asks, shows the commands, then runs them (every answer has a flag: `--name`, `--email`, `--host`, `--gh`, `--allow-owner`, `--fix`) |
+| `repown setup [<account>] [--guard] [--no-input]` | guided setup of this clone: asks, shows each step, then runs them (every answer has a flag: `--name`, `--email`, `--host`, `--gh`, `--allow-owner <owner>`, `--fix`; scripts: [docs/CONFIGURATION.md](docs/CONFIGURATION.md#scripts-and-ci)) |
 
 - **Help:** `repown --help` lists the commands. `repown help <command>` (or
   `repown <command> --help`) shows a command's options, and `repown help guard on` goes
@@ -328,56 +352,8 @@ how often. It never changes anything.
 - **Version:** `repown --version` (or `-v`).
 - **Exit codes:** `0` success, `1` failure or refusal, `2` usage error. `scan` exits `0`
   whatever it finds; read its output, or its JSON, for the problems. `setup` exits `0` too
-  when the clone is already set up and you choose Done, `130` when cancelled or
-  interrupted, and when one of its commands fails, that command's own code.
-
-## Configuration
-
-**Environment variables:**
-
-| Variable | Effect |
-| --- | --- |
-| `REPOWN_CONFIG_DIR` | where the account registry lives |
-| `NO_COLOR`, `FORCE_COLOR`, `TERM=dumb` | colour off or on, as `repown --help` describes |
-| `GH_TOKEN`, `GITHUB_TOKEN`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_EMAIL` | not settings: the guard **refuses** a push while any is set, because they override the pinned identity or credential ([card 7](docs/HOW-IT-WORKS.md#7-push-what-the-guard-checks)) |
-
-**The account registry** is one file, `accounts.json`, holding each account's name,
-email and host (no credentials). Once one is recorded, `repown accounts list` prints
-its path:
-
-| OS | Folder |
-| --- | --- |
-| Windows | `%APPDATA%\repown` |
-| macOS, Linux | `$XDG_CONFIG_HOME/repown`, else `~/.config/repown` |
-
-**Per clone, opt-in:** three repo-local keys widen what the guard accepts. Global config
-doesn't count. `repown`, `repown use` and the guard's refusals print the exact
-`git config` line where one applies.
-
-| Key | Allows | Card |
-| --- | --- | --- |
-| `repown.allowOwner` | pushing to an organisation's repositories | [8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
-| `repown.allowTagger` | pushing another tagger's annotated tags (a fork pushing upstream's tags) | [8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
-| `repown.mirrorBranch` | a fork's branch that only fast-forwards to upstream: commits already on a remote stop counting there | [8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
-
-**Scripts:** `repown scan --format json` and `repown accounts list --format json` print
-one JSON document on stdout. Those fields are stable; the text layout isn't. Every
-field of both is listed in [ADR-014](docs/decisions/ADR-014-json-for-scripts.md):
-
-```
-$ repown accounts list --format json
-[
-  {
-    "account": "octocat",
-    "name": "Octo Cat",
-    "email": "octocat@users.noreply.github.com",
-    "host": "github"
-  }
-]
-```
-
-Without a terminal nothing prompts: record accounts with `repown accounts add --name
---email`, and confirm `repown fix` with `--yes`.
+  when the clone is already set up and you choose Done, `1` when you Decline, `130` when
+  cancelled or interrupted, and when one of its commands fails, that command's own code.
 
 ## Uninstall
 
@@ -390,39 +366,23 @@ repown off               # optional: also drop the pinned identity
 npm uninstall -g repown
 ```
 
+Left behind, on purpose: the account registry ([where](docs/CONFIGURATION.md#the-account-registry)),
+which you can delete, and the sign-ins in your OS credential store. If `repown fix` took
+the helper role from gh and you want it back: `gh auth setup-git`.
+
 Details, and submodules: [card 12](docs/HOW-IT-WORKS.md#12-uninstall-or-repown-missing).
 
-## FAQ
+## More docs
 
-**Does it change anything outside the clone?** Its own account registry, and two things
-only on request: `repown fix` removes what `gh auth setup-git` added to git config, after
-showing it, and `repown use --gh` switches gh's active account. Everything else is
-repo-local.
-
-**Azure DevOps, GitLab, SSH?** Commit identity and the guard work on any host. The
-credential pin is measured only for GitHub over https, so elsewhere repown says the
-credential isn't pinned rather than guessing
-([card 3](docs/HOW-IT-WORKS.md#3-pin-a-clone)).
-
-**My teammates don't use it.** Nothing changes for them: repown writes nothing that gets
-committed ([card 9](docs/HOW-IT-WORKS.md#9-a-teammate-without-repown)).
-
-**Can I skip the guard for one push?** `git push --no-verify`. That is also why the guard
-is a safety net, not a lock
-([SECURITY.md](SECURITY.md#what-repown-protects-and-what-it-doesnt)).
-
-**What does it send over the network?** Nothing of its own, and no telemetry. It runs
-`git` and `gh`: gh may contact GitHub when repown asks for its accounts, and on a
-terminal, `repown use` or `repown accounts add` without `--name` and `--email` asks gh
-for the account's public profile to suggest a name and noreply address.
-
-## Contributing and security
-
-- **Run it from a clone, or try it on throwaway repositories:**
-  [CONTRIBUTING.md](CONTRIBUTING.md).
-- **Report a vulnerability privately:** [SECURITY.md](SECURITY.md).
-- **Why it works this way:** [docs/decisions/](docs/decisions/README.md), one ADR per
-  decision. Releases: [docs/RELEASING.md](docs/RELEASING.md).
+| I want… | Read |
+| --- | --- |
+| every scenario, with diagrams | [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) |
+| environment variables, where accounts are kept, per-clone keys, scripts and JSON | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) |
+| short answers, and how repown compares with other approaches | [docs/FAQ.md](docs/FAQ.md) |
+| to run it from a clone, or try it on throwaway repositories | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| to report a vulnerability privately | [SECURITY.md](SECURITY.md) |
+| why it works this way, one ADR per decision | [docs/decisions/](docs/decisions/README.md) |
+| what changed in each version, and how a release is cut | [CHANGELOG.md](CHANGELOG.md), [docs/RELEASING.md](docs/RELEASING.md) |
 
 ## License
 

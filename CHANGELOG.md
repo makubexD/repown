@@ -16,6 +16,10 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   The other commands' output is unchanged (tests lock `fix --dry-run`, `use`'s hints and
   the help's exit codes).
 
+- Docs: the README starts with `repown setup` and keeps what a new user needs; the
+  configuration (environment variables, registry, per-clone keys, scripts and JSON) moved
+  to docs/CONFIGURATION.md, and the FAQ and the comparison with other approaches to
+  docs/FAQ.md.
 - `repown guard on` warns when it runs from npx's cache: the hook would call that
   temporary copy, and once that is deleted it refuses every push unless another repown
   is on PATH. Install globally, then run `repown guard on` again.

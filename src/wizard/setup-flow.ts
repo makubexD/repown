@@ -23,6 +23,8 @@ export interface SetupContext {
   readonly recorded: Readonly<Record<string, Account>>;
   /** `repown.account` in this clone, if it is pinned already. */
   readonly pinned: string | null;
+  /** `use <pinned>` would write nothing new: every key it writes already holds, exactly. */
+  readonly pinIntact: boolean;
   /** The provider of origin's host (`github`, only as a default, without an origin), and who owns origin. */
   readonly host: string;
   readonly owner: string | null;
@@ -32,6 +34,8 @@ export interface SetupContext {
   readonly credentialPinned: boolean;
   /** Null when gh isn't installed; an error when it couldn't be queried. */
   readonly gh: Result<GhState> | null;
+  /** gh is git's credential helper, so pushes sign in as gh's active account, not the pin. */
+  readonly ghIsHelper: boolean;
   readonly guard: GuardState;
   readonly redirected: boolean;
   /** What `fix` would remove, when gh is the helper on a GitHub clone; otherwise null. */

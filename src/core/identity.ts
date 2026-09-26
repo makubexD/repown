@@ -104,14 +104,29 @@ export async function pinIdentity(
   credentialKeys: readonly string[],
   scope: ConfigScope = 'local',
 ): Promise<PinOutcome[]> {
-  const writes: Array<[string, string]> = [
+  return writeAll(pinWrites(values, credentialKeys), (key, value) => git.setConfig(key, value, scope));
+}
+
+/** Every key `pinIdentity` writes, with the value it writes. */
+export function pinWrites(values: IdentityValues, credentialKeys: readonly string[]): Array<[string, string]> {
+  return [
     [NAME_KEY, values.name],
     [EMAIL_KEY, values.email],
     [USE_CONFIG_ONLY_KEY, 'true'],
     [ACCOUNT_KEY, values.account],
     ...credentialKeys.map((key): [string, string] => [key, values.account]),
   ];
-  return writeAll(writes, (key, value) => git.setConfig(key, value, scope));
+}
+
+/**
+ * True only when pinning again would write nothing new: every key holds exactly one
+ * value, character for character. Read raw, because a trimmed read hides the stray
+ * blank or padded value that makes git and the guard disagree.
+ */
+export async function pinHolds(git: Git, values: IdentityValues, credentialKeys: readonly string[]): Promise<boolean> {
+  const writes = pinWrites(values, credentialKeys);
+  const found = await Promise.all(writes.map(([key]) => git.getAllConfigRaw(key, 'local')));
+  return writes.every(([, value], index) => found[index]!.length === 1 && found[index]![0] === value);
 }
 
 export async function clearIdentity(

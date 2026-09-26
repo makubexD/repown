@@ -15,7 +15,7 @@ const twoAccounts = {
 
 describe('repown setup, played with key presses', () => {
   test('S1 a clone already set up says so, and Done changes nothing', { todo: 'task 3' }, async () => {
-    const ctx = setupContext({ pinned: 'octocat', guard: 'on' as const, pinIntact: true } as Parameters<typeof setupContext>[0]);
+    const ctx = setupContext({ pinned: 'octocat', guard: 'on', pinIntact: true });
     const { outcome, screen } = await play(ctx, [[enter], [enter]]);
     assert.equal(outcome.status, 'done', screen);
     assert.match(screen, /currently pinned to octocat/);

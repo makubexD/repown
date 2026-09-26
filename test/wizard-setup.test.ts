@@ -16,6 +16,8 @@ import { ok, err } from '../src/core/result.ts';
 import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type ReviewChoice } from '../src/wizard/engine.ts';
 import { setupFlow, planCommands, formatCommand, missingFlags, NEW_ACCOUNT, type SetupContext } from '../src/wizard/setup-flow.ts';
 import { runSetup } from '../src/wizard/setup-run.ts';
+import { readContext } from '../src/wizard/setup-context.ts';
+import { Git } from '../src/core/git.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name];
@@ -259,6 +261,54 @@ function repown(args: readonly string[], cwd: string): { status: number; stdout:
 
 const localConfig = (at: Home): string => readFileSync(join(at.box.dir, '.git', 'config'), 'utf8');
 const hook = (at: Home): string => join(at.box.dir, '.git', 'hooks', 'pre-push');
+
+describe('setup context: would `use` change anything here?', () => {
+  let at: Home;
+  beforeEach(() => {
+    at = home();
+    record(at, 'octocat', 'octocat@example.invalid');
+    at.box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
+  });
+  afterEach(() => at.dispose());
+
+  const read = async (): Promise<SetupContext> => {
+    const ctx = await readContext(new Git(at.box.dir), null);
+    assert.ok(ctx.ok, ctx.ok ? '' : ctx.error);
+    return ctx.value;
+  };
+  const pin = (): void => { assert.equal(repown(['use', 'octocat'], at.box.dir).status, 0); };
+
+  test('a clone `use` just pinned is intact, and one never pinned is not', async () => {
+    assert.equal((await read()).pinIntact, false);
+    pin();
+    assert.equal((await read()).pinIntact, true);
+  });
+
+  test('any key `use` writes that differs, repeats, is blank or carries spaces is not intact', async () => {
+    const edits: (readonly string[])[] = [
+      ['config', 'user.email', 'other@example.invalid'],
+      ['config', '--add', 'user.email', ''],
+      ['config', '--add', 'repown.account', 'octocat'],
+      ['config', 'user.email', ' octocat@example.invalid'],
+      ['config', '--unset', 'credential.https://github.com.username'],
+      ['config', '--unset', 'user.useConfigOnly'],
+    ];
+    for (const edit of edits) {
+      pin();
+      at.box.git(...edit);
+      assert.equal((await read()).pinIntact, false, 'intact after: git ' + edit.join(' '));
+      // `use` can't overwrite a key with two values: clear it before the next pin.
+      const key = edit.find((word, index) => index > 0 && !word.startsWith('--'))!;
+      try { at.box.git('config', '--unset-all', key); } catch { /* already unset */ }
+    }
+  });
+
+  test('says whether gh is the credential helper', async () => {
+    assert.equal((await read()).ghIsHelper, false);
+    at.box.git('config', 'credential.helper', '!gh auth git-credential');
+    assert.equal((await read()).ghIsHelper, true);
+  });
+});
 
 describe('repown setup, without a terminal', () => {
   let at: Home;

@@ -3,7 +3,8 @@
 // (gh, the credential helper). Nothing here writes.
 
 import type { Git } from '../core/git.ts';
-import { inspectRepo, inspectAuth } from '../core/inspect.ts';
+import { inspectRepo, inspectAuth, type RepoState } from '../core/inspect.ts';
+import { pinHolds } from '../core/identity.ts';
 import { loadRegistry, type Account, type Registry } from '../core/registry.ts';
 import { planRepair } from '../core/credential/repair.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
@@ -30,29 +31,42 @@ export async function readContext(git: Git, cwd: string | null): Promise<Result<
   const registry = await readRegistry();
   if (!registry.ok) return registry;
   const repo = await inspectRepo(git);
-  // The history is read only for the guard question, which needs it; it can be long.
-  const guardAsked = repo.guard === 'off' && !repo.hook?.redirected;
   const [auth, pinned, allowed, planned, addresses] = await Promise.all([
     inspectAuth(git, repo.originUrl ?? undefined),
     git.getConfig('repown.account', 'local'),
     git.getAllConfig('repown.allowOwner', 'local'),
     planRepair(git),
-    guardAsked ? git.emailCounts() : Promise.resolve(ok(new Map<string, number>())),
+    historyFor(git, repo),
   ]);
+  const recorded = registry.value.accounts;
   return ok({
-    cwd, recorded: registry.value.accounts, pinned,
+    cwd, recorded, pinned,
+    pinIntact: await pinIntact(git, pinned, recorded[pinned ?? ''], repo.credentialKeys),
     // Without an origin there is no host to go by; GitHub is only the default offered.
     host: repo.url ? repo.provider.id : 'github',
     owner: repo.owner,
     allowed: allowed.map((owner) => owner.toLowerCase()),
     credentialPinned: repo.credentialKeys.length > 0,
     gh: auth.ghPresent ? auth.gh : null,
+    ghIsHelper: auth.ghIsHelper,
     guard: repo.guard,
     redirected: repo.hook?.redirected ?? false,
     fixLines: repo.provider.id === 'github' && auth.ghIsHelper && planned.length > 0 ? previewLines(planned) : null,
     addresses,
     suggest: suggester(),
   });
+}
+
+/** The history is read only for the guard question, which needs it; it can be long. */
+function historyFor(git: Git, repo: RepoState): Promise<Result<ReadonlyMap<string, number>>> {
+  const guardAsked = repo.guard === 'off' && !repo.hook?.redirected;
+  return guardAsked ? git.emailCounts() : Promise.resolve(ok(new Map<string, number>()));
+}
+
+/** Whether `use <pinned>` would write nothing new: the pinned account, as recorded, holds in full. */
+async function pinIntact(git: Git, pinned: string | null, entry: Account | undefined, credentialKeys: readonly string[]): Promise<boolean> {
+  if (!pinned || !entry) return false;
+  return pinHolds(git, { name: entry.name, email: entry.email, account: pinned }, credentialKeys);
 }
 
 /** Profile lookups are network calls: one per account and host, however often a step is re-asked. */

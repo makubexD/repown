@@ -524,4 +524,83 @@ review takes **Decline**.
 
 A username written into a `pushInsteadOf` URL isn't checked.
 
+**Keys.** ↑/↓ choose, Enter confirms, Esc or Ctrl-C cancels (exit 130). Once there is a
+question to go back to, each list ends with **← Back** (↑ from the first choice lands on
+it; at a text question, type `<`). With `NO_COLOR` or `FORCE_COLOR=0`, and always with
+`TERM=dumb`, the same questions come as numbered choices. Decline, Esc or Ctrl-C end with
+one line: nothing was changed, and you can run `repown setup` again any time.
+
+**The questions,** in a clone of an organisation's repository (the review follows, as in
+the [README](../README.md#quick-start)):
+
+```
+┌  repown setup
+│
+◇  Reading this clone and this machine
+│
+●  right now this clone isn't pinned to any account
+│
+◇  Which account should this clone belong to?
+│  commits made here carry its name and email; on GitHub, pushes from
+│  here also sign in as it
+│  octocat
+│
+◇  This repository belongs to "octo-org". Let this clone push to it?
+│  Yes if you're a member of that organisation or a collaborator on
+│  it; with No, the push guard refuses pushes there. Saved in this
+│  clone only
+│  Yes
+│
+●  only your email address is in this repository's commits
+│
+◇  Turn on the push guard?
+│  before each push, it checks that every commit is yours and goes to
+│  the right place, and stops the push if not; turn it off any time:
+│  repown guard off
+│  Yes
+```
+
+**Run:** each step prints what it is, then the command and its own output.
+
+```
+└  Running the commands
+
+       step 1 of 3: Let this clone push to octo-org's repositories
+       > git config --local --add repown.allowOwner octo-org
+OK    origin     pushes to octo-org allowed in this clone
+
+       ...
+
+       step 3 of 3: Turn on the push guard: each push is checked first
+       > repown guard on
+OK    guard      on -- every push is checked before it leaves
+  /home/you/code/project/.git/hooks/pre-push
+
+       done: this clone is set up for octocat
+       check it any time: repown (this clone), repown doctor (this machine)
+```
+
+**Already set up:** run it again in a clone that needs nothing.
+
+```
+◇  This clone is already set up ───────────────────────────────────────╮
+│                                                                      │
+│  commits as  Octo Cat <octocat@users.noreply.github.com>             │
+│  pushes as   octocat                                                 │
+│  guard       on: every push is checked before it leaves              │
+│                                                                      │
+│  Nothing needs to change.                                            │
+│                                                                      │
+│  Checked: the settings git uses here are octocat's, as recorded.     │
+│  See it any time: repown (this clone), repown doctor (this machine)  │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────╯
+│
+◆  What now?
+│  ● Done (change nothing)
+│  ○ Apply the same settings again
+│  ○ Change an answer
+└
+```
+
 </details>

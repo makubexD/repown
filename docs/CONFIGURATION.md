@@ -1,7 +1,7 @@
 # Configuration
 
 What you can set, where repown keeps things, and how to use it from scripts. None of this
-is needed to get started: [README](../README.md#quickstart) covers that.
+is needed to get started: [README](../README.md#quick-start) covers that.
 
 **Contents:** [Environment variables](#environment-variables) ·
 [The account registry](#the-account-registry) · [Per-clone keys](#per-clone-keys) ·
@@ -27,8 +27,16 @@ Once one is recorded, `repown accounts list` prints its path:
 
 ## Per-clone keys
 
-Besides the keys `repown use` writes ([README](../README.md#3-pin-and-guard-each-clone-once)), three repo-local
-keys widen what the guard accepts. They are opt-in and global config doesn't count.
+`repown use` writes these repo-local keys and nothing else:
+
+| Key | What it decides |
+| --- | --- |
+| `user.name`, `user.email` | who **authored** the commit |
+| `repown.account` | whose clone this is; the guard checks the destination against it |
+| `credential.<host>.username` | which stored credential serves the **push** (GitHub over https only) |
+| `user.useConfigOnly` | git refuses to invent an identity from the hostname |
+
+Three more repo-local keys widen what the guard accepts. They are opt-in and global config doesn't count.
 `repown`, `repown use`, `repown setup`'s review and the guard's refusals print the
 `git config` line for `allowOwner`, and the refusals a template for `allowTagger`;
 `mirrorBranch` you set yourself (card 8).

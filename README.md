@@ -9,7 +9,7 @@
 **Stop committing and pushing as the wrong account when one machine has two or more.**
 Each repository owns its identity (that's the name: *repo own*), so you move from a work
 repo to a personal one to a client one, on any host or sign-in method, with no switch
-command. A push carrying the wrong identity is refused before it leaves.
+command. A push carrying commits under the wrong identity is refused before it leaves.
 
 > **Status:** pre-1.0: the commands may still change. What changed in each version is in
 > [CHANGELOG.md](CHANGELOG.md).
@@ -26,8 +26,8 @@ command. A push carrying the wrong identity is refused before it leaves.
   address becomes permanent once it's pushed to a public repository.
 - **`gh auth switch` changes the account for the whole machine.** While `gh` (the GitHub
   CLI) is git's *credential helper* (the program git asks for a password or token), every
-  switch breaks the *other* account's repositories. An account that signs in through its
-  organisation (SSO) has no password to type at the prompt
+  switch breaks the *other* account's repositories. And if your organisation signs you in
+  through single sign-on (SSO), there's no password you could type at that prompt anyway
   ([ADR-001](docs/decisions/ADR-001-credential-manager-not-gh.md)).
 
 **What repown does:**
@@ -36,14 +36,14 @@ command. A push carrying the wrong identity is refused before it leaves.
   clone's own `.git/config`. That's what *pinned* means here: set once, never switched.
 - **Lets one credential serve each account.** [Git Credential Manager](https://github.com/git-ecosystem/git-credential-manager)
   (GCM) stores one sign-in per account and picks the one each clone names. `repown doctor`
-  checks GCM is the helper; if gh took the job, `repown fix` removes gh's entries after
-  showing them. `gh` stays your
-  account store for `gh pr create` and `gh api`.
+  checks GCM is the helper; if gh has become it (`gh auth login` offers that), `repown fix`
+  removes gh's entries after showing them. `gh` stays your account store for
+  `gh pr create` and `gh api`.
 - **Guards every push.** A git `pre-push` hook (a script git runs before every push), the
   *guard*, checks the commits being pushed, not just today's config.
 
-Commit identity and the guard work on every host. The sign-in is pinned on GitHub over
-https only; on SSH, your key decides which account pushes
+Commit identity and the guard work on every host. The sign-in is pinned on GitHub (github.com)
+over https only; on SSH, your key decides which account pushes
 ([ADR-009](docs/decisions/ADR-009-hosts-claim-only-measured.md)). Every scenario, with
 diagrams: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
 
@@ -67,8 +67,8 @@ npm install -g repown
   ([card 12](docs/HOW-IT-WORKS.md#12-uninstall-or-repown-missing)).
 - **Update** with `npm install -g repown@latest`; guarded clones keep working
   ([ADR-003](docs/decisions/ADR-003-hook-calls-installed-cli.md)).
-- **What gets installed:** one optional dependency, for the interactive prompts, pinned
-  exactly ([ADR-016](docs/decisions/ADR-016-clack-for-the-setup-wizard.md)). The package is
+- **What gets installed:** one optional dependency, for the arrow-key prompts (without it,
+  `setup` asks with numbered choices), pinned exactly ([ADR-016](docs/decisions/ADR-016-clack-for-the-setup-wizard.md)). The package is
   published from CI with provenance ([how](SECURITY.md#how-the-package-is-published)).
 
 ## Quick start
@@ -79,16 +79,23 @@ cd ~/code/my-repo
 repown setup           # once per clone: asks which account owns it, shows each step, runs it
 ```
 
-1. **`repown doctor`, once per machine.** If it reports a problem, see
-   [Troubleshooting](#troubleshooting).
-2. **`repown setup`, once per clone,** from inside it.
-   - **The first time,** it asks for the account's user name (login), where it's hosted,
-     and the name and email for your commits. On GitHub, use your *noreply* address,
-     GitHub's private address for commits, shown at github.com/settings/emails.
-   - **After that,** it lists the accounts it knows: pick one, or **a new account**.
-   - **Then it asks only what applies here:** switching gh too, allowing the repository's
-     owner, turning the guard on, taking git's sign-ins back from gh.
-3. **Check the review, then choose Run.** Nothing changes before that:
+1. **`repown doctor`, once per machine.** No `FAIL` line means it's ready. If gh is the
+   helper, or something is missing, see [Troubleshooting](#troubleshooting).
+2. **Clone as usual,** then **`repown setup`, once per clone,** from inside it. (Cloning a
+   private repository signs in first: pick the account that owns it.)
+   - **In your first clone,** it asks for the account's user name (login), where it's
+     hosted, and the name and email for your commits. On GitHub, use your *noreply*
+     address, GitHub's private address for commits, shown at github.com/settings/emails
+     (like `1234+octocat@users.noreply.github.com`).
+   - **In later clones,** it lists the accounts it knows: pick one, or **a new account**.
+   - **Then it asks only what applies here:**
+     - *switch gh too:* make the account gh's active one, so `gh pr create` matches;
+     - *allow the repository's owner:* for an organisation's repository (answer No and the
+       guard refuses pushes there);
+     - *turn the guard on;*
+     - *take git's sign-ins back from gh:* answer Yes if `repown doctor` said gh is the
+       helper, or pushes from your other account's clones fail.
+3. **Check the review, then choose Run them.** Nothing changes before that:
 
    ```
    ◇  Review: nothing has changed yet ───────────────────────────────────────╮
@@ -121,10 +128,10 @@ repown setup           # once per clone: asks which account owns it, shows each 
    from that clone use it without asking.
 
 **Keys:** ↑/↓ choose, Enter confirms, Esc or Ctrl-C stops with nothing changed. From the
-second question on, each list ends with **← Back**; at a typed answer, enter `<`. With
-`NO_COLOR`, `FORCE_COLOR=0` or `TERM=dumb`, the questions come as numbered choices. Run it again in a clone
-that's already set up and it says so: choose **Done**. Every screen:
-[card 13](docs/HOW-IT-WORKS.md#13-guided-setup).
+second question on, each list ends with **← Back**; at a typed answer, enter `<`. In a
+plain terminal the questions come as numbered choices ([when](docs/CONFIGURATION.md#environment-variables));
+there, Ctrl-C stops. Run it again in a clone that's already set up and it says so: choose
+**Done**. Every screen: [card 13](docs/HOW-IT-WORKS.md#13-guided-setup).
 
 ## Commands
 
@@ -143,8 +150,7 @@ then commit and push.
 | Rarely | `repown accounts list \| add \| remove` | the accounts this machine knows (bare `repown accounts` lists them; `add` takes `--name`, `--email`, `--host github\|azdo\|generic`; `list --format json` for scripts) |
 | | `repown off` | unpin this clone, leaving global config alone; warns if the guard is still on |
 
-**Who is this clone?** `repown` prints the three things that decide it: the commit
-identity, the push credential, and gh's active account.
+**Who is this clone?** Run `repown`:
 
 ```
 $ repown
@@ -170,28 +176,30 @@ can print: [card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are).
 - **Exit codes:** `0` success, `1` failure or refusal, `2` usage error.
   - `scan` exits `0` whatever it finds (read its output or JSON), `2` for a missing folder
     or a bad `--depth`.
-  - `setup` exits `0` when done (or Done); `1` when you Decline or it can't start (not
-    a clone, an unreadable registry, `--guard` where another tool owns the hook); `130` when
-    cancelled or interrupted; `2` for flags that don't fit, or without a terminal unless
-    `--no-input` is given; and a failing step's own code.
+  - `setup` exits `0` when done (or Done); `1` when you Decline or it can't start;
+    `130` when cancelled or interrupted; `2` for flags that don't fit, or without a
+    terminal unless `--no-input` is given; and a failing step's own code. Every case:
+    [Scripts and CI](docs/CONFIGURATION.md#scripts-and-ci).
 
 ## Troubleshooting
 
 | What happened | What to do |
 | --- | --- |
 | `repown doctor` says gh is the helper | `repown fix` ([card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine)) |
-| `repown doctor` shows `GCM  not found` | install Git Credential Manager ([Install](#install)), then `repown doctor` again |
-| `repown doctor` shows `helper  none configured` | `git-credential-manager configure`, then `repown doctor` again |
+| `repown doctor` shows `GCM` … `not found` | install Git Credential Manager ([Install](#install)), then `repown doctor` again |
+| `repown doctor` shows `helper` … `none configured` | `git credential-manager configure`, then `repown doctor` again |
 | A push asked for a password | run `repown`: it names the cause (gh as the helper, or no helper) and the fix |
 | A push failed right after signing in (SSO) | [card 6](docs/HOW-IT-WORKS.md#6-commit-and-first-push) |
 | The guard refused a push | it says which commit and the fix. Most often a commit made before pinning: `git commit --amend --reset-author --no-edit` fixes the last one ([card 8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) for older ones, and every other refusal) |
 | The guard said the push goes to another owner | if you're a member or collaborator there: `git config --local --add repown.allowOwner <owner>` |
-| The guard said `GH_TOKEN` (or `GITHUB_TOKEN`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_EMAIL`) is set | unset it, then push again: the email variables override the pinned identity, the token variables which account pushes |
-| husky or another tool owns the pre-push hook | have that hook run `repown guard check --remote="$1" --url="$2"`, passing its stdin through ([card 10](docs/HOW-IT-WORKS.md#10-other-hook-tools)) |
+| The guard said `GH_TOKEN` (or `GITHUB_TOKEN`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_EMAIL`) is set | unset it, then push again: the email variables override the pinned identity, and the token variables make gh serve that token |
+| husky or another tool owns the pre-push hook | have that hook run `repown guard check --remote="$1" --url="$2"`, passing its stdin through; if the hook is committed, make it skip teammates without repown ([card 10](docs/HOW-IT-WORKS.md#10-other-hook-tools)) |
+| An Azure DevOps push is refused as "wrong owner" | the owner there is the organisation: allow it with `git config --local --add repown.allowOwner <organisation>` |
 | "repown cannot be found" on push | [card 12](docs/HOW-IT-WORKS.md#12-uninstall-or-repown-missing) |
 
 To push once without the check: `git push --no-verify`, only when you mean to publish
-those addresses.
+those addresses. What the guard can't catch (other git clients, submodule pushes):
+[residual risks](docs/decisions/README.md#residual-risks).
 
 ## Set up by hand
 

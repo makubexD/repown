@@ -73,7 +73,7 @@ example, a test or a commit to this repository.
 the running CLI into the hook
 ([ADR-003](docs/decisions/ADR-003-hook-calls-installed-cli.md)). Run from a clone, that is
 your working copy's `src/cli.ts`: the guarded repository then runs whatever that checkout
-holds, and refuses every push if it moves. In your real repositories, turn the guard on
+holds, and if it moves, falls back to a `repown` on PATH or refuses. In your real repositories, turn the guard on
 with an installed repown.
 
 ## Making a change
@@ -100,7 +100,7 @@ with an installed repown.
   - `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md), written for users.
 
   `test/docs.test.ts` fails when a doc shows a command or option that help doesn't have;
-  when an option help declares is in neither README.md nor docs/; when an environment
+  when an option help declares is in no doc; when an environment
   variable help lists is missing from docs/CONFIGURATION.md; when a command is missing from
   the map below or a path in it doesn't exist; and when a relative link or `#anchor`
   doesn't resolve.
@@ -133,7 +133,8 @@ Shared by all of them:
 - **Reading a clone and the machine:** `src/core/inspect.ts`, `src/core/git.ts` (every git
   call), `src/core/url.ts` (remote URLs and owners), `src/core/result.ts` (answers that can fail).
 - **Hosts** (what each one can pin): `src/core/hosts/`. Adding one is one file there plus
-  one line in `providers()` (`src/core/hosts/index.ts`), with `generic` last.
+  one line in `providers()` (`src/core/hosts/index.ts`), with `generic` last, plus its
+  label and hint in setup's `HOSTS` (`src/wizard/setup-flow.ts`).
 - **The one place that runs processes:** `src/core/exec.ts`.
 - **The release tool:** `scripts/release.ts` ([RELEASING](docs/RELEASING.md)).
 

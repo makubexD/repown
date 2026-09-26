@@ -84,7 +84,7 @@ flowchart TD
 | Undo `fix` | `gh auth setup-git` |
 | Setting in the system scope | re-run `repown fix` in an elevated shell |
 | `GCM` shows `not found` | install [Git Credential Manager](https://github.com/git-ecosystem/git-credential-manager/blob/main/docs/install.md) (Git for Windows includes it), then run `repown doctor` again |
-| `helper` shows `none configured` | `git-credential-manager configure` makes GCM git's helper (on Windows, run it from Git Bash), then run `repown doctor` again |
+| `helper` shows `none configured` | `git credential-manager configure` makes GCM git's helper, then run `repown doctor` again |
 | `store  no accounts stored yet` | nothing: expected before the first push |
 
 `doctor` exits 1 only when gh is the helper.
@@ -144,11 +144,10 @@ sequenceDiagram
 | `--gh` | also runs `gh auth switch`, so `gh pr create` acts as the same account |
 | No terminal and no record | 🔴 stops and tells you to run `repown accounts add <account> …` |
 | SSH remote | no credential key is written, because your SSH key decides; 🟡 `use` says credentials are not pinned for this remote |
-| Azure DevOps or another host | identity and guard work; 🟡 credentials are not pinned ([ADR-009](decisions/ADR-009-hosts-claim-only-measured.md)) |
+| Azure DevOps or another host | identity and guard work; 🟡 credentials are not pinned ([ADR-009](decisions/ADR-009-hosts-claim-only-measured.md)). On Azure DevOps the owner is the organisation, so allow it with `repown.allowOwner` |
 | Repo owned by an organisation | 🟡 prints the line that allows it ([card 5](#5-check-where-you-are)) |
 | gh is still the credential helper | 🟡 `fix: repown fix` |
 | No stored credential yet | the first push signs in once ([card 6](#6-commit-and-first-push)) |
-| Clone has submodules | each submodule is its own clone ([card 5](#5-check-where-you-are)) |
 
 </details>
 
@@ -261,7 +260,7 @@ flowchart TD
   I -->|"yes: run all three checks,<br/>report every refusal together"| O{"destination owner = this clone's account<br/>(repown.account) or a repown.allowOwner?"}
   I -->|yes| T{"each pushed annotated tag's tagger<br/>= your email or a repown.allowTagger?"}
   I -->|yes| C["for each pushed ref, the commits the remote<br/>does NOT already have"]
-  O -->|"can't tell: local path, no owner in URL,<br/>no account pinned in this clone"| N[⚪ destination not checked]
+  O -->|"can't tell: local path, no owner in URL,<br/>no account and no allowOwner in this clone"| N[⚪ destination not checked]
   O -->|no| X3[🔴 wrong owner]
   T -->|no| X4[🔴 tagger]
   C --> A{"every commit's author AND committer<br/>email = yours? (case-insensitive)"}
@@ -387,6 +386,16 @@ To guard such a clone, call repown from that tool's `pre-push` hook, passing std
 repown guard check --remote="$1" --url="$2"
 ```
 
+If that hook is committed (husky's usually is), teammates without repown would get
+"command not found" on every push. Skip it for them:
+
+```sh
+if command -v repown >/dev/null 2>&1; then repown guard check --remote="$1" --url="$2" || exit 1; fi
+```
+
+`repown` and `scan` still show such a clone's guard as `foreign`: they can't see what the
+other tool's hook calls.
+
 </details>
 
 ### 11. Audit, re-point, move machines
@@ -396,7 +405,7 @@ repown guard check --remote="$1" --url="$2"
 <details><summary>Show how</summary>
 
 ```
-repown scan ~/code ~/work      # every clone: owner, host, identity, guard, addresses in history
+repown scan ~/code ~/work      # every clone: owner, host, identity, guard, email domains in history
 repown scan --emails           # show exact addresses instead of domains (counts stay)
 repown scan --format json      # the same facts as JSON, for scripts (ADR-014)
 repown use octo-work           # re-point this clone to another account (or repown setup)
@@ -536,12 +545,13 @@ Without a terminal (CI, a script): see [Scripts and CI](CONFIGURATION.md#scripts
 
 A username written into a `pushInsteadOf` URL isn't checked.
 
-**Keys.** ↑/↓ choose, Enter confirms, Esc or Ctrl-C cancels (exit 130). Once there is a
+**Keys.** ↑/↓ choose, Enter confirms, Esc or Ctrl-C cancels (exit 130; with numbered
+choices, Ctrl-C). Once there is a
 question to go back to, each list ends with **← Back** (↑ from the first choice lands on
 it; at a text question, type `<`). "Change an answer" lists the questions, with
-**← Back to the review** last; the "already set up" screen has no Back. With `NO_COLOR`,
-`FORCE_COLOR=0` (or `false`) or `TERM=dumb`, or when the prompt library can't load (it
-says so), the same questions come as numbered choices, and Back is plain **Back**. Decline,
+**← Back to the review** last; the "already set up" screen has no Back. In a plain terminal
+([when](CONFIGURATION.md#environment-variables)), or when the prompt library can't load
+(it says so), the same questions come as numbered choices, and Back is plain **Back**. Decline,
 Esc or Ctrl-C end with one line: nothing was changed, and you can run `repown setup` again
 any time.
 

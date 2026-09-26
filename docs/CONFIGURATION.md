@@ -15,7 +15,7 @@ is needed to get started: [README](../README.md#quick-start) covers that.
 | `NO_COLOR` | a non-empty value turns colour off |
 | `FORCE_COLOR` | colour even when output isn't a terminal; `0` or `false` turns it off. Wins over `NO_COLOR` and `TERM` |
 | `TERM=dumb` | colour off (unless `FORCE_COLOR`) |
-| `GH_TOKEN`, `GITHUB_TOKEN`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_EMAIL` | not settings: the guard **refuses** a push while any is set to a non-empty value, because they override the pinned identity or credential ([card 7](HOW-IT-WORKS.md#7-push-what-the-guard-checks)) |
+| `GH_TOKEN`, `GITHUB_TOKEN`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_EMAIL` | not settings: the guard **refuses** a push while any is set to a non-empty value, because the email variables override the pinned identity and the token variables make gh serve that token ([card 7](HOW-IT-WORKS.md#7-push-what-the-guard-checks)) |
 
 `repown setup` asks with plain numbered choices instead of arrow-key lists when colour is
 off on stderr (`NO_COLOR` without `FORCE_COLOR`, or `FORCE_COLOR=0`/`false`), always with
@@ -32,7 +32,8 @@ Once one is recorded, `repown accounts list` prints its path:
 | Windows | `%APPDATA%\repown` |
 | macOS, Linux (and Windows without `%APPDATA%`) | `$XDG_CONFIG_HOME/repown`, else `~/.config/repown` |
 
-The file is readable by you only. repown never overwrites one it can't read; fix or
+On macOS and Linux the file is readable by you only (on Windows, your user folder's
+permissions apply). repown never overwrites one it can't read; fix or
 delete it, and saving works again.
 
 ## Per-clone keys
@@ -64,7 +65,8 @@ a refusal); `mirrorBranch` you set yourself.
 --email`, confirm `repown fix` with `--yes`, and give `repown setup` its answers as flags
 with `--no-input`. Yes/no questions you don't pass as a flag are answered No; the account
 must be given, with `--name` and `--email` if it isn't recorded yet (`--host` defaults to
-origin's). There's no review, and it's safe to re-run.
+origin's). There's no review. Re-running is safe once the account is recorded: drop
+`--name`, `--email` and `--host` then, or it exits `2`.
 
 ```
 repown setup octocat --guard --no-input
@@ -77,13 +79,13 @@ Nothing is written when `repown setup` refuses:
 - **exit `2`:** no terminal and no `--no-input` (it names the flags it needs); no
   `<account>`, or a new one without `--name`/`--email`; `--name`/`--email`/`--host` for an
   account already recorded; `--allow-owner` that isn't origin's owner.
-- **exit `1`:** not in a clone; `--guard` where another tool owns the hook or
+- **exit `1`:** not in a clone; an unreadable registry; `--guard` where another tool owns the hook or
   `core.hooksPath` points elsewhere. `--fix` when gh isn't the helper is dropped with a note.
 
 Other commands without a terminal: `repown use` of an unrecorded account exits `1` (record
-it first, or pass `--name` and `--email`), and `repown fix` without `--yes` exits `1`. For
-checks in CI, `repown` exits `1` when something is wrong, and `repown doctor` when gh is
-the credential helper. More in [card 13](HOW-IT-WORKS.md#13-guided-setup).
+it first, or pass `--name` and `--email`), and `repown fix` without `--yes` exits `1` when it has something to remove. For
+checks, `repown` exits `1` when something is wrong (a fresh CI clone is never pinned, so
+it always does there), and `repown doctor` when gh is the credential helper. More in [card 13](HOW-IT-WORKS.md#13-guided-setup).
 
 **JSON:** `repown scan --format json` and `repown accounts list --format json` print one
 JSON document on stdout (warnings still go to stderr; nothing found prints `[]`). Scripts

@@ -6,8 +6,8 @@ to its own account (repo-local `user.name`, `user.email`, `repown.account`,
 refuses commits authored or committed by anyone else.
 Docs, one purpose each:
 - README.md: the user view (what, why, install, commands). test/docs.test.ts checks the
-  commands, options, links and ADR citations in every doc, but not sample output or
-  behaviour claims: check those against the code yourself.
+  commands, options and links in every doc but CHANGELOG, and the citation form (ADR-0NN), but
+  not sample output or behaviour claims: check those against the code yourself.
 - docs/HOW-IT-WORKS.md: every scenario with diagrams; update its card when behaviour or
   output changes.
 - docs/CONFIGURATION.md: environment variables, the registry, per-clone keys, scripts and
@@ -69,7 +69,7 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   `src/ui/help.ts` renders help from that same declaration, so help can't drift from the
   parser.
 - Adding a host: one provider file in `src/core/hosts/` plus one line in `providers()`
-  (index.ts). `generic` stays last.
+  (index.ts), `generic` last, plus its label and hint in `HOSTS` (`src/wizard/setup-flow.ts`).
 - The hook (`src/core/guard/hook.ts`) is LF-only. It calls the installed CLI's absolute path,
   falls back to PATH, and refuses if neither runs. Its location is where git runs hooks
   (`rev-parse --git-path hooks`, which honours `core.hooksPath`), never a hardcoded `.git/hooks`.

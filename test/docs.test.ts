@@ -26,7 +26,8 @@ const DOCS = [
   ...['README.md', 'CLAUDE.md', 'CONTRIBUTING.md', 'SECURITY.md'].map((file) => join(ROOT, file)),
   ...filesIn('docs', '.md'),
 ];
-const read = (path: string): string => readFileSync(path, 'utf8');
+/** LF only: Windows CI checks docs out with CRLF (core.autocrlf), and headings are matched by line. */
+const read = (path: string): string => readFileSync(path, 'utf8').replaceAll('\r\n', '\n');
 const name = (path: string): string => relative(ROOT, path).replaceAll('\\', '/');
 
 const helpCache = new Map<string, string>();
@@ -215,7 +216,7 @@ describe('traceability: what the code offers is documented', () => {
     const declared = commandPaths().flatMap((path) => helpBlock(help(['help', ...path]), 'Options:')
       .map((option) => [path.join(' '), option] as const));
     assert.ok(declared.length >= 15, 'parsed only ' + declared.length + ' options');
-    const missing = declared.filter(([, option]) => !new RegExp(option + '(?![\\w-])').test(everyDoc))
+    const missing = declared.filter(([, option]) => !new RegExp('(?<![\\w-])' + option + '(?![\\w-])').test(everyDoc))
       .map(([path, option]) => path + ' ' + option);
     assert.deepEqual([...new Set(missing)], [], 'options no doc mentions');
   });
@@ -224,7 +225,7 @@ describe('traceability: what the code offers is documented', () => {
     const configuration = read(join(ROOT, 'docs', 'CONFIGURATION.md'));
     const variables = helpBlock(help(['--help']), 'Environment:');
     assert.ok(variables.length >= 3, 'parsed only: ' + variables.join(', '));
-    assert.deepEqual(variables.filter((variable) => !configuration.includes(variable)), []);
+    assert.deepEqual(variables.filter((variable) => !new RegExp('\\b' + variable + '\\b').test(configuration)), []);
   });
 
   test('CONTRIBUTING.md maps every command and action to its source', () => {

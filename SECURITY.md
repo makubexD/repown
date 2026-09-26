@@ -20,7 +20,7 @@ only reports follows one rule: refuse what can't be undone once pushed, report t
 | The `pre-push` guard refuses | `repown` and `repown doctor` report |
 | --- | --- |
 | a commit authored or committed by another address, or a tag by another tagger | the credential helper (gh as the helper is a failure), and which account it would use |
-| a push to an owner that isn't the pinned account or a `repown.allowOwner`, when the URL names an owner and the clone records an account | gh's active account, when it differs or can't be queried |
+| a push to an owner that isn't the pinned account or a `repown.allowOwner`, when the URL names an owner and the clone records an account or a `repown.allowOwner` | gh's active account, when it differs or can't be queried |
 | a clone with no commit email of its own, or commits or tags it can't read | a guard that is off, or a hook another tool owns |
 | `GH_TOKEN`, `GITHUB_TOKEN` or `GIT_*_EMAIL` set in the environment | submodules, which need their own pin and guard; an origin whose owner this clone doesn't push to |
 

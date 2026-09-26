@@ -27,7 +27,12 @@ and `repown use --gh` when you ask ([full list](CONFIGURATION.md#what-repown-wri
 **Azure DevOps, GitLab, SSH?** Commit identity and the guard work on any host. The
 credential pin is measured only for GitHub over https, so elsewhere repown says the
 credential isn't pinned rather than guessing
-([card 3](HOW-IT-WORKS.md#3-pin-a-clone)).
+([card 3](HOW-IT-WORKS.md#3-pin-a-clone)). On Azure DevOps the owner is the organisation, so
+allow it once per clone with `repown.allowOwner`. GitHub means github.com: GitHub Enterprise
+Server hosts count as another host.
+
+**Worktrees?** They share the clone's config and hooks, so one pin and one guard cover
+every worktree.
 
 **My teammates don't use it.** Nothing changes for them: repown writes nothing that gets
 committed ([card 9](HOW-IT-WORKS.md#9-a-teammate-without-repown)).
@@ -50,7 +55,7 @@ settings again** to re-run `repown use` ([card 13](HOW-IT-WORKS.md#13-guided-set
 from that tool's hook instead ([card 10](HOW-IT-WORKS.md#10-other-hook-tools)).
 
 **What does it send over the network?** Nothing of its own, and no telemetry. It runs
-`git` and `gh`: gh may contact GitHub when `repown`, `repown doctor` or `repown setup`
-asks for its accounts. For an account that isn't recorded yet, on a terminal, `repown setup`,
+`git` and `gh`: gh may contact GitHub when `repown`, `repown doctor`, `repown setup`,
+`repown use` or `repown fix` asks for its accounts, and `use --gh` switches its account. For an account that isn't recorded yet, on a terminal, `repown setup`,
 `repown use` or `repown accounts add` (without both `--name` and `--email`) asks gh for
 its public profile to suggest a name and noreply address.

@@ -1,6 +1,6 @@
 # Docs end-to-end review: accurate, not repeated, to the point, traceable
 
-Status: Phase 5 next (parallel review).
+Status: GATE 5 (review findings fixed; code-side items deferred to the user).
 
 Spec: the approved plan (findings from a three-agent audit of README vs src/). Docs and
 tests only; no command's behaviour or output changes.
@@ -14,7 +14,7 @@ tests only; no command's behaviour or output changes.
       amend scope, fix wording), troubleshooting rows (env var refusal, --no-verify). Docs: README.
 - [x] 3. Every other doc reviewed end to end by parallel agents; fixes applied, repeats cut
       to links. Docs: HOW-IT-WORKS, CONFIGURATION, FAQ, CONTRIBUTING, SECURITY, CHANGELOG.
-- [ ] 5. Review: code-reviewer, docs-drift, junior + senior persona walkthroughs, cli-auditor.
+- [x] 5. Review: code-reviewer, docs-drift, junior + senior persona walkthroughs, cli-auditor.
 - [ ] 6. Close-out: delete tasks/.
 
 Deferred: status suggesting `repown setup` (behaviour change); WIZ-10; pushInsteadOf

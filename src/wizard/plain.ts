@@ -10,7 +10,7 @@
 import { createInterface, type Interface } from 'node:readline/promises';
 import type { Readable, Writable } from 'node:stream';
 import { BACK, CANCEL, type Asked, type Prompter, type Reply, type Review, type ReviewChoice, type Step } from './engine.ts';
-import { BACK_TO_REVIEW, PICK_QUESTION, reviewDefault, reviewLines, reviewOptions, reviewQuestion } from './review-text.ts';
+import { BACK_TO_REVIEW, PICK_QUESTION, reviewDefault, reviewLines, reviewOptions, reviewQuestion, textWidth, wrap } from './review-text.ts';
 
 export interface Streams {
   readonly input: Readable;
@@ -26,16 +26,18 @@ export function plainPrompter(streams: Streams): Prompter {
   const terminal = (streams.input as { isTTY?: boolean }).isTTY === true;
   const rl = createInterface({ input: streams.input, output: streams.output, terminal });
   const io = ioFor(rl, streams.output, terminal);
+  // Text is indented two spaces, the review's four.
+  const width = textWidth((streams.output as { columns?: number }).columns, 4);
   return {
-    ask: (step, asked) => askStep(io, step, asked),
-    review: (review) => showReview(io, review),
+    ask: (step, asked) => askStep({ ...io, width }, step, asked),
+    review: (review) => showReview(io, review, width),
     pickStep: async (steps) => {
       io.say(PICK_QUESTION);
       const index = await pickNumber(io, [...steps.map((step) => step.message), BACK_TO_REVIEW], 1);
       if (index === CANCEL) return CANCEL;
       return index === steps.length ? BACK : steps[index]!.id;
     },
-    note: (message) => io.say('  ' + message),
+    note: (message) => { for (const line of wrap(message, width)) io.say('  ' + line); },
     close: () => rl.close(),
     outro: (message) => io.say(message),
   };
@@ -69,19 +71,23 @@ function queue(rl: Interface): Next {
   const waiting: ((line: string | null) => void)[] = [];
   const buffered: (string | null)[] = [];
   const push = (line: string | null): void => { const take = waiting.shift(); if (take) take(line); else buffered.push(line); };
+  let ended = false;
   rl.on('line', (line) => push(line));
-  rl.on('close', () => push(null));
+  rl.on('close', () => { ended = true; push(null); });
   rl.on('SIGINT', () => { push(null); rl.close(); });
   return () => {
     if (buffered.length > 0) return Promise.resolve(buffered[0] === null ? null : buffered.shift()!);
+    // Every read after the end is a cancel too, not a wait for a line that can't come.
+    if (ended) return Promise.resolve(null);
     return new Promise((resolve) => waiting.push(resolve));
   };
 }
 
-async function askStep(io: Io, step: Step<never>, asked: Asked): Promise<Reply> {
+/** The question, its hint and any detail under it, each wrapped and indented. */
+async function askStep(io: Io & { width: number }, step: Step<never>, asked: Asked): Promise<Reply> {
   const { initial, detail } = asked;
-  io.say(step.message + (step.hint ? '  (' + step.hint + ')' : ''));
-  if (detail) io.say('  ' + detail);
+  io.say(step.message);
+  for (const line of [step.hint, detail].filter((text) => text).flatMap((text) => wrap(text!, io.width))) io.say('  ' + line);
   if (step.kind === 'select') return askSelect(io, asked);
   if (step.kind === 'confirm') return askConfirm(io, initial === true, asked.canGoBack);
   const shown = typeof initial === 'string' && initial ? ' [' + initial + ']' : '';
@@ -106,10 +112,10 @@ async function askConfirm(io: Io, yes: boolean, canGoBack: boolean): Promise<Rep
   return index === 2 ? BACK : index === 0;
 }
 
-async function showReview(io: Io, review: Review): Promise<ReviewChoice> {
+async function showReview(io: Io, review: Review, width: number): Promise<ReviewChoice> {
   io.say('');
   io.say(review.title);
-  for (const line of reviewLines(review)) io.say(line ? '  ' + line : '');
+  for (const line of reviewLines(review, width)) io.say(line ? '  ' + line : '');
   io.say('');
   io.say(reviewQuestion(review));
   const options = reviewOptions(review);
@@ -130,8 +136,10 @@ async function pickNumber(io: Io, labels: readonly string[], preset: number): Pr
   }
 }
 
+/** A line typed after `text`; null after Ctrl-C or the end of input, which leave the line unfinished. */
 async function prompt(io: Io, text: string): Promise<string | null> {
   io.write(text);
   const line = await io.lines();
+  if (line === null) io.say('');
   return line === null ? null : line.trim();
 }

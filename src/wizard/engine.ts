@@ -82,9 +82,9 @@ export interface Prompter {
   note(message: string): void;
   /** Releases the terminal once the questions are over; safe to call more than once. */
   close(): void;
-  /** Optional framing: a title, a closing line, and a line while the state is read. */
+  /** Optional framing: a title, a closing line (`cancelled` after Esc or Ctrl-C), and a line while the state is read. */
   intro?(title: string): void;
-  outro?(message: string): void;
+  outro?(message: string, cancelled?: boolean): void;
   busy?(message: string): void;
 }
 

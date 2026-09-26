@@ -416,12 +416,17 @@ describe('repown setup, without a terminal', () => {
     assert.match(run.stderr, /done: this clone is set up for octocat/);
     assert.match(run.stderr, /check it any time: repown/);
     assert.doesNotMatch(run.stdout, /done:|check it any time/, 'setup\'s own lines stay off stdout');
+    assert.match(run.stderr, /\n\n {7}step 2 of 2/, 'a blank line between steps');
+    assert.doesNotMatch(run.stdout, /Next: repown guard on/, 'use\'s hint is left out when the next step turns the guard on');
+    assert.match(run.stdout, /OK +guard +on/);
   });
 
   test('--no-input without --guard leaves the guard off', () => {
     record(at, 'octocat', 'octocat@example.invalid');
-    assert.equal(repown(['setup', 'octocat', '--no-input'], at.box.dir).status, 0);
+    const run = repown(['setup', 'octocat', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0);
     assert.equal(existsSync(hook(at)), false);
+    assert.match(run.stdout, /Next: repown guard on/, 'with no guard step to follow, use\'s hint stays');
   });
 
   test('--no-input with a value missing exits 2 naming it, and writes nothing', () => {
@@ -546,6 +551,17 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.equal(await run([['account', 'octocat'], ['guard', true], ['review', 'decline']]), 1);
     assert.equal(localConfig(at), before);
     assert.equal(existsSync(hook(at)), false);
+  });
+
+  test('Decline and cancel each end with one line: nothing changed, and how to start again', async () => {
+    const endings: [string, boolean | undefined][] = [];
+    const closing = (script: Entry[]): Prompter => ({ ...scripted(script), outro: (message, cancelled) => { endings.push([message, cancelled]); } });
+    assert.equal(await runWith(closing([['account', 'octocat'], ['guard', true], ['review', 'decline']])), 1);
+    assert.equal(await runWith(closing([['account', CANCEL]])), 130);
+    assert.deepEqual(endings, [
+      ['Declined: nothing was changed. Run repown setup again any time.', false],
+      ['Cancelled: nothing was changed. Run repown setup again any time.', true],
+    ]);
   });
 
   test('Cancel at a step or at the review exits 130 and writes nothing', async () => {

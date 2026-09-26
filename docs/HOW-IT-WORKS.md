@@ -495,9 +495,9 @@ flags stand for run, `use` included.
 | It asks | Only when | Becomes |
 | --- | --- | --- |
 | Which account should this clone belong to? | an account is recorded (default: the one pinned here) | `use <account>` |
-| Login, where it's hosted, name and email on your commits (on GitHub, with where to find your noreply address) | "a new account"; refused if already recorded | `accounts add <account> --name --email --host` |
+| The account's user name (login), where it's hosted, and your name and email as commits show them (on GitHub, with where to find your noreply address) | "a new account"; refused if already recorded | `accounts add <account> --name --email --host` |
 | Also make this account gh's active account? (default No) | a GitHub clone (or one with no origin), gh knows the account, another is active | `use --gh` |
-| This repository belongs to "octo-org". Allow pushes to it? (default Yes) | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
+| This repository belongs to "octo-org". Let this clone push to it? (default Yes) | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
 | Turn on the push guard? (default Yes) | the guard is off, no other tool owns the hook, and `core.hooksPath` doesn't redirect hooks | `guard on` |
 | Stop gh answering git's sign-in requests? (whole machine, default No) | a GitHub clone, gh is the helper, and `fix` finds its entries | `fix --yes` |
 
@@ -508,7 +508,7 @@ review takes **Decline**.
 
 | Variant | Command |
 | --- | --- |
-| Go back | pick **← Back** at any list once there is a question to go back to, or type `<` at a text question; **← Back to the review** (plain prompts: **Back to the review**) leaves "Change an answer". The "already set up" screen has no Back |
+| Go back | pick **← Back**, last in every list once there is a question to go back to, or type `<` at a text question; **← Back to the review** (plain prompts: **Back to the review**) leaves "Change an answer". The "already set up" screen has no Back |
 | Already set up | the clone is pinned to the account you chose, and every key `use` writes holds exactly the recorded value, both in `.git/config` and in what git actually resolves (includes, worktree config, credential entries for the same URL spelt otherwise); no organisation is left unallowed; gh is nowhere in the credential helper list; and your answers add nothing beyond `repown use <that account>`. A username written into a `pushInsteadOf` URL isn't checked |
 | No terminal (CI, a script) | see [Scripts and CI](CONFIGURATION.md#scripts-and-ci) |
 

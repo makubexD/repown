@@ -71,21 +71,21 @@ export function setupFlow(ctx: SetupContext): Flow<SetupContext> {
 function steps(ctx: SetupContext): Step<SetupContext>[] {
   return [
     { id: 'account', kind: 'select', flag: '<account>', message: 'Which account should this clone belong to?',
-      hint: 'its commits carry that account\'s name and email; on GitHub, its pushes sign in as it',
+      hint: 'commits made here carry its name and email; on GitHub, pushes from here also sign in as it',
       when: () => Object.keys(ctx.recorded).length > 0,
       choices: () => accountChoices(ctx), initial: () => defaultAccount(ctx),
-      detail: () => (ctx.pinned ? 'currently pinned to ' + ctx.pinned : 'not pinned by repown yet') },
-    { id: 'newAccount', kind: 'text', flag: '<account>', message: 'The account\'s login',
-      hint: 'the user name you sign in with on the host, e.g. octocat', when: (answers) => isNew(answers),
+      detail: () => (ctx.pinned ? 'right now this clone is pinned to ' + ctx.pinned : 'right now this clone isn\'t pinned to any account') },
+    { id: 'newAccount', kind: 'text', flag: '<account>', message: 'The account\'s user name (login)',
+      hint: 'the name you sign in with, e.g. octocat; not your email address', when: (answers) => isNew(answers),
       validate: (value) => newAccountProblem(String(value), ctx) },
     { id: 'host', kind: 'select', flag: '--host', message: 'Where is this account hosted?',
-      hint: 'on GitHub, repown also picks the sign-in your pushes use', when: (answers) => isNew(answers),
+      hint: 'on GitHub, repown also makes pushes sign in as this account', when: (answers) => isNew(answers),
       choices: () => hostChoices(), initial: () => ctx.host },
-    { id: 'name', kind: 'text', flag: '--name', message: 'Name on your commits',
-      hint: 'anyone who can see the repository sees it', when: (answers) => isNew(answers), validate: required,
+    { id: 'name', kind: 'text', flag: '--name', message: 'Your name, as your commits show it',
+      hint: 'e.g. Octo Cat; anyone who can see the repository sees it', when: (answers) => isNew(answers), validate: required,
       initial: async (answers) => (await ctx.suggest(accountOf(answers), hostOf(answers, ctx))).name ?? accountOf(answers) },
-    { id: 'email', kind: 'text', flag: '--email', message: 'Email on your commits',
-      hint: 'public once pushed; a noreply address keeps yours private', when: (answers) => isNew(answers), validate: required,
+    { id: 'email', kind: 'text', flag: '--email', message: 'Your email, as your commits show it',
+      hint: 'anyone who can see the repository can read it once you push', when: (answers) => isNew(answers), validate: required,
       initial: async (answers) => (await ctx.suggest(accountOf(answers), hostOf(answers, ctx))).email,
       detail: (answers) => noreplyExample(answers, ctx) },
     ...choiceSteps(ctx),
@@ -95,14 +95,16 @@ function steps(ctx: SetupContext): Step<SetupContext>[] {
 function choiceSteps(ctx: SetupContext): Step<SetupContext>[] {
   return [
     { id: 'gh', kind: 'confirm', flag: '--gh', message: 'Also make this account gh\'s active account?',
-      hint: 'only gh commands (gh pr create, gh api) use it, git doesn\'t; it applies in every terminal', initial: () => false,
+      hint: 'gh is GitHub\'s command-line tool: this changes the account gh commands use, in every terminal; git is not affected', initial: () => false,
       when: (answers) => ghOffered(accountOf(answers), ctx), detail: () => 'gh\'s active account is ' + ghActive(ctx) },
     { id: 'allowOwner', kind: 'confirm', flag: '--allow-owner', initial: () => true,
-      message: 'This repository belongs to "' + printable(ctx.owner ?? '') + '". Allow pushes to it?',
-      hint: 'for an organisation you\'re in: without it the guard refuses these pushes; stored in this clone only',
+      message: 'This repository belongs to "' + printable(ctx.owner ?? '') + '". Let this clone push to it?',
+      hint: 'Yes if you\'re a member of that organisation or a collaborator on it; with No, ' +
+        'the push guard refuses pushes there. Saved in this clone only',
       when: (answers) => ownerForeign(accountOf(answers), ctx) },
     { id: 'guard', kind: 'confirm', flag: '--guard', message: 'Turn on the push guard?',
-      hint: 'before each push it checks every commit is yours and goes to the right owner; undo: repown guard off',
+      hint: 'before each push, it checks that every commit is yours and goes to the right place, and stops the push if not; ' +
+        'turn it off any time: repown guard off',
       initial: () => true, when: () => ctx.guard === 'off' && !ctx.redirected, detail: (answers) => historyNote(answers, ctx) },
     { id: 'fix', kind: 'confirm', flag: '--fix', message: 'Stop gh answering git\'s sign-in requests? (whole machine)',
       hint: 'undo any time: gh auth setup-git', initial: () => false, when: () => ctx.fixLines !== null,
@@ -128,8 +130,8 @@ function hostChoices(): Choice[] {
 /** Where a GitHub account's private address comes from, for someone who has never looked. */
 function noreplyExample(answers: Answers, ctx: SetupContext): string | undefined {
   if (hostOf(answers, ctx) !== 'github') return undefined;
-  return 'on GitHub, your private noreply address is under Settings → Emails, like 1234+' +
-    printable(accountOf(answers)) + '@users.noreply.github.com';
+  return 'tip: to keep your own address private, use the one GitHub gives you, shown at ' +
+    'github.com/settings/emails, like 1234+' + printable(accountOf(answers)) + '@users.noreply.github.com';
 }
 
 function ghActive(ctx: SetupContext): string {
@@ -220,7 +222,7 @@ function whatOf(argv: readonly string[], answers: Answers, ctx: SetupContext): s
   if (argv[0] === 'fix') return 'Stop gh answering git\'s sign-in requests (whole machine)';
   if (argv[0] === 'guard') return 'Turn on the push guard: each push is checked first';
   if (answers['gh'] === true) return 'Pin this clone to ' + account + ', and make it gh\'s active account';
-  return 'Pin this clone to ' + account + (ctx.credentialPinned ? ': name, email and push account' : ': name and email');
+  return 'Pin this clone to ' + account + (ctx.credentialPinned ? ': its commit name, email and push sign-in' : ': its commit name and email');
 }
 
 function allowOwnerLine(ctx: SetupContext): string[] {
@@ -329,7 +331,8 @@ function notes(answers: Answers, ctx: SetupContext): string[] {
   if (guard) lines.push(guard);
   const guarded = answers['guard'] === true || ctx.guard === 'on';
   if (guarded && ownerForeign(account, ctx) && answers['allowOwner'] !== true) {
-    lines.push('Warning: the guard will refuse pushes to "' + ctx.owner + '" until it is allowed.');
+    lines.push('Warning: the push guard will refuse pushes to "' + ctx.owner + '". To allow them later: ' +
+      'git config --local --add repown.allowOwner ' + shellWord(ctx.owner!));
   }
   if (ctx.ghIsHelper && answers['fix'] !== true && ctx.credentialPinned) {
     lines.push('Note: gh is still git\'s credential helper, so pushes sign in as gh\'s active account, not ' + account + '.');

@@ -41,14 +41,22 @@ export interface Played {
   readonly screen: string;
 }
 
+export interface PlayOptions {
+  readonly given?: Answers;
+  /** How long to wait before calling the wizard stuck: generous, since a loaded CI runner draws slowly. */
+  readonly patience?: number;
+  /** The window's width; unset, like a stream that isn't a terminal. */
+  readonly columns?: number;
+}
+
 /**
  * Plays the wizard: each group of keys is pressed once the screen has settled after
- * the previous one. A wizard still waiting after the last group ends as 'stuck', after
- * `patience` ms: generous, since a loaded CI runner draws slowly.
+ * the previous one. A wizard still waiting after the last group ends as 'stuck'.
  */
-export async function play(ctx: SetupContext, keys: readonly (readonly string[])[], given: Answers = {}, patience = 10_000): Promise<Played> {
+export async function play(ctx: SetupContext, keys: readonly (readonly string[])[], options: PlayOptions = {}): Promise<Played> {
+  const { given = {}, patience = 10_000, columns } = options;
   const input = new PassThrough();
-  const output = new PassThrough();
+  const output = Object.assign(new PassThrough(), columns ? { columns } : {});
   const queue = [...keys];
   let screen = '';
   let idle: NodeJS.Timeout | undefined;

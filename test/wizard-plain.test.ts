@@ -39,7 +39,7 @@ describe('plain prompter', () => {
     const typed = harness('Octo Cat\n\n');
     assert.equal(await typed.prompter.ask(text, asked('x')), 'Octo Cat');
     assert.equal(await typed.prompter.ask(text, asked('Octo')), 'Octo');
-    assert.match(typed.shown(), /Commit name {2}\(shown on every commit\)/);
+    assert.match(typed.shown(), /Commit name\n {2}shown on every commit\n/);
     assert.match(typed.shown(), /\[Octo\]/);
   });
 
@@ -107,6 +107,28 @@ describe('plain prompter', () => {
     assert.equal(await harness('').prompter.ask(pick, asked(undefined, CHOICES)), CANCEL);
     assert.equal(await harness('').prompter.review(review()), CANCEL);
     assert.equal(await harness('').prompter.pickStep([text]), CANCEL);
+  });
+
+  test('a cancel finishes the line it interrupted, so the closing line starts on its own', async () => {
+    const run = harness('');
+    assert.equal(await run.prompter.ask(pick, asked(undefined, CHOICES)), CANCEL);
+    run.prompter.outro?.('Cancelled: nothing was changed.', true);
+    assert.match(run.shown(), /choice \[1\]: \nCancelled: nothing was changed\.\n$/);
+  });
+
+  test('hints and the review wrap to the window, under their indent', async () => {
+    const input = new PassThrough();
+    const output = Object.assign(new PassThrough(), { columns: 40 });
+    let shown = '';
+    output.on('data', (chunk: Buffer) => { shown += chunk.toString(); });
+    input.end();
+    const prompter = plainPrompter({ input, output });
+    const long = { ...text, hint: 'anyone who can see the repository can read it once you push' };
+    await prompter.ask(long, asked('x'));
+    await prompter.review(review({ notes: ['This clone moves from octo-work to octocat: its next commits use octocat.'] }));
+    const wide = shown.split('\n').filter((line) => line.length > 40);
+    assert.deepEqual(wide, [], shown);
+    assert.match(shown, /\n {2}anyone who can see the repository\n {2}can read it once you push\n/);
   });
 
   test('change an answer picks one of the steps by number, or goes back to the review', async () => {

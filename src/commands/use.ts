@@ -28,6 +28,9 @@ import { flagString, flagBool, gitFor, type Args } from '../ui/args.ts';
 import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
+/** The last hint while the guard is off; `repown setup` leaves it out when its next step turns the guard on. */
+export const NEXT_GUARD = '  Next: repown guard on    (check every push before it leaves)';
+
 export default {
   summary: 'pin this clone to an account (repown use <account>)',
   positionals: { min: 1, max: 1, label: '<account>' },
@@ -139,7 +142,7 @@ async function reportConcerns(account: string, repo: RepoState): Promise<void> {
   await credentialConcern(account, repo);
   if (repo.guard === 'off' && !repo.hook?.redirected) {
     out.line();
-    out.line('  Next: repown guard on    (check every push before it leaves)');
+    out.line(NEXT_GUARD);
   }
 }
 

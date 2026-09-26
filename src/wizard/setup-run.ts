@@ -11,7 +11,7 @@ import { flagBool, flagString, gitFor, parseArgs, type Args } from '../ui/args.t
 import { specFor, type Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 import { useColour } from '../ui/format.ts';
-import useCommand from '../commands/use.ts';
+import useCommand, { NEXT_GUARD } from '../commands/use.ts';
 import fixCommand from '../commands/fix.ts';
 import guardGroup from '../commands/guard.ts';
 import accountsGroup from '../commands/accounts.ts';
@@ -159,11 +159,13 @@ async function runGuided(given: Answers, ctx: SetupContext, { git, prompter }: G
   return execute(planCommands(outcome.answers, ctx), git);
 }
 
+/** One closing line: what happened, that nothing changed, and how to start again. */
 function stoppedBefore(status: 'cancelled' | 'declined', prompter: Prompter): number {
-  prompter.outro?.(status === 'cancelled' ? 'Cancelled' : 'Declined');
-  out.warn('setup', status + '; nothing was changed.');
-  out.detail('run repown setup again any time');
-  return status === 'cancelled' ? CANCELLED : 1;
+  const cancelled = status === 'cancelled';
+  const message = (cancelled ? 'Cancelled' : 'Declined') + ': nothing was changed. Run repown setup again any time.';
+  if (prompter.outro) prompter.outro(message, cancelled);
+  else out.warn('setup', message);
+  return cancelled ? CANCELLED : 1;
 }
 
 /**
@@ -193,9 +195,12 @@ async function execute(plan: readonly PlannedCommand[], git: Git): Promise<numbe
   process.on('SIGINT', onInterrupt);
   try {
     for (const [index, planned] of plan.entries()) {
+      // A blank line between steps, so each command's output reads as its own.
+      if (index > 0) process.stderr.write('\n');
       out.detail('step ' + (index + 1) + ' of ' + plan.length + ': ' + printable(planned.what));
       out.detail('> ' + formatCommand(planned.argv));
-      const code = await runOne(planned.argv, git);
+      const guardNext = plan[index + 1]?.argv[0] === 'guard';
+      const code = await (guardNext ? withoutLine(NEXT_GUARD, () => runOne(planned.argv, git)) : runOne(planned.argv, git));
       if (code !== 0 || interrupted) return stopped(plan.slice(index + 1), interrupted ? CANCELLED : code);
     }
   } finally {
@@ -210,6 +215,7 @@ async function execute(plan: readonly PlannedCommand[], git: Git): Promise<numbe
  * stdout carries only what the commands themselves print.
  */
 function finished(plan: readonly PlannedCommand[]): void {
+  process.stderr.write('\n');
   const pinned = plan.find((planned) => planned.argv[0] === 'use')?.argv.at(-1) ?? '';
   out.detail('done: this clone is set up for ' + printable(pinned));
   out.detail('check it any time: repown (this clone), repown doctor (this machine)');
@@ -220,6 +226,30 @@ function stopped(remaining: readonly PlannedCommand[], code: number): number {
   if (remaining.length > 0) out.detail('not run:');
   for (const planned of remaining) out.detail('  ' + formatCommand(planned.argv));
   return code;
+}
+
+/**
+ * Runs `run` with one line of its stdout -- and the blank line before it -- left out:
+ * `use`'s "Next: repown guard on" when the plan's next step does just that. `use`
+ * itself is unchanged; run on its own, it still says it.
+ */
+async function withoutLine<T>(hidden: string, run: () => Promise<T>): Promise<T> {
+  const write = process.stdout.write;
+  let held = '';
+  const pass = (text: string): boolean => write.call(process.stdout, text);
+  process.stdout.write = ((chunk: string | Uint8Array): boolean => {
+    const text = String(chunk);
+    if (text === '\n' && !held) { held = text; return true; }
+    const shown = text === hidden + '\n' ? '' : held + text;
+    held = '';
+    return shown ? pass(shown) : true;
+  }) as typeof process.stdout.write;
+  try {
+    return await run();
+  } finally {
+    process.stdout.write = write;
+    if (held) pass(held);
+  }
 }
 
 // -------------------------------------------------------- one planned command

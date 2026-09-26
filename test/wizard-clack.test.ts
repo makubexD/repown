@@ -20,6 +20,20 @@ function press(input: PassThrough, ...keys: string[]): void {
 const guard = { id: 'guard', kind: 'confirm', message: 'Check every push?', hint: 'undo: repown guard off', flag: '--guard' } as Step<never>;
 const name = { id: 'name', kind: 'text', message: 'Commit name', hint: 'shown on every commit', flag: '--name' } as Step<never>;
 
+test('after a cancel the closing line follows clack\'s own last gutter line, not a second one', () => {
+  const output = new PassThrough();
+  let shown = '';
+  output.on('data', (chunk: Buffer) => { shown += chunk.toString(); });
+  const prompter = clackPrompter({ input: new PassThrough(), output });
+  const plain = (): string => shown.replace(/\x1b\[[0-9;]*m/g, '');
+  prompter.outro?.('Cancelled: nothing was changed.', true);
+  assert.doesNotMatch(plain(), /│/);
+  assert.match(plain(), /└ {2}Cancelled: nothing was changed\./);
+  shown = '';
+  prompter.outro?.('Running the commands');
+  assert.match(plain(), /│\n└ {2}Running the commands/);
+});
+
 test('the clack prompter answers the engine through its own keys, on the given stream', async () => {
   const input = new PassThrough();
   const output = new PassThrough();

@@ -6,6 +6,8 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ok, err } from '../src/core/result.ts';
 import { KEY, typed, play, linesWith, setupContext } from './setup-fixtures.ts';
+import { setupFlow } from '../src/wizard/setup-flow.ts';
+import { textWidth, wrap } from '../src/wizard/review-text.ts';
 
 const { enter, up, down, esc } = KEY;
 const twoAccounts = {
@@ -18,7 +20,7 @@ describe('repown setup, played with key presses', () => {
     const ctx = setupContext({ pinned: 'octocat', guard: 'on', pinIntact: true });
     const { outcome, screen } = await play(ctx, [[enter], [enter]]);
     assert.equal(outcome.status, 'done', screen);
-    assert.match(screen, /currently pinned to octocat/);
+    assert.match(screen, /right now this clone is pinned to octocat/);
     assert.doesNotMatch(screen, /pinned to octocat now/);
     assert.match(screen, /This clone is already set up/);
     assert.match(screen, /Nothing needs to change/);
@@ -33,7 +35,7 @@ describe('repown setup, played with key presses', () => {
     });
     const { outcome, screen } = await play(ctx, [[...typed('octo-work'), enter], [enter], [enter], [enter], [enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
-    for (const hint of ['the user name you sign in with', 'anyone who can see the repository sees it', 'a noreply address keeps yours private']) {
+    for (const hint of ['the name you sign in with', 'anyone who can see the repository sees it', 'anyone who can see the repository can read it']) {
       const lines = linesWith(screen, hint);
       assert.ok(lines.length > 0, 'hint never shown: ' + hint + '\n' + screen);
       for (const line of lines) assert.match(line, /^│/, 'a hint drawn outside the gutter: ' + line);
@@ -100,7 +102,7 @@ describe('repown setup, played with key presses', () => {
     const ctx = setupContext({ recorded: {}, owner: null });
     const { outcome, screen } = await play(ctx, [[...typed('octocat'), enter], [enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
-    assert.match(screen, /Settings → Emails, like 1234\+octocat@users\.noreply\.github\.com/);
+    assert.match(screen.replace(/\n│  /g, ' '), /github\.com\/settings\/emails, like 1234\+octocat@users\.noreply\.github\.com/);
   });
 
   test('S10 moving a clone to another account says what changes', async () => {
@@ -116,5 +118,25 @@ describe('repown setup, played with key presses', () => {
     assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /another host \(GitLab, Bitbucket, self-hosted\)/);
     assert.doesNotMatch(screen, /this host/);
+  });
+
+  test('S12 in a narrow window every line fits, and hints stay in the gutter', async () => {
+    const ctx = setupContext({ pinned: 'octocat', guard: 'on', pinIntact: true });
+    const keys = [[down, enter], [...typed('octo-work'), enter], [enter], [enter], [...typed('octo-work@example.invalid'), enter], [down, enter], [esc]];
+    const { outcome, screen } = await play(ctx, keys, { columns: 60 });
+    assert.equal(outcome.status, 'cancelled', screen);
+    assert.match(screen, /This clone moves from octocat to octo-work/);
+    // A text answer is redrawn at each key press, with a cursor (█) the window never keeps.
+    const wide = screen.split('\n').filter((line) => line.length > 60 && !line.includes('█'));
+    assert.deepEqual(wide, [], 'lines wider than the window:\n' + wide.join('\n'));
+    // Each hint line as setup wrapped it: clack wraps a question again if it's too wide.
+    const hint = setupFlow(ctx).steps.find((step) => step.id === 'allowOwner')!.hint;
+    for (const line of wrap(hint, textWidth(60, 13))) assert.ok(screen.includes('│  ' + line + '\n'), 'hint line rewrapped: ' + line + '\n' + screen);
+  });
+
+  test('S13 Back says where it goes, since ↑ from the first choice lands on it', async () => {
+    const { outcome, screen } = await play(setupContext(), [[enter], [up], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    assert.match(screen, /← Back \(to the previous question\)/);
   });
 });

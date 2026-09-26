@@ -118,41 +118,43 @@ make [your first push](#the-first-push).
 │
 ◇  Reading this clone and this machine
 │
-●  not pinned by repown yet
+●  right now this clone isn't pinned to any account
 │
 ◇  Which account should this clone belong to?
-│  its commits carry that account's name and email; on GitHub, its
-│  pushes sign in as it
+│  commits made here carry its name and email; on GitHub, pushes from
+│  here also sign in as it
 │  octocat
 │
-◇  This repository belongs to "octo-org". Allow pushes to it?
-│  for an organisation you're in: without it the guard refuses these
-│  pushes; stored in this clone only
+◇  This repository belongs to "octo-org". Let this clone push to it?
+│  Yes if you're a member of that organisation or a collaborator on
+│  it; with No, the push guard refuses pushes there. Saved in this
+│  clone only
 │  Yes
 │
 ●  only your email address is in this repository's commits
 │
 ◇  Turn on the push guard?
-│  before each push it checks every commit is yours and goes to the
-│  right owner; undo: repown guard off
+│  before each push, it checks that every commit is yours and goes to
+│  the right place, and stops the push if not; turn it off any time:
+│  repown guard off
 │  Yes
 │
-◇  Review: nothing has changed yet ─────────────────────────────────────╮
-│                                                                       │
-│  This clone will commit and push as octocat.                          │
-│                                                                       │
-│  When you choose Run:                                                 │
-│  1. Let this clone push to octo-org's repositories                    │
-│       git config --local --add repown.allowOwner octo-org             │
-│  2. Pin this clone to octocat: name, email and push account           │
-│       repown use octocat                                              │
-│  3. Turn on the push guard: each push is checked first                │
-│       repown guard on                                                 │
-│                                                                       │
-│  These are ordinary commands: run them yourself, or in a script.      │
-│  This clone's settings go in its .git/config, which is never pushed.  │
-│                                                                       │
-├───────────────────────────────────────────────────────────────────────╯
+◇  Review: nothing has changed yet ───────────────────────────────────────╮
+│                                                                         │
+│  This clone will commit and push as octocat.                            │
+│                                                                         │
+│  When you choose Run:                                                   │
+│  1. Let this clone push to octo-org's repositories                      │
+│       git config --local --add repown.allowOwner octo-org               │
+│  2. Pin this clone to octocat: its commit name, email and push sign-in  │
+│       repown use octocat                                                │
+│  3. Turn on the push guard: each push is checked first                  │
+│       repown guard on                                                   │
+│                                                                         │
+│  These are ordinary commands: run them yourself, or in a script.        │
+│  This clone's settings go in its .git/config, which is never pushed.    │
+│                                                                         │
+├─────────────────────────────────────────────────────────────────────────╯
 │
 ◆  Run these 3 steps?
 │  ● Run them
@@ -163,26 +165,30 @@ make [your first push](#the-first-push).
 ```
 
 Arrow keys choose, Enter confirms, Esc or Ctrl-C cancels (exit 130). Once there is a
-question to go back to, each list has a **← Back** (at a text question, type `<`). The
+question to go back to, each list ends with **← Back** (↑ from the first choice lands
+on it; at a text question, type `<`). The
 review has **Back** and **Change an answer**, and Enter takes **Run them**, or
 **Decline** when a step changes the whole machine (`fix`). With `NO_COLOR` or
 `FORCE_COLOR=0`, and always with `TERM=dumb`, the same questions come as numbered
-choices.
+choices. Decline, Esc or Ctrl-C end with one line: nothing was changed, and you can run
+`repown setup` again any time.
 
-When you choose Run, each step prints what it is, then the command and its own output
-(`use` may print its own "Next: repown guard on"; if you chose the guard, the next step
-turns it on):
+When you choose Run, each step prints what it is, then the command and its own output:
 
 ```
 └  Running the commands
+
        step 1 of 3: Let this clone push to octo-org's repositories
        > git config --local --add repown.allowOwner octo-org
 OK    origin     pushes to octo-org allowed in this clone
+
        ...
+
        step 3 of 3: Turn on the push guard: each push is checked first
        > repown guard on
 OK    guard      on -- every push is checked before it leaves
   /home/you/code/project/.git/hooks/pre-push
+
        done: this clone is set up for octocat
        check it any time: repown (this clone), repown doctor (this machine)
 ```

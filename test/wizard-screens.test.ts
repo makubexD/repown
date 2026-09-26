@@ -39,7 +39,7 @@ describe('repown setup, played with key presses', () => {
       for (const line of lines) assert.match(line, /^│/, 'a hint drawn outside the gutter: ' + line);
     }
     assert.match(screen, /3 other people's email addresses are in this repository's commits/);
-    for (const step of ['1. Record the account octo-work', '2. Allow pushes to octo-org', '3. Pin this clone to octo-work', '4. Turn on the push guard']) {
+    for (const step of ['1. Record the account octo-work', '2. Let this clone push to octo-org', '3. Pin this clone to octo-work', '4. Turn on the push guard']) {
       assert.ok(screen.includes(step), 'missing review step: ' + step + '\n' + screen);
     }
     assert.match(screen, /Run these 4 steps\?/);
@@ -47,31 +47,37 @@ describe('repown setup, played with key presses', () => {
 
   test('S3 gh as the credential helper is explained in plain words', async () => {
     const ctx = setupContext({ fixLines: ['  global  credential.https://github.com.helper = !gh auth git-credential'] });
-    const { screen } = await play(ctx, [[enter], [enter], [up, enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[enter], [enter], [up, enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /gh answers git's sign-in requests with its active account only/);
     assert.match(screen, /Stop gh answering git's sign-in requests/);
   });
 
   test('S4 on Azure DevOps the review says who decides the push sign-in', async () => {
     const ctx = setupContext({ host: 'azdo', owner: 'octo-org', credentialPinned: false });
-    const { screen } = await play(ctx, [[enter], [enter], [enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[enter], [enter], [enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /repown pins the sign-in on GitHub only/);
     assert.doesNotMatch(screen, /not pinned by repown on this host/);
   });
 
   test('S5 a hook another tool owns comes with what to do about it', async () => {
-    const { screen } = await play(setupContext({ guard: 'foreign' }), [[enter], [esc]]);
+    const { outcome, screen } = await play(setupContext({ guard: 'foreign' }), [[enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /another tool \(husky, for example\) owns/);
     assert.match(screen, /repown guard check/);
   });
 
   test('S6 a login already recorded says how to pick it', async () => {
-    const { screen } = await play(setupContext(), [[down, enter], [...typed('OctoCat'), enter], [esc]]);
-    assert.ok(screen.includes('"octocat" is already recorded on this machine: use it by that name (at a prompt, type < to go back and pick it)'), screen);
+    const { outcome, screen } = await play(setupContext(), [[down, enter], [...typed('OctoCat'), enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    assert.ok(screen.includes('"octocat" is already recorded on this machine: use it by that name'), screen);
+    assert.doesNotMatch(screen, /type < to go back and pick it/, 'the same words serve a flag, where there is no prompt');
   });
 
   test('S6 a login with a space is refused with the characters allowed', async () => {
-    const { screen } = await play(setupContext(), [[down, enter], [...typed('octo cat'), enter], [esc]]);
+    const { outcome, screen } = await play(setupContext(), [[down, enter], [...typed('octo cat'), enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /use letters, digits and \. _ @ - only/);
   });
 
@@ -92,19 +98,22 @@ describe('repown setup, played with key presses', () => {
 
   test('S9 a new GitHub account without a profile gets an example address', async () => {
     const ctx = setupContext({ recorded: {}, owner: null });
-    const { screen } = await play(ctx, [[...typed('octocat'), enter], [enter], [enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[...typed('octocat'), enter], [enter], [enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /Settings → Emails, like 1234\+octocat@users\.noreply\.github\.com/);
   });
 
   test('S10 moving a clone to another account says what changes', async () => {
     const ctx = setupContext({ pinned: 'octo-work', recorded: twoAccounts, addresses: err('git log failed') });
-    const { screen } = await play(ctx, [[up, enter], [enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[up, enter], [enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /This clone moves from octo-work to octocat/);
     assert.match(screen, /commits could not be read/);
   });
 
   test('S11 the hosts are named so a newcomer can tell them apart', async () => {
-    const { screen } = await play(setupContext({ recorded: {} }), [[...typed('octocat'), enter], [esc]]);
+    const { outcome, screen } = await play(setupContext({ recorded: {} }), [[...typed('octocat'), enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /another host \(GitLab, Bitbucket, self-hosted\)/);
     assert.doesNotMatch(screen, /this host/);
   });

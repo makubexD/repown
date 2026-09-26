@@ -11,7 +11,7 @@ import { styleText } from 'node:util';
 import * as p from '@clack/prompts';
 import { BACK, CANCEL, type Asked, type Prompter, type Reply, type Review, type ReviewChoice, type Step } from './engine.ts';
 import { BACK_WORD, type Streams } from './plain.ts';
-import { BACK_TO_REVIEW, reviewLines, reviewOptions, reviewQuestion } from './review-text.ts';
+import { BACK_TO_REVIEW, PICK_QUESTION, reviewDefault, reviewLines, reviewOptions, reviewQuestion } from './review-text.ts';
 
 /** A value no real choice can have. */
 const GO_BACK = '\u0000back';
@@ -25,8 +25,8 @@ export function clackPrompter(streams: Streams): Prompter {
     },
     review: (review) => showReview(review, io),
     pickStep: async (steps) => {
-      const id = await p.select({ ...io, message: 'Which answer do you want to change?',
-        options: [...steps.map((step) => ({ value: step.id, label: step.message })), { value: GO_BACK, label: BACK_TO_REVIEW }] });
+      const id = await p.select({ ...io, message: PICK_QUESTION,
+        options: [...steps.map((step) => ({ value: step.id, label: step.message })), { value: GO_BACK, label: '← ' + BACK_TO_REVIEW }] });
       if (p.isCancel(id)) return CANCEL;
       return id === GO_BACK ? BACK : id;
     },
@@ -36,10 +36,7 @@ export function clackPrompter(streams: Streams): Prompter {
     outro: (message) => p.outro(message, io),
     // A line, not clack's spinner: the spinner takes over Ctrl-C and exits 0, where a
     // cancel must exit 130.
-    busy: (message) => {
-      p.log.step(message, io);
-      return () => {};
-    },
+    busy: (message) => p.log.step(message, io),
   };
 }
 
@@ -75,9 +72,14 @@ async function askText(step: Step<never>, asked: Asked, io: Io): Promise<Reply> 
   const preset = typeof asked.initial === 'string' ? { initialValue: asked.initial } : {};
   const extra = asked.canGoBack ? 'type ' + BACK_WORD + ' to go back' : undefined;
   const value = await p.text({ ...io, ...preset, message: messageOf(step, extra, TEXT_GUTTER),
-    validate: (typed) => (typed?.trim() === BACK_WORD ? undefined : step.validate?.((typed ?? '').trim()) ?? undefined) });
+    validate: (typed) => (isBack(typed, asked) ? undefined : step.validate?.((typed ?? '').trim()) ?? undefined) });
   if (p.isCancel(value)) return CANCEL;
-  return value.trim() === BACK_WORD ? BACK : value.trim();
+  return isBack(value, asked) ? BACK : value.trim();
+}
+
+/** `<` means back only where there is somewhere to go; on the first question it is just text. */
+function isBack(typed: string | undefined, asked: Asked): boolean {
+  return asked.canGoBack && typed?.trim() === BACK_WORD;
 }
 
 /**
@@ -94,6 +96,7 @@ function messageOf(step: Step<never>, extra?: string, gutter = ''): string {
 
 async function showReview(review: Review, io: Io): Promise<ReviewChoice> {
   p.note(reviewLines(review, (text) => styleText('dim', text)).join('\n'), review.title, io);
-  const choice = await p.select({ ...io, message: reviewQuestion(review), options: reviewOptions(review) });
+  const choice = await p.select({ ...io, message: reviewQuestion(review), options: reviewOptions(review),
+    initialValue: reviewDefault(review) });
   return p.isCancel(choice) ? CANCEL : choice;
 }

@@ -31,8 +31,7 @@ test('the clack prompter answers the engine through its own keys, on the given s
   process.stdout.write = ((chunk: string) => { writes.push(String(chunk)); return true; }) as typeof process.stdout.write;
   try {
     // No spinner: clack's takes over Ctrl-C and exits 0, where a cancel must be 130.
-    const done = prompter.busy?.('Reading this clone');
-    done?.('Read');
+    prompter.busy?.('Reading this clone');
     assert.doesNotMatch(shown, /[◒◐◓◑]/);
     press(input, ENTER);
     assert.equal(await prompter.ask(guard, { initial: true, choices: [], detail: 'only your address is in this history', canGoBack: true }), true);

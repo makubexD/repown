@@ -158,7 +158,7 @@ function newAccountProblem(value: string, ctx: SetupContext): string | null {
   if (!value.trim()) return 'a value is required';
   if (!LOGIN.test(value)) return 'use letters, digits and . _ @ - only';
   const clash = Object.keys(ctx.recorded).find((account) => lower(account) === lower(value));
-  return clash ? '"' + clash + '" is already recorded on this machine: use it by that name (at a prompt, type < to go back and pick it)' : null;
+  return clash ? '"' + clash + '" is already recorded on this machine: use it by that name' : null;
 }
 
 function hostOf(answers: Answers, ctx: SetupContext): string {
@@ -179,8 +179,9 @@ function ownerForeign(account: string, ctx: SetupContext): boolean {
 /** The addresses in history besides this account's, said as a count -- or that it couldn't be read. */
 function historyNote(answers: Answers, ctx: SetupContext): string {
   if (!ctx.addresses.ok) {
-    return 'this repository\'s commits could not be read (' + ctx.addresses.error + '), so repown can\'t say who else committed here';
+    return 'this repository\'s commits could not be read (' + printable(ctx.addresses.error) + '), so repown can\'t say who else committed here';
   }
+  if (ctx.addresses.value.size === 0) return 'this repository has no commits yet';
   const own = lower(emailOf(answers, ctx) ?? '');
   const others = [...ctx.addresses.value.keys()].filter((address) => lower(address) !== own).length;
   if (others === 0) return 'only your email address is in this repository\'s commits';
@@ -215,7 +216,7 @@ export function planCommands(answers: Answers, ctx: SetupContext): PlannedComman
 function whatOf(argv: readonly string[], answers: Answers, ctx: SetupContext): string {
   const account = accountOf(answers);
   if (argv[0] === 'accounts') return 'Record the account ' + account + ' on this machine: ' + String(answers['email']);
-  if (argv[0] === 'git') return 'Allow pushes to ' + ctx.owner + '\'s repositories';
+  if (argv[0] === 'git') return 'Let this clone push to ' + ctx.owner + '\'s repositories';
   if (argv[0] === 'fix') return 'Stop gh answering git\'s sign-in requests (whole machine)';
   if (argv[0] === 'guard') return 'Turn on the push guard: each push is checked first';
   if (answers['gh'] === true) return 'Pin this clone to ' + account + ', and make it gh\'s active account';
@@ -242,9 +243,13 @@ export function formatCommand(argv: readonly string[]): string {
   return printable(['repown', ...words.map(shellWord)].join(' '));
 }
 
-/** Control characters as visible escapes: a value read from a remote URL must not redraw the screen. */
+/**
+ * Control characters, and the invisible or direction-changing ones, as visible escapes:
+ * a value read from a remote URL must neither redraw the screen nor read as another name.
+ */
 export function printable(text: string): string {
-  return text.replace(/[\x00-\x1f\x7f]/g, (char) => '\\x' + char.charCodeAt(0).toString(16).padStart(2, '0'));
+  return text.replace(/[\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g,
+    (char) => '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0'));
 }
 
 /** `--name=value` as `--name value`, unless the value starts with a dash and would read as an option. */
@@ -272,7 +277,7 @@ function review(answers: Answers, ctx: SetupContext): Review {
   }));
   if (settled(answers, ctx, plan)) {
     return { title: 'This clone is already set up', headline: settledLines(answers, ctx).map(printable), steps,
-      notes: ['Checked: this clone is pinned to ' + printable(accountOf(answers)) + ', exactly as recorded.',
+      notes: ['Checked: the settings git uses here are ' + printable(accountOf(answers)) + '\'s, as recorded.',
         'See it any time: repown (this clone), repown doctor (this machine)'], settled: true };
   }
   return { title: 'Review: nothing has changed yet', headline: [printable(headline(answers, ctx))], steps,
@@ -281,8 +286,10 @@ function review(answers: Answers, ctx: SetupContext): Review {
 
 /**
  * Nothing to do: the only command left is pinning this clone to the account it is
- * already pinned to, exactly as recorded, with nothing `use` would warn about -- an
- * organisation the guard would refuse, or gh answering sign-ins instead of the pin.
+ * already pinned to, as recorded and as git would use it (see pinIntact), with no
+ * organisation the guard would refuse and gh nowhere in the helper list. `use` may
+ * still say, on a host it can't pin, that it doesn't pin the sign-in; the settled
+ * screen says so too.
  */
 function settled(answers: Answers, ctx: SetupContext, plan: readonly PlannedCommand[]): boolean {
   const account = accountOf(answers);
@@ -316,10 +323,8 @@ function guardState(ctx: SetupContext): string {
 function notes(answers: Answers, ctx: SetupContext): string[] {
   const account = accountOf(answers);
   const lines: string[] = [];
-  if (ctx.pinned && lower(ctx.pinned) !== lower(account)) {
-    lines.push('This clone moves from ' + ctx.pinned + ' to ' + account + ': its next commits and pushes use ' + account +
-      '. Commits already made keep their author.');
-  }
+  const pin = pinNote(account, ctx);
+  if (pin) lines.push(pin);
   const guard = guardNote(answers, ctx);
   if (guard) lines.push(guard);
   const guarded = answers['guard'] === true || ctx.guard === 'on';
@@ -330,6 +335,16 @@ function notes(answers: Answers, ctx: SetupContext): string[] {
     lines.push('Note: gh is still git\'s credential helper, so pushes sign in as gh\'s active account, not ' + account + '.');
   }
   return lines;
+}
+
+/** What pinning changes for a clone pinned already: another account, or settings that drifted. */
+function pinNote(account: string, ctx: SetupContext): string | null {
+  if (!ctx.pinned) return null;
+  if (lower(ctx.pinned) !== lower(account)) {
+    return 'This clone moves from ' + ctx.pinned + ' to ' + account + ': its next commits and pushes use ' + account +
+      '. Commits already made keep their author.';
+  }
+  return ctx.pinIntact ? null : 'This clone\'s settings differ from what is recorded for ' + account + ': pinning again restores them.';
 }
 
 /** What happens to the guard, when no step says it already. */

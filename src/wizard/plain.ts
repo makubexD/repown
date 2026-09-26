@@ -1,6 +1,7 @@
 // The wizard drawn with plain lines: numbered choices, words instead of symbols, no
-// colour needed. Used when the richer prompter can't be (TERM=dumb, or @clack/prompts
-// fails to load) and by the tests, which drive it through ordinary streams.
+// colour needed. Used when the richer prompter can't be (NO_COLOR or FORCE_COLOR=0,
+// always TERM=dumb, or @clack/prompts fails to load) and by the tests, which drive it
+// through ordinary streams.
 //
 // Everything goes to the output stream it's given -- stderr in real use -- so stdout
 // keeps carrying only what the commands themselves print. End of input or Ctrl-C at a
@@ -8,8 +9,8 @@
 
 import { createInterface, type Interface } from 'node:readline/promises';
 import type { Readable, Writable } from 'node:stream';
-import { BACK, CANCEL, type Answer, type Asked, type Choice, type Prompter, type Reply, type Review, type ReviewChoice, type Step } from './engine.ts';
-import { reviewLines, reviewOptions, reviewQuestion } from './review-text.ts';
+import { BACK, CANCEL, type Asked, type Prompter, type Reply, type Review, type ReviewChoice, type Step } from './engine.ts';
+import { BACK_TO_REVIEW, PICK_QUESTION, reviewDefault, reviewLines, reviewOptions, reviewQuestion } from './review-text.ts';
 
 export interface Streams {
   readonly input: Readable;
@@ -29,13 +30,14 @@ export function plainPrompter(streams: Streams): Prompter {
     ask: (step, asked) => askStep(io, step, asked),
     review: (review) => showReview(io, review),
     pickStep: async (steps) => {
-      io.say('Which answer do you want to change?');
-      const index = await pickNumber(io, [...steps.map((step) => step.message), 'Back to the review'], 1);
+      io.say(PICK_QUESTION);
+      const index = await pickNumber(io, [...steps.map((step) => step.message), BACK_TO_REVIEW], 1);
       if (index === CANCEL) return CANCEL;
       return index === steps.length ? BACK : steps[index]!.id;
     },
     note: (message) => io.say('  ' + message),
     close: () => rl.close(),
+    outro: (message) => io.say(message),
   };
 }
 
@@ -86,7 +88,7 @@ async function askStep(io: Io, step: Step<never>, asked: Asked): Promise<Reply> 
   if (asked.canGoBack) io.say('  type ' + BACK_WORD + ' to go back');
   const line = await prompt(io, '  >' + shown + ' ');
   if (line === null) return CANCEL;
-  if (line === BACK_WORD) return BACK;
+  if (line === BACK_WORD && asked.canGoBack) return BACK;
   return line || (typeof initial === 'string' ? initial : '');
 }
 
@@ -111,7 +113,8 @@ async function showReview(io: Io, review: Review): Promise<ReviewChoice> {
   io.say('');
   io.say(reviewQuestion(review));
   const options = reviewOptions(review);
-  const index = await pickNumber(io, options.map((option) => option.label + (option.hint ? '  -- ' + option.hint : '')), 1);
+  const preset = options.findIndex((option) => option.value === reviewDefault(review)) + 1;
+  const index = await pickNumber(io, options.map((option) => option.label + (option.hint ? '  -- ' + option.hint : '')), preset);
   return index === CANCEL ? CANCEL : options[index]!.value;
 }
 

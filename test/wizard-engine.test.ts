@@ -132,9 +132,12 @@ describe('wizard engine', () => {
     assert.deepEqual(await wizard(FLOW, NONE, {}, atPick), { status: 'cancelled' });
   });
 
-  test('Done ends the wizard with nothing to run', async () => {
+  test('Done ends the wizard with nothing to run, and only on a review that is settled', async () => {
+    const settled: Flow<Context> = { ...FLOW, review: (answers, context) => ({ ...FLOW.review(answers, context), settled: true }) };
     const prompter = scripted([['ask', 'account', 'octocat'], ['ask', 'name', 'x'], ['ask', 'guard', true], ['review', 'done']]);
-    assert.deepEqual(await wizard(FLOW, NONE, {}, prompter), { status: 'done' });
+    assert.deepEqual(await wizard(settled, NONE, {}, prompter), { status: 'done' });
+    const unsettled = scripted([['ask', 'account', 'octocat'], ['ask', 'name', 'x'], ['ask', 'guard', true], ['review', 'done']]);
+    assert.deepEqual(await wizard(FLOW, NONE, {}, unsettled), { status: 'declined' }, 'Done on a review with work to do changes nothing');
   });
 
   test('only the first question asked comes without a way back, whichever it is', async () => {

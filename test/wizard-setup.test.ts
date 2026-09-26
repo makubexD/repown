@@ -14,7 +14,7 @@ import { sandbox, type Sandbox } from './helpers.ts';
 import { setupContext as context } from './setup-fixtures.ts';
 import { ok, err } from '../src/core/result.ts';
 import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Review, type ReviewChoice } from '../src/wizard/engine.ts';
-import { setupFlow, planCommands, formatCommand, missingFlags, NEW_ACCOUNT, type SetupContext } from '../src/wizard/setup-flow.ts';
+import { setupFlow, planCommands, formatCommand, missingFlags, printable, NEW_ACCOUNT, type SetupContext } from '../src/wizard/setup-flow.ts';
 import { runSetup } from '../src/wizard/setup-run.ts';
 import { readContext } from '../src/wizard/setup-context.ts';
 import { Git } from '../src/core/git.ts';
@@ -26,7 +26,7 @@ for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name]
 
 type Entry = readonly [string, Reply | ReviewChoice];
 
-function scripted(script: Entry[]): Prompter & { readonly asked: string[] } {
+function scripted(script: Entry[]): Prompter & { readonly asked: string[]; readonly reviews: Review[] } {
   const queue = [...script];
   const next = (id: string): Reply | ReviewChoice => {
     const entry = queue.shift();
@@ -35,10 +35,12 @@ function scripted(script: Entry[]): Prompter & { readonly asked: string[] } {
     return entry[1];
   };
   const asked: string[] = [];
+  const reviews: Review[] = [];
   return {
     asked,
+    reviews,
     ask: async (step) => { asked.push(step.id); return next(step.id) as Reply; },
-    review: async () => next('review') as ReviewChoice,
+    review: async (review) => { reviews.push(review); return next('review') as ReviewChoice; },
     pickStep: async () => next('pick') as string,
     note: () => {},
     close: () => {},
@@ -181,7 +183,7 @@ describe('setup flow', () => {
   test('control characters are shown escaped, so nothing can redraw the review', () => {
     const shown = formatCommand(['use', '--', 'octo\x1b[2Jcat']);
     assert.doesNotMatch(shown, /\x1b/);
-    assert.match(shown, /\\x1b/);
+    assert.match(shown, /\\u001b/);
     const ctx = context({ owner: 'octo\x1b]0;x\x07org' });
     for (const line of textOf(setupFlow(ctx).review({ account: 'octocat', guard: true }, ctx))) {
       assert.doesNotMatch(line, /[\x00-\x1f\x7f]/);
@@ -213,7 +215,7 @@ describe('setup flow', () => {
     const review = setupFlow(ctx).review(answers, ctx);
     assert.equal(review.settled, false);
     assert.deepEqual(review.steps.map((step) => step.what.split(' ').slice(0, 3).join(' ')),
-      ['Record the account', 'Allow pushes to', 'Stop gh answering', 'Pin this clone', 'Turn on the']);
+      ['Record the account', 'Let this clone', 'Stop gh answering', 'Pin this clone', 'Turn on the']);
     assert.deepEqual(review.steps.map((step) => step.command), planCommands(answers, ctx).map((command) => formatCommand(command.argv)));
     assert.deepEqual(review.steps[2]!.detail, ['  global  credential.helper = gh'], 'what fix removes, under its step');
   });
@@ -235,6 +237,21 @@ describe('setup flow', () => {
     assert.equal(reviewOf({ guard: 'off' }, { account: 'octocat', guard: true }).settled, false);
     assert.equal(reviewOf({}, { account: 'octocat', gh: true }).settled, false);
     assert.match(reviewOf({}).title, /already set up/);
+  });
+
+  test('the guard question says when a repository has no commits yet', () => {
+    const guard = setupFlow(context()).steps.find((step) => step.id === 'guard')!;
+    assert.match(guard.detail!({ account: 'octocat' }, context()) ?? '', /no commits yet/);
+  });
+
+  test('a clone pinned to the account but changed since says why pinning again is offered', () => {
+    const ctx = context({ pinned: 'octocat', pinIntact: false, guard: 'on' });
+    const review = setupFlow(ctx).review({ account: 'octocat' }, ctx);
+    assert.ok(review.notes.some((line) => /differ from what is recorded/.test(line)), review.notes.join('\n'));
+  });
+
+  test('values read from a clone are shown with invisible and control characters escaped', () => {
+    for (const hidden of ['\u202e', '\u200b', '\u009b', '\x1b']) assert.doesNotMatch(printable('octo' + hidden + 'org'), /[\u0080-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\x1b]/);
   });
 
   test('every question carries a hint a newcomer can act on', () => {
@@ -342,10 +359,23 @@ describe('setup context: would `use` change anything here?', () => {
     }
   });
 
-  test('says whether gh is the credential helper', async () => {
+  test('says whether gh is the credential helper, anywhere in the helper list', async () => {
     assert.equal((await read()).ghIsHelper, false);
     at.box.git('config', 'credential.helper', '!gh auth git-credential');
-    assert.equal((await read()).ghIsHelper, true);
+    at.box.git('config', '--add', 'credential.helper', 'manager');
+    assert.equal((await read()).ghIsHelper, true, 'gh asked first, even with another helper after it');
+  });
+
+  test('what git actually uses must agree: an include or a differently-cased credential entry is not intact', async () => {
+    pin();
+    const extra = join(at.registry, 'extra.gitconfig');
+    writeFileSync(extra, '[user]\n\temail = other@example.invalid\n');
+    at.box.git('config', 'include.path', extra);
+    assert.equal((await read()).pinIntact, false, 'an included file overrides the email');
+    at.box.git('config', '--unset', 'include.path');
+    assert.equal((await read()).pinIntact, true);
+    at.box.git('config', 'credential.https://GITHUB.COM.username', 'octo-work');
+    assert.equal((await read()).pinIntact, false, 'git matches credential URLs without case');
   });
 });
 
@@ -383,8 +413,9 @@ describe('repown setup, without a terminal', () => {
     assert.ok(existsSync(hook(at)));
     assert.match(run.stderr, /step 1 of 2: Pin this clone to octocat/);
     assert.match(run.stderr, /step 2 of 2: Turn on the push guard/);
-    assert.match(run.stdout, /done: this clone is set up for octocat/);
-    assert.match(run.stdout, /check it any time: repown/);
+    assert.match(run.stderr, /done: this clone is set up for octocat/);
+    assert.match(run.stderr, /check it any time: repown/);
+    assert.doesNotMatch(run.stdout, /done:|check it any time/, 'setup\'s own lines stay off stdout');
   });
 
   test('--no-input without --guard leaves the guard off', () => {
@@ -487,8 +518,9 @@ describe('repown setup, on a terminal (scripted)', () => {
   beforeEach(() => { at = home(); record(at, 'octocat', 'octocat@example.invalid'); });
   afterEach(() => at.dispose());
 
-  const run = (script: Entry[]): Promise<number> =>
-    runSetup({ positional: [], flags: new Map([['cwd', at.box.dir]]) }, { prompter: scripted(script), interactive: true });
+  const runWith = (prompter: Prompter): Promise<number> =>
+    runSetup({ positional: [], flags: new Map([['cwd', at.box.dir]]) }, { prompter, interactive: true });
+  const run = (script: Entry[]): Promise<number> => runWith(scripted(script));
 
   test('Run pins the clone and turns the guard on', async () => {
     assert.equal(await run([['account', 'octocat'], ['guard', true], ['review', 'run']]), 0);
@@ -497,9 +529,13 @@ describe('repown setup, on a terminal (scripted)', () => {
   });
 
   test('already set up: Done exits 0 and writes nothing; Apply again pins as before', async () => {
-    assert.equal(await run([['account', 'octocat'], ['guard', false], ['review', 'run']]), 0);
+    const first = scripted([['account', 'octocat'], ['guard', false], ['review', 'run']]);
+    assert.equal(await runWith(first), 0);
+    assert.equal(first.reviews[0]!.settled, false, 'not set up before the first run');
     const before = localConfig(at);
-    assert.equal(await run([['account', 'octocat'], ['guard', false], ['review', 'done']]), 0);
+    const again = scripted([['account', 'octocat'], ['guard', false], ['review', 'done']]);
+    assert.equal(await runWith(again), 0);
+    assert.equal(again.reviews[0]!.settled, true, 'the clone, read back from git, counts as set up');
     assert.equal(localConfig(at), before);
     assert.equal(await run([['account', 'octocat'], ['guard', false], ['review', 'run']]), 0);
     assert.equal(localConfig(at), before);

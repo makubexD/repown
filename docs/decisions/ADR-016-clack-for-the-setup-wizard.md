@@ -66,3 +66,12 @@ changing that, in September 2026:
   bumps them.
 - **Node 20 is end-of-life** (April 2026). On 20.0–20.11 the dependency is skipped and the
   wizard uses the plain prompter; nothing else changes.
+
+## Amendments
+
+- **2026-09-25, as built.** Two details of the Decision differ in the code:
+  - **No spinner.** clack's spinner takes over Ctrl-C and exits 0, where a cancel must
+    exit 130, so reading the clone shows one step line instead.
+  - **When the plain prompter is used:** `NO_COLOR` or `FORCE_COLOR=0`, always
+    `TERM=dumb`, and whenever clack fails to load. Without a terminal, setup never gets
+    as far as a prompter: it exits 2, naming the flags to pass.

@@ -78,16 +78,27 @@ describe('plain prompter', () => {
     assert.equal(await run.prompter.review(review()), 'edit');
     assert.match(run.shown(), /nothing has changed yet/);
     assert.match(run.shown(), /1\. Pin this clone to octocat\n\s+repown use octocat/);
-    assert.match(run.shown(), /ordinary repown commands/);
+    assert.match(run.shown(), /ordinary commands/);
     assert.match(run.shown(), /Run this step\?/);
     assert.equal(await harness('\n').prompter.review(review()), 'run');
+  });
+
+  test('with a whole-machine step in the plan, Enter at the review declines', async () => {
+    const fix = review({ steps: [{ what: 'Stop gh answering', command: 'repown fix --yes', detail: [] }, ...review().steps] });
+    assert.equal(await harness('\n').prompter.review(fix), 'decline');
+  });
+
+  test('closing lines are written, as the richer prompter draws them', async () => {
+    const run = harness('');
+    run.prompter.outro?.('Nothing changed: this clone was already set up');
+    assert.match(run.shown(), /Nothing changed: this clone was already set up/);
   });
 
   test('a settled review offers Done first', async () => {
     const run = harness('\n');
     assert.equal(await run.prompter.review(review({ settled: true, title: 'This clone is already set up' })), 'done');
     assert.match(run.shown(), /already set up/);
-    assert.match(run.shown(), /Apply the same settings again/);
+    assert.match(run.shown(), /Apply the same settings again  -- runs repown use octocat/);
     assert.doesNotMatch(run.shown(), /Decline/);
   });
 

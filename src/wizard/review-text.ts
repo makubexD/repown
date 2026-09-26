@@ -1,6 +1,7 @@
 // The words around a review, shared by both prompters so the plain and the drawn
-// screens say the same thing: the numbered steps, the closing line, the question and
-// its choices. What goes IN the review comes from the flow (setup-flow.ts).
+// screens say the same thing: the numbered steps, the closing lines, the question, its
+// choices and which one Enter takes, and "Change an answer". What goes IN the review
+// comes from the flow (setup-flow.ts).
 
 import type { Review, ReviewChoice } from './engine.ts';
 
@@ -9,6 +10,10 @@ export interface ReviewOption {
   readonly label: string;
   readonly hint?: string;
 }
+
+/** "Change an answer": the question, and the choice that returns to the review. */
+export const PICK_QUESTION = 'Which answer do you want to change?';
+export const BACK_TO_REVIEW = 'Back to the review';
 
 /**
  * The body of the review, line by line. `command` styles each command line (dimmed
@@ -22,8 +27,8 @@ export function reviewLines(review: Review, command: (text: string) => string = 
     ...step.detail.map((line) => command('     ' + line)),
   ]);
   return [...review.headline, '', 'When you choose Run:', ...steps, ...notesOf(review), '',
-    'These are ordinary repown commands: run them yourself, or in a script.',
-    'A clone\'s settings go in its .git/config, which is never pushed.'];
+    'These are ordinary commands: run them yourself, or in a script.',
+    'This clone\'s settings go in its .git/config, which is never pushed.'];
 }
 
 function notesOf(review: Review): string[] {
@@ -37,9 +42,10 @@ export function reviewQuestion(review: Review): string {
 
 export function reviewOptions(review: Review): ReviewOption[] {
   if (review.settled) {
+    const again = review.steps.map((step) => step.command).join('; ');
     return [
       { value: 'done', label: 'Done', hint: 'change nothing' },
-      { value: 'run', label: 'Apply the same settings again' },
+      { value: 'run', label: 'Apply the same settings again', ...(again ? { hint: 'runs ' + again } : {}) },
       { value: 'edit', label: 'Change an answer' },
     ];
   }
@@ -51,5 +57,11 @@ export function reviewOptions(review: Review): ReviewOption[] {
   ];
 }
 
-/** The last choice of "Which answer do you want to change?". */
-export const BACK_TO_REVIEW = '← Back to the review';
+/**
+ * The choice Enter takes: the first, unless a step changes the whole machine
+ * (`fix`), which, like its own question, needs a deliberate yes.
+ */
+export function reviewDefault(review: Review): ReviewOption['value'] {
+  const machineWide = review.steps.some((step) => step.command.startsWith('repown fix'));
+  return !review.settled && machineWide ? 'decline' : reviewOptions(review)[0]!.value;
+}

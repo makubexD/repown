@@ -80,6 +80,11 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   and prompts go to stderr. Colour is decided per stream.
 - `--format json` (`scan`, `accounts list`) is a stable contract for scripts; the text
   layout isn't. Renaming a JSON field is breaking (ADR-014).
+- `src/wizard/` is `repown setup`: `engine.ts` owns Back and the review loop and draws
+  nothing; `setup-flow.ts` is pure and turns answers into existing commands' argv;
+  `setup-context.ts` reads the clone once, read-only; `setup-run.ts` runs each command's
+  own `run()`, never a copy; `review-text.ts` holds the words both prompters (`plain.ts`,
+  `clack.ts`) share.
 
 ## Tests
 
@@ -87,6 +92,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` and clears `GIT_DIR`, `GIT_*_EMAIL`, `GH_TOKEN`
   and friends, so neither the machine's config nor the shell running `npm test` leaks in.
 - Guard tests build foreign-authored commits with `git commit-tree`, which doesn't move HEAD.
+- `test/wizard-screens.test.ts` plays `repown setup`'s real screens with key presses
+  (`play()` in `test/setup-fixtures.ts`); add a scenario when a screen changes.
 - `test/cli.test.ts` spawns the real entry point. Keep `guard check --remote "$1" --url "$2"`
   (hooks already on disk) and `--remote="$1" --url="$2"` (new hooks) working.
 - `test/docs.test.ts` checks the README against `repown --help` and `repown help <group>`.

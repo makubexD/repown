@@ -43,9 +43,10 @@ export interface Played {
 
 /**
  * Plays the wizard: each group of keys is pressed once the screen has settled after
- * the previous one. A wizard still waiting after the last group ends as 'stuck'.
+ * the previous one. A wizard still waiting after the last group ends as 'stuck', after
+ * `patience` ms: generous, since a loaded CI runner draws slowly.
  */
-export async function play(ctx: SetupContext, keys: readonly (readonly string[])[], given: Answers = {}): Promise<Played> {
+export async function play(ctx: SetupContext, keys: readonly (readonly string[])[], given: Answers = {}, patience = 10_000): Promise<Played> {
   const input = new PassThrough();
   const output = new PassThrough();
   const queue = [...keys];
@@ -53,7 +54,7 @@ export async function play(ctx: SetupContext, keys: readonly (readonly string[])
   let idle: NodeJS.Timeout | undefined;
   const pressNext = (): void => { for (const key of queue.shift() ?? []) input.write(key); };
   output.on('data', (chunk: Buffer) => { screen += chunk.toString(); clearTimeout(idle); idle = setTimeout(pressNext, 40); });
-  const stuck = new Promise<{ status: 'stuck' }>((resolve) => { setTimeout(() => resolve({ status: 'stuck' }), 4000).unref(); });
+  const stuck = new Promise<{ status: 'stuck' }>((resolve) => { setTimeout(() => resolve({ status: 'stuck' }), patience).unref(); });
   const outcome = await Promise.race([wizard(setupFlow(ctx), ctx, given, clackPrompter({ input, output })), stuck]);
   clearTimeout(idle);
   return { outcome, screen: screen.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '') };

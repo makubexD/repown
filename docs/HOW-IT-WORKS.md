@@ -463,40 +463,53 @@ commands before anything changes. A clone that already needs nothing says so.
 
 ```mermaid
 flowchart TD
-  S[repown setup] --> T{"a terminal,<br/>or --no-input?"}
+  S[repown setup] --> G{"registry readable,<br/>flags consistent?"}
+  G -->|registry unreadable| X0["🔴 exit 1"]
+  G -->|a recorded account with --name/--email/--host| X4["🔴 exit 2"]
+  G -->|yes| T{"a terminal,<br/>or --no-input?"}
   T -->|neither| X2["🔴 exit 2: names the flags to pass"]
   T -->|yes| R{"a git repository?"}
-  R -->|no| X1["🔴 exit 1"]
+  R -->|no| X1["🔴 exit 1: run it inside a clone"]
   R -->|yes| F{"flags consistent with this clone?"}
   F -->|no| X3["🔴 exit 2 (or 1): nothing written"]
+  F -->|--no-input| C
   F -->|yes| A["account: a recorded one, or a new one<br/>(host, name, email; suggested from the profile)"]
   A --> Q["only what applies here:<br/>switch gh · allow the organisation · the guard · gh as helper"]
+  A -->|Esc or Ctrl-C| N
+  Q -->|Esc or Ctrl-C| N
   Q --> K{"already pinned to it, as recorded,<br/>and nothing else to do?"}
-  K -->|yes| D["🟢 already set up: Done (exit 0, nothing written)<br/>or apply the same settings again"]
+  K -->|yes| D["🟢 already set up"]
+  D -->|Done| DN["⚪ nothing written (exit 0)"]
+  D -->|Apply the same settings again| C
+  D -->|Change an answer| Q
   K -->|no| V["review: numbered plain steps, each with its command"]
   V -->|Run| C["accounts add → allowOwner → fix → use → guard on<br/>stops at the first failure, listing what didn't run"]
-  V -->|Back / Change an answer| A
+  V -->|"Back: the last question · Change an answer: the one you pick"| Q
   V -->|Decline, Esc or Ctrl-C| N["⚪ nothing changed (exit 1, or 130)"]
   C -->|Ctrl-C while running| I["🟡 the running command reacts as usual;<br/>nothing after it runs (exit 130)"]
 ```
+
+With `--no-input` there is no review and no "already set up" check: the commands the
+flags stand for run, `use` included.
 
 | It asks | Only when | Becomes |
 | --- | --- | --- |
 | Which account should this clone belong to? | an account is recorded (default: the one pinned here) | `use <account>` |
 | Login, where it's hosted, name and email on your commits (on GitHub, with where to find your noreply address) | "a new account"; refused if already recorded | `accounts add <account> --name --email --host` |
-| Also make it gh's active account? (default No) | a GitHub clone, gh knows the account, another is active | `use --gh` |
+| Also make this account gh's active account? (default No) | a GitHub clone (or one with no origin), gh knows the account, another is active | `use --gh` |
 | This repository belongs to "octo-org". Allow pushes to it? (default Yes) | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
 | Turn on the push guard? (default Yes) | the guard is off, no other tool owns the hook, and `core.hooksPath` doesn't redirect hooks | `guard on` |
 | Stop gh answering git's sign-in requests? (whole machine, default No) | a GitHub clone, gh is the helper, and `fix` finds its entries | `fix --yes` |
 
-Before the guard question it says how many other people's email addresses are in this repository's commits:
-the guard suits clones where you push only your own commits (ADR-005).
+Before the guard question it says how many other people's email addresses are in this
+repository's commits, or that it has none yet: the guard suits clones where you push only
+your own commits (ADR-005). When a step changes the whole machine (`fix`), Enter at the
+review takes **Decline**.
 
 | Variant | Command |
 | --- | --- |
-| Go back | pick **Back** at any choice from the second question on, or type `<` at a text question; **← Back to the review** leaves "Change an answer" |
-| Already set up | "already set up" means every key `use` writes holds exactly the recorded value in `.git/config` (`include`d files aren't read), no organisation is left unallowed, and gh isn't the credential helper |
-| No terminal (CI, a script) | `repown setup octocat --guard --no-input`: runs with the flags, or exits 2 naming what's missing. Every question not given as a flag counts as No, including the two that default to Yes; `--fix` does nothing where gh isn't the helper |
-| A new account from a script | `repown setup octo-work --name "Octo Work" --email octo-work@users.noreply.github.com --no-input` |
+| Go back | pick **← Back** at any list once there is a question to go back to, or type `<` at a text question; **← Back to the review** (plain prompts: **Back to the review**) leaves "Change an answer". The "already set up" screen has no Back |
+| Already set up | the clone is pinned to the account you chose, and every key `use` writes holds exactly the recorded value, both in `.git/config` and in what git actually resolves (includes, worktree config, credential entries for the same URL spelt otherwise); no organisation is left unallowed; gh is nowhere in the credential helper list; and your answers add nothing beyond `repown use <that account>`. A username written into a `pushInsteadOf` URL isn't checked |
+| No terminal (CI, a script) | see [Scripts and CI](CONFIGURATION.md#scripts-and-ci) |
 
 </details>

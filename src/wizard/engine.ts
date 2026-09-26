@@ -82,10 +82,10 @@ export interface Prompter {
   note(message: string): void;
   /** Releases the terminal once the questions are over; safe to call more than once. */
   close(): void;
-  /** Optional framing a richer prompter can draw: a title, a closing line, a spinner. */
+  /** Optional framing: a title, a closing line, and a line while the state is read. */
   intro?(title: string): void;
   outro?(message: string): void;
-  busy?(message: string): (done: string) => void;
+  busy?(message: string): void;
 }
 
 export type Outcome =
@@ -166,9 +166,11 @@ export async function wizard<C>(flow: Flow<C>, context: C, given: Answers, promp
   for (;;) {
     const walk = await runFlow(flow, context, pass, prompter);
     if (walk.status === 'cancelled') return walk;
-    const choice = await prompter.review(flow.review(walk.answers, context));
+    const review = flow.review(walk.answers, context);
+    const choice = await prompter.review(review);
     if (choice === 'run') return { status: 'run', answers: walk.answers };
-    if (choice === 'done') return { status: 'done' };
+    // Done promises "nothing needed changing": on a review with work left, it changes nothing either way.
+    if (choice === 'done') return { status: review.settled ? 'done' : 'declined' };
     if (choice === 'decline' || choice === CANCEL) return { status: choice === CANCEL ? 'cancelled' : 'declined' };
     const start = await restartAt(flow, context, { walk, given: fixed, choice }, prompter);
     if (start === CANCEL) return { status: 'cancelled' };

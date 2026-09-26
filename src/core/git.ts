@@ -112,7 +112,8 @@ export class Git {
   async getAllConfigRaw(key: string, scope?: ConfigScope): Promise<string[]> {
     const result = await this.exec(this.scoped(scope, ['--get-all', key]));
     if (!succeeded(result)) return [];
-    const split = result.stdout.split(/\r?\n/);
+    // git ends every value with LF on every platform, so a CR is part of a value: kept.
+    const split = result.stdout.split('\n');
     // git terminates the last value with a newline, so a trailing empty element
     // is an artefact of splitting -- unlike any earlier one, which is a value.
     if (split[split.length - 1] === '') split.pop();

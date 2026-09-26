@@ -61,9 +61,8 @@ interface Setup {
 
 async function continueSetup({ args, git, given, prompter }: Setup): Promise<number> {
   prompter?.intro?.('repown setup');
-  const done = prompter?.busy?.('Reading this clone and this machine');
+  prompter?.busy?.('Reading this clone and this machine');
   const ctx = await readContext(git, flagString(args, 'cwd'));
-  done?.(ctx.ok ? 'Read this clone and this machine' : 'Could not read everything');
   if (!ctx.ok) { out.fail('setup', ctx.error); return 1; }
   const answers = checkAgainst(given, ctx.value, flagString(args, 'allow-owner'));
   if (!answers.ok) return answers.error;
@@ -206,12 +205,14 @@ async function execute(plan: readonly PlannedCommand[], git: Git): Promise<numbe
   return 0;
 }
 
-/** The account the plan pinned, and where to look next. */
+/**
+ * The account the plan pinned, and where to look next. On stderr, like the step lines:
+ * stdout carries only what the commands themselves print.
+ */
 function finished(plan: readonly PlannedCommand[]): void {
   const pinned = plan.find((planned) => planned.argv[0] === 'use')?.argv.at(-1) ?? '';
-  out.line();
-  out.line('  done: this clone is set up for ' + printable(pinned));
-  out.line('  check it any time: repown (this clone), repown doctor (this machine)');
+  out.detail('done: this clone is set up for ' + printable(pinned));
+  out.detail('check it any time: repown (this clone), repown doctor (this machine)');
 }
 
 function stopped(remaining: readonly PlannedCommand[], code: number): number {

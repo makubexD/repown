@@ -11,8 +11,8 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   (recording a new one), whether to switch gh, allow an organisation, turn the guard on and
   stop gh being the credential helper; shows each step in plain words with its exact
   command; and runs them only when you choose Run. A clone that is already set up says so
-  and offers Done (exit 0, nothing written). Every answer is also a flag, and `--no-input`
-  runs it from a script.
+  and offers Done (exit 0, nothing written). Decline exits 1; Esc, Ctrl-C or an interrupt
+  exits 130. Every answer is also a flag, and `--no-input` runs it from a script.
   The other commands' output is unchanged (tests lock `fix --dry-run`, `use`'s hints and
   the help's exit codes).
 

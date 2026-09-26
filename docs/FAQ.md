@@ -39,8 +39,8 @@ is a safety net, not a lock
 ([SECURITY.md](../SECURITY.md#what-repown-protects-and-what-it-doesnt)).
 
 **I ran `repown setup` again and it said "already set up". Is that right?** Yes: the clone
-is pinned to that account exactly as recorded, and nothing else you asked for is left to
-do (the guard line shows whether the guard is on). Choose
+is pinned to that account exactly as recorded, git would use those settings, and nothing
+else you asked for is left to do (the guard line shows whether the guard is on). Choose
 **Done**, or **Apply the same settings again** to run `repown use` anyway
 ([card 13](HOW-IT-WORKS.md#13-guided-setup)).
 

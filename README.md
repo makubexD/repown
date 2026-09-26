@@ -137,22 +137,22 @@ make [your first push](#the-first-push).
 │  right owner; undo: repown guard off
 │  Yes
 │
-◇  Review: nothing has changed yet ────────────────────────────────────────╮
-│                                                                          │
-│  This clone will commit and push as octocat.                             │
-│                                                                          │
-│  When you choose Run:                                                    │
-│  1. Allow pushes to octo-org's repositories                              │
-│       git config --local --add repown.allowOwner octo-org                │
-│  2. Pin this clone to octocat: name, email and push account              │
-│       repown use octocat                                                 │
-│  3. Turn on the push guard: each push is checked first                   │
-│       repown guard on                                                    │
-│                                                                          │
-│  These are ordinary repown commands: run them yourself, or in a script.  │
-│  A clone's settings go in its .git/config, which is never pushed.        │
-│                                                                          │
-├──────────────────────────────────────────────────────────────────────────╯
+◇  Review: nothing has changed yet ─────────────────────────────────────╮
+│                                                                       │
+│  This clone will commit and push as octocat.                          │
+│                                                                       │
+│  When you choose Run:                                                 │
+│  1. Let this clone push to octo-org's repositories                    │
+│       git config --local --add repown.allowOwner octo-org             │
+│  2. Pin this clone to octocat: name, email and push account           │
+│       repown use octocat                                              │
+│  3. Turn on the push guard: each push is checked first                │
+│       repown guard on                                                 │
+│                                                                       │
+│  These are ordinary commands: run them yourself, or in a script.      │
+│  This clone's settings go in its .git/config, which is never pushed.  │
+│                                                                       │
+├───────────────────────────────────────────────────────────────────────╯
 │
 ◆  Run these 3 steps?
 │  ● Run them
@@ -162,7 +162,33 @@ make [your first push](#the-first-push).
 └
 ```
 
-Run it again in a clone that needs nothing, and it says so instead:
+Arrow keys choose, Enter confirms, Esc or Ctrl-C cancels (exit 130). Once there is a
+question to go back to, each list has a **← Back** (at a text question, type `<`). The
+review has **Back** and **Change an answer**, and Enter takes **Run them**, or
+**Decline** when a step changes the whole machine (`fix`). With `NO_COLOR` or
+`FORCE_COLOR=0`, and always with `TERM=dumb`, the same questions come as numbered
+choices.
+
+When you choose Run, each step prints what it is, then the command and its own output
+(`use` may print its own "Next: repown guard on"; if you chose the guard, the next step
+turns it on):
+
+```
+└  Running the commands
+       step 1 of 3: Let this clone push to octo-org's repositories
+       > git config --local --add repown.allowOwner octo-org
+OK    origin     pushes to octo-org allowed in this clone
+       ...
+       step 3 of 3: Turn on the push guard: each push is checked first
+       > repown guard on
+OK    guard      on -- every push is checked before it leaves
+  /home/you/code/project/.git/hooks/pre-push
+       done: this clone is set up for octocat
+       check it any time: repown (this clone), repown doctor (this machine)
+```
+
+Run it again in a clone that needs nothing, and it says so instead (this screen has no
+Back):
 
 ```
 ◇  This clone is already set up ───────────────────────────────────────╮
@@ -172,34 +198,17 @@ Run it again in a clone that needs nothing, and it says so instead:
 │  guard       on: every push is checked before it leaves              │
 │                                                                      │
 │  Nothing needs to change.                                            │
-│  ...                                                                 │
+│                                                                      │
+│  Checked: the settings git uses here are octocat's, as recorded.     │
+│  See it any time: repown (this clone), repown doctor (this machine)  │
+│                                                                      │
 ├──────────────────────────────────────────────────────────────────────╯
 │
 ◆  What now?
-│  ● Done
+│  ● Done (change nothing)
 │  ○ Apply the same settings again
 │  ○ Change an answer
 └
-```
-
-Arrow keys choose, Enter confirms, Esc or Ctrl-C cancels. From the second question on,
-each list has a **← Back** (at a text question, type `<`), and the review has **Back** and
-**Change an answer**. With `NO_COLOR` or `FORCE_COLOR=0`, and always with
-`TERM=dumb`, the same questions come as numbered choices.
-
-When you choose Run, each step prints what it is, then the command and its own output
-(`use` may add its own "Next:" hint; the following step takes care of it):
-
-```
-step 1 of 3: Allow pushes to octo-org's repositories
-> git config --local --add repown.allowOwner octo-org
-...
-step 3 of 3: Turn on the push guard: each push is checked first
-> repown guard on
-OK    guard      on -- every push is checked before it leaves
-
-  done: this clone is set up for octocat
-  check it any time: repown (this clone), repown doctor (this machine)
 ```
 
 </details>

@@ -1,6 +1,6 @@
 # Docs end-to-end review: accurate, not repeated, to the point, traceable
 
-Status: Phase 4, task 2 next (README rewrite).
+Status: Phase 4, task 3 next (other docs, parallel review).
 
 Spec: the approved plan (findings from a three-agent audit of README vs src/). Docs and
 tests only; no command's behaviour or output changes.
@@ -9,7 +9,7 @@ tests only; no command's behaviour or output changes.
 - [x] 1. Traceability test: every declared option documented, every help env var in
       CONFIGURATION, a feature map in CONTRIBUTING with a row per command/action and real
       src/ paths. Docs: CONTRIBUTING, CLAUDE.md Tests.
-- [ ] 2. README rewritten top to bottom: one quick-start block, "Commands, by when you use
+- [x] 2. README rewritten top to bottom: one quick-start block, "Commands, by when you use
       them" replaces Day to day + Commands, fixes (husky, Keys, profile email, exit codes,
       amend scope, fix wording), troubleshooting rows (env var refusal, --no-verify). Docs: README.
 - [ ] 3. Every other doc reviewed end to end by parallel agents; fixes applied, repeats cut

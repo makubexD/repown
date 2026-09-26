@@ -14,7 +14,7 @@ export const CANCEL = Symbol('cancel');
 export type Answer = string | boolean;
 export type Answers = Record<string, Answer>;
 export type Reply = Answer | typeof BACK | typeof CANCEL;
-export type ReviewChoice = 'run' | 'back' | 'edit' | 'decline' | typeof CANCEL;
+export type ReviewChoice = 'run' | 'back' | 'edit' | 'decline' | 'done' | typeof CANCEL;
 
 export interface Choice {
   readonly value: string;
@@ -40,9 +40,33 @@ export interface Step<C> {
   when?(answers: Answers, context: C): boolean;
 }
 
+/** One command the review will run: what it does in plain words, and the command itself. */
+export interface ReviewStep {
+  readonly what: string;
+  readonly command: string;
+  /** Lines shown under the command, such as what it removes. */
+  readonly detail: readonly string[];
+}
+
 export interface Review {
-  readonly summary: readonly string[];
-  readonly commands: readonly string[];
+  readonly title: string;
+  /** What the answers add up to, before the steps. */
+  readonly headline: readonly string[];
+  readonly steps: readonly ReviewStep[];
+  /** Warnings and side notes, after the steps. */
+  readonly notes: readonly string[];
+  /** Nothing needs to change: offer Done first, and running the steps again second. */
+  readonly settled: boolean;
+}
+
+/** What a prompter needs to ask one step. */
+export interface Asked {
+  readonly initial: Answer | undefined;
+  readonly choices: readonly Choice[];
+  /** A line of context shown with the question. */
+  readonly detail: string | undefined;
+  /** False for the first question asked: there is nothing to go back to. */
+  readonly canGoBack: boolean;
 }
 
 export interface Flow<C> {
@@ -51,10 +75,10 @@ export interface Flow<C> {
 }
 
 export interface Prompter {
-  ask(step: Step<never>, initial: Answer | undefined, choices: readonly Choice[], detail?: string): Promise<Reply>;
+  ask(step: Step<never>, asked: Asked): Promise<Reply>;
   review(review: Review): Promise<ReviewChoice>;
-  /** "Change an answer": one of the steps that were asked. */
-  pickStep(steps: readonly Step<never>[]): Promise<string | typeof CANCEL>;
+  /** "Change an answer": one of the steps that were asked, or BACK to the review. */
+  pickStep(steps: readonly Step<never>[]): Promise<string | typeof BACK | typeof CANCEL>;
   note(message: string): void;
   /** Releases the terminal once the questions are over; safe to call more than once. */
   close(): void;
@@ -67,6 +91,7 @@ export interface Prompter {
 export type Outcome =
   | { readonly status: 'run'; readonly answers: Answers }
   | { readonly status: 'declined' }
+  | { readonly status: 'done' }
   | { readonly status: 'cancelled' };
 
 interface Pass {
@@ -87,7 +112,7 @@ export async function runFlow<C>(flow: Flow<C>, context: C, pass: Pass, prompter
   while (index < flow.steps.length) {
     const step = flow.steps[index]!;
     if (!askable(step, answers, context, pass.given)) { index++; continue; }
-    const reply = await ask(step, answers, context, prompter);
+    const reply = await ask(step, { answers, canGoBack: asked.length > 0 }, context, prompter);
     if (reply === CANCEL) return { status: 'cancelled' };
     if (reply === BACK) { index = asked.pop() ?? index; continue; }
     const problem = step.validate?.(reply) ?? null;
@@ -98,10 +123,11 @@ export async function runFlow<C>(flow: Flow<C>, context: C, pass: Pass, prompter
   return { status: 'answered', answers: prune(flow, answers, context, pass.given), asked };
 }
 
-async function ask<C>(step: Step<C>, answers: Answers, context: C, prompter: Prompter): Promise<Reply> {
+async function ask<C>(step: Step<C>, at: { answers: Answers; canGoBack: boolean }, context: C, prompter: Prompter): Promise<Reply> {
+  const { answers, canGoBack } = at;
   const initial = answers[step.id] ?? await step.initial?.(answers, context);
   const choices = step.choices?.(answers, context) ?? [];
-  return prompter.ask(step as Step<never>, initial, choices, step.detail?.(answers, context));
+  return prompter.ask(step as Step<never>, { initial, choices, detail: step.detail?.(answers, context), canGoBack });
 }
 
 function askable<C>(step: Step<C>, answers: Answers, context: C, given: ReadonlySet<string>): boolean {
@@ -142,6 +168,7 @@ export async function wizard<C>(flow: Flow<C>, context: C, given: Answers, promp
     if (walk.status === 'cancelled') return walk;
     const choice = await prompter.review(flow.review(walk.answers, context));
     if (choice === 'run') return { status: 'run', answers: walk.answers };
+    if (choice === 'done') return { status: 'done' };
     if (choice === 'decline' || choice === CANCEL) return { status: choice === CANCEL ? 'cancelled' : 'declined' };
     const start = await restartAt(flow, context, { walk, given: fixed, choice }, prompter);
     if (start === CANCEL) return { status: 'cancelled' };
@@ -166,6 +193,7 @@ async function restartAt<C>(flow: Flow<C>, context: C, how: Return, prompter: Pr
   if (steps.length === 0) { prompter.note('every answer came from a flag: there is nothing here to change'); return flow.steps.length; }
   const id = await prompter.pickStep(steps as Step<never>[]);
   if (id === CANCEL) return CANCEL;
+  if (id === BACK) return flow.steps.length;
   const index = flow.steps.findIndex((step) => step.id === id);
   return index < 0 ? flow.steps.length : index;
 }

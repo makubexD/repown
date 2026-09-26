@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { sandbox, type Sandbox } from './helpers.ts';
 import { setupContext as context } from './setup-fixtures.ts';
 import { ok, err } from '../src/core/result.ts';
-import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type ReviewChoice } from '../src/wizard/engine.ts';
+import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Review, type ReviewChoice } from '../src/wizard/engine.ts';
 import { setupFlow, planCommands, formatCommand, missingFlags, NEW_ACCOUNT, type SetupContext } from '../src/wizard/setup-flow.ts';
 import { runSetup } from '../src/wizard/setup-run.ts';
 import { readContext } from '../src/wizard/setup-context.ts';
@@ -50,6 +50,10 @@ async function answer(ctx: SetupContext, script: Entry[], given: Answers = {}): 
   assert.equal(outcome.status, 'run');
   return outcome.status === 'run' ? outcome.answers : {};
 }
+
+/** Every line of text a review shows. */
+const textOf = (review: Review): string[] =>
+  [review.title, ...review.headline, ...review.notes, ...review.steps.flatMap((step) => [step.what, step.command, ...step.detail])];
 
 const argvOf = (answers: Answers, ctx: SetupContext): (readonly string[])[] =>
   planCommands(answers, ctx).map((command) => command.argv);
@@ -115,9 +119,9 @@ describe('setup flow', () => {
     const ctx = context({ fixLines: ['    global:  credential.https://github.com.helper'] });
     const prompter = scripted([['account', 'octocat'], ['guard', true], ['fix', true], ['review', 'run']]);
     let initial: unknown;
-    const outcome = await wizard(setupFlow(ctx), ctx, {}, { ...prompter, ask: async (step, value, choices) => {
-      if (step.id === 'fix') initial = value;
-      return prompter.ask(step, value, choices);
+    const outcome = await wizard(setupFlow(ctx), ctx, {}, { ...prompter, ask: async (step, asked) => {
+      if (step.id === 'fix') initial = asked.initial;
+      return prompter.ask(step, asked);
     } });
     assert.equal(initial, false);
     assert.equal(outcome.status, 'run');
@@ -135,9 +139,9 @@ describe('setup flow', () => {
     const ctx = context({ pinned: 'octocat', cwd: '/work/project' });
     const prompter = scripted([['account', 'octocat'], ['guard', true], ['review', 'run']]);
     let initial: unknown;
-    const outcome = await wizard(setupFlow(ctx), ctx, {}, { ...prompter, ask: async (step, value, choices) => {
-      if (step.id === 'account') initial = value;
-      return prompter.ask(step, value, choices);
+    const outcome = await wizard(setupFlow(ctx), ctx, {}, { ...prompter, ask: async (step, asked) => {
+      if (step.id === 'account') initial = asked.initial;
+      return prompter.ask(step, asked);
     } });
     assert.equal(initial, 'octocat');
     if (outcome.status !== 'run') return;
@@ -179,7 +183,7 @@ describe('setup flow', () => {
     assert.doesNotMatch(shown, /\x1b/);
     assert.match(shown, /\\x1b/);
     const ctx = context({ owner: 'octo\x1b]0;x\x07org' });
-    for (const line of setupFlow(ctx).review({ account: 'octocat', guard: true }, ctx).summary) {
+    for (const line of textOf(setupFlow(ctx).review({ account: 'octocat', guard: true }, ctx))) {
       assert.doesNotMatch(line, /[\x00-\x1f\x7f]/);
     }
   });
@@ -202,6 +206,37 @@ describe('setup flow', () => {
     assert.deepEqual(argvOf(answers, ctx), [['use', '--', 'octocat']]);
   });
 
+  test('the review lists each command as a numbered plain step, the command under it', () => {
+    const ctx = context({ owner: 'octo-org', recorded: {}, fixLines: ['  global  credential.helper = gh'] });
+    const answers = { account: NEW_ACCOUNT, newAccount: 'octo-work', host: 'github', name: 'Octo Work', email: 'work@example.invalid',
+      allowOwner: true, guard: true, fix: true };
+    const review = setupFlow(ctx).review(answers, ctx);
+    assert.equal(review.settled, false);
+    assert.deepEqual(review.steps.map((step) => step.what.split(' ').slice(0, 3).join(' ')),
+      ['Record the account', 'Allow pushes to', 'Stop gh answering', 'Pin this clone', 'Turn on the']);
+    assert.deepEqual(review.steps.map((step) => step.command), planCommands(answers, ctx).map((command) => formatCommand(command.argv)));
+    assert.deepEqual(review.steps[2]!.detail, ['  global  credential.helper = gh'], 'what fix removes, under its step');
+  });
+
+  test('a clone already pinned to that account, as recorded, is settled; anything left to do is not', () => {
+    const settled = { pinned: 'octocat', pinIntact: true, guard: 'on' as const };
+    const reviewOf = (overrides: Parameters<typeof context>[0], answers: Answers = { account: 'octocat' }): Review => {
+      const ctx = context({ ...settled, ...overrides });
+      return setupFlow(ctx).review(answers, ctx);
+    };
+    assert.equal(reviewOf({}).settled, true);
+    assert.equal(reviewOf({ cwd: 'elsewhere' }).settled, true, '--cwd changes the argv, not the answer');
+    assert.equal(reviewOf({ guard: 'off' }, { account: 'octocat', guard: false }).settled, true, 'the guard declined is still nothing to do');
+    assert.equal(reviewOf({ pinIntact: false }).settled, false);
+    assert.equal(reviewOf({ pinned: 'octo-work' }).settled, false);
+    assert.equal(reviewOf({ ghIsHelper: true }).settled, false, 'use would warn the pin is not honoured');
+    assert.equal(reviewOf({ owner: 'octo-org' }).settled, false, 'use would warn the guard refuses that owner');
+    assert.equal(reviewOf({ owner: 'octo-org', allowed: ['octo-org'] }).settled, true);
+    assert.equal(reviewOf({ guard: 'off' }, { account: 'octocat', guard: true }).settled, false);
+    assert.equal(reviewOf({}, { account: 'octocat', gh: true }).settled, false);
+    assert.match(reviewOf({}).title, /already set up/);
+  });
+
   test('missing flags for --no-input are named', () => {
     const recorded = context().recorded;
     assert.deepEqual(missingFlags({}, recorded), ['<account>']);
@@ -212,8 +247,8 @@ describe('setup flow', () => {
   test('where the host has no credential pin, the review says so rather than claiming one (ADR-009)', () => {
     const ctx = context({ host: 'azdo', credentialPinned: false });
     const review = setupFlow(ctx).review({ account: 'octocat', guard: false }, ctx);
-    assert.ok(review.summary.some((line) => /not pinned by repown/.test(line)), review.summary.join('\n'));
-    assert.ok(!review.summary.some((line) => /^pushes as {2}octocat$/.test(line)));
+    assert.ok(textOf(review).some((line) => /repown pins the sign-in on GitHub only/.test(line)), textOf(review).join('\n'));
+    assert.ok(!textOf(review).some((line) => /push as octocat/.test(line)));
   });
 
   test('a history that could not be read is said, not shown as clean', () => {
@@ -331,6 +366,10 @@ describe('repown setup, without a terminal', () => {
     assert.equal(run.status, 0, run.stderr);
     assert.match(localConfig(at), /account = octocat/);
     assert.ok(existsSync(hook(at)));
+    assert.match(run.stderr, /step 1 of 2: Pin this clone to octocat/);
+    assert.match(run.stderr, /step 2 of 2: Turn on the push guard/);
+    assert.match(run.stdout, /done: this clone is set up for octocat/);
+    assert.match(run.stdout, /check it any time: repown/);
   });
 
   test('--no-input without --guard leaves the guard off', () => {
@@ -440,6 +479,15 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.equal(await run([['account', 'octocat'], ['guard', true], ['review', 'run']]), 0);
     assert.match(localConfig(at), /account = octocat/);
     assert.ok(existsSync(hook(at)));
+  });
+
+  test('already set up: Done exits 0 and writes nothing; Apply again pins as before', async () => {
+    assert.equal(await run([['account', 'octocat'], ['guard', false], ['review', 'run']]), 0);
+    const before = localConfig(at);
+    assert.equal(await run([['account', 'octocat'], ['guard', false], ['review', 'done']]), 0);
+    assert.equal(localConfig(at), before);
+    assert.equal(await run([['account', 'octocat'], ['guard', false], ['review', 'run']]), 0);
+    assert.equal(localConfig(at), before);
   });
 
   test('Decline exits 1 and writes nothing', async () => {

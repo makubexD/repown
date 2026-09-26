@@ -48,6 +48,8 @@ export interface SetupContext {
 export interface PlannedCommand {
   /** For repown: the command path, options, `--`, positionals. For git: the git argv. */
   readonly argv: readonly string[];
+  /** What it does, in plain words: the review's numbered step, and the run's progress line. */
+  readonly what: string;
 }
 
 const lower = (value: string): string => value.toLowerCase();
@@ -72,7 +74,7 @@ function steps(ctx: SetupContext): Step<SetupContext>[] {
       hint: 'its commits and pushes go out as this account',
       when: () => Object.keys(ctx.recorded).length > 0,
       choices: () => accountChoices(ctx), initial: () => defaultAccount(ctx),
-      detail: () => (ctx.pinned ? 'this clone is pinned to ' + ctx.pinned + ' now' : undefined) },
+      detail: () => (ctx.pinned ? 'currently pinned to ' + ctx.pinned : undefined) },
     { id: 'newAccount', kind: 'text', flag: '<account>', message: 'Account login',
       hint: 'your user name on the host, e.g. octocat', when: (answers) => isNew(answers),
       validate: (value) => newAccountProblem(String(value), ctx) },
@@ -177,7 +179,21 @@ export function planCommands(answers: Answers, ctx: SetupContext): PlannedComman
     ['use', ...(answers['gh'] === true ? ['--gh'] : []), ...cwd, '--', account],
     answers['guard'] === true ? ['guard', 'on', ...cwd] : null,
   ];
-  return planned.filter((argv): argv is readonly string[] => argv !== null).map((argv) => ({ argv }));
+  return planned.filter((argv): argv is readonly string[] => argv !== null).map((argv) => ({ argv, what: whatOf(argv, answers, ctx) }));
+}
+
+/** What a planned command does, in words for someone who has never used repown. */
+function whatOf(argv: readonly string[], answers: Answers, ctx: SetupContext): string {
+  const account = accountOf(answers);
+  if (argv[0] === 'accounts') {
+    return 'Record the account ' + account + ' (' + String(answers['name']) + ' <' + String(answers['email']) + '>) on this machine, for any clone';
+  }
+  if (argv[0] === 'git') return 'Allow pushes to ' + ctx.owner + '\'s repositories from this clone';
+  if (argv[0] === 'fix') return 'Stop gh answering git\'s sign-in requests, on this whole machine (undo: gh auth setup-git)';
+  if (argv[0] === 'guard') return 'Turn on the push guard: a pre-push hook checks every push before it leaves';
+  const what = ctx.credentialPinned ? 'its name, email and push account' : 'its name and email';
+  const gh = answers['gh'] === true ? '; and make ' + account + ' gh\'s active account' : '';
+  return 'Pin this clone to ' + account + ': ' + what + ' go in .git/config, which is never pushed' + gh;
 }
 
 function allowOwnerLine(ctx: SetupContext): string[] {
@@ -223,27 +239,81 @@ export function missingFlags(given: Answers, recorded: Readonly<Record<string, u
 // ---------------------------------------------------------------- the review
 
 function review(answers: Answers, ctx: SetupContext): Review {
-  return { summary: summary(answers, ctx).map(printable), commands: planCommands(answers, ctx).map((command) => formatCommand(command.argv)) };
+  const plan = planCommands(answers, ctx);
+  const steps = plan.map((command) => ({
+    what: printable(command.what), command: formatCommand(command.argv),
+    detail: command.argv[0] === 'fix' ? (ctx.fixLines ?? []).map(printable) : [],
+  }));
+  if (settled(answers, ctx, plan)) {
+    return { title: 'This clone is already set up', headline: settledLines(answers, ctx).map(printable), steps,
+      notes: ['Checked: this clone is pinned to ' + printable(accountOf(answers)) + ', exactly as recorded.',
+        'Check it any time: repown    this machine: repown doctor'], settled: true };
+  }
+  return { title: 'Review: nothing has changed yet', headline: [printable(headline(answers, ctx))], steps,
+    notes: notes(answers, ctx).map(printable), settled: false };
 }
 
-function summary(answers: Answers, ctx: SetupContext): string[] {
+/**
+ * Nothing to do: the only command left is pinning this clone to the account it is
+ * already pinned to, exactly as recorded, with nothing `use` would warn about -- an
+ * organisation the guard would refuse, or gh answering sign-ins instead of the pin.
+ */
+function settled(answers: Answers, ctx: SetupContext, plan: readonly PlannedCommand[]): boolean {
   const account = accountOf(answers);
-  const lines = [
-    'account    ' + account + (isNew(answers) ? '  (new: ' + String(answers['name']) + ' <' + String(answers['email']) + '>)' : ''),
-    ctx.credentialPinned ? 'pushes as  ' + account : 'pushes as  not pinned by repown on this host; its own sign-in decides',
-    'guard      ' + guardSummary(answers, ctx),
+  const onlyPin = plan.length === 1 && plan[0]!.argv[0] === 'use' && !plan[0]!.argv.includes('--gh');
+  return onlyPin && !isNew(answers) && account === ctx.pinned && ctx.pinIntact && !ctx.ghIsHelper && !ownerForeign(account, ctx);
+}
+
+function headline(answers: Answers, ctx: SetupContext): string {
+  const account = accountOf(answers);
+  if (ctx.credentialPinned) return 'This clone will commit and push as ' + account + '.';
+  return 'This clone will commit as ' + account + '. Its pushes sign in with whatever you use for this host: ' +
+    'repown pins the sign-in on GitHub only.';
+}
+
+function settledLines(answers: Answers, ctx: SetupContext): string[] {
+  const account = accountOf(answers);
+  const entry = ctx.recorded[account];
+  return [
+    'commits as  ' + (entry ? entry.name + ' <' + entry.email + '>' : account),
+    'pushes as   ' + (ctx.credentialPinned ? account : 'your own sign-in for this host (repown pins it on GitHub only)'),
+    'guard       ' + guardState(ctx),
   ];
-  if (ctx.pinned && lower(ctx.pinned) !== lower(account)) lines.push('note       switches this clone from ' + ctx.pinned);
-  if (answers['guard'] === true && ownerForeign(account, ctx) && answers['allowOwner'] !== true) {
-    lines.push('warning    the guard will refuse pushes to "' + ctx.owner + '" until it is allowed');
+}
+
+function guardState(ctx: SetupContext): string {
+  if (ctx.redirected) return 'not repown\'s: core.hooksPath sends hooks elsewhere';
+  if (ctx.guard === 'foreign') return 'not repown\'s: another tool owns the pre-push hook';
+  return ctx.guard === 'on' ? 'on: every push is checked before it leaves' : 'off: turn it on with repown guard on';
+}
+
+function notes(answers: Answers, ctx: SetupContext): string[] {
+  const account = accountOf(answers);
+  const lines: string[] = [];
+  if (ctx.pinned && lower(ctx.pinned) !== lower(account)) {
+    lines.push('This clone moves from ' + ctx.pinned + ' to ' + account + ': its next commits and pushes use ' + account +
+      '. Commits already made keep their author.');
   }
-  if (answers['fix'] === true) lines.push(...(ctx.fixLines ?? []));
+  const guard = guardNote(answers, ctx);
+  if (guard) lines.push(guard);
+  const guarded = answers['guard'] === true || ctx.guard === 'on';
+  if (guarded && ownerForeign(account, ctx) && answers['allowOwner'] !== true) {
+    lines.push('Warning: the guard will refuse pushes to "' + ctx.owner + '" until it is allowed.');
+  }
+  if (ctx.ghIsHelper && answers['fix'] !== true && ctx.credentialPinned) {
+    lines.push('Note: gh is still git\'s credential helper, so pushes sign in as gh\'s active account, not ' + account + '.');
+  }
   return lines;
 }
 
-function guardSummary(answers: Answers, ctx: SetupContext): string {
-  if (ctx.redirected) return 'left alone: core.hooksPath points hooks elsewhere';
-  if (ctx.guard === 'foreign') return 'left alone: another tool owns the pre-push hook';
-  if (ctx.guard === 'on') return 'already on';
-  return answers['guard'] === true ? 'turned on' : 'stays off';
+/** What happens to the guard, when no step says it already. */
+function guardNote(answers: Answers, ctx: SetupContext): string | null {
+  if (ctx.redirected) return 'The push guard stays off: core.hooksPath sends this clone\'s hooks elsewhere (see: repown guard status).';
+  if (ctx.guard === 'foreign') {
+    return 'The push guard stays off: another tool (husky, for example) owns this clone\'s pre-push hook. ' +
+      'To keep the check, call repown guard check from that hook (HOW-IT-WORKS card 10).';
+  }
+  if (ctx.guard === 'on') return 'The push guard is already on in this clone.';
+  return answers['guard'] === true ? null
+    : 'The push guard stays off: pushes are not checked (turn it on later: repown guard on).';
 }

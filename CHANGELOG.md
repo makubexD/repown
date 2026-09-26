@@ -9,8 +9,10 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 - New: `repown setup`, a guided setup of the clone you're in. It asks which account owns it
   (recording a new one), whether to switch gh, allow an organisation, turn the guard on and
-  stop gh being the credential helper; shows the exact commands; and runs them only when
-  you choose Run. Every answer is also a flag, and `--no-input` runs it from a script.
+  stop gh being the credential helper; shows each step in plain words with its exact
+  command; and runs them only when you choose Run. A clone that is already set up says so
+  and offers Done (exit 0, nothing written). Every answer is also a flag, and `--no-input`
+  runs it from a script.
   The other commands' output is unchanged (tests lock `fix --dry-run`, `use`'s hints and
   the help's exit codes).
 

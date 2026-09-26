@@ -35,15 +35,15 @@ test('the clack prompter answers the engine through its own keys, on the given s
     done?.('Read');
     assert.doesNotMatch(shown, /[◒◐◓◑]/);
     press(input, ENTER);
-    assert.equal(await prompter.ask(guard, true, [], 'only your address is in this history'), true);
+    assert.equal(await prompter.ask(guard, { initial: true, choices: [], detail: 'only your address is in this history', canGoBack: true }), true);
     press(input, ENTER);
-    assert.equal(await prompter.ask(name, '  Octo Cat ', []), 'Octo Cat', 'answers are trimmed, as in the plain prompter');
+    assert.equal(await prompter.ask(name, { initial: '  Octo Cat ', choices: [], detail: undefined, canGoBack: true }), 'Octo Cat', 'answers are trimmed, as in the plain prompter');
     press(input, DOWN, DOWN, ENTER);
-    assert.equal(await prompter.ask(guard, true, []), BACK);
+    assert.equal(await prompter.ask(guard, { initial: true, choices: [], detail: undefined, canGoBack: true }), BACK);
     press(input, ESC);
-    assert.equal(await prompter.ask(guard, true, []), CANCEL);
+    assert.equal(await prompter.ask(guard, { initial: true, choices: [], detail: undefined, canGoBack: true }), CANCEL);
     press(input, ENTER);
-    assert.equal(await prompter.review({ summary: ['account    octocat'], commands: ['repown use octocat'] }), 'run');
+    assert.equal(await prompter.review({ title: 'Review: nothing has changed yet', headline: [], notes: [], settled: false, steps: [{ what: 'Pin this clone to octocat', command: 'repown use octocat', detail: [] }] }), 'run');
   } finally {
     process.stdout.write = realWrite;
   }

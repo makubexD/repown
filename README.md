@@ -297,9 +297,9 @@ how often. It never changes anything.
 - **Every command:** `--cwd <dir>` works on all of them.
 - **Version:** `repown --version` (or `-v`).
 - **Exit codes:** `0` success, `1` failure or refusal, `2` usage error. `scan` exits `0`
-  whatever it finds; read its output, or its JSON, for the problems. `setup` also exits
-  `130` when cancelled or interrupted, and when one of its commands fails, that
-  command's own code.
+  whatever it finds; read its output, or its JSON, for the problems. `setup` exits `0` too
+  when the clone is already set up and you choose Done, `130` when cancelled or
+  interrupted, and when one of its commands fails, that command's own code.
 
 ## Configuration
 

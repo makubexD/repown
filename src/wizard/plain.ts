@@ -8,7 +8,8 @@
 
 import { createInterface, type Interface } from 'node:readline/promises';
 import type { Readable, Writable } from 'node:stream';
-import { BACK, CANCEL, type Answer, type Choice, type Prompter, type Reply, type Review, type ReviewChoice, type Step } from './engine.ts';
+import { BACK, CANCEL, type Answer, type Asked, type Choice, type Prompter, type Reply, type Review, type ReviewChoice, type Step } from './engine.ts';
+import { reviewLines, reviewOptions, reviewQuestion } from './review-text.ts';
 
 export interface Streams {
   readonly input: Readable;
@@ -18,10 +19,6 @@ export interface Streams {
 /** Typed at a text question, it means "go back" (never used for a real answer here). */
 export const BACK_WORD = '<';
 
-const REVIEW: readonly (readonly [ReviewChoice, string])[] = [
-  ['run', 'Run these commands'], ['back', 'Back'], ['edit', 'Change an answer'], ['decline', 'Decline'],
-];
-
 export function plainPrompter(streams: Streams): Prompter {
   // On a real terminal, readline must own it: only then does Ctrl-C arrive as its
   // SIGINT event (a cancel) instead of ending the process with a signal.
@@ -29,12 +26,13 @@ export function plainPrompter(streams: Streams): Prompter {
   const rl = createInterface({ input: streams.input, output: streams.output, terminal });
   const io = ioFor(rl, streams.output, terminal);
   return {
-    ask: (step, initial, choices, detail) => askStep(io, step, { initial, choices, detail }),
+    ask: (step, asked) => askStep(io, step, asked),
     review: (review) => showReview(io, review),
     pickStep: async (steps) => {
       io.say('Which answer do you want to change?');
-      const index = await pickNumber(io, steps.map((step) => step.message), 1);
-      return index === CANCEL ? CANCEL : steps[index]!.id;
+      const index = await pickNumber(io, [...steps.map((step) => step.message), 'Back to the review'], 1);
+      if (index === CANCEL) return CANCEL;
+      return index === steps.length ? BACK : steps[index]!.id;
     },
     note: (message) => io.say('  ' + message),
     close: () => rl.close(),
@@ -78,49 +76,43 @@ function queue(rl: Interface): Next {
   };
 }
 
-interface Asked {
-  readonly initial: Answer | undefined;
-  readonly choices: readonly Choice[];
-  readonly detail: string | undefined;
-}
-
-async function askStep(io: Io, step: Step<never>, { initial, choices, detail }: Asked): Promise<Reply> {
+async function askStep(io: Io, step: Step<never>, asked: Asked): Promise<Reply> {
+  const { initial, detail } = asked;
   io.say(step.message + (step.hint ? '  (' + step.hint + ')' : ''));
   if (detail) io.say('  ' + detail);
-  if (step.kind === 'select') return askSelect(io, choices, initial);
-  if (step.kind === 'confirm') return askConfirm(io, initial === true);
+  if (step.kind === 'select') return askSelect(io, asked);
+  if (step.kind === 'confirm') return askConfirm(io, initial === true, asked.canGoBack);
   const shown = typeof initial === 'string' && initial ? ' [' + initial + ']' : '';
-  io.say('  type ' + BACK_WORD + ' to go back');
+  if (asked.canGoBack) io.say('  type ' + BACK_WORD + ' to go back');
   const line = await prompt(io, '  >' + shown + ' ');
   if (line === null) return CANCEL;
   if (line === BACK_WORD) return BACK;
   return line || (typeof initial === 'string' ? initial : '');
 }
 
-async function askSelect(io: Io, choices: readonly Choice[], initial: Answer | undefined): Promise<Reply> {
+async function askSelect(io: Io, { choices, initial, canGoBack }: Asked): Promise<Reply> {
   const labels = choices.map((choice) => choice.label + (choice.hint ? '  -- ' + choice.hint : ''));
   const current = choices.findIndex((choice) => choice.value === initial);
-  const index = await pickNumber(io, [...labels, 'Back'], current >= 0 ? current + 1 : 1);
+  const index = await pickNumber(io, canGoBack ? [...labels, 'Back'] : labels, current >= 0 ? current + 1 : 1);
   if (index === CANCEL) return CANCEL;
   return index === choices.length ? BACK : choices[index]!.value;
 }
 
-async function askConfirm(io: Io, yes: boolean): Promise<Reply> {
-  const index = await pickNumber(io, ['Yes', 'No', 'Back'], yes ? 1 : 2);
+async function askConfirm(io: Io, yes: boolean, canGoBack: boolean): Promise<Reply> {
+  const index = await pickNumber(io, canGoBack ? ['Yes', 'No', 'Back'] : ['Yes', 'No'], yes ? 1 : 2);
   if (index === CANCEL) return CANCEL;
   return index === 2 ? BACK : index === 0;
 }
 
 async function showReview(io: Io, review: Review): Promise<ReviewChoice> {
   io.say('');
-  io.say('Review -- nothing has changed yet');
-  for (const line of review.summary) io.say('  ' + line);
+  io.say(review.title);
+  for (const line of reviewLines(review)) io.say(line ? '  ' + line : '');
   io.say('');
-  io.say('This runs:');
-  for (const command of review.commands) io.say('  ' + command);
-  io.say('');
-  const index = await pickNumber(io, REVIEW.map(([, label]) => label), 1);
-  return index === CANCEL ? CANCEL : REVIEW[index]![0];
+  io.say(reviewQuestion(review));
+  const options = reviewOptions(review);
+  const index = await pickNumber(io, options.map((option) => option.label + (option.hint ? '  -- ' + option.hint : '')), 1);
+  return index === CANCEL ? CANCEL : options[index]!.value;
 }
 
 /** Lists numbered options and reads a number until it's valid; Enter takes the default. */

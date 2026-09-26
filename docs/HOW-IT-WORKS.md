@@ -454,10 +454,10 @@ repown writes nothing else to a clone: no tracked file, nothing that gets commit
 
 ### 13. Guided setup
 
-**`repown setup` asks, shows the commands, then runs them.** Nothing it does is special:
-every answer is a flag of `accounts add`, `use`, `guard on` or `fix`, or the one git line
-card 8 uses for an organisation, and the review shows those commands before anything
-changes.
+**`repown setup` asks, shows each step in plain words with its command, then runs them.**
+Nothing it does is special: every answer is a flag of `accounts add`, `use`, `guard on`
+or `fix`, or the one git line card 8 uses for an organisation, and the review shows those
+commands before anything changes. A clone that already needs nothing says so.
 
 <details><summary>Show how</summary>
 
@@ -471,7 +471,9 @@ flowchart TD
   F -->|no| X3["🔴 exit 2 (or 1): nothing written"]
   F -->|yes| A["account: a recorded one, or a new one<br/>(host, name, email; suggested from the profile)"]
   A --> Q["only what applies here:<br/>switch gh · allow the organisation · the guard · gh as helper"]
-  Q --> V["review: the summary and the exact commands"]
+  Q --> K{"already pinned to it, as recorded,<br/>and nothing else to do?"}
+  K -->|yes| D["🟢 already set up: Done (exit 0, nothing written)<br/>or apply the same settings again"]
+  K -->|no| V["review: numbered plain steps, each with its command"]
   V -->|Run| C["accounts add → allowOwner → fix → use → guard on<br/>stops at the first failure, listing what didn't run"]
   V -->|Back / Change an answer| A
   V -->|Decline, Esc or Ctrl-C| N["⚪ nothing changed (exit 1, or 130)"]
@@ -492,7 +494,8 @@ the guard suits clones where you push only your own commits (ADR-005).
 
 | Variant | Command |
 | --- | --- |
-| Go back | pick **Back** at any choice, or type `<` at a text question |
+| Go back | pick **Back** at any choice from the second question on, or type `<` at a text question; **← Back to the review** leaves "Change an answer" |
+| Already set up | "already set up" means every key `use` writes holds exactly the recorded value in `.git/config` (`include`d files aren't read), no organisation is left unallowed, and gh isn't the credential helper |
 | No terminal (CI, a script) | `repown setup octocat --guard --no-input`: runs with the flags, or exits 2 naming what's missing. Every question not given as a flag counts as No, including the two that default to Yes; `--fix` does nothing where gh isn't the helper |
 | A new account from a script | `repown setup octo-work --name "Octo Work" --email octo-work@users.noreply.github.com --no-input` |
 

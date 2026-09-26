@@ -148,12 +148,19 @@ interface Guided {
 
 async function runGuided(given: Answers, ctx: SetupContext, { git, prompter }: Guided): Promise<number> {
   const outcome = await wizard(setupFlow(ctx), ctx, given, prompter);
-  if (outcome.status === 'cancelled') { prompter.outro?.('Cancelled'); out.warn('setup', 'cancelled; nothing was changed.'); return CANCELLED; }
-  if (outcome.status === 'declined') { prompter.outro?.('Declined'); out.warn('setup', 'declined; nothing was changed.'); return 1; }
+  if (outcome.status === 'done') { prompter.outro?.('Nothing changed: this clone was already set up'); return 0; }
+  if (outcome.status !== 'run') return stoppedBefore(outcome.status, prompter);
   prompter.outro?.('Running the commands');
   // The commands own the terminal from here: none of them may find it held.
   prompter.close();
   return execute(planCommands(outcome.answers, ctx), git);
+}
+
+function stoppedBefore(status: 'cancelled' | 'declined', prompter: Prompter): number {
+  prompter.outro?.(status === 'cancelled' ? 'Cancelled' : 'Declined');
+  out.warn('setup', status + '; nothing was changed.');
+  out.detail('run repown setup again any time');
+  return status === 'cancelled' ? CANCELLED : 1;
 }
 
 /**
@@ -183,6 +190,7 @@ async function execute(plan: readonly PlannedCommand[], git: Git): Promise<numbe
   process.on('SIGINT', onInterrupt);
   try {
     for (const [index, planned] of plan.entries()) {
+      out.detail('step ' + (index + 1) + ' of ' + plan.length + ': ' + printable(planned.what));
       out.detail('> ' + formatCommand(planned.argv));
       const code = await runOne(planned.argv, git);
       if (code !== 0 || interrupted) return stopped(plan.slice(index + 1), interrupted ? CANCELLED : code);
@@ -190,9 +198,16 @@ async function execute(plan: readonly PlannedCommand[], git: Git): Promise<numbe
   } finally {
     process.off('SIGINT', onInterrupt);
   }
-  out.line();
-  out.line('  next: repown doctor    (what serves credentials on this machine)');
+  finished(plan);
   return 0;
+}
+
+/** The account the plan pinned, and where to look next. */
+function finished(plan: readonly PlannedCommand[]): void {
+  const pinned = plan.find((planned) => planned.argv[0] === 'use')?.argv.at(-1) ?? '';
+  out.line();
+  out.line('  done: this clone is set up for ' + printable(pinned));
+  out.line('  check it any time: repown    this machine: repown doctor');
 }
 
 function stopped(remaining: readonly PlannedCommand[], code: number): number {

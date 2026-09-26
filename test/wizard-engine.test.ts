@@ -9,12 +9,14 @@ import { wizard, BACK, CANCEL, type Answer, type Flow, type Prompter, type Reply
 type Entry =
   | readonly ['ask', string, Reply]
   | readonly ['review', ReviewChoice]
-  | readonly ['pick', string | typeof CANCEL];
+  | readonly ['pick', string | typeof BACK | typeof CANCEL];
 
 interface Scripted extends Prompter {
   readonly initials: Record<string, Answer | undefined>;
   readonly notes: string[];
   readonly reviews: string[][];
+  /** Steps asked without a way back: the first question of the walk. */
+  readonly withoutBack: string[];
 }
 
 function scripted(script: Entry[]): Scripted {
@@ -30,9 +32,14 @@ function scripted(script: Entry[]): Scripted {
     initials: {},
     notes: [],
     reviews: [],
-    ask: async (step, initial) => { prompter.initials[step.id] = initial; return next('ask', step.id)[2] as Reply; },
-    review: async (review) => { prompter.reviews.push([...review.commands]); return next('review')[1] as ReviewChoice; },
-    pickStep: async () => next('pick')[1] as string,
+    withoutBack: [],
+    ask: async (step, asked) => {
+      prompter.initials[step.id] = asked.initial;
+      if (!asked.canGoBack) prompter.withoutBack.push(step.id);
+      return next('ask', step.id)[2] as Reply;
+    },
+    review: async (review) => { prompter.reviews.push(review.steps.map((step) => step.command)); return next('review')[1] as ReviewChoice; },
+    pickStep: async () => next('pick')[1] as string | typeof BACK | typeof CANCEL,
     note: (message) => { prompter.notes.push(message); },
     close: () => {},
   };
@@ -51,7 +58,8 @@ const FLOW: Flow<Context> = {
       initial: (answers) => String(answers['account']) },
     { id: 'guard', kind: 'confirm', message: 'Guard', hint: '', flag: '--guard', initial: () => true },
   ],
-  review: (answers) => ({ summary: [], commands: Object.entries(answers).map(([key, value]) => key + '=' + String(value)) }),
+  review: (answers) => ({ title: '', headline: [], notes: [], settled: false,
+    steps: Object.entries(answers).map(([key, value]) => ({ what: key, command: key + '=' + String(value), detail: [] })) }),
 };
 
 const NONE: Context = { recorded: [] };
@@ -122,6 +130,27 @@ describe('wizard engine', () => {
     assert.deepEqual(await wizard(FLOW, NONE, {}, atReview), { status: 'cancelled' });
     const atPick = scripted([['ask', 'account', 'octocat'], ['ask', 'name', 'x'], ['ask', 'guard', true], ['review', 'edit'], ['pick', CANCEL]]);
     assert.deepEqual(await wizard(FLOW, NONE, {}, atPick), { status: 'cancelled' });
+  });
+
+  test('Done ends the wizard with nothing to run', async () => {
+    const prompter = scripted([['ask', 'account', 'octocat'], ['ask', 'name', 'x'], ['ask', 'guard', true], ['review', 'done']]);
+    assert.deepEqual(await wizard(FLOW, NONE, {}, prompter), { status: 'done' });
+  });
+
+  test('only the first question asked comes without a way back, whichever it is', async () => {
+    const prompter = scripted([['ask', 'account', 'octocat'], ['ask', 'name', 'x'], ['ask', 'guard', BACK], ['ask', 'name', BACK],
+      ['ask', 'account', 'octocat'], ['ask', 'name', 'x'], ['ask', 'guard', true], ['review', 'run']]);
+    await wizard(FLOW, NONE, {}, prompter);
+    assert.deepEqual(prompter.withoutBack, ['account', 'account']);
+    const given = scripted([['ask', 'name', 'x'], ['ask', 'guard', true], ['review', 'run']]);
+    await wizard(FLOW, NONE, { account: 'octocat' }, given);
+    assert.deepEqual(given.withoutBack, ['name']);
+  });
+
+  test('Back from Change an answer shows the review again', async () => {
+    const prompter = scripted([['ask', 'account', 'octocat'], ['ask', 'name', 'x'], ['ask', 'guard', true], ['review', 'edit'],
+      ['pick', BACK], ['review', 'run']]);
+    assert.equal((await wizard(FLOW, NONE, {}, prompter)).status, 'run');
   });
 
   test('with every value given, Change an answer has nothing to offer and shows the review again', async () => {

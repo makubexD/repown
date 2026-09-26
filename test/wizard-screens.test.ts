@@ -14,7 +14,7 @@ const twoAccounts = {
 };
 
 describe('repown setup, played with key presses', () => {
-  test('S1 a clone already set up says so, and Done changes nothing', { todo: 'task 3' }, async () => {
+  test('S1 a clone already set up says so, and Done changes nothing', async () => {
     const ctx = setupContext({ pinned: 'octocat', guard: 'on', pinIntact: true });
     const { outcome, screen } = await play(ctx, [[enter], [enter]]);
     assert.equal(outcome.status, 'done', screen);
@@ -52,14 +52,14 @@ describe('repown setup, played with key presses', () => {
     assert.match(screen, /Stop gh answering git's sign-in requests/);
   });
 
-  test('S4 on Azure DevOps the review says who decides the push sign-in', { todo: 'task 4' }, async () => {
+  test('S4 on Azure DevOps the review says who decides the push sign-in', async () => {
     const ctx = setupContext({ host: 'azdo', owner: 'octo-org', credentialPinned: false });
     const { screen } = await play(ctx, [[enter], [enter], [enter], [esc]]);
     assert.match(screen, /repown pins the sign-in on GitHub only/);
     assert.doesNotMatch(screen, /not pinned by repown on this host/);
   });
 
-  test('S5 a hook another tool owns comes with what to do about it', { todo: 'task 4' }, async () => {
+  test('S5 a hook another tool owns comes with what to do about it', async () => {
     const { screen } = await play(setupContext({ guard: 'foreign' }), [[enter], [esc]]);
     assert.match(screen, /another tool \(husky, for example\) owns/);
     assert.match(screen, /repown guard check/);
@@ -75,14 +75,14 @@ describe('repown setup, played with key presses', () => {
     assert.match(screen, /use letters, digits and \. _ @ - only/);
   });
 
-  test('S7 the first question asked has no Back', { todo: 'task 3' }, async () => {
+  test('S7 the first question asked has no Back', async () => {
     const recorded = await play(setupContext(), [[esc]]);
     assert.doesNotMatch(recorded.screen, /← Back/);
     const fresh = await play(setupContext({ recorded: {} }), [[esc]]);
     assert.doesNotMatch(fresh.screen, /type < to go back/);
   });
 
-  test('S8 Change an answer can return to the review', { todo: 'task 3' }, async () => {
+  test('S8 Change an answer can return to the review', async () => {
     const ctx = setupContext({ owner: 'octo-org' });
     const { outcome, screen } = await play(ctx, [[enter], [enter], [enter], [down, down, enter], [up, enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);

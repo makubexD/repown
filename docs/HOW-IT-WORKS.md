@@ -141,7 +141,11 @@ sequenceDiagram
 
 | Variant | What happens |
 | --- | --- |
-| `--gh` | also runs `gh auth switch`, so `gh pr create` acts as the same account |
+| `--gh`, already signed in | `gh auth switch`, so `gh pr create` acts as the same account |
+| `--gh`, not signed in, in a terminal | `gh auth login` opens the browser; sign in there as this account (a private window helps). gh before 2.40.0 replaces an account, so repown refuses and tells you to upgrade |
+| gh's question | "Authenticate Git with your GitHub credentials?": not asked when gh is already the helper. Another helper (Git Credential Manager, or whatever is configured): Yes also stores this sign-in there, so the first push won't ask again. No helper: answer No. Yes would make gh answer git's sign-in requests for every repository, and repown would then need `repown fix` |
+| `--gh`, gh becomes the helper | 🟡 when gh was not the helper before the login and is afterwards: `fix: repown fix` |
+| `--gh`, no terminal, not signed in | 🟡 `<account> isn't signed in to gh`. `fix: gh auth login, then repown use <account> --gh`. No login |
 | No terminal and no record | 🔴 stops and tells you to run `repown accounts add <account> …` |
 | SSH remote | no credential key is written, because your SSH key decides; 🟡 `use` says credentials are not pinned for this remote |
 | Azure DevOps or another host | identity and guard work; 🟡 credentials are not pinned ([ADR-009](decisions/ADR-009-hosts-claim-only-measured.md)). On Azure DevOps the owner is the organisation, so allow it with `repown.allowOwner` |

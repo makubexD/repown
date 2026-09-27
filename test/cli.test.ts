@@ -26,11 +26,11 @@ interface Run {
   readonly stderr: string;
 }
 
-function repown(args: readonly string[], options: { cwd?: string; input?: string } = {}): Run {
+function repown(args: readonly string[], options: { cwd?: string; input?: string; env?: NodeJS.ProcessEnv } = {}): Run {
   const result = spawnSync(process.execPath, [CLI, ...args], {
     cwd: options.cwd,
     input: options.input ?? '',
-    env: process.env,
+    env: options.env ?? process.env,
     encoding: 'utf8',
   });
   return { status: result.status ?? -1, stdout: result.stdout, stderr: result.stderr };
@@ -521,6 +521,41 @@ describe('repown use', () => {
   });
 });
 
+// No TTY (spawnSync pipes stdin and stderr). The fake is the only `gh` on PATH:
+// a directory that already contains gh is dropped, so this cannot fall through
+// to the machine's gh. The fake records argv and never runs login, logout,
+// switch or setup-git.
+describe('repown use --gh with no terminal', () => {
+  let box: Sandbox;
+  let bin: string;
+  let log: string;
+
+  beforeEach(() => {
+    box = sandbox();
+    bin = join(box.dir, '..', 'fake-bin');
+    log = join(box.dir, '..', 'gh.log');
+    mkdirSync(bin);
+    installFakeGh(bin);
+    recordOctocat(box);
+  });
+  afterEach(() => box.dispose());
+
+  test('G3: octocat is not in gh, so it warns and still pins', () => {
+    const env = ghEnv(bin, log);
+    const version = spawnSync('gh', ['--version'], { env, encoding: 'utf8' });
+    assert.match(version.stdout, /repown-fake-gh/, version.stderr + (version.error?.message ?? ''));
+    const run = repown(['use', 'octocat', '--gh'], { cwd: box.dir, env });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout, /OK\s+identity\s+Octo Cat <octocat@example\.invalid>\s+push-as:octocat/);
+    assert.match(run.stderr, /WARN\s+gh\s+octocat isn't signed in to gh/);
+    assert.match(run.stderr, /fix: gh auth login, then repown use octocat --gh/);
+    assert.equal(box.git('config', '--local', '--get', 'repown.account'), 'octocat');
+    const calls = readFileSync(log, 'utf8');
+    assert.match(calls, /auth status/);
+    assert.doesNotMatch(calls, /login|logout|switch|setup-git/);
+  });
+});
+
 describe('repown scan', () => {
   let box: Sandbox;
   beforeEach(() => {
@@ -882,6 +917,79 @@ function fakeProgram(choose: (() => Promise<string>) | undefined, ran: string[])
     ...(choose ? { chooseDefault: choose } : {}),
     topHelp: () => ['TOP HELP'],
   };
+}
+
+const FAKE_GH_CS = `
+using System;
+using System.IO;
+class FakeGh {
+  static int Main(string[] args) {
+    var log = Environment.GetEnvironmentVariable("GH_FAKE_LOG");
+    if (!string.IsNullOrEmpty(log)) File.AppendAllText(log, string.Join(" ", args) + "\\n");
+    if (args.Length == 1 && args[0] == "--version") {
+      Console.WriteLine("gh version 2.88.1 (2026-03-12)");
+      Console.WriteLine("repown-fake-gh");
+      return 0;
+    }
+    if (args.Length >= 2 && args[0] == "auth" && args[1] == "status") {
+      Console.WriteLine("{\\"hosts\\":{\\"github.com\\":[{\\"login\\":\\"octo-work\\",\\"active\\":true}]}}");
+      return 0;
+    }
+    return 97;
+  }
+}
+`;
+
+const FAKE_GH_SH = `#!/bin/sh
+if [ -n "$GH_FAKE_LOG" ]; then printf '%s\\n' "$*" >> "$GH_FAKE_LOG"; fi
+if [ "$1" = "--version" ]; then
+  echo "gh version 2.88.1 (2026-03-12)"
+  echo "repown-fake-gh"
+  exit 0
+fi
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo '{"hosts":{"github.com":[{"login":"octo-work","active":true}]}}'
+  exit 0
+fi
+exit 97
+`;
+
+function ghEnv(bin: string, log: string): NodeJS.ProcessEnv {
+  const path = (process.env['PATH'] ?? '').split(delimiter).filter((dir) => !dirHasGh(dir));
+  return { ...process.env, GH_FAKE_LOG: log, PATH: bin + delimiter + path.join(delimiter) };
+}
+
+function dirHasGh(dir: string): boolean {
+  return ['gh', 'gh.exe', 'gh.cmd', 'gh.bat'].some((name) => dir !== '' && existsSync(join(dir, name)));
+}
+
+function recordOctocat(box: Sandbox): void {
+  const dir = join(box.dir, '..', 'repown-config');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'accounts.json'), JSON.stringify({
+    accounts: { octocat: { name: 'Octo Cat', email: 'octocat@example.invalid' } },
+  }));
+}
+
+function installFakeGh(bin: string): void {
+  if (process.platform === 'win32') compileFakeGh(bin);
+  else writeFileSync(join(bin, 'gh'), FAKE_GH_SH, { mode: 0o755 });
+}
+
+function compileFakeGh(bin: string): void {
+  const source = join(bin, 'fake-gh.cs');
+  writeFileSync(source, FAKE_GH_CS);
+  const run = spawnSync(cscPath(), ['/nologo', '/out:' + join(bin, 'gh.exe'), source], { encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+}
+
+function cscPath(): string {
+  const root = join(process.env['WINDIR'] ?? 'C:\\Windows', 'Microsoft.NET');
+  const found = ['Framework64', 'Framework']
+    .map((name) => join(root, name, 'v4.0.30319', 'csc.exe'))
+    .find((path) => existsSync(path));
+  if (!found) throw new Error('csc.exe is not installed');
+  return found;
 }
 
 async function capture(run: () => Promise<number>): Promise<{ code: number; out: string }> {

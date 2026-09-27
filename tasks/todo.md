@@ -3,14 +3,14 @@
 Each task: failing test, code, docs on its `Docs:` line, one commit.
 
 - [x] 0. Plan. Docs: none
-- [ ] 1. Research (report only, nothing in the repo): the `gh auth login` flags for
+- [x] 1. Research (report only, nothing in the repo): the `gh auth login` flags for
   github.com with the browser. Does `-p https` prompt about, or run, `setup-git`? Does
   `--skip-ssh-key` apply? Is gh's `git_protocol` config written? From which gh versions?
   Recommend flags that never make gh git's helper; if impossible, ask before Task 3.
   Docs: none
 - [x] 2. Status fix line (G7): `ghAdvice` picks switch vs login from
   `auth.gh.value.accounts`. Docs: HOW-IT-WORKS status card table
-- [ ] 3. `use --gh` signs in (G2–G5): a terminal-inheriting runner in `src/core/exec.ts`
+- [x] 3. `use --gh` signs in (G2–G5): a terminal-inheriting runner in `src/core/exec.ts`
   (`shell: false`, exec itself writes nothing); `ghLogin(host)` in
   `src/core/credential/gh.ts`; a pure `ghAction(account, auth, interactive)` →
   `'switch' | 'login' | 'advise' | 'none'`; `inspectAuth` again after a login.

@@ -46,8 +46,12 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   one exception is the owner's GitHub handle, which a public repo's URL, package.json
   and LICENSE can't avoid.
 - **`src/core/exec.ts` is the only place that spawns processes.** It never writes to the
-  console (credential helpers print live passwords), and a non-zero exit resolves rather
-  than rejects (`git config --get` exits 1 for "not set"). Always `shell: false`.
+  console, and a non-zero exit resolves rather than rejects (`git config --get` exits 1
+  for "not set"). Always `shell: false`. `run` returns the child's output and never shows
+  it (credential helpers print live passwords). `inherit` hands the terminal to the child
+  (`stdio: 'inherit'`) and is used only for `gh auth login`, only in a terminal: repown
+  never sees what the child prints, so no credential passes through repown. A spawn error
+  such as ENOENT resolves as not installed, for both.
 - **Every `git log` passes `--no-show-signature`.** `scan` runs it in repositories
   it merely found, and their config can set `gpg.program`.
 - **A skipped check must never look like a passed one.** Failures that are answers

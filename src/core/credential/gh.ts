@@ -5,6 +5,10 @@
 // reporting -- a pull request opened from the wrong account on a public repo is
 // as permanent as a commit.
 //
+// `ghLogin` does not ask. It hands the terminal to `gh auth login` and never
+// reads what gh prints. Below gh 2.40.0 that login is refused: it would
+// replace the host's account.
+//
 // NOT `gh api user`. That spent an API round trip to learn one login and, the
 // reason it had to go, returned nothing on failure. Callers guarded their
 // warnings on the value being truthy, so an offline machine or an expired token
@@ -17,7 +21,7 @@
 // installed" and from "gh is active as nobody". Collapsing it into either is the
 // bug this shape exists to prevent.
 
-import { run, succeeded, notInstalled, output } from '../exec.ts';
+import { run, inherit, succeeded, notInstalled, output, type ExecResult, type InheritFn } from '../exec.ts';
 import { ok, err, type Result } from '../result.ts';
 
 export interface GhAccount {
@@ -92,4 +96,71 @@ export async function ghSwitch(login: string): Promise<Result<void>> {
   if (notInstalled(result)) return err('gh is not installed');
   if (!succeeded(result)) return err(result.stderr.trim() || `gh auth switch exited ${result.code}`);
   return ok(undefined);
+}
+
+/**
+ * gh before 2.40.0 replaces the host's one account on `auth login`. `unknown`
+ * means the text was not a version, and login must not run in that case either.
+ */
+export type GhLoginVersion = 'ready' | 'old' | 'unknown';
+
+const LOGIN_MIN: readonly [number, number, number] = [2, 40, 0];
+
+export function ghLoginVersion(text: string): GhLoginVersion {
+  const found = /gh version (\d+)\.(\d+)\.(\d+)/.exec(text);
+  if (!found) return 'unknown';
+  return atLeast(found, LOGIN_MIN) ? 'ready' : 'old';
+}
+
+export async function readGhLoginVersion(): Promise<GhLoginVersion> {
+  const result = await run('gh', ['--version']);
+  return succeeded(result) ? ghLoginVersion(result.stdout) : 'unknown';
+}
+
+export type GhLoginError =
+  | { readonly kind: 'cancelled' }
+  | { readonly kind: 'failed'; readonly reason: string };
+
+/**
+ * Browser login for one host. The child inherits the terminal (`inherit`), with
+ * `GH_TOKEN` and `GITHUB_TOKEN` removed so gh will store the new sign-in.
+ */
+export async function ghLogin(host: string, runner: InheritFn = inherit): Promise<Result<void, GhLoginError>> {
+  const result = await runner('gh', loginArgs(host), { env: withoutGhTokens(process.env) });
+  return loginResult(result);
+}
+
+function loginArgs(host: string): string[] {
+  return ['auth', 'login', '--hostname', host, '--web', '--git-protocol', 'https'];
+}
+
+function loginResult(result: ExecResult): Result<void, GhLoginError> {
+  if (notInstalled(result)) return err({ kind: 'failed', reason: 'gh is not installed' });
+  if (result.spawnError) return err({ kind: 'failed', reason: result.spawnError.message });
+  if (result.code === 0) return ok(undefined);
+  if (result.code === 2) return err({ kind: 'cancelled' });
+  return err({ kind: 'failed', reason: 'gh auth login exited ' + result.code });
+}
+
+/** Windows matches env names case-insensitively; either spelling blocks login. */
+function withoutGhTokens(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const child: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined || isGhToken(key)) continue;
+    child[key] = value;
+  }
+  return child;
+}
+
+function isGhToken(key: string): boolean {
+  const name = key.toUpperCase();
+  return name === 'GH_TOKEN' || name === 'GITHUB_TOKEN';
+}
+
+function atLeast(found: RegExpMatchArray, min: readonly [number, number, number]): boolean {
+  for (let i = 0; i < min.length; i++) {
+    const got = Number(found[i + 1]);
+    if (got !== min[i]) return got > min[i]!;
+  }
+  return true;
 }

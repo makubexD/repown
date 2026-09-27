@@ -36,8 +36,10 @@ export default {
 
     summary(repo, auth, registry);
     const problems = collectProblems(repo, auth);
-    await reportWarnings(repo, auth, registry);
-    return verdict(repo, auth, problems);
+    const warnings = await reportWarnings(repo, auth, registry);
+    const code = verdict(repo, auth, problems);
+    closeStatus(repo, problems, warnings);
+    return code;
   },
 } satisfies Command;
 
@@ -156,6 +158,23 @@ function matchesRecord(repo: RepoState, entry: Account): boolean {
 
 interface Problem { readonly what: string; readonly fix: string; }
 
+function closeStatus(repo: RepoState, problems: readonly Problem[], warnings: number): void {
+  if (problems.length === 0 && warnings === 0) return;
+  const hint = identityProblems(repo).length > 0 ? ': run repown setup' : '';
+  out.note('');
+  out.note(tally(problems.length, warnings) + hint);
+}
+
+function tally(problems: number, warnings: number): string {
+  const parts = [howMany(problems, 'problem'), howMany(warnings, 'warning')];
+  return parts.filter((part) => part.length > 0).join(', ');
+}
+
+function howMany(count: number, word: string): string {
+  if (count === 0) return '';
+  return count + ' ' + word + (count === 1 ? '' : 's');
+}
+
 function collectProblems(repo: RepoState, auth: AuthState): Problem[] {
   const gh: Problem[] = auth.ghIsHelper ? [{
     what: 'gh is the git credential helper, so only its ACTIVE account can ' +
@@ -165,52 +184,59 @@ function collectProblems(repo: RepoState, auth: AuthState): Problem[] {
   return [...identityProblems(repo), ...gh];
 }
 
-function identityProblems(repo: RepoState): Problem[] {
+const SETUP_FIX = 'repown setup   (or: repown use <account>)';
+
+export function identityProblems(repo: RepoState): Problem[] {
   const id = repo.identity;
   if (!isPinned(id)) {
     return [{
       what: 'This clone sets no identity of its own, so it inherits the machine default (' +
             (id.inheritedEmail ?? 'nothing') + ').',
-      fix: 'repown use <account>',
+      fix: SETUP_FIX,
     }];
   }
   if (repo.credentialKeys.length === 0 || id.account) return [];
   return [{
     what: 'No account is pinned, so pushes fall back to the machine default (' +
           (id.inheritedAccount ?? 'nothing') + ').',
-    fix: 'repown use <account>',
+    fix: SETUP_FIX,
   }];
 }
 
-async function reportWarnings(repo: RepoState, auth: AuthState, registry: LoadedRegistry): Promise<void> {
-  await ownerWarning(repo);
-  accountWarning(repo, registry);
-  guardWarning(repo);
-  submoduleWarning(repo);
-  helperWarning(repo, auth);
-  ghWarning(repo.identity.account, auth);
+async function reportWarnings(repo: RepoState, auth: AuthState, registry: LoadedRegistry): Promise<number> {
+  const warned = [
+    await ownerWarning(repo),
+    accountWarning(repo, registry),
+    guardWarning(repo),
+    submoduleWarning(repo),
+    helperWarning(repo, auth),
+    ghWarning(repo.identity.account, auth),
+  ];
+  return warned.filter((flag) => flag).length;
 }
 
-function accountWarning(repo: RepoState, registry: LoadedRegistry): void {
-  if (!registry.ok) return;
+function accountWarning(repo: RepoState, registry: LoadedRegistry): boolean {
+  if (!registry.ok) return false;
   const pinned = pinnedAccount(repo);
   const found = pinned === null ? null : recordedAs(registry.value, pinned);
-  if (!found || matchesRecord(repo, found.entry)) return;
+  if (!found || matchesRecord(repo, found.entry)) return false;
   const id = repo.identity;
   out.warn('account', 'this clone commits as ' + person(id.name, id.email, '?') +
     ', but ' + found.key + ' is recorded as ' + person(found.entry.name, found.entry.email, '?') + '.');
   out.detail('fix: repown use ' + found.key);
+  return true;
 }
 
 /** A pinned credential key is only as good as the helper reading it. gh as helper is a problem, reported elsewhere. */
-function helperWarning(repo: RepoState, auth: AuthState): void {
-  if (repo.credentialKeys.length === 0 || auth.helperIsGcm || auth.ghIsHelper) return;
+function helperWarning(repo: RepoState, auth: AuthState): boolean {
+  if (repo.credentialKeys.length === 0 || auth.helperIsGcm || auth.ghIsHelper) return false;
   if (!auth.helper) {
     out.warn('helper', 'no credential helper is set, so the pinned account selects no credential; git will prompt on push.');
   } else {
     out.warn('helper', '"' + auth.helper + '" serves credentials here, and repown cannot tell whether it honours the pinned account.');
   }
   out.detail('see: repown doctor   (Git Credential Manager is the helper repown pins for)');
+  return true;
 }
 
 /**
@@ -218,22 +244,24 @@ function helperWarning(repo: RepoState, auth: AuthState): void {
  * guard never sees its commits -- not even when `git push --recurse-submodules`
  * publishes them from here.
  */
-function submoduleWarning(repo: RepoState): void {
-  if (!repo.root || !existsSync(join(repo.root, '.gitmodules'))) return;
+function submoduleWarning(repo: RepoState): boolean {
+  if (!repo.root || !existsSync(join(repo.root, '.gitmodules'))) return false;
   out.warn('submodule', 'this clone has submodules; each is a separate clone with its own identity and hook.');
   out.detail('pin and guard each one too:  git submodule foreach "repown use <account> && repown guard on"');
+  return true;
 }
 
 /**
  * An organisation is never an account name, so a bare owner-vs-account
  * comparison warns on every org repository -- which is most of them at work.
  */
-async function ownerWarning(repo: RepoState): Promise<void> {
+async function ownerWarning(repo: RepoState): Promise<boolean> {
   const allowed = await allowedOwners(repo.git, repo.identity.owner ?? repo.identity.account);
-  if (!repo.owner || allowed.length === 0 || allowed.includes(repo.owner.toLowerCase())) return;
+  if (!repo.owner || allowed.length === 0 || allowed.includes(repo.owner.toLowerCase())) return false;
   out.warn('origin', 'origin belongs to "' + repo.owner + '", which is not an owner this clone pushes to.');
   out.detail('if that is an organisation you belong to:');
   out.detail('  git config --local --add repown.allowOwner ' + shellWord(repo.owner));
+  return true;
 }
 
 /**
@@ -241,19 +269,23 @@ async function ownerWarning(repo: RepoState): Promise<void> {
  * account being truthy is how a failed lookup used to make the whole warning
  * disappear, leaving output that looked clean rather than uncertain.
  */
-function ghWarning(account: string | null, auth: AuthState): void {
+function ghWarning(account: string | null, auth: AuthState): boolean {
   if (auth.ghPresent && !auth.gh.ok) {
     out.warn('gh', 'could not be queried, so who `gh pr create` would act as is UNVERIFIED.');
     out.detail('check it yourself: gh auth status');
-  } else if (auth.gh.ok && auth.gh.value.active && account &&
-             auth.gh.value.active.toLowerCase() !== account.toLowerCase()) {
+    return true;
+  }
+  if (auth.gh.ok && auth.gh.value.active && account &&
+      auth.gh.value.active.toLowerCase() !== account.toLowerCase()) {
     out.warn('gh', 'active as "' + auth.gh.value.active + '", so `gh pr create` here would act as that account.');
     out.detail('fix: gh auth switch -u ' + account);
+    return true;
   }
+  return false;
 }
 
-function guardWarning(repo: RepoState): void {
-  if (repo.guard === 'on') return;
+function guardWarning(repo: RepoState): boolean {
+  if (repo.guard === 'on') return false;
   if (repo.hook?.redirected) {
     out.warn('guard', 'core.hooksPath makes git run hooks from another tool\'s directory; repown does not install there.');
     out.detail('guard this clone from that tool\'s pre-push hook: repown guard check --remote="$1" --url="$2"');
@@ -264,4 +296,5 @@ function guardWarning(repo: RepoState): void {
     out.warn('guard', 'a pre-push hook repown did not write is installed; it was left alone.');
     out.detail('read it first; if it is safe to drop, delete ' + (repo.hook?.path ?? 'it') + ', then run: repown guard on');
   }
+  return true;
 }

@@ -63,6 +63,11 @@ export function detail(message: string): void {
   process.stderr.write('       ' + message + '\n');
 }
 
+/** Stderr with no indent. `detail`'s seven spaces would attach a closing tally to the row above. */
+export function note(message: string): void {
+  process.stderr.write(message + '\n');
+}
+
 export function line(message = ''): void {
   process.stdout.write(message + '\n');
 }

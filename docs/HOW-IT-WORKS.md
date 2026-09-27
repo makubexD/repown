@@ -198,12 +198,14 @@ This machine
 WARN  gh         active as "octo-work", so `gh pr create` here would act as that account.
        fix: gh auth switch -u octocat
 OK    identity   this clone is pinned, and its credential mechanism honours it
+
+1 warning
 ```
 
 | You see | Meaning | Fix |
 | --- | --- | --- |
-| 🔴 `This clone sets no identity of its own` (`commits as` shows `NOT SET LOCALLY` or a `?`) | the clone sets no name or email of its own | `repown use <account>` |
-| 🔴 `No account is pinned` | a GitHub https clone with no push account; pushes use the machine default | `repown use <account>` |
+| 🔴 `This clone sets no identity of its own` (`commits as` shows `NOT SET LOCALLY` or a `?`) | the clone sets no name or email of its own | `repown setup` (or `repown use <account>`) |
+| 🔴 `No account is pinned` | a GitHub https clone with no push account; pushes use the machine default | `repown setup` (or `repown use <account>`) |
 | 🔴 `gh is the git credential helper` | only gh's active account can push | `repown fix` |
 | 🟡 `no credential helper is set` / `cannot tell whether it honours` | a GitHub https clone, and the helper isn't Git Credential Manager | `repown doctor` ([card 1](#1-set-up-the-machine)) |
 | 🟡 `gh active as "…"` | the gh CLI would act as another account | `gh auth switch -u <account>` |
@@ -218,8 +220,9 @@ OK    identity   this clone is pinned, and its credential mechanism honours it
 | `account … (not in this machine's registry)` | pinned by hand or on another machine | `repown accounts add <account> --name "..." --email "..."` |
 | `origin no remote` | nothing to push to yet | nothing |
 
-🔴 rows exit 1; 🟡 rows alone exit 0. Outside a clone it prints `Not a git repository` and
-exits 1.
+🔴 rows exit 1; 🟡 rows alone exit 0. Stderr then ends with a count (`1 problem, 2 warnings`),
+adding `: run repown setup` when an identity problem is among them. Outside a clone it prints
+`Not a git repository` and exits 1.
 
 </details>
 

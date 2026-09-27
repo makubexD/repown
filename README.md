@@ -175,6 +175,8 @@ This machine
 WARN  gh         active as "octo-work", so `gh pr create` here would act as that account.
        fix: gh auth switch -u octocat
 OK    identity   this clone is pinned, and its credential mechanism honours it
+
+1 warning
 ```
 
 Here git is right, and only `gh` commands would act as another account. Every warning it

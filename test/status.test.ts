@@ -1,13 +1,14 @@
 // `repown status` says where the clone is and which settings are its own.
-// S6 title, path and branch; S7 the two groups; S8 the recorded account; S10 outside a repository.
+// S6 title, path and branch; S7 the two groups; S8 the recorded account;
+// S9 what to run next; S10 outside a repository.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { loadRegistry, registryPath } from '../src/core/registry.ts';
 import { sandbox, type Sandbox } from './helpers.ts';
 
@@ -197,6 +198,95 @@ describe('repown status account', () => {
   });
 });
 
+const SETUP_FIX = '       fix: repown setup   (or: repown use <account>)';
+
+describe('repown status failure pointers', () => {
+  let box: Sandbox;
+  beforeEach(() => { box = sandbox(); });
+  afterEach(() => box.dispose());
+
+  test('S9: an unpinned clone\'s fix is setup, or use', () => {
+    unpin(box);
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 1);
+    assert.ok(run.stderr.includes('FAIL  identity   This clone sets no identity of its own'), run.stderr);
+    assert.ok(run.stderr.includes(SETUP_FIX), run.stderr);
+  });
+
+  test('S9: a clone with no push account has the same fix', () => {
+    box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
+    box.git('config', '--local', 'user.name', 'Octo Cat');
+    box.git('config', '--local', 'user.email', 'octocat@example.invalid');
+    box.git('config', '--local', 'credential.helper', 'manager');
+    guardOn(box);
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 1);
+    assert.ok(run.stderr.includes('FAIL  identity   No account is pinned'), run.stderr);
+    assert.ok(run.stderr.includes(SETUP_FIX), run.stderr);
+    assert.equal(closing(run.stderr), '1 problem: run repown setup');
+  });
+
+  test('S9: gh as the helper still says repown fix, with no setup pointer', () => {
+    pinGithub(box);
+    box.git('config', '--local', 'credential.helper', '!gh auth git-credential');
+    guardOn(box);
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 1);
+    assert.ok(run.stderr.includes('gh is the git credential helper'), run.stderr);
+    assert.ok(run.stderr.includes('       fix: repown fix'), run.stderr);
+    assert.equal(counted(run.stderr, 'FAIL'), 1, run.stderr);
+    assert.equal(counted(run.stderr, 'WARN'), 0, run.stderr);
+    assert.equal(closing(run.stderr), '1 problem');
+  });
+
+  test('S9: unpinned with the guard off counts one problem and one warning', () => {
+    unpin(box);
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 1);
+    assert.equal(counted(run.stderr, 'FAIL'), 1, run.stderr);
+    assert.equal(counted(run.stderr, 'WARN'), 1, run.stderr);
+    assert.equal(closing(run.stderr), '1 problem, 1 warning: run repown setup');
+  });
+
+  test('S9: two warnings pluralise, and an identity problem still points at setup', () => {
+    unpin(box);
+    writeFileSync(join(box.dir, '.gitmodules'), '[submodule "lib"]\n\tpath = lib\n\turl = https://github.com/octocat/lib.git\n');
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 1);
+    assert.equal(counted(run.stderr, 'FAIL'), 1, run.stderr);
+    assert.equal(counted(run.stderr, 'WARN'), 2, run.stderr);
+    assert.equal(closing(run.stderr), '1 problem, 2 warnings: run repown setup');
+  });
+
+  test('S9: two problems pluralise, and the identity one still points at setup', () => {
+    unpin(box);
+    box.git('config', '--local', 'credential.helper', '!gh auth git-credential');
+    guardOn(box);
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 1);
+    assert.equal(counted(run.stderr, 'FAIL'), 2, run.stderr);
+    assert.equal(counted(run.stderr, 'WARN'), 0, run.stderr);
+    assert.equal(closing(run.stderr), '2 problems: run repown setup');
+  });
+
+  test('S9: warnings alone do not point at setup', () => {
+    pinGithub(box);
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 0);
+    assert.equal(counted(run.stderr, 'FAIL'), 0, run.stderr);
+    assert.equal(counted(run.stderr, 'WARN'), 1, run.stderr);
+    assert.equal(closing(run.stderr), '1 warning');
+  });
+
+  test('S9: a clean run prints no closing line and leaves stderr empty', () => {
+    pinGithub(box);
+    guardOn(box);
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stderr, '');
+  });
+});
+
 describe('repown status outside a repository', () => {
   test('S10: the failure is unchanged and no title is printed', () => {
     const empty = mkdtempSync(join(tmpdir(), 'repown-not-a-repo-'));
@@ -255,6 +345,33 @@ function pinGithub(box: Sandbox): void {
 function unpin(box: Sandbox): void {
   box.git('config', '--local', '--unset', 'user.name');
   box.git('config', '--local', '--unset', 'user.email');
+}
+
+/** gh on PATH would add a machine-dependent warning; a clean count needs it absent. */
+function quietEnv(): NodeJS.ProcessEnv {
+  const dirs = (process.env['PATH'] ?? '').split(delimiter).filter((dir) => !namesGh(dir));
+  return { ...process.env, PATH: dirs.join(delimiter) };
+}
+
+function namesGh(dir: string): boolean {
+  return ['gh', 'gh.exe', 'gh.cmd', 'gh.bat'].some((name) => dir !== '' && existsSync(join(dir, name)));
+}
+
+function guardOn(box: Sandbox): void {
+  const run = repown(['guard', 'on'], box.dir);
+  assert.equal(run.status, 0, run.stderr);
+}
+
+function counted(stderr: string, word: 'FAIL' | 'WARN'): number {
+  return stderr.split('\n').filter((line) => line.startsWith(word + '  ')).length;
+}
+
+/** The last stderr line, which must stand after a blank line. */
+function closing(stderr: string): string {
+  const lines = stderr.split('\n');
+  assert.equal(lines.at(-1), '', stderr);
+  assert.equal(lines.at(-3), '', stderr);
+  return lines.at(-2) ?? '';
 }
 
 function notARepo(dir: string): string {

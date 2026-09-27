@@ -19,8 +19,10 @@ export type Loader = () => Promise<Entry>;
 export interface Program {
   readonly name: string;
   readonly commands: Readonly<Record<string, Loader>>;
-  /** Runs when no command is typed; without one, the top help is printed. */
+  /** Runs when no command is typed and no `chooseDefault` is set; without either, the top help is printed. */
   readonly defaultCommand?: string;
+  /** Called only for an empty argv. A command name is dispatched as if typed; `'help'` prints the top help. */
+  readonly chooseDefault?: () => Promise<string>;
   readonly topHelp: (entries: ReadonlyMap<string, Entry>) => string[];
   readonly version?: () => string;
 }
@@ -139,11 +141,20 @@ export async function runProgram(program: Program, argv: readonly string[]): Pro
   if (version && (argv[0] === '--version' || argv[0] === '-v')) { out.line(program.name + ' ' + version()); return 0; }
   if (argv[0] === '--help' || argv[0] === '-h') return runHelp(program, []);
   if (argv[0] === 'help') return runHelp(program, argv.slice(1));
-  if (argv.length === 0 && program.defaultCommand === undefined) return runHelp(program, []);
+  const words = await bareArgv(program, argv);
+  if (words === 'help') return runHelp(program, []);
+  if (words.length === 0 && program.defaultCommand === undefined) return runHelp(program, []);
 
-  const top = await resolveTop(program, argv);
+  const top = await resolveTop(program, words);
   if (!top.ok) { reportUsageError(program.name, top.error + helpPointer(program, [])); return 2; }
   return dispatch(program, top.value);
+}
+
+/** Empty argv with a chooser becomes that command, or `'help'` for the top help. */
+async function bareArgv(program: Program, argv: readonly string[]): Promise<readonly string[] | 'help'> {
+  if (argv.length > 0 || program.chooseDefault === undefined) return argv;
+  const chosen = await program.chooseDefault();
+  return chosen === 'help' ? 'help' : [chosen];
 }
 
 /** The whole life of the process: run, set the exit code, and report a crash as a failure. */

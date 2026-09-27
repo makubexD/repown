@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { sandbox, type Sandbox } from './helpers.ts';
+import { runProgram, type Loader, type Program } from '../src/ui/dispatch.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 
@@ -424,13 +425,15 @@ describe('repown status, doctor and fix: exit codes and what they change', () =>
   const GH_HELPER = '[credential "https://github.com"]\n\thelper =\n\thelper = !gh auth git-credential\n' +
                     '[credential "https://gist.github.com"]\n\thelper =\n\thelper = !gh auth git-credential\n';
 
-  test('status exits 1 on an unpinned clone and names the address it would inherit', () => {
+  test('S3: bare repown without a terminal prints status and never the setup wizard', () => {
     box.git('config', '--local', '--unset', 'user.name');
     box.git('config', '--local', '--unset', 'user.email');
     box.writeGlobalConfig('[user]\n\tname = Machine\n\temail = machine@example.invalid\n');
     const run = repown([], { cwd: box.dir });
     assert.equal(run.status, 1);
+    assert.match(run.stdout, /^repown status · current settings of this clone$/m);
     assert.match(run.stderr, /machine@example\.invalid/);
+    assert.doesNotMatch(run.stdout + run.stderr, /needs a terminal to ask|Which account should this clone/);
   });
 
   test('status exits 0 on a pinned clone', () => {
@@ -825,3 +828,72 @@ describe('guard on from npx\'s cache', () => {
     assert.doesNotMatch(run.stderr, /npx/);
   });
 });
+
+// chooseDefault is consulted only for an empty argv. With none set, empty argv
+// still runs defaultCommand; the release tool sets neither (release-tool.test.ts).
+describe('chooseDefault', () => {
+  test('an empty argv asks the chooser and runs the command it names', async () => {
+    const ran: string[] = [];
+    let calls = 0;
+    const program = fakeProgram(async () => { calls += 1; return 'setup'; }, ran);
+    const captured = await capture(() => runProgram(program, []));
+    assert.equal(captured.code, 0);
+    assert.equal(calls, 1);
+    assert.deepEqual(ran, ['setup']);
+  });
+
+  test('help from the chooser prints the top help and runs no command', async () => {
+    const ran: string[] = [];
+    const captured = await capture(() => runProgram(fakeProgram(async () => 'help', ran), []));
+    assert.equal(captured.code, 0);
+    assert.match(captured.out, /TOP HELP/);
+    assert.deepEqual(ran, []);
+  });
+
+  test('any argument skips the chooser', async () => {
+    const ran: string[] = [];
+    let calls = 0;
+    const program = fakeProgram(async () => { calls += 1; return 'setup'; }, ran);
+    await capture(() => runProgram(program, ['status']));
+    await capture(() => runProgram(program, ['--cwd', 'x']));
+    await capture(() => runProgram(program, ['-x']));
+    assert.equal(calls, 0);
+    assert.deepEqual(ran, ['status', 'status']);
+  });
+
+  test('with no chooser, empty argv still runs defaultCommand', async () => {
+    const ran: string[] = [];
+    const captured = await capture(() => runProgram(fakeProgram(undefined, ran), []));
+    assert.equal(captured.code, 0);
+    assert.deepEqual(ran, ['status']);
+    assert.equal(captured.out, '');
+  });
+});
+
+function fakeProgram(choose: (() => Promise<string>) | undefined, ran: string[]): Program {
+  const load = (name: string): Loader => async () => ({
+    summary: name,
+    run: async () => { ran.push(name); return 0; },
+  });
+  return {
+    name: 'tool',
+    commands: { status: load('status'), setup: load('setup') },
+    defaultCommand: 'status',
+    ...(choose ? { chooseDefault: choose } : {}),
+    topHelp: () => ['TOP HELP'],
+  };
+}
+
+async function capture(run: () => Promise<number>): Promise<{ code: number; out: string }> {
+  const chunks: string[] = [];
+  const stdout = process.stdout.write.bind(process.stdout);
+  const stderr = process.stderr.write.bind(process.stderr);
+  try {
+    process.stdout.write = ((chunk: string | Uint8Array) => { chunks.push(String(chunk)); return true; }) as typeof process.stdout.write;
+    process.stderr.write = (() => true) as typeof process.stderr.write;
+    return { code: await run(), out: chunks.join('') };
+  } finally {
+    process.stdout.write = stdout;
+    process.stderr.write = stderr;
+  }
+}

@@ -22,7 +22,7 @@ export function renderTopHelp(entries: ReadonlyMap<string, Command | CommandGrou
 function topHeader(entries: ReadonlyMap<string, Command | CommandGroup>): string[] {
   const lines = ['', '  repown <command> [options]', ''];
   for (const [name, entry] of entries) lines.push('  ' + name.padEnd(10) + entry.summary);
-  lines.push('', '  Run `repown` with no command for the state of this repository.');
+  lines.push('', '  Run `repown` alone to set up a new clone (in a terminal), or to see its status once it is.');
   lines.push('  Run `repown help <command>` for its options.', '');
   return lines;
 }

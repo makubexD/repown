@@ -1,4 +1,6 @@
-// What `repown` with no arguments prints: is this clone set up correctly?
+// What `repown status` prints: is this clone set up correctly?
+// Bare `repown` runs this once a clone is set up, or whenever there is no
+// terminal. An unset clone in a terminal goes to setup (commands/start.ts).
 //
 // Three separate things decide who you are here, and they fail differently:
 //
@@ -21,7 +23,7 @@ import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
 export default {
-  summary: 'the state of this repository and this machine (the default)',
+  summary: 'this clone\'s and this machine\'s settings, and what to fix (bare `repown` once the clone is set up)',
 
   async run(args: Args): Promise<number> {
     const git = gitFor(args);

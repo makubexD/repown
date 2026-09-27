@@ -76,13 +76,14 @@ npm install -g repown
 ```
 repown doctor          # once per machine: is Git Credential Manager ready for sign-ins?
 cd ~/code/my-repo
-repown setup           # once per clone: asks which account owns it, shows each step, runs it
+repown                 # a new clone: just typing this starts the guided setup
 ```
 
 1. **`repown doctor`, once per machine.** No `FAIL` line means it's ready. If gh is the
    helper, or something is missing, see [Troubleshooting](#troubleshooting).
-2. **Clone as usual,** then **`repown setup`, once per clone,** from inside it. (Cloning a
-   private repository signs in first: pick the account that owns it.)
+2. **Clone as usual,** then from inside a new clone just type **`repown`.** That starts the
+   guided setup. **`repown setup`** still works. (Cloning a private repository signs in
+   first: pick the account that owns it.)
    - **In your first clone,** it lists the accounts it can already see on GitHub
      (origin's owner, gh's accounts, Git Credential Manager's) and suggests origin's
      owner when that owner is a user, or asks for the login. Then it asks where the
@@ -147,12 +148,12 @@ then commit and push.
 | Once per clone | `repown setup [<account>]` | guided: asks, shows each step and its command, then runs them. Every answer has a flag (`--name`, `--email`, `--host`, `--gh`, `--allow-owner <owner>`, `--guard`, `--fix`); `--no-input` asks nothing ([scripts and CI](docs/CONFIGURATION.md#scripts-and-ci)) |
 | | `repown use <account> [--gh]` | what setup runs: pin this clone to an account; `--gh` also switches gh's active account. `--name` with `--email` skips the registry, the file where repown remembers accounts |
 | | `repown guard on \| off \| status` | install, remove or show the pre-push hook (bare `repown guard` shows it) |
-| Any time | `repown` (or `repown status`) | shows this clone's and this machine's settings; exits 1 on a problem (warnings alone exit 0) |
+| Any time | `repown` (or `repown status`) | this clone's and this machine's settings, and what to fix; exits 1 on a problem (warnings alone exit 0). In a terminal, bare `repown` in a clone that isn't set up starts `repown setup` instead; without a terminal it's always status |
 | | `repown scan [dir...] [--emails] [--depth <n>] [--format json]` | every clone under the folders (default: this one, 3 levels deep): owner, host, identity, guard, and which email domains its history has. Changes nothing |
 | Rarely | `repown accounts list \| add \| remove` | the accounts this machine knows (bare `repown accounts` lists them; `add` takes `--name`, `--email`, `--host github\|azdo\|generic`; `list --format json` for scripts) |
 | | `repown off` | unpin this clone, leaving global config alone; warns if the guard is still on |
 
-**Who is this clone?** Run `repown`:
+**Who is this clone?** Once the clone is set up, `repown` prints:
 
 ```
 $ repown

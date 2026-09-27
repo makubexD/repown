@@ -173,7 +173,8 @@ After `repown fix`, gh's active account affects only the gh CLI. To keep it in s
 
 ### 5. Check where you are
 
-**`repown`** (short for `repown status`) prints all three identities. It changes nothing.
+**`repown`** sets up a clone that isn't set up yet when you're in a terminal, and otherwise
+shows status. **`repown status`** prints all three identities and changes nothing.
 
 <details><summary>Show how</summary>
 
@@ -491,7 +492,8 @@ To uninstall, follow the [README's steps](../README.md#uninstall), and also:
 
 ### 13. Guided setup
 
-**`repown setup` asks a few questions, shows the commands it will run, then runs them.**
+In a terminal, **`repown`** with no arguments starts this when the clone isn't set up yet.
+**`repown setup`** asks a few questions, shows the commands it will run, then runs them.
 Each answer maps to an ordinary command (`accounts add`, `use`, `guard on`, `fix`) or to
 the `allowOwner` git line from card 8, so you can run the same thing yourself. If the
 clone needs nothing, it says so.

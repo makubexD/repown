@@ -114,7 +114,7 @@ and help text in its own file under `src/commands/`, so help can't drift from th
 
 | Command | Code | Explained in |
 | --- | --- | --- |
-| `repown status` (bare `repown`) | `src/commands/status.ts`, `src/core/inspect.ts` | [card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are) |
+| `repown status` (bare `repown`) | `src/commands/status.ts`, `src/commands/start.ts`, `src/ui/dispatch.ts`, `src/core/inspect.ts` | [card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are) |
 | `repown doctor` | `src/commands/doctor.ts`, `src/core/inspect.ts`, `src/core/credential/gcm.ts`, `src/core/credential/gh.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
 | `repown fix` | `src/commands/fix.ts`, `src/core/credential/repair.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
 | `repown accounts list`, `repown accounts add`, `repown accounts remove` | `src/commands/accounts.ts`, `src/core/registry.ts` | [card 2](docs/HOW-IT-WORKS.md#2-remember-an-account), [the registry](docs/CONFIGURATION.md#the-account-registry) |

@@ -12,6 +12,7 @@
 //    so a credential cannot pass through repown. It is used only for
 //    `gh auth login`, and only from a terminal. The child prints to the
 //    terminal itself; this function still writes nothing.
+//    The parent ignores SIGINT while the child runs, so Ctrl-C reaches the child.
 //
 // 2. A NON-ZERO EXIT IS NOT AN ERROR. git answers questions with exit codes:
 //    `git config --get missing.key` exits 1, and that is the answer "not set",
@@ -24,7 +25,7 @@
 // `shell: false` throughout: no argument ever reaches a shell parser, so a
 // branch name or URL containing shell metacharacters cannot be interpreted.
 
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 export interface ExecResult {
   readonly code: number;
@@ -99,21 +100,29 @@ export function inherit(
   options: InheritOptions = {},
 ): Promise<ExecResult> {
   return new Promise((resolve) => {
-    let settled = false;
-    const done = (result: ExecResult): void => {
-      if (settled) return;
-      settled = true;
-      resolve(result);
-    };
+    const ignore = (): void => {};
+    process.on('SIGINT', ignore);
     const child = spawn(file, [...args], {
       env: options.env ?? process.env,
       shell: false,
       stdio: 'inherit',
       windowsHide: true,
     });
-    child.on('error', (error: NodeJS.ErrnoException) => done(spawnFailure(error)));
-    child.on('close', (code) => done({ code: code ?? -1, stdout: '', stderr: '' }));
+    settleInherit(child, ignore, resolve);
   });
+}
+
+/** Drops the parent's SIGINT listener when the child closes or fails to spawn. */
+function settleInherit(child: ChildProcess, ignore: () => void, resolve: (result: ExecResult) => void): void {
+  let settled = false;
+  const done = (result: ExecResult): void => {
+    if (settled) return;
+    settled = true;
+    process.off('SIGINT', ignore);
+    resolve(result);
+  };
+  child.on('error', (error: NodeJS.ErrnoException) => done(spawnFailure(error)));
+  child.on('close', (code) => done({ code: code ?? -1, stdout: '', stderr: '' }));
 }
 
 function spawnFailure(error: NodeJS.ErrnoException): ExecResult {

@@ -50,6 +50,16 @@ describe('repown setup, played with key presses', () => {
     assert.match(screen, /Run these 4 steps\?/);
   });
 
+  test('G1 an account gh does not know is offered a sign-in', async () => {
+    const gh = ok({ accounts: [{ login: 'octo-work', active: true }], active: 'octo-work' });
+    const { outcome, screen } = await play(setupContext({ gh }), [[enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    const plain = screen.replace(/\n│\s*/g, ' ');
+    assert.match(plain, /Sign in to gh as octocat too\?/);
+    assert.match(plain, /gh is GitHub's command-line tool \(gh pr create\); git pushes don't need it\. Yes opens your browser to sign in, and gh then acts as octocat in every terminal/);
+    assert.match(plain, /gh's active account is octo-work/);
+  });
+
   test('S3 gh as the credential helper is explained in plain words', async () => {
     const ctx = setupContext({ fixLines: ['  global  credential.https://github.com.helper = !gh auth git-credential'] });
     const { outcome, screen } = await play(ctx, [[enter], [enter], [up, enter], [esc]]);
@@ -134,6 +144,7 @@ describe('repown setup, played with key presses', () => {
     assert.deepEqual(wide, [], 'lines wider than the window:\n' + wide.join('\n'));
     // Each hint line as setup wrapped it: clack wraps a question again if it's too wide.
     const hint = setupFlow(ctx).steps.find((step) => step.id === 'allowOwner')!.hint;
+    if (typeof hint !== 'string') throw new Error('allowOwner hint');
     for (const line of wrap(hint, textWidth(60, 13))) assert.ok(screen.includes('│  ' + line + '\n'), 'hint line rewrapped: ' + line + '\n' + screen);
   });
 

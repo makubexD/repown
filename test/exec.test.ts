@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -77,6 +77,37 @@ function inheritEnvScript(marker: string): string {
     `const r = await inherit(process.execPath, ['-e', ${JSON.stringify(child)}, ${JSON.stringify(marker)}], { env });` +
     `if (r.code !== 0) process.exit(4);`;
 }
+
+test('inherit ignores SIGINT only while its child runs', async () => {
+  const { inherit } = await import('../src/core/exec.ts');
+  const marker = join(tmpdir(), 'repown-sigint-' + process.pid);
+  const stop = marker + '.stop';
+  rmSync(marker, { force: true });
+  rmSync(stop, { force: true });
+  const child = 'const fs=require("fs");fs.writeFileSync(process.argv[1],"up");' +
+    'const stop=process.argv[1]+".stop";' +
+    'const wait=()=>{if(fs.existsSync(stop))process.exit(0);else setTimeout(wait,15)};wait()';
+  const before = process.listenerCount('SIGINT');
+  const pending = inherit(process.execPath, ['-e', child, marker]);
+  try {
+    const started = Date.now();
+    while (!existsSync(marker)) {
+      if (Date.now() - started > 5_000) throw new Error('child did not start');
+      await new Promise((resolve) => setTimeout(resolve, 15));
+    }
+    assert.equal(process.listenerCount('SIGINT'), before + 1);
+    writeFileSync(stop, 'x');
+    assert.equal((await pending).code, 0);
+    assert.equal(process.listenerCount('SIGINT'), before);
+    await inherit('repown-definitely-missing-binary', []);
+    assert.equal(process.listenerCount('SIGINT'), before);
+  } finally {
+    writeFileSync(stop, 'x');
+    await pending;
+    rmSync(marker, { force: true });
+    rmSync(stop, { force: true });
+  }
+});
 
 test('a killed child is marked as timed out, not left to read as an ordinary failure', () => {
   const script =

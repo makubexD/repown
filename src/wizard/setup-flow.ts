@@ -6,6 +6,7 @@
 // Pure: no I/O. What the clone and the machine look like arrives as a SetupContext
 // (src/wizard/setup-context.ts), read before the first question.
 
+import { ghAdvice } from '../commands/status.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { shellWord } from '../core/guard/check.ts';
 import type { Account } from '../core/registry.ts';
@@ -129,9 +130,7 @@ function accountSteps(ctx: SetupContext): Step<SetupContext>[] {
 
 function choiceSteps(ctx: SetupContext): Step<SetupContext>[] {
   return [
-    { id: 'gh', kind: 'confirm', flag: '--gh', message: 'Also make this account gh\'s active account?',
-      hint: 'gh is GitHub\'s command-line tool: this changes the account gh commands use, in every terminal; git is not affected', initial: () => false,
-      when: (answers) => ghOffered(accountOf(answers), ctx), detail: () => 'gh\'s active account is ' + ghActive(ctx) },
+    ghStep(ctx),
     { id: 'allowOwner', kind: 'confirm', flag: '--allow-owner', initial: () => true,
       message: 'This repository belongs to "' + printable(ctx.owner ?? '') + '". Let this clone push to it?',
       hint: 'Yes if you\'re a member of that organisation or a collaborator on it; with No, ' +
@@ -188,6 +187,50 @@ function addressDetail(answers: Answers, ctx: SetupContext): string | undefined 
   const email = ctx.machineIdentity.email;
   if (!isNew(answers) || !email) return undefined;
   return 'not this machine\'s default address (' + printable(email) + '), unless this account uses it';
+}
+
+const SWITCH_MESSAGE = 'Also make this account gh\'s active account?';
+const SWITCH_HINT = 'gh is GitHub\'s command-line tool: this changes the account gh commands use, in every terminal; git is not affected';
+
+function ghStep(ctx: SetupContext): Step<SetupContext> {
+  return {
+    id: 'gh', kind: 'confirm', flag: '--gh', initial: () => false,
+    message: (answers) => ghMessage(accountOf(answers), ctx),
+    hint: (answers) => ghHint(accountOf(answers), ctx),
+    detail: () => ghDetail(ctx),
+    when: (answers) => ghAsked(accountOf(answers), ctx),
+  };
+}
+
+function ghMessage(account: string, ctx: SetupContext): string {
+  if (inGh(account, ctx)) return SWITCH_MESSAGE;
+  return 'Sign in to gh as ' + printable(account) + ' too?';
+}
+
+function ghHint(account: string, ctx: SetupContext): string {
+  if (inGh(account, ctx)) return SWITCH_HINT;
+  return 'gh is GitHub\'s command-line tool (gh pr create); git pushes don\'t need it. ' +
+    'Yes opens your browser to sign in, and gh then acts as ' + printable(account) + ' in every terminal';
+}
+
+function ghDetail(ctx: SetupContext): string {
+  if (noGhAccounts(ctx)) return 'gh isn\'t signed in to any account';
+  return 'gh\'s active account is ' + ghActive(ctx);
+}
+
+function noGhAccounts(ctx: SetupContext): boolean {
+  return ctx.gh?.ok === true && ctx.gh.value.accounts.length === 0;
+}
+
+function ghAsked(account: string, ctx: SetupContext): boolean {
+  if (ctx.host !== 'github' || !ctx.gh?.ok) return false;
+  if (!inGh(account, ctx)) return true;
+  return lower(ctx.gh.value.active ?? '') !== lower(account);
+}
+
+function inGh(account: string, ctx: SetupContext): boolean {
+  if (!ctx.gh?.ok) return false;
+  return ctx.gh.value.accounts.some((entry) => lower(entry.login) === lower(account));
 }
 
 function ghActive(ctx: SetupContext): string {
@@ -291,12 +334,6 @@ function hostOf(answers: Answers, ctx: SetupContext): string {
   return typeof answers['host'] === 'string' ? answers['host'] : ctx.host;
 }
 
-function ghOffered(account: string, ctx: SetupContext): boolean {
-  if (ctx.host !== 'github' || !ctx.gh?.ok) return false;
-  const known = ctx.gh.value.accounts.some((entry) => lower(entry.login) === lower(account));
-  return known && lower(ctx.gh.value.active ?? '') !== lower(account);
-}
-
 function ownerForeign(account: string, ctx: SetupContext): boolean {
   if (!ctx.owner || lower(ctx.owner) === lower(account)) return false;
   return !ctx.allowed.includes(lower(ctx.owner));
@@ -345,8 +382,14 @@ function whatOf(argv: readonly string[], answers: Answers, ctx: SetupContext): s
   if (argv[0] === 'git') return 'Let this clone push to ' + ctx.owner + '\'s repositories';
   if (argv[0] === 'fix') return 'Stop gh answering git\'s sign-in requests (whole machine)';
   if (argv[0] === 'guard') return 'Turn on the push guard: each push is checked first';
-  if (answers['gh'] === true) return 'Pin this clone to ' + account + ', and make it gh\'s active account';
+  if (answers['gh'] === true) return ghWhat(account, ctx);
   return 'Pin this clone to ' + account + (ctx.credentialPinned ? ': its commit name, email and push sign-in' : ': its commit name and email');
+}
+
+function ghWhat(account: string, ctx: SetupContext): string {
+  const pin = 'Pin this clone to ' + account + ', and ';
+  if (inGh(account, ctx)) return pin + 'make it gh\'s active account';
+  return pin + 'sign ' + account + ' in to gh (opens your browser)';
 }
 
 function allowOwnerLine(ctx: SetupContext): string[] {
@@ -404,10 +447,24 @@ function review(answers: Answers, ctx: SetupContext): Review {
   if (settled(answers, ctx, plan)) {
     return { title: 'This clone is already set up', headline: settledLines(answers, ctx).map(printable), steps,
       notes: ['Checked: the settings git uses here are ' + printable(accountOf(answers)) + '\'s, as recorded.',
-        'See it any time: repown (this clone), repown doctor (this machine)'], settled: true };
+        'See it any time: repown (this clone), repown doctor (this machine)'].concat(ghNote(answers, ctx)), settled: true };
   }
   return { title: 'Review: nothing has changed yet', headline: [printable(headline(answers, ctx))], steps,
-    notes: notes(answers, ctx).map(printable), settled: false };
+    notes: notes(answers, ctx).map(printable).concat(ghNote(answers, ctx)), settled: false };
+}
+
+/** gh still acts as someone else, and this run will not change that. */
+function ghNote(answers: Answers, ctx: SetupContext): string[] {
+  const line = ghLeft(answers, ctx);
+  return line ? [printable(line)] : [];
+}
+
+function ghLeft(answers: Answers, ctx: SetupContext): string | null {
+  const gh = ctx.gh;
+  if (answers['gh'] === true || !gh?.ok || !gh.value.active) return null;
+  const advice = ghAdvice(accountOf(answers), { ghPresent: true, gh });
+  if (!advice) return null;
+  return 'gh still acts as ' + gh.value.active + ', so gh pr create here would act as that account. Later: ' + advice.detail;
 }
 
 /**

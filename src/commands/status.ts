@@ -278,7 +278,9 @@ function registryUnread(): boolean {
  * disappear, leaving output that looked clean rather than uncertain.
  * `account` is the clone's account: repown.account, else the credential username.
  */
-export function ghAdvice(account: string | null, auth: AuthState): { readonly warn: string; readonly detail: string } | null {
+type GhAuth = Pick<AuthState, 'ghPresent' | 'gh'>;
+
+export function ghAdvice(account: string | null, auth: GhAuth): { readonly warn: string; readonly detail: string } | null {
   if (auth.ghPresent && !auth.gh.ok) return { warn: GH_UNVERIFIED, detail: 'check it yourself: gh auth status' };
   const active = ghActiveOther(account, auth);
   if (!active || account === null) return null;
@@ -291,20 +293,20 @@ export function ghAdvice(account: string | null, auth: AuthState): { readonly wa
 const GH_UNVERIFIED = 'could not be queried, so who `gh pr create` would act as is UNVERIFIED.';
 
 /** `gh auth switch` only works for a login gh already lists, and only in gh's spelling. */
-function ghFix(account: string, auth: AuthState): string {
+function ghFix(account: string, auth: GhAuth): string {
   const login = ghReportedLogin(account, auth);
   if (login !== null) return 'fix: gh auth switch -u ' + login;
   return 'fix: repown use ' + account + ' --gh   (signs ' + account + ' in to gh)';
 }
 
-function ghReportedLogin(account: string, auth: AuthState): string | null {
+function ghReportedLogin(account: string, auth: GhAuth): string | null {
   if (!auth.gh.ok) return null;
   const wanted = account.toLowerCase();
   const found = auth.gh.value.accounts.find((item) => item.login.toLowerCase() === wanted);
   return found === undefined ? null : found.login;
 }
 
-function ghActiveOther(account: string | null, auth: AuthState): string | null {
+function ghActiveOther(account: string | null, auth: GhAuth): string | null {
   if (!auth.gh.ok || !account || !auth.gh.value.active) return null;
   const active = auth.gh.value.active;
   return active.toLowerCase() === account.toLowerCase() ? null : active;

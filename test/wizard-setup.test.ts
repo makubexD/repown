@@ -18,6 +18,7 @@ import { setupFlow, planCommands, formatCommand, missingFlags, printable, NEW_AC
 import { runSetup } from '../src/wizard/setup-run.ts';
 import { readContext } from '../src/wizard/setup-context.ts';
 import { Git } from '../src/core/git.ts';
+import type { AuthState } from '../src/core/inspect.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name];
@@ -108,13 +109,70 @@ describe('setup flow', () => {
     await answer(ctx, [['account', 'octocat'], ['guard', true], ['review', 'run']]);
   });
 
-  test('gh is offered only on GitHub, only for an account gh knows, and only when another is active', async () => {
+  test('switching gh is offered on GitHub when gh knows the account and another is active', async () => {
     const gh = ok({ accounts: [{ login: 'octocat', active: false }, { login: 'octo-work', active: true }], active: 'octo-work' });
-    const answers = await answer(context({ gh }), [['account', 'octocat'], ['gh', true], ['guard', true], ['review', 'run']]);
-    assert.deepEqual(argvOf(answers, context({ gh }))[0], ['use', '--gh', '--', 'octocat']);
+    const ctx = context({ gh });
+    const answers = await answer(ctx, [['account', 'octocat'], ['gh', true], ['guard', true], ['review', 'run']]);
+    assert.deepEqual(argvOf(answers, ctx)[0], ['use', '--gh', '--', 'octocat']);
+    const step = stepOf(ctx, 'gh');
+    const picked = { account: 'octocat' };
+    assert.equal(wording(step.message, picked, ctx), 'Also make this account gh\'s active account?');
+    assert.match(wording(step.hint, picked, ctx), /git is not affected/);
+    assert.equal(step.detail?.(picked, ctx), 'gh\'s active account is octo-work');
+    const review = setupFlow(ctx).review({ account: 'octocat', gh: true, guard: true }, ctx);
+    assert.ok(review.steps.some((item) => item.what === 'Pin this clone to octocat, and make it gh\'s active account'));
     await answer(context({ gh, host: 'azdo', credentialPinned: false }), [['account', 'octocat'], ['guard', true], ['review', 'run']]);
+    const active = ok({ accounts: [{ login: 'octocat', active: true }], active: 'octocat' });
+    await answer(context({ gh: active }), [['account', 'octocat'], ['guard', true], ['review', 'run']]);
+  });
+
+  test('a GitHub account gh does not know is offered a sign-in, planning use --gh', async () => {
+    const gh = ok({ accounts: [{ login: 'octo-work', active: true }], active: 'octo-work' });
+    const ctx = context({ gh });
+    const step = stepOf(ctx, 'gh');
+    const picked = { account: 'octocat' };
+    assert.equal(step.when?.(picked, ctx), true);
+    assert.equal(step.initial?.(picked, ctx), false);
+    assert.equal(wording(step.message, picked, ctx), 'Sign in to gh as octocat too?');
+    assert.equal(wording(step.hint, picked, ctx),
+      'gh is GitHub\'s command-line tool (gh pr create); git pushes don\'t need it. ' +
+      'Yes opens your browser to sign in, and gh then acts as octocat in every terminal');
+    assert.equal(step.detail?.(picked, ctx), 'gh\'s active account is octo-work');
+    const answers = await answer(ctx, [['account', 'octocat'], ['gh', true], ['guard', false], ['review', 'run']]);
+    assert.deepEqual(argvOf(answers, ctx), [['use', '--gh', '--', 'octocat']]);
+    const review = setupFlow(ctx).review(answers, ctx);
+    assert.ok(review.steps.some((item) => item.what === 'Pin this clone to octocat, and sign octocat in to gh (opens your browser)'));
+    const given = await answer(ctx, [['guard', false], ['review', 'run']], { account: 'octocat', gh: true });
+    assert.deepEqual(argvOf(given, ctx)[0], ['use', '--gh', '--', 'octocat']);
+  });
+
+  test('the gh sign-in is hidden when gh cannot be queried or the host is not GitHub', async () => {
+    await answer(context({ gh: err('gh auth status failed') }), [['account', 'octocat'], ['guard', true], ['review', 'run']]);
+    const none = ok({ accounts: [], active: null });
+    await answer(context({ gh: none, host: 'azdo', credentialPinned: false }), [['account', 'octocat'], ['guard', true], ['review', 'run']]);
+    const ctx = context({ gh: none });
+    assert.equal(stepOf(ctx, 'gh').detail?.({ account: 'octocat' }, ctx), 'gh isn\'t signed in to any account');
+    assert.equal(stepOf(ctx, 'gh').when?.({ account: 'octocat' }, ctx), true);
+  });
+
+  test('when gh stays someone else, the review says so and names ghAdvice\'s fix', () => {
     const other = ok({ accounts: [{ login: 'octo-work', active: true }], active: 'octo-work' });
-    await answer(context({ gh: other }), [['account', 'octocat'], ['guard', true], ['review', 'run']]);
+    const declined = setupFlow(context({ gh: other })).review({ account: 'octocat', gh: false, guard: false }, context({ gh: other }));
+    assert.match(declined.notes.join('\n'), /gh still acts as octo-work, so gh pr create here would act as that account\. Later: fix: repown use octocat --gh {3}\(signs octocat in to gh\)/);
+    const accepted = setupFlow(context({ gh: other })).review({ account: 'octocat', gh: true, guard: false }, context({ gh: other }));
+    assert.equal(accepted.notes.some((line) => /gh still acts/.test(line)), false);
+    const known = ok({ accounts: [{ login: 'octocat', active: false }, { login: 'octo-work', active: true }], active: 'octo-work' });
+    const switched = setupFlow(context({ gh: known })).review({ account: 'octocat', guard: true }, context({ gh: known }));
+    assert.match(switched.notes.join('\n'), /Later: fix: gh auth switch -u octocat/);
+    const elsewhere = context({ gh: other, host: 'azdo', credentialPinned: false });
+    const hidden = setupFlow(elsewhere).review({ account: 'octocat', guard: false }, elsewhere);
+    assert.match(hidden.notes.join('\n'), /gh still acts as octo-work/);
+    const failed = setupFlow(context({ gh: err('gh auth status failed') })).review({ account: 'octocat', guard: false }, context({ gh: err('gh auth status failed') }));
+    assert.equal(failed.notes.some((line) => /gh still acts|could not be queried/.test(line)), false);
+    const settled = context({ gh: other, pinned: 'octocat', pinIntact: true, guard: 'on' });
+    const quiet = setupFlow(settled).review({ account: 'octocat' }, settled);
+    assert.equal(quiet.settled, true);
+    assert.match(quiet.notes.join('\n'), /gh still acts as octo-work/);
   });
 
   test('fix is offered only when gh is the helper, defaults to No, and runs before use', async () => {
@@ -255,7 +313,10 @@ describe('setup flow', () => {
   });
 
   test('every question carries a hint a newcomer can act on', () => {
-    for (const step of setupFlow(context()).steps) assert.ok(step.hint.trim().length > 10, step.id + ' has no real hint');
+    for (const step of setupFlow(context()).steps) {
+      const hint = wording(step.hint, { account: 'octocat' }, context());
+      assert.ok(hint.trim().length > 10, step.id + ' has no real hint');
+    }
   });
 
   test('missing flags for --no-input are named', () => {
@@ -457,6 +518,10 @@ function stepOf(ctx: SetupContext, id: string) {
   const found = setupFlow(ctx).steps.find((item) => item.id === id);
   assert.ok(found, id);
   return found;
+}
+
+function wording(text: string | ((answers: Answers, ctx: SetupContext) => string), answers: Answers, ctx: SetupContext): string {
+  return typeof text === 'function' ? text(answers, ctx) : text;
 }
 
 /** A POSIX shell's word splitting, for the single-quoted words formatCommand produces. */
@@ -781,4 +846,38 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.equal(await run([['account', 'octocat'], ['guard', true], ['review', CANCEL]]), 130);
     assert.equal(localConfig(at), before);
   });
+
+  test('after the steps, gh advice is one more done line and the first push is not repeated', async () => {
+    const left = await captureSetup(async () => ghAuth('octo-work', ['octo-work']));
+    assert.equal(left.code, 0, left.stderr);
+    assert.match(left.stderr, /done: this clone is set up for octocat/);
+    assert.match(left.stderr, /still to do: repown use octocat --gh {3}\(signs octocat in to gh\)/);
+    assert.doesNotMatch(left.stderr, /first push/);
+    const same = await captureSetup(async () => ghAuth('octocat', ['octocat']));
+    assert.equal(same.code, 0, same.stderr);
+    assert.doesNotMatch(same.stderr, /still to do/);
+  });
+
+  function ghAuth(active: string, logins: readonly string[]): AuthState {
+    return {
+      gcmPath: null, gcmPresent: false, stored: ok([]), ghPresent: true,
+      gh: ok({ accounts: logins.map((login) => ({ login, active: login === active })), active }),
+      helper: null, ghIsHelper: false, helperIsGcm: false, ghHelperOrigins: [],
+    };
+  }
+
+  async function captureSetup(auth: () => Promise<AuthState>): Promise<{ code: number; stderr: string }> {
+    let stderr = '';
+    const write = process.stderr.write;
+    process.stderr.write = ((chunk: string | Uint8Array) => { stderr += String(chunk); return true; }) as typeof process.stderr.write;
+    try {
+      const code = await runSetup(
+        { positional: ['octocat'], flags: new Map<string, string | boolean>([['cwd', at.box.dir], ['no-input', true]]) },
+        { interactive: false, auth },
+      );
+      return { code, stderr };
+    } finally {
+      process.stderr.write = write;
+    }
+  }
 });

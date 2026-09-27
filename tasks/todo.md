@@ -16,7 +16,7 @@ Each task: failing test, code, docs on its `Docs:` line, one commit.
   `'switch' | 'login' | 'advise' | 'none'`; `inspectAuth` again after a login.
   Docs: README `use` row, HOW-IT-WORKS `use` card, CLAUDE.md exec rule, FAQ on when gh
   contacts GitHub
-- [ ] 4. Setup offers it (G1, G6): the gh step asks switch or sign-in by state, both
+- [x] 4. Setup offers it (G1, G6): the gh step asks switch or sign-in by state, both
   planning `use --gh`; notes and done lines reuse `ghAdvice`; a wizard-screens scenario
   and `--no-input --gh`. Docs: HOW-IT-WORKS setup card
 - [ ] 5. Doctor readiness (D1–D3): reuse `loadRegistry`, `auth.stored`, `auth.gh`,

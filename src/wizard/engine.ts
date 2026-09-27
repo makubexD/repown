@@ -22,11 +22,14 @@ export interface Choice {
   readonly hint?: string;
 }
 
+/** Question text, or a function of the answers when the words depend on them. */
+export type Wording<C> = string | ((answers: Answers, context: C) => string);
+
 export interface Step<C> {
   readonly id: string;
   readonly kind: 'text' | 'select' | 'confirm';
-  readonly message: string;
-  readonly hint: string;
+  readonly message: Wording<C>;
+  readonly hint: Wording<C>;
   /** The option or positional this answer becomes, shown in help and in errors. */
   readonly flag: string;
   choices?(answers: Answers, context: C): Choice[];
@@ -38,6 +41,16 @@ export interface Step<C> {
   validate?(value: Answer): string | null;
   /** Asked only when this holds; absent means always. */
   when?(answers: Answers, context: C): boolean;
+}
+
+/** A step whose question has already been chosen for the answers so far. */
+export interface Drawn {
+  readonly id: string;
+  readonly kind: 'text' | 'select' | 'confirm';
+  readonly message: string;
+  readonly hint: string;
+  readonly flag: string;
+  validate?(value: Answer): string | null;
 }
 
 /** One command the review will run: what it does in plain words, and the command itself. */
@@ -75,10 +88,10 @@ export interface Flow<C> {
 }
 
 export interface Prompter {
-  ask(step: Step<never>, asked: Asked): Promise<Reply>;
+  ask(step: Drawn, asked: Asked): Promise<Reply>;
   review(review: Review): Promise<ReviewChoice>;
   /** "Change an answer": one of the steps that were asked, or BACK to the review. */
-  pickStep(steps: readonly Step<never>[]): Promise<string | typeof BACK | typeof CANCEL>;
+  pickStep(steps: readonly Drawn[]): Promise<string | typeof BACK | typeof CANCEL>;
   note(message: string): void;
   /** Releases the terminal once the questions are over; safe to call more than once. */
   close(): void;
@@ -127,7 +140,20 @@ async function ask<C>(step: Step<C>, at: { answers: Answers; canGoBack: boolean 
   const { answers, canGoBack } = at;
   const initial = answers[step.id] ?? await step.initial?.(answers, context);
   const choices = step.choices?.(answers, context) ?? [];
-  return prompter.ask(step as Step<never>, { initial, choices, detail: step.detail?.(answers, context), canGoBack });
+  const detail = step.detail?.(answers, context);
+  return prompter.ask(drawn(step, answers, context), { initial, choices, detail, canGoBack });
+}
+
+function drawn<C>(step: Step<C>, answers: Answers, context: C): Drawn {
+  const shown = {
+    id: step.id, kind: step.kind, flag: step.flag,
+    message: wording(step.message, answers, context), hint: wording(step.hint, answers, context),
+  };
+  return step.validate ? { ...shown, validate: step.validate } : shown;
+}
+
+function wording<C>(text: Wording<C>, answers: Answers, context: C): string {
+  return typeof text === 'function' ? text(answers, context) : text;
 }
 
 function askable<C>(step: Step<C>, answers: Answers, context: C, given: ReadonlySet<string>): boolean {
@@ -191,9 +217,9 @@ interface Return {
  */
 async function restartAt<C>(flow: Flow<C>, context: C, how: Return, prompter: Prompter): Promise<number | typeof CANCEL> {
   if (how.choice === 'back') return how.walk.asked.at(-1) ?? flow.steps.length;
-  const steps = reachable(flow, how.walk.answers, context, how.given);
+  const steps = reachable(flow, how.walk.answers, context, how.given).map((step) => drawn(step, how.walk.answers, context));
   if (steps.length === 0) { prompter.note('every answer came from a flag: there is nothing here to change'); return flow.steps.length; }
-  const id = await prompter.pickStep(steps as Step<never>[]);
+  const id = await prompter.pickStep(steps);
   if (id === CANCEL) return CANCEL;
   if (id === BACK) return flow.steps.length;
   const index = flow.steps.findIndex((step) => step.id === id);

@@ -523,7 +523,7 @@ flowchart TD
   F -->|--no-input| C
   F -->|--no-input, account incomplete| X5["🔴 exit 2: names the missing flags"]
   F -->|yes| A["account: one already seen, a recorded one, or a new login<br/>(suggests origin's owner when it is a user; then host, name, email)"]
-  A --> Q["only what applies here:<br/>switch gh · allow the organisation · the guard · gh as helper"]
+  A --> Q["only what applies here:<br/>switch or sign in to gh · allow the organisation · the guard · gh as helper"]
   A -->|Esc or Ctrl-C| N
   Q -->|Esc or Ctrl-C| N
   Q --> K{"already pinned to it, as recorded,<br/>and nothing else to do?"}
@@ -555,6 +555,7 @@ never suggested.
 | The account's user name (login) | "a new account", or nothing recorded and nothing detected. Starts as origin's owner only when that owner is a user and is not recorded. Refused if already recorded | the `<account>` of `accounts add` |
 | Where it's hosted, and your name and email as commits show them (on GitHub, with where to find your noreply address; this machine's default is shown, never filled in) | the login is new: "a new account", or one picked from the logins already seen | `accounts add <account> --name --email --host` |
 | Also make this account gh's active account? (default No) | a GitHub clone (or one whose origin isn't a URL), gh knows the account, another is active | `use --gh` |
+| Sign in to gh as that account too? (default No) | the same, except gh does not know the account. Yes opens a browser; gh then acts as that account in every terminal. The line under it names gh's active account, or says gh isn't signed in | `use --gh` |
 | This repository belongs to "octo-org". Let this clone push to it? (default Yes) | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
 | Turn on the push guard? (default Yes) | the guard is off, no other tool owns the hook, and `core.hooksPath` doesn't redirect hooks | `guard on` |
 | Stop gh answering git's sign-in requests? (whole machine, default No) | a GitHub clone, gh is the helper, and `fix` finds its entries | `fix --yes` |
@@ -636,7 +637,10 @@ OK    guard      on -- every push is checked before it leaves
 
        done: this clone is set up for octocat
        check it any time: repown (this clone), repown doctor (this machine)
+       still to do: gh auth switch -u octocat
 ```
+
+The last line is only when gh still acts as someone else. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh`. The review says the same thing (`gh still acts as <active>… Later:`). The first push's sign-in is said by `use`, not again here.
 
 **Already set up:** run it again in a clone that needs nothing.
 

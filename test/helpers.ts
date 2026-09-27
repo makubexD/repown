@@ -56,12 +56,13 @@ export function sandbox(): Sandbox {
 }
 
 function isolate(dir: string, globalConfig: string, systemConfig: string): Record<string, string | undefined> {
-  const saved = Object.fromEntries(['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'REPOWN_CONFIG_DIR', ...LEAKY]
+  const saved = Object.fromEntries(['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'REPOWN_CONFIG_DIR', 'GH_CONFIG_DIR', ...LEAKY]
     .map((name) => [name, process.env[name]]));
   for (const name of LEAKY) delete process.env[name];
   process.env['GIT_CONFIG_GLOBAL'] = globalConfig;
   process.env['GIT_CONFIG_SYSTEM'] = systemConfig;
   process.env['REPOWN_CONFIG_DIR'] = join(dir, 'repown-config');
+  process.env['GH_CONFIG_DIR'] = join(dir, 'gh-config');
   return saved;
 }
 

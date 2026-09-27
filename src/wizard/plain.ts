@@ -9,7 +9,7 @@
 
 import { createInterface, type Interface } from 'node:readline/promises';
 import type { Readable, Writable } from 'node:stream';
-import { BACK, CANCEL, type Asked, type Prompter, type Reply, type Review, type ReviewChoice, type Step } from './engine.ts';
+import { BACK, CANCEL, type Asked, type Drawn, type Prompter, type Reply, type Review, type ReviewChoice } from './engine.ts';
 import { BACK_TO_REVIEW, PICK_QUESTION, reviewDefault, reviewLines, reviewOptions, reviewQuestion, textWidth, wrap } from './review-text.ts';
 
 export interface Streams {
@@ -84,7 +84,7 @@ function queue(rl: Interface): Next {
 }
 
 /** The question, its hint and any detail under it, each wrapped and indented. */
-async function askStep(io: Io & { width: number }, step: Step<never>, asked: Asked): Promise<Reply> {
+async function askStep(io: Io & { width: number }, step: Drawn, asked: Asked): Promise<Reply> {
   const { initial, detail } = asked;
   io.say(step.message);
   for (const line of [step.hint, detail].filter((text) => text).flatMap((text) => wrap(text!, io.width))) io.say('  ' + line);

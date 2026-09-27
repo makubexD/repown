@@ -5,8 +5,10 @@
 //
 // Nothing is written before the commands run. Cancelling exits 130, declining 1.
 
+import { ghAdvice } from '../commands/status.ts';
 import { ok, err, type Result } from '../core/result.ts';
 import type { Git } from '../core/git.ts';
+import { inspectAuth, type AuthState } from '../core/inspect.ts';
 import { flagBool, flagString, gitFor, parseArgs, type Args } from '../ui/args.ts';
 import { specFor, type Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
@@ -27,6 +29,8 @@ export interface SetupDeps {
   readonly interactive: boolean;
   /** Tests pass a spy. Production leaves it unset, and the provider classifies. */
   readonly accountKind?: ReadOptions['accountKind'];
+  /** Re-read after the steps. Tests pass a fake; production uses inspectAuth. */
+  readonly auth?: ReadAuth;
 }
 
 const CANCELLED = 130;
@@ -47,7 +51,9 @@ export async function runSetup(args: Args, deps: SetupDeps): Promise<number> {
   }
   const prompter = unattended ? null : deps.prompter ?? await choosePrompter();
   try {
-    return await continueSetup({ args, git, given: given.value, prompter, accountKind: deps.accountKind });
+    return await continueSetup({
+      args, git, given: given.value, prompter, accountKind: deps.accountKind, readAuth: deps.auth ?? inspectAuth,
+    });
   } finally {
     prompter?.close();
   }
@@ -60,17 +66,18 @@ interface Setup {
   /** Null with --no-input: nothing is asked. */
   readonly prompter: Prompter | null;
   readonly accountKind?: ReadOptions['accountKind'];
+  readonly readAuth: ReadAuth;
 }
 
-async function continueSetup({ args, git, given, prompter, accountKind }: Setup): Promise<number> {
+async function continueSetup({ args, git, given, prompter, accountKind, readAuth }: Setup): Promise<number> {
   prompter?.intro?.('repown setup');
   prompter?.busy?.('Reading this clone and this machine');
   const ctx = await readContext(git, flagString(args, 'cwd'), contextOptions(prompter, accountKind));
   if (!ctx.ok) { out.fail('setup', ctx.error); return 1; }
   const answers = checkAgainst(given, ctx.value, flagString(args, 'allow-owner'));
   if (!answers.ok) return answers.error;
-  if (!prompter) return runUnattended(answers.value, ctx.value, git);
-  return runGuided(answers.value, ctx.value, { git, prompter });
+  if (!prompter) return runUnattended(answers.value, ctx.value, git, readAuth);
+  return runGuided(answers.value, ctx.value, { git, prompter, readAuth });
 }
 
 function contextOptions(prompter: Prompter | null, accountKind: ReadOptions['accountKind']): ReadOptions {
@@ -146,25 +153,28 @@ function checkAgainst(given: Answers, ctx: SetupContext, allowOwner: string | nu
 
 // ------------------------------------------------------------------- the runs
 
-async function runUnattended(answers: Answers, ctx: SetupContext, git: Git): Promise<number> {
+async function runUnattended(answers: Answers, ctx: SetupContext, git: Git, readAuth: ReadAuth): Promise<number> {
   const missing = missingFlags(answers, ctx.recorded);
   if (missing.length > 0) return usage('--no-input, but still needed: ' + missing.join(', '));
-  return execute(planCommands(answers, ctx), git);
+  return execute(planCommands(answers, ctx), git, readAuth);
 }
+
+type ReadAuth = (git: Git, probeUrl?: string) => Promise<AuthState>;
 
 interface Guided {
   readonly git: Git;
   readonly prompter: Prompter;
+  readonly readAuth: ReadAuth;
 }
 
-async function runGuided(given: Answers, ctx: SetupContext, { git, prompter }: Guided): Promise<number> {
+async function runGuided(given: Answers, ctx: SetupContext, { git, prompter, readAuth }: Guided): Promise<number> {
   const outcome = await wizard(setupFlow(ctx), ctx, given, prompter);
   if (outcome.status === 'done') { prompter.outro?.('Nothing changed: this clone was already set up'); return 0; }
   if (outcome.status !== 'run') return stoppedBefore(outcome.status, prompter);
   prompter.outro?.('Running the commands');
   // The commands own the terminal from here: none of them may find it held.
   prompter.close();
-  return execute(planCommands(outcome.answers, ctx), git);
+  return execute(planCommands(outcome.answers, ctx), git, readAuth);
 }
 
 /** One closing line: what happened, that nothing changed, and how to start again. */
@@ -197,7 +207,7 @@ async function choosePrompter(): Promise<Prompter> {
  * reaches the git and gh processes it has started; the command itself finishes what it
  * is doing, and nothing after it runs (exit 130).
  */
-async function execute(plan: readonly PlannedCommand[], git: Git): Promise<number> {
+async function execute(plan: readonly PlannedCommand[], git: Git, readAuth: ReadAuth): Promise<number> {
   let interrupted = false;
   const onInterrupt = (): void => { interrupted = true; };
   process.on('SIGINT', onInterrupt);
@@ -214,8 +224,21 @@ async function execute(plan: readonly PlannedCommand[], git: Git): Promise<numbe
   } finally {
     process.off('SIGINT', onInterrupt);
   }
-  finished(plan);
+  await finishRun(plan, git, readAuth);
   return 0;
+}
+
+async function finishRun(plan: readonly PlannedCommand[], git: Git, readAuth: ReadAuth): Promise<void> {
+  finished(plan);
+  const left = await ghLeftover(plan, git, readAuth);
+  if (left) out.detail(left);
+}
+
+async function ghLeftover(plan: readonly PlannedCommand[], git: Git, readAuth: ReadAuth): Promise<string | null> {
+  const account = plan.find((item) => item.argv[0] === 'use')?.argv.at(-1);
+  if (!account) return null;
+  const advice = ghAdvice(account, await readAuth(git));
+  return advice ? 'still to do: ' + advice.detail.replace(/^fix: /, '') : null;
 }
 
 /**

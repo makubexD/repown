@@ -173,12 +173,12 @@ describe('setup flow', () => {
   test('when gh stays someone else, the review says so and names ghAdvice\'s fix', () => {
     const other = ok({ accounts: [{ login: 'octo-work', active: true }], active: 'octo-work' });
     const declined = setupFlow(context({ gh: other })).review({ account: 'octocat', gh: false, guard: false }, context({ gh: other }));
-    assert.match(declined.notes.join('\n'), /gh still acts as octo-work, so gh pr create here would act as that account\. Later: fix: repown use octocat --gh {3}\(signs octocat in to gh\)/);
+    assert.match(declined.notes.join('\n'), /gh still acts as octo-work, so gh pr create here would act as that account \(git pushes are unaffected\)\. If you use gh here, later: fix: repown use octocat --gh {3}\(signs octocat in to gh\)/);
     const accepted = setupFlow(context({ gh: other })).review({ account: 'octocat', gh: true, guard: false }, context({ gh: other }));
     assert.equal(accepted.notes.some((line) => /gh still acts/.test(line)), false);
     const known = ok({ accounts: [{ login: 'octocat', active: false }, { login: 'octo-work', active: true }], active: 'octo-work' });
     const switched = setupFlow(context({ gh: known })).review({ account: 'octocat', guard: true }, context({ gh: known }));
-    assert.match(switched.notes.join('\n'), /Later: fix: gh auth switch -u octocat/);
+    assert.match(switched.notes.join('\n'), /later: fix: gh auth switch -u octocat/);
     const elsewhere = context({ gh: other, host: 'azdo', credentialPinned: false });
     const hidden = setupFlow(elsewhere).review({ account: 'octocat', guard: false }, elsewhere);
     assert.match(hidden.notes.join('\n'), /gh still acts as octo-work/);
@@ -878,11 +878,11 @@ describe('repown setup, on a terminal (scripted)', () => {
     const left = await captureSetup(async () => ghAuth('octo-work', ['octo-work']));
     assert.equal(left.code, 0, left.stderr);
     assert.match(left.stderr, /done: this clone is set up for octocat/);
-    assert.match(left.stderr, /still to do: repown use octocat --gh {3}\(signs octocat in to gh\)/);
+    assert.match(left.stderr, /optional, only if you use gh here: repown use octocat --gh {3}\(signs octocat in to gh\)/);
     assert.doesNotMatch(left.stderr, /first push/);
     const same = await captureSetup(async () => ghAuth('octocat', ['octocat']));
     assert.equal(same.code, 0, same.stderr);
-    assert.doesNotMatch(same.stderr, /still to do/);
+    assert.doesNotMatch(same.stderr, /optional, only if you use gh here/);
   });
 
   function ghAuth(active: string, logins: readonly string[]): AuthState {

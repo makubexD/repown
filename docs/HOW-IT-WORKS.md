@@ -237,7 +237,7 @@ This machine
   helper         manager
   gh active      octo-work
 
-WARN  gh         active as "octo-work", so `gh pr create` here would act as that account.
+WARN  gh         active as "octo-work", so `gh pr create` here would act as that account. git pushes are unaffected; this only matters if you use gh here.
        fix: gh auth switch -u octocat
 OK    identity   this clone is pinned, and its credential mechanism honours it
 
@@ -672,10 +672,10 @@ OK    guard      on -- every push is checked before it leaves
 
        done: this clone is set up for octocat
        check it any time: repown (this clone), repown doctor (this machine)
-       still to do: gh auth switch -u octocat
+       optional, only if you use gh here: gh auth switch -u octocat
 ```
 
-The last line is only when gh still acts as someone else. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh`. The review says the same thing (`gh still acts as <active>… Later:`). The first push's sign-in is said by `use`, not again here.
+The last line is only when gh still acts as someone else. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh`. The review says the same thing (`gh still acts as <active>… If you use gh here, later:`). The first push's sign-in is said by `use`, not again here.
 
 **Already set up:** run it again in a clone that needs nothing.
 

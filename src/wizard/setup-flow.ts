@@ -464,7 +464,7 @@ function ghLeft(answers: Answers, ctx: SetupContext): string | null {
   if (answers['gh'] === true || !gh?.ok || !gh.value.active) return null;
   const advice = ghAdvice(accountOf(answers), { ghPresent: true, gh });
   if (!advice) return null;
-  return 'gh still acts as ' + gh.value.active + ', so gh pr create here would act as that account. Later: ' + advice.detail;
+  return 'gh still acts as ' + gh.value.active + ', so gh pr create here would act as that account (git pushes are unaffected). If you use gh here, later: ' + advice.detail;
 }
 
 /**

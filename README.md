@@ -174,7 +174,7 @@ This machine
   helper         manager
   gh active      octo-work
 
-WARN  gh         active as "octo-work", so `gh pr create` here would act as that account.
+WARN  gh         active as "octo-work", so `gh pr create` here would act as that account. git pushes are unaffected; this only matters if you use gh here.
        fix: gh auth switch -u octocat
 OK    identity   this clone is pinned, and its credential mechanism honours it
 

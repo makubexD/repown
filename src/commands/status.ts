@@ -285,7 +285,7 @@ export function ghAdvice(account: string | null, auth: GhAuth): { readonly warn:
   const active = ghActiveOther(account, auth);
   if (!active || account === null) return null;
   return {
-    warn: 'active as "' + active + '", so `gh pr create` here would act as that account.',
+    warn: 'active as "' + active + '", so `gh pr create` here would act as that account. git pushes are unaffected; this only matters if you use gh here.',
     detail: ghFix(account, auth),
   };
 }

@@ -239,7 +239,7 @@ async function ghLeftover(plan: readonly PlannedCommand[], git: Git, readAuth: R
   const account = plan.find((item) => item.argv[0] === 'use')?.argv.at(-1);
   if (!account) return null;
   const advice = ghAdvice(account, await readAuth(git));
-  return advice ? 'still to do: ' + advice.detail.replace(/^fix: /, '') : null;
+  return advice ? 'optional, only if you use gh here: ' + advice.detail.replace(/^fix: /, '') : null;
 }
 
 /**

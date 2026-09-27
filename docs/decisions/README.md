@@ -30,6 +30,7 @@ name was free on npm, and is now this package.
 | [017](ADR-017-setup-suggests-detected-accounts.md) | Setup suggests the accounts it can see, never the machine default |
 | [018](ADR-018-bare-repown-guides-new-clones.md) | Bare repown guides a clone that isn't set up; scripts still get status |
 | [019](ADR-019-repown-signs-accounts-in-to-gh.md) | repown can sign an account in to gh; the terminal is handed over, never read |
+| [020](ADR-020-setup-leaves-clone-ready.md) | Setup leaves the clone ready to work, in one of two modes |
 
 **Adding one:** create the next number, using the same sections: Status, Context,
 Decision, Alternatives considered, Consequences. Cite it as `ADR-0NN`. Never delete or

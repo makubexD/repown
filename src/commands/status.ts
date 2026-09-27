@@ -69,13 +69,13 @@ function summary(repo: RepoState, auth: AuthState, registry: LoadedRegistry): vo
 }
 
 function place(repo: RepoState): string {
-  return '  ' + (repo.root ?? repo.git.cwd) + '  ' + headLabel(repo.branch);
+  const where = repo.root ?? repo.git.cwd;
+  return repo.branch ? '  ' + where + '  ' + headLabel(repo.branch) : '  ' + where;
 }
 
-function headLabel(branch: RepoState['branch']): string {
-  if (branch?.kind === 'detached') return '(detached at ' + branch.hash + ')';
-  if (branch?.kind === 'branch') return '(branch ' + branch.name + ')';
-  return '(unknown)';
+function headLabel(branch: NonNullable<RepoState['branch']>): string {
+  if (branch.kind === 'detached') return '(detached at ' + branch.hash + ')';
+  return '(branch ' + branch.name + ')';
 }
 
 function cloneSettings(repo: RepoState, registry: LoadedRegistry): void {
@@ -212,13 +212,13 @@ async function reportWarnings(repo: RepoState, auth: AuthState, registry: Loaded
     guardWarning(repo),
     submoduleWarning(repo),
     helperWarning(repo, auth),
-    ghWarning(repo.identity.account, auth),
+    ghWarning(pinnedAccount(repo), auth),
   ];
   return warned.filter((flag) => flag).length;
 }
 
 function accountWarning(repo: RepoState, registry: LoadedRegistry): boolean {
-  if (!registry.ok) return false;
+  if (!registry.ok) return registryUnread();
   const pinned = pinnedAccount(repo);
   const found = pinned === null ? null : recordedAs(registry.value, pinned);
   if (!found || matchesRecord(repo, found.entry)) return false;
@@ -266,24 +266,42 @@ async function ownerWarning(repo: RepoState): Promise<boolean> {
   return true;
 }
 
+function registryUnread(): boolean {
+  out.warn('account', 'the account registry could not be read, so this clone\'s account was not compared with it.');
+  out.detail('see: repown accounts list');
+  return true;
+}
+
 /**
  * The unknown case is REPORTED, never skipped. Guarding this on the active
  * account being truthy is how a failed lookup used to make the whole warning
  * disappear, leaving output that looked clean rather than uncertain.
+ * `account` is the clone's account: repown.account, else the credential username.
  */
+export function ghAdvice(account: string | null, auth: AuthState): { readonly warn: string; readonly detail: string } | null {
+  if (auth.ghPresent && !auth.gh.ok) return { warn: GH_UNVERIFIED, detail: 'check it yourself: gh auth status' };
+  const active = ghActiveOther(account, auth);
+  if (!active) return null;
+  return {
+    warn: 'active as "' + active + '", so `gh pr create` here would act as that account.',
+    detail: 'fix: gh auth switch -u ' + account,
+  };
+}
+
+const GH_UNVERIFIED = 'could not be queried, so who `gh pr create` would act as is UNVERIFIED.';
+
+function ghActiveOther(account: string | null, auth: AuthState): string | null {
+  if (!auth.gh.ok || !account || !auth.gh.value.active) return null;
+  const active = auth.gh.value.active;
+  return active.toLowerCase() === account.toLowerCase() ? null : active;
+}
+
 function ghWarning(account: string | null, auth: AuthState): boolean {
-  if (auth.ghPresent && !auth.gh.ok) {
-    out.warn('gh', 'could not be queried, so who `gh pr create` would act as is UNVERIFIED.');
-    out.detail('check it yourself: gh auth status');
-    return true;
-  }
-  if (auth.gh.ok && auth.gh.value.active && account &&
-      auth.gh.value.active.toLowerCase() !== account.toLowerCase()) {
-    out.warn('gh', 'active as "' + auth.gh.value.active + '", so `gh pr create` here would act as that account.');
-    out.detail('fix: gh auth switch -u ' + account);
-    return true;
-  }
-  return false;
+  const advice = ghAdvice(account, auth);
+  if (!advice) return false;
+  out.warn('gh', advice.warn);
+  out.detail(advice.detail);
+  return true;
 }
 
 function guardWarning(repo: RepoState): boolean {

@@ -64,6 +64,11 @@ export class Git {
     return succeeded(await this.exec(['rev-parse', '--git-dir']));
   }
 
+  /** No work tree to pin a commit identity in. A failed rev-parse is not bare. */
+  async isBare(): Promise<boolean> {
+    return output(await this.exec(['rev-parse', '--is-bare-repository'])) === 'true';
+  }
+
   /** The working tree root. Asked of git so a linked worktree resolves to itself. */
   async root(): Promise<string | null> {
     return output(await this.exec(['rev-parse', '--show-toplevel']));

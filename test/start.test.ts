@@ -4,11 +4,13 @@
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { Git } from '../src/core/git.ts';
-import { chooseStart } from '../src/commands/start.ts';
+import { registryPath } from '../src/core/registry.ts';
+import { chooseStart, startDefault } from '../src/commands/start.ts';
 import { sandbox, type Sandbox } from './helpers.ts';
 
 describe('chooseStart', () => {
@@ -18,26 +20,45 @@ describe('chooseStart', () => {
 
   test('S1: an unpinned clone in a terminal starts setup', async () => {
     unpin(box);
-    assert.equal(await chooseStart({ interactive: true, git: new Git(box.dir) }), 'setup');
+    assert.equal(await chooseStart(deps(box, true, true)), 'setup');
   });
 
   test('S1: GitHub https with no credential username is not set up', async () => {
     box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
-    assert.equal(await chooseStart({ interactive: true, git: new Git(box.dir) }), 'setup');
+    assert.equal(await chooseStart(deps(box, true, true)), 'setup');
   });
 
   test('S2: a pinned clone in a terminal shows status', async () => {
     pinGithub(box);
-    assert.equal(await chooseStart({ interactive: true, git: new Git(box.dir) }), 'status');
+    assert.equal(await chooseStart(deps(box, true, true)), 'status');
   });
 
   test('S2: name and email, with no credential key to pin, shows status', async () => {
-    assert.equal(await chooseStart({ interactive: true, git: new Git(box.dir) }), 'status');
+    assert.equal(await chooseStart(deps(box, true, true)), 'status');
   });
 
   test('S3: an unpinned clone without a terminal shows status', async () => {
     unpin(box);
-    assert.equal(await chooseStart({ interactive: false, git: new Git(box.dir) }), 'status');
+    assert.equal(await chooseStart(deps(box, false, false)), 'status');
+  });
+
+  test('S3: an unpinned clone with stdout redirected shows status', async () => {
+    unpin(box);
+    assert.equal(await chooseStart(deps(box, true, false)), 'status');
+  });
+
+  test('S11: a bare repository in a terminal shows help', async () => {
+    assert.equal(await chooseStart({ interactive: true, stdoutIsTerminal: true, git: new Git(bareRepo(box)) }), 'help');
+  });
+
+  test('S11: a bare repository without a terminal shows status', async () => {
+    assert.equal(await chooseStart({ interactive: false, stdoutIsTerminal: false, git: new Git(bareRepo(box)) }), 'status');
+  });
+
+  test('S12: an unreadable registry does not start setup', async () => {
+    pinGithub(box);
+    breakRegistry();
+    assert.equal(await chooseStart(deps(box, true, true)), 'status');
   });
 });
 
@@ -47,17 +68,80 @@ describe('chooseStart outside a repository', () => {
   afterEach(() => box.dispose());
 
   test('S4: a terminal that is not a clone shows help', async () => {
-    await outside((git) => chooseStart({ interactive: true, git }).then((choice) => {
+    await outside((git) => chooseStart({ interactive: true, stdoutIsTerminal: true, git }).then((choice) => {
+      assert.equal(choice, 'help');
+    }));
+  });
+
+  test('S4: help still prints when stdout is redirected', async () => {
+    await outside((git) => chooseStart({ interactive: true, stdoutIsTerminal: false, git }).then((choice) => {
       assert.equal(choice, 'help');
     }));
   });
 
   test('without a terminal, not being a clone still shows status', async () => {
-    await outside((git) => chooseStart({ interactive: false, git }).then((choice) => {
+    await outside((git) => chooseStart({ interactive: false, stdoutIsTerminal: false, git }).then((choice) => {
       assert.equal(choice, 'status');
     }));
   });
 });
+
+const SETUP_SENTENCE =
+  'This clone isn\'t set up yet, so repown is starting setup (repown status shows its settings).\n';
+
+describe('startDefault', () => {
+  let box: Sandbox;
+  beforeEach(() => { box = sandbox(); });
+  afterEach(() => box.dispose());
+
+  test('S1: setup prints exactly that sentence on stderr', async () => {
+    unpin(box);
+    const run = await captured(() => startDefault(deps(box, true, true)));
+    assert.equal(run.choice, 'setup');
+    assert.equal(run.stderr, SETUP_SENTENCE);
+  });
+
+  test('status and help print nothing', async () => {
+    const status = await captured(() => startDefault(deps(box, true, true)));
+    assert.equal(status.choice, 'status');
+    assert.equal(status.stderr, '');
+    await outside(async (git) => {
+      const help = await captured(() => startDefault({ interactive: true, stdoutIsTerminal: true, git }));
+      assert.equal(help.choice, 'help');
+      assert.equal(help.stderr, '');
+    });
+  });
+});
+
+function deps(box: Sandbox, interactive: boolean, stdoutIsTerminal: boolean): { interactive: boolean; stdoutIsTerminal: boolean; git: Git } {
+  return { interactive, stdoutIsTerminal, git: new Git(box.dir) };
+}
+
+function bareRepo(box: Sandbox): string {
+  const bare = join(box.dir, '..', 'bare.git');
+  execFileSync('git', ['init', '--bare', '-q', bare]);
+  return bare;
+}
+
+function breakRegistry(): void {
+  const path = registryPath();
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, '{');
+}
+
+async function captured(run: () => Promise<string>): Promise<{ choice: string; stderr: string }> {
+  const chunks: string[] = [];
+  const write = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    chunks.push(String(chunk));
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    return { choice: await run(), stderr: chunks.join('') };
+  } finally {
+    process.stderr.write = write;
+  }
+}
 
 function unpin(box: Sandbox): void {
   box.git('config', '--local', '--unset', 'user.name');

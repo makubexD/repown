@@ -173,8 +173,10 @@ After `repown fix`, gh's active account affects only the gh CLI. To keep it in s
 
 ### 5. Check where you are
 
-**`repown`** sets up a clone that isn't set up yet when you're in a terminal, and otherwise
-shows status. **`repown status`** prints all three identities and changes nothing.
+In a terminal, bare **`repown`** starts `repown setup` in a clone that isn't set up, shows
+status in one that is, and shows the help outside a clone (exit 0). Without a terminal, or
+with its output redirected, it is always status (exit 1 outside a clone). **`repown status`**
+prints all three identities and changes nothing.
 
 <details><summary>Show how</summary>
 
@@ -216,14 +218,17 @@ OK    identity   this clone is pinned, and its credential mechanism honours it
 | 🟡 a pre-push hook repown did not write, or `core.hooksPath` | another tool owns the hook | [card 10](#10-other-hook-tools) |
 | 🟡 `this clone has submodules` | each submodule is a clone of its own | `git submodule foreach "repown use <account> && repown guard on"` |
 | 🟡 `this clone commits as …, but <account> is recorded as …` | the clone's identity drifted from the record | `repown use <account>` |
+| 🟡 `the account registry could not be read` | this clone's account was not compared with the registry | `repown accounts list` |
 | 🟢 `commit identity is pinned; its credentials are left to …` | a host where repown doesn't pin credentials, or a helper other than Git Credential Manager (see the 🟡 helper row) | nothing on other hosts; on GitHub, `repown doctor` |
 | `pushes as not pinned by repown on …` | a host where credentials aren't pinned | nothing: expected |
 | `account … (not in this machine's registry)` | pinned by hand or on another machine | `repown accounts add <account> --name "..." --email "..."` |
 | `origin no remote` | nothing to push to yet | nothing |
 
 🔴 rows exit 1; 🟡 rows alone exit 0. Stderr then ends with a count (`1 problem, 2 warnings`),
-adding `: run repown setup` when an identity problem is among them. Outside a clone it prints
-`Not a git repository` and exits 1.
+adding `: run repown setup` when an identity problem is among them. Outside a clone,
+`repown status` prints `Not a git repository` and exits 1. Bare `repown` does that only
+without a terminal or with its output redirected; in a terminal it shows the help and
+exits 0. A bare repository takes that same path.
 
 </details>
 

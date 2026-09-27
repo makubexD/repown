@@ -133,7 +133,8 @@ repown                 # a new clone: just typing this starts the guided setup
 **Keys:** ↑/↓ choose, Enter confirms, Esc or Ctrl-C stops with nothing changed. From the
 second question on, each list ends with **← Back**; at a typed answer, enter `<`. In a
 plain terminal the questions come as numbered choices ([when](docs/CONFIGURATION.md#environment-variables));
-there, Ctrl-C stops. Run it again in a clone that's already set up and it says so: choose
+there, Ctrl-C stops. Run `repown` again in a clone that's already set up and it shows
+that clone's status. `repown setup` there says the clone is already set up and offers
 **Done**. Every screen: [card 13](docs/HOW-IT-WORKS.md#13-guided-setup).
 
 ## Commands
@@ -148,7 +149,7 @@ then commit and push.
 | Once per clone | `repown setup [<account>]` | guided: asks, shows each step and its command, then runs them. Every answer has a flag (`--name`, `--email`, `--host`, `--gh`, `--allow-owner <owner>`, `--guard`, `--fix`); `--no-input` asks nothing ([scripts and CI](docs/CONFIGURATION.md#scripts-and-ci)) |
 | | `repown use <account> [--gh]` | what setup runs: pin this clone to an account; `--gh` also switches gh's active account. `--name` with `--email` skips the registry, the file where repown remembers accounts |
 | | `repown guard on \| off \| status` | install, remove or show the pre-push hook (bare `repown guard` shows it) |
-| Any time | `repown` (or `repown status`) | this clone's and this machine's settings, and what to fix; exits 1 on a problem (warnings alone exit 0). In a terminal, bare `repown` in a clone that isn't set up starts `repown setup` instead; without a terminal it's always status |
+| Any time | `repown` (or `repown status`) | this clone's and this machine's settings, and what to fix; exits 1 on a problem (warnings alone exit 0). In a terminal, bare `repown` starts `repown setup` in a clone that isn't set up, shows status in one that is, and shows the help outside a clone (exit 0). Without a terminal, or with its output redirected, it is always status (exit 1 outside a clone) |
 | | `repown scan [dir...] [--emails] [--depth <n>] [--format json]` | every clone under the folders (default: this one, 3 levels deep): owner, host, identity, guard, and which email domains its history has. Changes nothing |
 | Rarely | `repown accounts list \| add \| remove` | the accounts this machine knows (bare `repown accounts` lists them; `add` takes `--name`, `--email`, `--host github\|azdo\|generic`; `list --format json` for scripts) |
 | | `repown off` | unpin this clone, leaving global config alone; warns if the guard is still on |

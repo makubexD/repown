@@ -22,7 +22,9 @@ export function renderTopHelp(entries: ReadonlyMap<string, Command | CommandGrou
 function topHeader(entries: ReadonlyMap<string, Command | CommandGroup>): string[] {
   const lines = ['', '  repown <command> [options]', ''];
   for (const [name, entry] of entries) lines.push('  ' + name.padEnd(10) + entry.summary);
-  lines.push('', '  Run `repown` alone to set up a new clone (in a terminal), or to see its status once it is.');
+  lines.push('', '  Bare `repown`, in a terminal: `repown setup` in a clone that isn\'t set up, status in');
+  lines.push('  one that is, and this help outside a clone (exit 0). Without a terminal, or with its');
+  lines.push('  output redirected, it is always status (exit 1 outside a clone).');
   lines.push('  Run `repown help <command>` for its options.', '');
   return lines;
 }

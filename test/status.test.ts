@@ -9,7 +9,10 @@ import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
+import { ghAdvice } from '../src/commands/status.ts';
+import type { AuthState } from '../src/core/inspect.ts';
 import { loadRegistry, registryPath } from '../src/core/registry.ts';
+import { ok } from '../src/core/result.ts';
 import { sandbox, type Sandbox } from './helpers.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
@@ -77,13 +80,34 @@ describe('repown status layout', () => {
     assert.match(run.stdout, /helper\s+manager$/m);
   });
 
-  test('S7: default is the global identity an unpinned clone inherits', () => {
+  test('S7: default is the effective identity an unpinned clone inherits', () => {
     unpin(box);
     box.writeGlobalConfig('[user]\n\tname = Octo Cat\n\temail = octocat@example.invalid\n');
     const run = repown(['status'], box.dir);
     assert.equal(run.status, 1);
     assert.match(run.stdout, /commits as\s+NOT SET LOCALLY/);
     assert.match(run.stdout, /default\s+Octo Cat <octocat@example\.invalid>/);
+  });
+
+  test('S7: an includeIf address is the default, and the FAIL quotes that same address', () => {
+    unpin(box);
+    const included = join(box.dir, '..', 'included-identity');
+    writeFileSync(included, '[user]\n\temail = octo-work@example.invalid\n');
+    box.writeGlobalConfig('[includeIf "gitdir:**"]\n\tpath = ' + included.replaceAll('\\', '/') + '\n');
+    const run = repown(['status'], box.dir);
+    assert.equal(run.status, 1);
+    assert.match(run.stdout, /default\s+\? <octo-work@example\.invalid>/);
+    assert.match(run.stderr, /inherits the machine default \(octo-work@example\.invalid\)/);
+  });
+
+  test('S7: a pinned clone shows an identity that lives only in the system file', () => {
+    pinGithub(box);
+    const system = process.env['GIT_CONFIG_SYSTEM'];
+    assert.ok(system);
+    writeFileSync(system, '[user]\n\tname = Octo Work\n\temail = octo-work@example.invalid\n');
+    const run = repown(['status'], box.dir);
+    assert.match(run.stdout, /commits as\s+Octo Cat <octocat@example\.invalid>/);
+    assert.match(run.stdout, /default\s+Octo Work <octo-work@example\.invalid>/);
   });
 
   test('S7: default stays the machine identity when this clone pins another', () => {
@@ -181,20 +205,33 @@ describe('repown status account', () => {
     breakRegistry();
     const loaded = await loadRegistry();
     const error = loaded.ok ? '' : loaded.error;
-    const run = repown(['status'], box.dir);
+    const run = repown(['status'], box.dir, quietEnv());
     assert.equal(run.status, 0);
     assert.notEqual(error, '');
     assert.equal(accountLine(run.stdout), '  account        registry could not be read: ' + error);
     assert.doesNotMatch(run.stdout, /none recorded/);
-    assert.doesNotMatch(run.stderr, /WARN {2}account/);
+    assertRegistryWarning(run.stderr);
+    assert.equal(closing(run.stderr), '2 warnings');
+    assert.doesNotMatch(run.stderr, /run repown setup/);
   });
 
   test('S8: an unreadable registry never looks like none recorded', () => {
     breakRegistry();
-    const run = repown(['status'], box.dir);
+    const run = repown(['status'], box.dir, quietEnv());
     assert.equal(run.status, 0);
     assert.match(accountLine(run.stdout), /^ {2}account {8}registry could not be read: /);
     assert.doesNotMatch(run.stdout, /none recorded/);
+    assertRegistryWarning(run.stderr);
+    assert.equal(counted(run.stderr), tallyCount(run.stderr), run.stderr);
+  });
+});
+
+describe('gh warning account', () => {
+  test('repown.account octo-work, credential username octocat: the fix switches to octo-work', () => {
+    const advice = ghAdvice('octo-work', ghActive('octocat'));
+    assert.ok(advice);
+    assert.match(advice.warn, /active as "octocat"/);
+    assert.equal(advice.detail, 'fix: gh auth switch -u octo-work');
   });
 });
 
@@ -285,6 +322,40 @@ describe('repown status failure pointers', () => {
     assert.equal(run.status, 0, run.stderr);
     assert.equal(run.stderr, '');
   });
+
+  test('S9: a foreign pre-push hook is counted in the closing tally', () => {
+    pinGithub(box);
+    const hooks = join(box.dir, '.git', 'hooks');
+    mkdirSync(hooks, { recursive: true });
+    writeFileSync(join(hooks, 'pre-push'), '#!/bin/sh\nexit 0\n');
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.match(run.stderr, /a pre-push hook repown did not write/);
+    assert.equal(counted(run.stderr), tallyCount(run.stderr), run.stderr);
+  });
+
+  test('S9: core.hooksPath redirected is counted in the closing tally', () => {
+    pinGithub(box);
+    box.git('config', '--local', 'core.hooksPath', join(box.dir, 'husky'));
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.match(run.stderr, /core\.hooksPath/);
+    assert.equal(counted(run.stderr), tallyCount(run.stderr), run.stderr);
+  });
+
+  test('S9: no credential helper on a pinned GitHub clone is counted in the closing tally', () => {
+    pinGithub(box);
+    box.git('config', '--local', '--unset', 'credential.helper');
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.match(run.stderr, /no credential helper is set/);
+    assert.equal(counted(run.stderr), tallyCount(run.stderr), run.stderr);
+  });
+
+  test('S9: a non-GCM helper is counted in the closing tally', () => {
+    pinGithub(box);
+    box.git('config', '--local', 'credential.helper', 'store');
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.match(run.stderr, /"store" serves credentials here/);
+    assert.equal(counted(run.stderr), tallyCount(run.stderr), run.stderr);
+  });
 });
 
 describe('repown status outside a repository', () => {
@@ -362,8 +433,29 @@ function guardOn(box: Sandbox): void {
   assert.equal(run.status, 0, run.stderr);
 }
 
-function counted(stderr: string, word: 'FAIL' | 'WARN'): number {
-  return stderr.split('\n').filter((line) => line.startsWith(word + '  ')).length;
+function counted(stderr: string, word?: 'FAIL' | 'WARN'): number {
+  const lines = stderr.split('\n');
+  if (word === undefined) return lines.filter((line) => line.startsWith('FAIL  ') || line.startsWith('WARN  ')).length;
+  return lines.filter((line) => line.startsWith(word + '  ')).length;
+}
+
+/** Problems plus warnings named by the closing tally. */
+function tallyCount(stderr: string): number {
+  const line = closing(stderr).replace(/: run repown setup$/, '');
+  return [...line.matchAll(/(\d+) /g)].reduce((sum, match) => sum + Number(match[1]), 0);
+}
+
+function assertRegistryWarning(stderr: string): void {
+  assert.ok(stderr.includes('WARN  account    the account registry could not be read, so this clone\'s account was not compared with it.'), stderr);
+  assert.ok(stderr.includes('       see: repown accounts list'), stderr);
+}
+
+function ghActive(login: string): AuthState {
+  return {
+    gcmPath: null, gcmPresent: false, stored: ok([]), ghPresent: true,
+    gh: ok({ accounts: [{ login, active: true }], active: login }),
+    helper: null, ghIsHelper: false, helperIsGcm: false, ghHelperOrigins: [],
+  };
 }
 
 /** The last stderr line, which must stand after a blank line. */

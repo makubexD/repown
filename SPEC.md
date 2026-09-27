@@ -33,7 +33,7 @@ Every scenario below is asserted by a test, and `npm run build` and `npm test` p
 |---|---|---|
 | S1 | `repown`, terminal, clone not set up | stderr: "This clone isn't set up yet, so repown is starting setup (repown status shows its settings)", then the wizard, with `repown setup`'s exit codes |
 | S2 | `repown`, terminal, clone set up | the enriched status (S6-S9) |
-| S3 | `repown`, no terminal (piped, CI) | status; exit codes and facts unchanged, only the layout is new |
+| S3 | `repown`, no terminal, or output redirected | status; exit codes and facts unchanged, only the layout is new |
 | S4 | `repown`, terminal, not a clone | the top help, exit 0 |
 | S5 | `repown --cwd <dir>` or any other argument | status, as today (no routing) |
 | S6 | `repown status` | title `repown status · current settings of this clone`, then the clone's path and branch (a detached HEAD shows its short hash) |
@@ -41,6 +41,8 @@ Every scenario below is asserted by a test, and `npm run build` and `npm test` p
 | S8 | `account` field | pinned, recorded, name/email match: `octocat (recorded)`; mismatch: `octocat (recorded as <name> <email>)` plus a WARN, fix `repown use octocat`; not recorded: `octocat (not in this machine's registry)`; not pinned: `not pinned (recorded: octocat, octo-work)` or `not pinned (none recorded)`; unreadable registry: `registry could not be read: <why>` |
 | S9 | failure pointers | an identity FAIL's fix reads `repown setup   (or: repown use <account>)`; a closing stderr line `N problem(s), M warning(s)`, plus `: run repown setup` when an identity FAIL is among them; a clean run prints none |
 | S10 | `repown status` outside a clone | unchanged: `Not a git repository`, exit 1 |
+| S11 | `repown`, a bare repository | the same as not a clone: the help and exit 0 in a terminal (S4), status and exit 1 otherwise (S3) |
+| S12 | the account registry cannot be read | a WARN, included in the closing count; the field stays `registry could not be read: <why>`; not an identity problem, so no routing to setup and the exit code is unchanged |
 
 ## Open questions
 None.

@@ -22,19 +22,25 @@ guard. gh as the credential helper is a FAIL of its own, and its fix is `repown 
 
 ## Decision
 
-- **Bare `repown`, with no arguments at all, chooses only in a terminal.** A terminal
-  means stdin and stderr are both terminals, the same test `repown setup` uses before
-  it will ask a question. `src/commands/start.ts` then reads the working directory
-  (`inspectRepo`) and:
-  - starts `repown setup` when `identityProblems` is not empty, which is when status
-    would report an identity FAIL, after one stderr line saying setup is starting and
-    that `repown status` shows the settings;
-  - prints the top help, and exits 0, when the directory isn't a clone;
+- **Bare `repown`, with no arguments at all, starts setup only when stdin, stdout
+  and stderr are all terminals.** A terminal means stdin and stderr are both
+  terminals, the same test `repown setup` uses before it will ask a question.
+  Setup also requires stdout to be a terminal, so `repown > report.txt` or
+  `repown | tee report.txt` still prints status. `src/commands/start.ts` then
+  reads the working directory (`inspectRepo`) and:
+  - starts `repown setup` when stdout is a terminal and `identityProblems` is not
+    empty, which is when status would report an identity FAIL, after one stderr
+    line saying setup is starting and that `repown status` shows the settings;
+  - prints the top help, and exits 0, when the directory isn't a clone. A bare
+    repository is not a clone: `git rev-parse --is-bare-repository` is true, and
+    there is no work tree to pin a commit identity in. That help still prints when
+    stdout is redirected; only a missing terminal (stdin or stderr) sends the
+    directory to status;
   - prints status otherwise.
-- **Without a terminal it is always status, with status's exit codes.** 0 when there is
-  no FAIL, including when the only lines are warnings; 1 on a FAIL, including
-  `Not a git repository` outside a clone. A script, a CI job or an alias that runs
-  `repown` still gets that report.
+- **Without a terminal, or with stdout redirected, it is always status, with
+  status's exit codes.** 0 when there is no FAIL, including when the only lines
+  are warnings; 1 on a FAIL, including `Not a git repository` outside a clone. A
+  script, a CI job or an alias that runs `repown` still gets that report.
   Setup with no terminal exits 2
   ([ADR-016](ADR-016-clack-for-the-setup-wizard.md)); this path never starts it.
 - **Any argument bypasses the choice.** Dispatch calls `chooseDefault` only for an empty
@@ -47,15 +53,19 @@ guard. gh as the credential helper is a FAIL of its own, and its fix is `repown 
   status.
 - **Status says what it shows, and which side each value comes from.** The title is
   `repown status · current settings of this clone`, then the clone's path and branch. A
-  detached HEAD shows its short hash; when neither a branch nor a commit can be read,
-  it says `(unknown)`. **This clone:** commits as, pushes as, account, origin, push
-  guard. **This machine:** default (the global name and email; `none` when the machine
-  has neither), helper, gh active.
+  detached HEAD shows its short hash. `rev-parse --short` still names a commit,
+  including one of forty zeros, so the place line has no separate unknown label.
+  **This clone:** commits as, pushes as, account, origin, push guard. **This machine:** default (what an unpinned clone inherits: the effective
+  name and email, system config and conditional includes included, when this clone
+  sets neither local name nor email; otherwise global, falling back to system;
+  `none` when that is unset), helper, gh active.
   The account field says the account is recorded; recorded under another name or email,
   plus a warning whose fix is `repown use <account>`; not in this machine's registry; or
   not pinned, listing what is recorded. A registry that can't be read is reported in
-  that field. That report is not an identity FAIL, so it doesn't start setup. An
-  identity FAIL's fix points at `repown setup` (or `repown use <account>`). A run with
+  that field (`registry could not be read: <why>`) and as one warning, counted in the
+  closing tally, pointing at `repown accounts list`. That report is not an identity
+  FAIL, so it doesn't start setup. An identity FAIL's fix points at `repown setup`
+  (or `repown use <account>`). A run with
   any problem or warning ends with a count on stderr of whichever are present
   (`1 problem`, `2 warnings`, or `1 problem, 2 warnings`), and adds `: run repown setup`
   when an identity FAIL is among them. A clean run prints no count. Status's own exit
@@ -73,11 +83,17 @@ guard. gh as the credential helper is a FAIL of its own, and its fix is `repown 
 
 ## Consequences
 
-- **Behaviour differs by terminal.** The top help, the [README](../../README.md#commands)
-  commands table and [HOW-IT-WORKS card 5](../HOW-IT-WORKS.md#5-check-where-you-are) say
-  so. One exit code changes, and only in a terminal: a directory that isn't a clone
-  prints help and exits 0, where status would have exited 1. Without a terminal that
-  case is still status, exit 1.
+- **Behaviour differs by terminal, and by whether stdout is a terminal.** The top
+  help, the [README](../../README.md#commands) commands table and
+  [HOW-IT-WORKS card 5](../HOW-IT-WORKS.md#5-check-where-you-are) say so. One exit
+  code changes, and only in a terminal: a directory that isn't a clone, including a
+  bare repository, prints help and exits 0, where status would have exited 1.
+  Without a terminal, or with stdout redirected, that case is still status, exit 1.
+  An unset clone whose stdout is redirected prints status and does not start setup.
+- **An unreadable account registry is a warning.** It is counted with the other
+  warnings. It does not change the exit code and it does not start setup. The
+  account field still says the registry could not be read, so it cannot be read as
+  "none recorded".
 - **The status text layout changed.** Text isn't a contract
   ([ADR-014](ADR-014-json-for-scripts.md)). `repown status` has no `--format json`. That
   flag exists only on `scan` and `accounts list`, and neither changed. A script's

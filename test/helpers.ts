@@ -3,6 +3,8 @@
 // GIT_CONFIG_GLOBAL and GIT_CONFIG_SYSTEM (git >= 2.32) are what make these
 // tests honest: without them a machine whose global config already sets
 // credential.helper would pass the very assertions that are meant to detect it.
+// REPOWN_CONFIG_DIR is the same idea for the account registry: an empty directory
+// inside the sandbox, so a test never reads or writes this machine's accounts.
 
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -36,21 +38,11 @@ export function sandbox(): Sandbox {
   const systemConfig = join(dir, 'gitconfig-system');
   writeFileSync(globalConfig, '');
   writeFileSync(systemConfig, '');
-
-  const saved = Object.fromEntries(['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', ...LEAKY]
-    .map((name) => [name, process.env[name]]));
-  for (const name of LEAKY) delete process.env[name];
-  process.env['GIT_CONFIG_GLOBAL'] = globalConfig;
-  process.env['GIT_CONFIG_SYSTEM'] = systemConfig;
-
+  const saved = isolate(dir, globalConfig, systemConfig);
   const work = join(dir, 'repo');
   const git = (...args: string[]): string =>
     execFileSync('git', args, { cwd: work, encoding: 'utf8' }).trim();
-
-  execFileSync('git', ['init', '-q', '-b', 'main', work], { encoding: 'utf8' });
-  git('config', '--local', 'user.name', 'Sandbox');
-  git('config', '--local', 'user.email', 'sandbox@example.invalid');
-
+  initRepo(work, git);
   return {
     dir: work,
     globalConfig,
@@ -61,6 +53,22 @@ export function sandbox(): Sandbox {
       restore(saved);
     },
   };
+}
+
+function isolate(dir: string, globalConfig: string, systemConfig: string): Record<string, string | undefined> {
+  const saved = Object.fromEntries(['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'REPOWN_CONFIG_DIR', ...LEAKY]
+    .map((name) => [name, process.env[name]]));
+  for (const name of LEAKY) delete process.env[name];
+  process.env['GIT_CONFIG_GLOBAL'] = globalConfig;
+  process.env['GIT_CONFIG_SYSTEM'] = systemConfig;
+  process.env['REPOWN_CONFIG_DIR'] = join(dir, 'repown-config');
+  return saved;
+}
+
+function initRepo(work: string, git: (...args: string[]) => string): void {
+  execFileSync('git', ['init', '-q', '-b', 'main', work], { encoding: 'utf8' });
+  git('config', '--local', 'user.name', 'Sandbox');
+  git('config', '--local', 'user.email', 'sandbox@example.invalid');
 }
 
 function restore(saved: Record<string, string | undefined>): void {

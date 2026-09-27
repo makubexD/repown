@@ -11,6 +11,8 @@
 
 import { inspectRepo, inspectAuth, activeAccountLabel, type RepoState, type AuthState } from '../core/inspect.ts';
 import { isPinned } from '../core/identity.ts';
+import { loadRegistry, type Account, type Registry } from '../core/registry.ts';
+import type { Result } from '../core/result.ts';
 import { allowedOwners, shellWord } from '../core/guard/check.ts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -30,10 +32,11 @@ export default {
       return 1;
     }
     const auth = await inspectAuth(git, repo.originUrl ?? undefined);
+    const registry = await loadRegistry();
 
-    summary(repo, auth);
+    summary(repo, auth, registry);
     const problems = collectProblems(repo, auth);
-    await reportWarnings(repo, auth);
+    await reportWarnings(repo, auth, registry);
     return verdict(repo, auth, problems);
   },
 } satisfies Command;
@@ -53,10 +56,10 @@ function verdict(repo: RepoState, auth: AuthState, problems: readonly Problem[])
 
 const STATUS_TITLE = 'repown status · current settings of this clone';
 
-function summary(repo: RepoState, auth: AuthState): void {
+function summary(repo: RepoState, auth: AuthState, registry: LoadedRegistry): void {
   out.heading(STATUS_TITLE);
   out.line(place(repo));
-  cloneSettings(repo);
+  cloneSettings(repo, registry);
   machineSettings(repo, auth);
   out.line();
 }
@@ -71,11 +74,12 @@ function headLabel(branch: RepoState['branch']): string {
   return '(unknown)';
 }
 
-function cloneSettings(repo: RepoState): void {
+function cloneSettings(repo: RepoState, registry: LoadedRegistry): void {
   const id = repo.identity;
   out.heading('This clone');
   out.field('commits as', person(id.name, id.email, 'NOT SET LOCALLY'));
   out.field('pushes as', pushesAs(repo));
+  out.field('account', accountOf(repo, registry));
   out.field('origin', originOf(repo));
   out.field('push guard', repo.guard);
 }
@@ -102,6 +106,52 @@ function pushesAs(repo: RepoState): string {
   if (!repo.originUrl) return 'no remote to push to';
   if (repo.credentialKeys.length === 0) return 'not pinned by repown on ' + repo.provider.label;
   return repo.identity.account ?? 'NOT SET LOCALLY';
+}
+
+type LoadedRegistry = Result<Registry>;
+
+interface Recorded {
+  readonly key: string;
+  readonly entry: Account;
+}
+
+// A registry that cannot be read is reported. Skipping it would look like "none recorded".
+function accountOf(repo: RepoState, registry: LoadedRegistry): string {
+  if (!registry.ok) return 'registry could not be read: ' + registry.error;
+  const pinned = pinnedAccount(repo);
+  if (pinned === null) return noted('not pinned', recordedList(registry.value));
+  const found = recordedAs(registry.value, pinned);
+  if (!found) return noted(pinned, 'not in this machine\'s registry');
+  const aside = matchesRecord(repo, found.entry) ? 'recorded' : recordedAside(found.entry);
+  return noted(found.key, aside);
+}
+
+function recordedList(registry: Registry): string {
+  const keys = Object.keys(registry.accounts);
+  return keys.length === 0 ? 'none recorded' : 'recorded: ' + keys.join(', ');
+}
+
+function recordedAside(entry: Account): string {
+  return 'recorded as ' + person(entry.name, entry.email, '?');
+}
+
+function noted(value: string, aside: string): string {
+  return value + '  ' + out.dim('(' + aside + ')');
+}
+
+function pinnedAccount(repo: RepoState): string | null {
+  return repo.identity.owner ?? repo.identity.account;
+}
+
+function recordedAs(registry: Registry, pinned: string): Recorded | null {
+  const wanted = pinned.toLowerCase();
+  const key = Object.keys(registry.accounts).find((candidate) => candidate.toLowerCase() === wanted);
+  return key === undefined ? null : { key, entry: registry.accounts[key]! };
+}
+
+function matchesRecord(repo: RepoState, entry: Account): boolean {
+  const id = repo.identity;
+  return id.name === entry.name && id.email?.toLowerCase() === entry.email.toLowerCase();
 }
 
 interface Problem { readonly what: string; readonly fix: string; }
@@ -132,12 +182,24 @@ function identityProblems(repo: RepoState): Problem[] {
   }];
 }
 
-async function reportWarnings(repo: RepoState, auth: AuthState): Promise<void> {
+async function reportWarnings(repo: RepoState, auth: AuthState, registry: LoadedRegistry): Promise<void> {
   await ownerWarning(repo);
+  accountWarning(repo, registry);
   guardWarning(repo);
   submoduleWarning(repo);
   helperWarning(repo, auth);
   ghWarning(repo.identity.account, auth);
+}
+
+function accountWarning(repo: RepoState, registry: LoadedRegistry): void {
+  if (!registry.ok) return;
+  const pinned = pinnedAccount(repo);
+  const found = pinned === null ? null : recordedAs(registry.value, pinned);
+  if (!found || matchesRecord(repo, found.entry)) return;
+  const id = repo.identity;
+  out.warn('account', 'this clone commits as ' + person(id.name, id.email, '?') +
+    ', but ' + found.key + ' is recorded as ' + person(found.entry.name, found.entry.email, '?') + '.');
+  out.detail('fix: repown use ' + found.key);
 }
 
 /** A pinned credential key is only as good as the helper reading it. gh as helper is a problem, reported elsewhere. */

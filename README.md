@@ -163,6 +163,7 @@ repown status · current settings of this clone
 This clone
   commits as     Octo Cat <octocat@users.noreply.github.com>
   pushes as      octocat
+  account        octocat  (recorded)
   origin         octocat  (GitHub)
   push guard     on
 

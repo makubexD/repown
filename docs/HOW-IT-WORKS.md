@@ -186,6 +186,7 @@ repown status · current settings of this clone
 This clone
   commits as     Octo Cat <octocat@users.noreply.github.com>
   pushes as      octocat
+  account        octocat  (recorded)
   origin         octocat  (GitHub)
   push guard     on
 
@@ -211,8 +212,10 @@ OK    identity   this clone is pinned, and its credential mechanism honours it
 | 🟡 `guard off` | pushes are not checked | `repown guard on` |
 | 🟡 a pre-push hook repown did not write, or `core.hooksPath` | another tool owns the hook | [card 10](#10-other-hook-tools) |
 | 🟡 `this clone has submodules` | each submodule is a clone of its own | `git submodule foreach "repown use <account> && repown guard on"` |
+| 🟡 `this clone commits as …, but <account> is recorded as …` | the clone's identity drifted from the record | `repown use <account>` |
 | 🟢 `commit identity is pinned; its credentials are left to …` | a host where repown doesn't pin credentials, or a helper other than Git Credential Manager (see the 🟡 helper row) | nothing on other hosts; on GitHub, `repown doctor` |
 | `pushes as not pinned by repown on …` | a host where credentials aren't pinned | nothing: expected |
+| `account … (not in this machine's registry)` | pinned by hand or on another machine | `repown accounts add <account> --name "..." --email "..."` |
 | `origin no remote` | nothing to push to yet | nothing |
 
 🔴 rows exit 1; 🟡 rows alone exit 0. Outside a clone it prints `Not a git repository` and

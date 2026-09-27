@@ -1,13 +1,14 @@
 // `repown status` says where the clone is and which settings are its own.
-// S6 title, path and branch; S7 the two groups; S10 outside a repository.
+// S6 title, path and branch; S7 the two groups; S8 the recorded account; S10 outside a repository.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { loadRegistry, registryPath } from '../src/core/registry.ts';
 import { sandbox, type Sandbox } from './helpers.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
@@ -16,9 +17,9 @@ for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name]
 
 interface Run { readonly status: number; readonly stdout: string; readonly stderr: string; }
 
-function repown(args: readonly string[], cwd: string): Run {
+function repown(args: readonly string[], cwd: string, env: NodeJS.ProcessEnv = process.env): Run {
   const result = spawnSync(process.execPath, [CLI, ...args], {
-    cwd, input: '', env: process.env, encoding: 'utf8',
+    cwd, input: '', env, encoding: 'utf8',
   });
   return { status: result.status ?? -1, stdout: result.stdout, stderr: result.stderr };
 }
@@ -59,7 +60,7 @@ describe('repown status layout', () => {
     const run = repown(['status'], box.dir);
     assert.ok(run.stdout.indexOf('This clone') < run.stdout.indexOf('This machine'));
     assert.deepEqual(fieldsUnder(run.stdout, 'This clone'),
-      ['commits as', 'pushes as', 'origin', 'push guard']);
+      ['commits as', 'pushes as', 'account', 'origin', 'push guard']);
     assert.deepEqual(fieldsUnder(run.stdout, 'This machine'),
       ['default', 'helper', 'gh active']);
   });
@@ -99,6 +100,103 @@ describe('repown status layout', () => {
   });
 });
 
+describe('repown status account', () => {
+  let box: Sandbox;
+  beforeEach(() => { box = sandbox(); });
+  afterEach(() => box.dispose());
+
+  test('S8: pinned, recorded, and this clone matches the record', () => {
+    pinGithub(box);
+    record(box, 'octocat', 'Octo Cat', 'octocat@example.invalid');
+    const run = repown(['status'], box.dir);
+    assert.equal(run.status, 0);
+    assert.equal(accountLine(run.stdout), '  account        octocat  (recorded)');
+    assert.doesNotMatch(run.stderr, /WARN {2}account/);
+    const coloured = repown(['status'], box.dir, { ...process.env, FORCE_COLOR: '1' });
+    assert.match(coloured.stdout, /octocat {2}\x1b\[2m\(recorded\)\x1b\[0m/);
+  });
+
+  test('S8: the registry key\'s spelling is shown, and email matches ignoring case', () => {
+    pinGithub(box);
+    record(box, 'Octocat', 'Octo Cat', 'OctoCat@Example.Invalid');
+    const run = repown(['status'], box.dir);
+    assert.equal(accountLine(run.stdout), '  account        Octocat  (recorded)');
+    assert.doesNotMatch(run.stderr, /WARN {2}account/);
+  });
+
+  test('S8: a different name warns, and the fix names the registry key', () => {
+    pinGithub(box);
+    record(box, 'Octocat', 'Octo Work', 'octocat@example.invalid');
+    const run = repown(['status'], box.dir);
+    assert.equal(run.status, 0);
+    assert.equal(accountLine(run.stdout), '  account        Octocat  (recorded as Octo Work <octocat@example.invalid>)');
+    const warn = 'this clone commits as Octo Cat <octocat@example.invalid>, but Octocat is recorded as Octo Work <octocat@example.invalid>.';
+    assert.ok(run.stderr.includes('WARN  account    ' + warn), run.stderr);
+    assert.ok(run.stderr.includes('       fix: repown use Octocat'), run.stderr);
+  });
+
+  test('S8: a different email warns the same way', () => {
+    pinGithub(box);
+    record(box, 'octocat', 'Octo Cat', 'octo-work@example.invalid');
+    const run = repown(['status'], box.dir);
+    assert.equal(run.status, 0);
+    assert.equal(accountLine(run.stdout), '  account        octocat  (recorded as Octo Cat <octo-work@example.invalid>)');
+    const warn = 'this clone commits as Octo Cat <octocat@example.invalid>, but octocat is recorded as Octo Cat <octo-work@example.invalid>.';
+    assert.ok(run.stderr.includes('WARN  account    ' + warn), run.stderr);
+  });
+
+  test('S8: pinned, but not in this machine\'s registry', () => {
+    pinGithub(box);
+    const run = repown(['status'], box.dir);
+    assert.equal(run.status, 0);
+    assert.equal(accountLine(run.stdout), '  account        octocat  (not in this machine\'s registry)');
+    assert.doesNotMatch(run.stderr, /WARN {2}account/);
+  });
+
+  test('S8: the pin is repown.account, otherwise the credential username', () => {
+    pinGithub(box);
+    box.git('config', '--local', 'repown.account', 'octo-work');
+    const owner = repown(['status'], box.dir);
+    assert.equal(accountLine(owner.stdout), '  account        octo-work  (not in this machine\'s registry)');
+    box.git('config', '--local', '--unset', 'repown.account');
+    const credential = repown(['status'], box.dir);
+    assert.equal(accountLine(credential.stdout), '  account        octocat  (not in this machine\'s registry)');
+  });
+
+  test('S8: not pinned lists registry keys in registry order', () => {
+    record(box, 'octo-work', 'Octo Work', 'octo-work@example.invalid');
+    record(box, 'octocat', 'Octo Cat', 'octocat@example.invalid');
+    const run = repown(['status'], box.dir);
+    assert.equal(accountLine(run.stdout), '  account        not pinned  (recorded: octo-work, octocat)');
+  });
+
+  test('S8: not pinned, and nothing recorded', () => {
+    const run = repown(['status'], box.dir);
+    assert.equal(accountLine(run.stdout), '  account        not pinned  (none recorded)');
+  });
+
+  test('S8: an unreadable registry is reported and the exit code stays', async () => {
+    pinGithub(box);
+    breakRegistry();
+    const loaded = await loadRegistry();
+    const error = loaded.ok ? '' : loaded.error;
+    const run = repown(['status'], box.dir);
+    assert.equal(run.status, 0);
+    assert.notEqual(error, '');
+    assert.equal(accountLine(run.stdout), '  account        registry could not be read: ' + error);
+    assert.doesNotMatch(run.stdout, /none recorded/);
+    assert.doesNotMatch(run.stderr, /WARN {2}account/);
+  });
+
+  test('S8: an unreadable registry never looks like none recorded', () => {
+    breakRegistry();
+    const run = repown(['status'], box.dir);
+    assert.equal(run.status, 0);
+    assert.match(accountLine(run.stdout), /^ {2}account {8}registry could not be read: /);
+    assert.doesNotMatch(run.stdout, /none recorded/);
+  });
+});
+
 describe('repown status outside a repository', () => {
   test('S10: the failure is unchanged and no title is printed', () => {
     const empty = mkdtempSync(join(tmpdir(), 'repown-not-a-repo-'));
@@ -115,6 +213,23 @@ describe('repown status outside a repository', () => {
     }
   });
 });
+
+function accountLine(stdout: string): string {
+  const found = stdout.split('\n').find((text) => text.startsWith('  account '));
+  assert.ok(found, stdout);
+  return found;
+}
+
+function record(box: Sandbox, account: string, name: string, email: string): void {
+  const run = repown(['accounts', 'add', account, '--name', name, '--email', email], box.dir);
+  assert.equal(run.status, 0, run.stderr);
+}
+
+function breakRegistry(): void {
+  const path = registryPath();
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, '{');
+}
 
 function fieldsUnder(stdout: string, heading: string): string[] {
   const lines = stdout.split('\n');

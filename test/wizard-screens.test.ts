@@ -139,4 +139,75 @@ describe('repown setup, played with key presses', () => {
     assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /← Back \(to the previous question\)/);
   });
+
+  test('D1 nothing recorded, and the owner is a user: that owner is listed and preselected', async () => {
+    const ctx = setupContext({
+      recorded: {}, owner: 'octocat', ownerIsUser: true, detected: detectedPair,
+      suggest: async () => ({ name: 'Octo Cat', email: 'octocat@example.invalid' }),
+    });
+    const { outcome, screen } = await play(ctx, [[enter], [enter], [enter], [enter], [enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    const first = screen.slice(0, screen.indexOf('Where is this account hosted?'));
+    assert.match(first, /right now this clone isn't pinned to any account/);
+    assert.ok(marked(first, 'octocat'), first);
+    assert.ok(!marked(first, 'octo-work'), first);
+    assert.ok(!marked(first, 'a new account'), first);
+    const ownerAt = first.indexOf('octocat (owns this repository)');
+    const workAt = first.indexOf('octo-work');
+    const freshAt = first.indexOf('a new account');
+    assert.ok(ownerAt >= 0 && workAt > ownerAt && freshAt > workAt, first);
+    assert.match(screen, /Your name, as your commits show it/);
+    assert.doesNotMatch(screen, /The account's user name/);
+    assert.match(screen, /Record the account octocat/);
+    assert.match(screen, /repown accounts add octocat/);
+    assert.match(screen, /repown use octocat/);
+    assert.doesNotMatch(screen, /repown (?:accounts add|use) \+/);
+    assert.doesNotMatch(screen, /(?:Record the account|Pin this clone to) \+octocat/);
+  });
+
+  test('D2 an organisation owner is left out, and a gh account is not preselected', async () => {
+    const ctx = setupContext({
+      recorded: {}, owner: 'octo-org', ownerIsUser: false,
+      detected: [{ login: 'octo-work', from: ['signed in to gh'] }],
+    });
+    const { outcome, screen } = await play(ctx, [[esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    assert.match(screen, /octo-work/);
+    assert.doesNotMatch(screen, /octo-org/);
+    assert.ok(marked(screen, 'a new account'), screen);
+    assert.ok(!marked(screen, 'octo-work'), screen);
+  });
+
+  test('D3 an owner of unknown kind may be an organisation, and is not preselected', async () => {
+    const ctx = setupContext({
+      recorded: {}, owner: 'octocat', ownerIsUser: null,
+      detected: [{ login: 'octocat', from: ['owns this repository'] }],
+    });
+    const { outcome, screen } = await play(ctx, [[up], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    const opened = screen.split('↑/↓ to navigate')[0] ?? '';
+    assert.ok(marked(opened, 'a new account'), opened);
+    assert.ok(!marked(opened, 'octocat'), opened);
+    assert.match(screen, /octocat \(owns this repository; may be an organisation\)/);
+  });
+
+  test('D9 Back from the next question keeps the detected account selected', async () => {
+    const ctx = setupContext({ recorded: {}, owner: 'octocat', ownerIsUser: true, detected: detectedPair });
+    const { outcome, screen } = await play(ctx, [[down, enter], [up, enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    const restored = screen.split('Where is this account hosted?').at(-1) ?? '';
+    assert.ok(marked(restored, 'octo-work'), restored);
+    assert.ok(!marked(restored, 'octocat'), restored);
+  });
 });
+
+const detectedPair = [
+  { login: 'octocat', from: ['owns this repository'] },
+  { login: 'octo-work', from: ['signed in to gh', 'stored in Git Credential Manager'] },
+];
+
+/** The active radio: clack's disc, or `>` where the terminal has no unicode. */
+function marked(screen: string, label: string): boolean {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('(?:\u25cf|>) ' + escaped).test(screen);
+}

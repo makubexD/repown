@@ -83,10 +83,12 @@ repown setup           # once per clone: asks which account owns it, shows each 
    helper, or something is missing, see [Troubleshooting](#troubleshooting).
 2. **Clone as usual,** then **`repown setup`, once per clone,** from inside it. (Cloning a
    private repository signs in first: pick the account that owns it.)
-   - **In your first clone,** it asks for the account's user name (login), where it's
-     hosted, and the name and email for your commits. On GitHub, use your *noreply*
-     address, GitHub's private address for commits, shown at github.com/settings/emails
-     (like `1234+octocat@users.noreply.github.com`).
+   - **In your first clone,** it lists the accounts it can already see on GitHub
+     (origin's owner, gh's accounts, Git Credential Manager's) and suggests origin's
+     owner when that owner is a user, or asks for the login. Then it asks where the
+     account is hosted and the name and email for your commits; on GitHub, use your
+     *noreply* address, shown at github.com/settings/emails (like
+     `1234+octocat@users.noreply.github.com`).
    - **In later clones,** it lists the accounts it knows: pick one, or **a new account**.
    - **Then it asks only what applies here:**
      - *switch gh too:* make the account gh's active one, so `gh pr create` matches;

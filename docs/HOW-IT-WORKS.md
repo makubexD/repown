@@ -498,7 +498,7 @@ flowchart TD
   F -->|no| X3["🔴 exit 2 (or 1): nothing written"]
   F -->|--no-input| C
   F -->|--no-input, account incomplete| X5["🔴 exit 2: names the missing flags"]
-  F -->|yes| A["account: a recorded one, or a new one<br/>(host, name, email; suggested from the profile)"]
+  F -->|yes| A["account: one already seen, a recorded one, or a new login<br/>(suggests origin's owner when it is a user; then host, name, email)"]
   A --> Q["only what applies here:<br/>switch gh · allow the organisation · the guard · gh as helper"]
   A -->|Esc or Ctrl-C| N
   Q -->|Esc or Ctrl-C| N
@@ -517,10 +517,16 @@ flowchart TD
 With `--no-input` there is no review and no "already set up" check: the commands the
 flags stand for run, `use` included.
 
+The first question lists the accounts already recorded and the GitHub logins repown can
+already see (origin's owner, gh's accounts, Git Credential Manager's), then **a new
+account**. It suggests origin's owner when that owner is a user. A login seen only in
+gh or Git Credential Manager is listed, never suggested.
+
 | It asks | Only when | Becomes |
 | --- | --- | --- |
-| Which account should this clone belong to? | an account is recorded (default: the one pinned here if recorded, else the first) | `use <account>` |
-| The account's user name (login), where it's hosted, and your name and email as commits show them (on GitHub, with where to find your noreply address) | "a new account", or no account is recorded yet; refused if already recorded | `accounts add <account> --name --email --host` |
+| Which account should this clone belong to? | an account is recorded, or a GitHub login can already be seen. Default: the one pinned here if it is recorded, else origin's owner when that owner is a user, else the first recorded, else a new account | `use <account>`, after `accounts add` when the login is not recorded |
+| The account's user name (login) | "a new account", or nothing recorded and nothing detected. Starts as origin's owner only when that owner is a user and is not recorded. Refused if already recorded | the `<account>` of `accounts add` |
+| Where it's hosted, and your name and email as commits show them (on GitHub, with where to find your noreply address) | the login is new: "a new account", or one picked from the logins already seen | `accounts add <account> --name --email --host` |
 | Also make this account gh's active account? (default No) | a GitHub clone (or one whose origin isn't a URL), gh knows the account, another is active | `use --gh` |
 | This repository belongs to "octo-org". Let this clone push to it? (default Yes) | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
 | Turn on the push guard? (default Yes) | the guard is off, no other tool owns the hook, and `core.hooksPath` doesn't redirect hooks | `guard on` |

@@ -17,6 +17,9 @@ import type { Answers, Choice, Flow, Review, Step } from './engine.ts';
 /** The "a new account" choice. Empty, so it can never be a real account's name. */
 export const NEW_ACCOUNT = '';
 
+/** A detected choice's value. The login grammar refuses '+', so a recorded account cannot collide. */
+export const DETECTED_PREFIX = '+';
+
 /** A GitHub login repown can already see, and every place it was seen. */
 export interface DetectedAccount {
   readonly login: string;
@@ -66,13 +69,26 @@ export interface PlannedCommand {
 
 const lower = (value: string): string => value.toLowerCase();
 
-/** The account the answers are about: a recorded one, or the new one typed in. */
+/** The account the answers are about: a recorded one, a detected login, or the new one typed in. */
 export function accountOf(answers: Answers): string {
   const picked = answers['account'];
-  return picked === undefined || picked === NEW_ACCOUNT ? String(answers['newAccount'] ?? '') : String(picked);
+  if (picked === undefined || picked === NEW_ACCOUNT) return String(answers['newAccount'] ?? '');
+  return stripDetected(String(picked));
 }
 
+/** A recorded account is not new. A detected login still has to be recorded. */
 export function isNew(answers: Answers): boolean {
+  const picked = answers['account'];
+  if (picked === undefined || picked === NEW_ACCOUNT) return true;
+  return String(picked).startsWith(DETECTED_PREFIX);
+}
+
+function stripDetected(value: string): string {
+  return value.startsWith(DETECTED_PREFIX) ? value.slice(DETECTED_PREFIX.length) : value;
+}
+
+/** The login is typed only for "a new account". A detected login is already chosen. */
+function asksForLogin(answers: Answers): boolean {
   return (answers['account'] ?? NEW_ACCOUNT) === NEW_ACCOUNT;
 }
 
@@ -82,14 +98,7 @@ export function setupFlow(ctx: SetupContext): Flow<SetupContext> {
 
 function steps(ctx: SetupContext): Step<SetupContext>[] {
   return [
-    { id: 'account', kind: 'select', flag: '<account>', message: 'Which account should this clone belong to?',
-      hint: 'commits made here carry its name and email; on GitHub, pushes from here also sign in as it',
-      when: () => Object.keys(ctx.recorded).length > 0,
-      choices: () => accountChoices(ctx), initial: () => defaultAccount(ctx),
-      detail: () => (ctx.pinned ? 'right now this clone is pinned to ' + ctx.pinned : 'right now this clone isn\'t pinned to any account') },
-    { id: 'newAccount', kind: 'text', flag: '<account>', message: 'The account\'s user name (login)',
-      hint: 'the name you sign in with, e.g. octocat; not your email address', when: (answers) => isNew(answers),
-      validate: (value) => newAccountProblem(String(value), ctx) },
+    ...accountSteps(ctx),
     { id: 'host', kind: 'select', flag: '--host', message: 'Where is this account hosted?',
       hint: 'on GitHub, repown also makes pushes sign in as this account', when: (answers) => isNew(answers),
       choices: () => hostChoices(), initial: () => ctx.host },
@@ -101,6 +110,19 @@ function steps(ctx: SetupContext): Step<SetupContext>[] {
       initial: async (answers) => (await ctx.suggest(accountOf(answers), hostOf(answers, ctx))).email,
       detail: (answers) => noreplyExample(answers, ctx) },
     ...choiceSteps(ctx),
+  ];
+}
+
+function accountSteps(ctx: SetupContext): Step<SetupContext>[] {
+  return [
+    { id: 'account', kind: 'select', flag: '<account>', message: 'Which account should this clone belong to?',
+      hint: 'commits made here carry its name and email; on GitHub, pushes from here also sign in as it',
+      when: () => Object.keys(ctx.recorded).length > 0 || ctx.detected.length > 0,
+      choices: () => accountChoices(ctx), initial: () => defaultAccount(ctx),
+      detail: () => (ctx.pinned ? 'right now this clone is pinned to ' + ctx.pinned : 'right now this clone isn\'t pinned to any account') },
+    { id: 'newAccount', kind: 'text', flag: '<account>', message: 'The account\'s user name (login)',
+      hint: 'the name you sign in with, e.g. octocat; not your email address', when: (answers) => asksForLogin(answers),
+      validate: (value) => newAccountProblem(String(value), ctx), initial: () => ownerInitial(ctx) },
   ];
 }
 
@@ -150,15 +172,55 @@ function ghActive(ctx: SetupContext): string {
   return ctx.gh?.ok ? printable(ctx.gh.value.active ?? 'none') : 'unknown';
 }
 
+const OWNER_SOURCE = 'owns this repository';
+const OWNER_UNKNOWN = 'owns this repository; may be an organisation';
+
 function accountChoices(ctx: SetupContext): Choice[] {
   const recorded = Object.entries(ctx.recorded).map(([account, entry]) =>
     ({ value: account, label: account, hint: entry.name + ' <' + entry.email + '>' }));
-  return [...recorded, { value: NEW_ACCOUNT, label: 'a new account', hint: 'record another account on this machine' }];
+  const detected = ctx.detected.map((account) => detectedChoice(account, ctx));
+  return [...recorded, ...detected, { value: NEW_ACCOUNT, label: 'a new account', hint: 'record another account on this machine' }];
+}
+
+function detectedChoice(account: DetectedAccount, ctx: SetupContext): Choice {
+  return {
+    value: DETECTED_PREFIX + account.login,
+    label: printable(account.login),
+    hint: printable(detectedHint(account, ctx)),
+  };
+}
+
+function detectedHint(account: DetectedAccount, ctx: SetupContext): string {
+  return account.from.map((source) => sourceText(source, account, ctx)).join('; ');
+}
+
+function sourceText(source: string, account: DetectedAccount, ctx: SetupContext): string {
+  if (source !== OWNER_SOURCE || ctx.ownerIsUser !== null) return source;
+  return sameLogin(account.login, ctx.owner) ? OWNER_UNKNOWN : source;
 }
 
 function defaultAccount(ctx: SetupContext): string {
   if (ctx.pinned && Object.hasOwn(ctx.recorded, ctx.pinned)) return ctx.pinned;
-  return Object.keys(ctx.recorded)[0] ?? NEW_ACCOUNT;
+  return detectedOwnerValue(ctx) ?? Object.keys(ctx.recorded)[0] ?? NEW_ACCOUNT;
+}
+
+/** The detected spelling, which is the choice the list can highlight. */
+function detectedOwnerValue(ctx: SetupContext): string | undefined {
+  if (ctx.ownerIsUser !== true) return undefined;
+  const found = ctx.detected.find((account) => sameLogin(account.login, ctx.owner));
+  return found === undefined ? undefined : DETECTED_PREFIX + found.login;
+}
+
+/** Origin's owner, only as a typed login, and only when it is a user not recorded yet. */
+function ownerInitial(ctx: SetupContext): string | undefined {
+  const owner = ctx.owner;
+  if (ctx.ownerIsUser !== true || owner === null) return undefined;
+  const recorded = Object.keys(ctx.recorded).some((account) => sameLogin(account, owner));
+  return recorded ? undefined : owner;
+}
+
+function sameLogin(login: string, other: string | null): boolean {
+  return other !== null && lower(other) === lower(login);
 }
 
 function required(value: unknown): string | null {

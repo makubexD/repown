@@ -14,7 +14,7 @@ import { sandbox, type Sandbox } from './helpers.ts';
 import { setupContext as context } from './setup-fixtures.ts';
 import { ok, err } from '../src/core/result.ts';
 import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Review, type ReviewChoice } from '../src/wizard/engine.ts';
-import { setupFlow, planCommands, formatCommand, missingFlags, printable, NEW_ACCOUNT, type SetupContext } from '../src/wizard/setup-flow.ts';
+import { setupFlow, planCommands, formatCommand, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext } from '../src/wizard/setup-flow.ts';
 import { runSetup } from '../src/wizard/setup-run.ts';
 import { readContext } from '../src/wizard/setup-context.ts';
 import { Git } from '../src/core/git.ts';
@@ -277,7 +277,104 @@ describe('setup flow', () => {
     const guard = flow.steps.find((step) => step.id === 'guard')!;
     assert.match(guard.detail?.({ account: 'octocat' }, context({ addresses: err('git log failed') })) ?? '', /could not be read/);
   });
+
+  test('a detected choice is a new account under its login', () => {
+    assert.equal(accountOf({ account: DETECTED_PREFIX + 'octocat' }), 'octocat');
+    assert.equal(accountOf({ account: DETECTED_PREFIX + 'octo-work', newAccount: 'octocat' }), 'octo-work');
+    assert.equal(accountOf({ account: 'octocat' }), 'octocat');
+    assert.equal(accountOf({ account: NEW_ACCOUNT, newAccount: 'octo-work' }), 'octo-work');
+    assert.equal(accountOf({}), '');
+    assert.equal(isNew({ account: DETECTED_PREFIX + 'octocat' }), true);
+    assert.equal(isNew({ account: NEW_ACCOUNT }), true);
+    assert.equal(isNew({}), true);
+    assert.equal(isNew({ account: 'octocat' }), false);
+  });
+
+  test('a detected pick plans accounts add and use for the login, and no command carries +', async () => {
+    const ctx = context({ recorded: {}, owner: 'octocat', ownerIsUser: true,
+      detected: [{ login: 'octocat', from: ['owns this repository'] }] });
+    const answers = await answer(ctx, [
+      ['account', DETECTED_PREFIX + 'octocat'], ['host', 'github'],
+      ['name', 'Octo Cat'], ['email', 'octocat@example.invalid'], ['guard', false], ['review', 'run'],
+    ]);
+    const commands = planCommands(answers, ctx);
+    assert.deepEqual(commands.map((command) => command.argv), [
+      ['accounts', 'add', '--name=Octo Cat', '--email=octocat@example.invalid', '--host=github', '--', 'octocat'],
+      ['use', '--', 'octocat'],
+    ]);
+    const shown = [...commands.flatMap((command) => command.argv), ...commands.map((command) => formatCommand(command.argv))];
+    for (const token of shown) assert.equal(token.includes('+'), false, token);
+  });
+
+  test('D1 a user who owns the repository is preselected when that login was detected', () => {
+    const detected = [
+      { login: 'octocat', from: ['owns this repository'] },
+      { login: 'octo-work', from: ['signed in to gh', 'stored in Git Credential Manager'] },
+    ];
+    const ctx = context({ recorded: {}, owner: 'octocat', ownerIsUser: true, detected });
+    const account = stepOf(ctx, 'account');
+    assert.equal(account.when?.({}, ctx), true);
+    assert.equal(account.initial?.({}, ctx), DETECTED_PREFIX + 'octocat');
+    const choices = account.choices?.({}, ctx) ?? [];
+    assert.deepEqual(choices.map((choice) => [choice.value, choice.label, choice.hint]), [
+      [DETECTED_PREFIX + 'octocat', 'octocat', 'owns this repository'],
+      [DETECTED_PREFIX + 'octo-work', 'octo-work', 'signed in to gh; stored in Git Credential Manager'],
+      [NEW_ACCOUNT, 'a new account', 'record another account on this machine'],
+    ]);
+    const spelled = context({ recorded: {}, owner: 'Octocat', ownerIsUser: true, detected: detected.slice(0, 1) });
+    assert.equal(stepOf(spelled, 'account').initial?.({}, spelled), DETECTED_PREFIX + 'octocat');
+    const pinned = context({ pinned: 'octo-work', owner: 'octocat', ownerIsUser: true, detected: detected.slice(0, 1),
+      recorded: { 'octo-work': { name: 'Octo Work', email: 'work@example.invalid', host: 'github' } } });
+    assert.equal(stepOf(pinned, 'account').initial?.({}, pinned), 'octo-work');
+    assert.equal(stepOf(context({ recorded: {} }), 'account').when?.({}, context({ recorded: {} })), false);
+  });
+
+  test('D2 an organisation is not offered, and a gh-only login is not preselected', () => {
+    const detected = [{ login: 'octo-work', from: ['signed in to gh'] }];
+    const ctx = context({ recorded: {}, owner: 'octo-org', ownerIsUser: false, detected });
+    const account = stepOf(ctx, 'account');
+    assert.equal(account.initial?.({}, ctx), NEW_ACCOUNT);
+    assert.deepEqual((account.choices?.({}, ctx) ?? []).map((choice) => choice.label), ['octo-work', 'a new account']);
+    const recorded = context({ owner: 'octo-org', ownerIsUser: false, detected });
+    assert.equal(stepOf(recorded, 'account').initial?.({}, recorded), 'octocat');
+  });
+
+  test('D3 an owner of unknown kind is listed, not preselected, and may be an organisation', () => {
+    const ctx = context({ recorded: {}, owner: 'octocat', ownerIsUser: null,
+      detected: [{ login: 'octocat', from: ['owns this repository', 'signed in to gh'] }] });
+    const account = stepOf(ctx, 'account');
+    assert.equal(account.initial?.({}, ctx), NEW_ACCOUNT);
+    assert.equal(account.choices?.({}, ctx)?.[0]?.hint, 'owns this repository; may be an organisation; signed in to gh');
+    const odd = context({ recorded: {}, detected: [{ login: 'octo\x1bcat', from: ['signed in to gh\x1b'] }] });
+    const choice = stepOf(odd, 'account').choices?.({}, odd)?.[0];
+    assert.equal(choice?.label, 'octo\\u001bcat');
+    assert.equal(choice?.hint, 'signed in to gh\\u001b');
+    assert.equal(choice?.value, DETECTED_PREFIX + 'octo\x1bcat');
+  });
+
+  test('D8 the login question starts as the owner only when that owner is a user and not recorded', () => {
+    const fresh = context({ recorded: {}, owner: 'octocat', ownerIsUser: true });
+    const login = stepOf(fresh, 'newAccount');
+    assert.equal(login.when?.({}, fresh), true);
+    assert.equal(login.when?.({ account: NEW_ACCOUNT }, fresh), true);
+    assert.equal(login.when?.({ account: DETECTED_PREFIX + 'octocat' }, fresh), false);
+    assert.equal(login.initial?.({ account: NEW_ACCOUNT }, fresh), 'octocat');
+    const org = context({ recorded: {}, owner: 'octo-org', ownerIsUser: false });
+    assert.equal(stepOf(org, 'newAccount').initial?.({}, org), undefined);
+    const unknown = context({ recorded: {}, owner: 'octocat', ownerIsUser: null });
+    assert.equal(stepOf(unknown, 'newAccount').initial?.({}, unknown), undefined);
+    const known = context({ owner: 'octocat', ownerIsUser: true });
+    assert.equal(stepOf(known, 'newAccount').initial?.({}, known), undefined);
+    const cased = context({ owner: 'Octocat', ownerIsUser: true });
+    assert.equal(stepOf(cased, 'newAccount').initial?.({}, cased), undefined);
+  });
 });
+
+function stepOf(ctx: SetupContext, id: string) {
+  const found = setupFlow(ctx).steps.find((item) => item.id === id);
+  assert.ok(found, id);
+  return found;
+}
 
 /** A POSIX shell's word splitting, for the single-quoted words formatCommand produces. */
 function shellSplit(line: string): string[] {

@@ -1,7 +1,7 @@
 // `repown status` says where the clone is and which settings are its own.
 // S6 title, path and branch; S7 the two groups; S8 the recorded account;
 // S9 what to run next; S10 outside a repository.
-// SPEC.md S1-S7: the upstream field and the ready: summary (ADR-020).
+// The upstream field and the ready: summary (ADR-020).
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';

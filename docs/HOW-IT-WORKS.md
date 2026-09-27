@@ -211,7 +211,7 @@ OK    identity   this clone is pinned, and its credential mechanism honours it
 | 🔴 `No account is pinned` | a GitHub https clone with no push account; pushes use the machine default | `repown setup` (or `repown use <account>`) |
 | 🔴 `gh is the git credential helper` | only gh's active account can push | `repown fix` |
 | 🟡 `no credential helper is set` / `cannot tell whether it honours` | a GitHub https clone, and the helper isn't Git Credential Manager | `repown doctor` ([card 1](#1-set-up-the-machine)) |
-| 🟡 `gh active as "…"` | the gh CLI would act as another account | `gh auth switch -u <account>` |
+| 🟡 `gh active as "…"` | the gh CLI would act as another account | `gh auth switch -u <account>` when that account is signed in to gh; `repown use <account> --gh` when it is not |
 | 🟡 `gh could not be queried` | who `gh pr create` acts as is unknown | `gh auth status` |
 | 🟡 `origin belongs to "octo-org"` | an organisation repository | `git config --local --add repown.allowOwner octo-org` |
 | 🟡 `guard off` | pushes are not checked | `repown guard on` |

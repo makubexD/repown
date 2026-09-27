@@ -8,7 +8,7 @@ Each task: failing test, code, docs on its `Docs:` line, one commit.
   `--skip-ssh-key` apply? Is gh's `git_protocol` config written? From which gh versions?
   Recommend flags that never make gh git's helper; if impossible, ask before Task 3.
   Docs: none
-- [ ] 2. Status fix line (G7): `ghAdvice` picks switch vs login from
+- [x] 2. Status fix line (G7): `ghAdvice` picks switch vs login from
   `auth.gh.value.accounts`. Docs: HOW-IT-WORKS status card table
 - [ ] 3. `use --gh` signs in (G2–G5): a terminal-inheriting runner in `src/core/exec.ts`
   (`shell: false`, exec itself writes nothing); `ghLogin(host)` in

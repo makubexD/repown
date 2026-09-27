@@ -12,7 +12,7 @@ import { delimiter, dirname, join } from 'node:path';
 import { ghAdvice } from '../src/commands/status.ts';
 import type { AuthState } from '../src/core/inspect.ts';
 import { loadRegistry, registryPath } from '../src/core/registry.ts';
-import { ok } from '../src/core/result.ts';
+import { err, ok } from '../src/core/result.ts';
 import { sandbox, type Sandbox } from './helpers.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
@@ -227,11 +227,33 @@ describe('repown status account', () => {
 });
 
 describe('gh warning account', () => {
-  test('repown.account octo-work, credential username octocat: the fix switches to octo-work', () => {
-    const advice = ghAdvice('octo-work', ghActive('octocat'));
+  test('signed in to gh: the fix switches, in the spelling gh reports', () => {
+    const advice = ghAdvice('octo-work', ghAccounts('octocat', ['octocat', 'octo-work']));
     assert.ok(advice);
     assert.match(advice.warn, /active as "octocat"/);
     assert.equal(advice.detail, 'fix: gh auth switch -u octo-work');
+  });
+
+  test('signed in under a different case: the fix uses the login gh reports', () => {
+    const advice = ghAdvice('Octo-Work', ghAccounts('octocat', ['octocat', 'octo-work']));
+    assert.ok(advice);
+    assert.match(advice.warn, /active as "octocat"/);
+    assert.equal(advice.detail, 'fix: gh auth switch -u octo-work');
+  });
+
+  test('not signed in to gh: the fix is repown use --gh', () => {
+    const advice = ghAdvice('octo-work', ghActive('octocat'));
+    assert.ok(advice);
+    assert.match(advice.warn, /active as "octocat"/);
+    assert.equal(advice.detail, 'fix: repown use octo-work --gh   (signs octo-work in to gh)');
+  });
+
+  test('unverified gh stays a check of gh auth status', () => {
+    const advice = ghAdvice('octocat', ghUnverified());
+    assert.deepEqual(advice, {
+      warn: 'could not be queried, so who `gh pr create` would act as is UNVERIFIED.',
+      detail: 'check it yourself: gh auth status',
+    });
   });
 });
 
@@ -451,9 +473,24 @@ function assertRegistryWarning(stderr: string): void {
 }
 
 function ghActive(login: string): AuthState {
+  return ghAccounts(login, [login]);
+}
+
+function ghAccounts(active: string, logins: readonly string[]): AuthState {
   return {
     gcmPath: null, gcmPresent: false, stored: ok([]), ghPresent: true,
-    gh: ok({ accounts: [{ login, active: true }], active: login }),
+    gh: ok({
+      accounts: logins.map((login) => ({ login, active: login === active })),
+      active,
+    }),
+    helper: null, ghIsHelper: false, helperIsGcm: false, ghHelperOrigins: [],
+  };
+}
+
+function ghUnverified(): AuthState {
+  return {
+    gcmPath: null, gcmPresent: false, stored: ok([]), ghPresent: true,
+    gh: err('gh auth status failed'),
     helper: null, ghIsHelper: false, helperIsGcm: false, ghHelperOrigins: [],
   };
 }

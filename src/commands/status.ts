@@ -281,14 +281,28 @@ function registryUnread(): boolean {
 export function ghAdvice(account: string | null, auth: AuthState): { readonly warn: string; readonly detail: string } | null {
   if (auth.ghPresent && !auth.gh.ok) return { warn: GH_UNVERIFIED, detail: 'check it yourself: gh auth status' };
   const active = ghActiveOther(account, auth);
-  if (!active) return null;
+  if (!active || account === null) return null;
   return {
     warn: 'active as "' + active + '", so `gh pr create` here would act as that account.',
-    detail: 'fix: gh auth switch -u ' + account,
+    detail: ghFix(account, auth),
   };
 }
 
 const GH_UNVERIFIED = 'could not be queried, so who `gh pr create` would act as is UNVERIFIED.';
+
+/** `gh auth switch` only works for a login gh already lists, and only in gh's spelling. */
+function ghFix(account: string, auth: AuthState): string {
+  const login = ghReportedLogin(account, auth);
+  if (login !== null) return 'fix: gh auth switch -u ' + login;
+  return 'fix: repown use ' + account + ' --gh   (signs ' + account + ' in to gh)';
+}
+
+function ghReportedLogin(account: string, auth: AuthState): string | null {
+  if (!auth.gh.ok) return null;
+  const wanted = account.toLowerCase();
+  const found = auth.gh.value.accounts.find((item) => item.login.toLowerCase() === wanted);
+  return found === undefined ? null : found.login;
+}
 
 function ghActiveOther(account: string | null, auth: AuthState): string | null {
   if (!auth.gh.ok || !account || !auth.gh.value.active) return null;

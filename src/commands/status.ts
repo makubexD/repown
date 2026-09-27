@@ -51,18 +51,51 @@ function verdict(repo: RepoState, auth: AuthState, problems: readonly Problem[])
   return 1;
 }
 
+const STATUS_TITLE = 'repown status · current settings of this clone';
+
 function summary(repo: RepoState, auth: AuthState): void {
-  const id = repo.identity;
+  out.heading(STATUS_TITLE);
+  out.line(place(repo));
+  cloneSettings(repo);
+  machineSettings(repo, auth);
   out.line();
-  out.field('commits as', id.name || id.email ? (id.name ?? '?') + ' <' + (id.email ?? '?') + '>' : 'NOT SET LOCALLY');
+}
+
+function place(repo: RepoState): string {
+  return '  ' + (repo.root ?? repo.git.cwd) + '  ' + headLabel(repo.branch);
+}
+
+function headLabel(branch: RepoState['branch']): string {
+  if (branch?.kind === 'detached') return '(detached at ' + branch.hash + ')';
+  if (branch?.kind === 'branch') return '(branch ' + branch.name + ')';
+  return '(unknown)';
+}
+
+function cloneSettings(repo: RepoState): void {
+  const id = repo.identity;
+  out.heading('This clone');
+  out.field('commits as', person(id.name, id.email, 'NOT SET LOCALLY'));
   out.field('pushes as', pushesAs(repo));
-  out.field('origin', repo.originUrl
-    ? (repo.owner ?? 'unknown') + '  ' + out.dim('(' + repo.provider.label + ')')
-    : 'no remote');
+  out.field('origin', originOf(repo));
+  out.field('push guard', repo.guard);
+}
+
+function machineSettings(repo: RepoState, auth: AuthState): void {
+  const id = repo.identity;
+  out.heading('This machine');
+  out.field('default', person(id.machineName, id.machineEmail, 'none'));
   out.field('helper', repo.helper ?? 'none');
   out.field('gh active', activeAccountLabel(auth));
-  out.field('push guard', repo.guard);
-  out.line();
+}
+
+function person(name: string | null, email: string | null, absent: string): string {
+  if (!name && !email) return absent;
+  return (name ?? '?') + ' <' + (email ?? '?') + '>';
+}
+
+function originOf(repo: RepoState): string {
+  if (!repo.originUrl) return 'no remote';
+  return (repo.owner ?? 'unknown') + '  ' + out.dim('(' + repo.provider.label + ')');
 }
 
 function pushesAs(repo: RepoState): string {

@@ -60,6 +60,9 @@ export interface RepoIdentity {
   readonly inheritedName: string | null;
   readonly inheritedEmail: string | null;
   readonly inheritedAccount: string | null;
+  /** The global identity: what an unpinned clone inherits, whatever this clone sets. */
+  readonly machineName: string | null;
+  readonly machineEmail: string | null;
 }
 
 export function isPinned(identity: RepoIdentity): boolean {
@@ -73,16 +76,18 @@ export async function readIdentity(git: Git, credentialKey: string | null): Prom
     git.getConfig(USE_CONFIG_ONLY_KEY, 'local'),
     git.getConfig(ACCOUNT_KEY, 'local'),
   ]);
-  const [inheritedName, inheritedEmail] = await Promise.all([
+  const [inheritedName, inheritedEmail, machineName, machineEmail] = await Promise.all([
     git.getConfig(NAME_KEY),
     git.getConfig(EMAIL_KEY),
+    git.getConfig(NAME_KEY, 'global'),
+    git.getConfig(EMAIL_KEY, 'global'),
   ]);
   const account = credentialKey ? await git.getConfig(credentialKey, 'local') : null;
   const inheritedAccount = credentialKey ? await git.getConfig(credentialKey) : null;
 
   return {
     name, email, account, owner, useConfigOnly,
-    inheritedName, inheritedEmail, inheritedAccount,
+    inheritedName, inheritedEmail, inheritedAccount, machineName, machineEmail,
   };
 }
 

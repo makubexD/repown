@@ -180,12 +180,19 @@ After `repown fix`, gh's active account affects only the gh CLI. To keep it in s
 ```
 $ repown
 
+repown status · current settings of this clone
+  ~/code/personal  (branch main)
+
+This clone
   commits as     Octo Cat <octocat@users.noreply.github.com>
   pushes as      octocat
   origin         octocat  (GitHub)
+  push guard     on
+
+This machine
+  default        Octo Work <octo-work@example.invalid>
   helper         manager
   gh active      octo-work
-  push guard     on
 
 WARN  gh         active as "octo-work", so `gh pr create` here would act as that account.
        fix: gh auth switch -u octocat

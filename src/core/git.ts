@@ -34,6 +34,11 @@ export interface ConfigEntry {
   readonly value: string;
 }
 
+/** What HEAD points at. An unborn branch still has a name; a detached HEAD has only a commit. */
+export type CurrentBranch =
+  | { readonly kind: 'branch'; readonly name: string }
+  | { readonly kind: 'detached'; readonly hash: string };
+
 export class Git {
   readonly cwd: string;
 
@@ -62,6 +67,17 @@ export class Git {
   /** The working tree root. Asked of git so a linked worktree resolves to itself. */
   async root(): Promise<string | null> {
     return output(await this.exec(['rev-parse', '--show-toplevel']));
+  }
+
+  /**
+   * `symbolic-ref` answers with the branch name even when that branch has no
+   * commits yet. Detached HEAD is not a symbolic ref, so the short hash names it.
+   */
+  async currentBranch(): Promise<CurrentBranch | null> {
+    const name = output(await this.exec(['symbolic-ref', '--short', '-q', 'HEAD']));
+    if (name) return { kind: 'branch', name };
+    const hash = output(await this.exec(['rev-parse', '--short', 'HEAD']));
+    return hash ? { kind: 'detached', hash } : null;
   }
 
   /**

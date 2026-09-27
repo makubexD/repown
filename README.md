@@ -147,7 +147,7 @@ then commit and push.
 | Once per clone | `repown setup [<account>]` | guided: asks, shows each step and its command, then runs them. Every answer has a flag (`--name`, `--email`, `--host`, `--gh`, `--allow-owner <owner>`, `--guard`, `--fix`); `--no-input` asks nothing ([scripts and CI](docs/CONFIGURATION.md#scripts-and-ci)) |
 | | `repown use <account> [--gh]` | what setup runs: pin this clone to an account; `--gh` also switches gh's active account. `--name` with `--email` skips the registry, the file where repown remembers accounts |
 | | `repown guard on \| off \| status` | install, remove or show the pre-push hook (bare `repown guard` shows it) |
-| Any time | `repown` (or `repown status`) | who this clone commits and pushes as; exits 1 on a problem (warnings alone exit 0) |
+| Any time | `repown` (or `repown status`) | shows this clone's and this machine's settings; exits 1 on a problem (warnings alone exit 0) |
 | | `repown scan [dir...] [--emails] [--depth <n>] [--format json]` | every clone under the folders (default: this one, 3 levels deep): owner, host, identity, guard, and which email domains its history has. Changes nothing |
 | Rarely | `repown accounts list \| add \| remove` | the accounts this machine knows (bare `repown accounts` lists them; `add` takes `--name`, `--email`, `--host github\|azdo\|generic`; `list --format json` for scripts) |
 | | `repown off` | unpin this clone, leaving global config alone; warns if the guard is still on |
@@ -157,12 +157,19 @@ then commit and push.
 ```
 $ repown
 
+repown status · current settings of this clone
+  ~/code/personal  (branch main)
+
+This clone
   commits as     Octo Cat <octocat@users.noreply.github.com>
   pushes as      octocat
   origin         octocat  (GitHub)
+  push guard     on
+
+This machine
+  default        Octo Work <octo-work@example.invalid>
   helper         manager
   gh active      octo-work
-  push guard     on
 
 WARN  gh         active as "octo-work", so `gh pr create` here would act as that account.
        fix: gh auth switch -u octocat

@@ -146,17 +146,16 @@ interface Loaded {
 
 async function loadClone(git: Git, repo: RepoState, options: ReadOptions): Promise<Loaded> {
   const authPromise = inspectAuth(git, repo.originUrl ?? undefined);
-  const [auth, pinned, allowed, planned, addresses, helpers, name, email, ownerIsUser] = await Promise.all([
+  const [auth, pinned, allowed, planned, addresses, helpers, ownerIsUser] = await Promise.all([
     authPromise,
     git.getConfig('repown.account', 'local'),
     git.getAllConfig('repown.allowOwner', 'local'),
     planRepair(git),
     historyFor(git, repo),
     git.getAllConfigRaw('credential.helper'),
-    git.getConfig('user.name', 'global'),
-    git.getConfig('user.email', 'global'),
     authPromise.then((auth) => askOwnerIsUser(repo, auth, options)),
   ]);
+  const { machineName: name, machineEmail: email } = repo.identity;
   return { auth, pinned, allowed, planned, addresses, helpers, name, email, ownerIsUser };
 }
 

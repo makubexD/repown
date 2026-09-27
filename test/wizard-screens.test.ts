@@ -105,7 +105,7 @@ describe('repown setup, played with key presses', () => {
     assert.doesNotMatch(fresh.screen, /type < to go back/);
   });
 
-  test('Recommended asks how setup should work, then only the account, and the review lists the rest', async () => {
+  test('Recommended asks how setup should work, the account, and a foreign owner, then the review lists the rest', async () => {
     const gh = ok({
       accounts: [{ login: 'octocat', active: false }, { login: 'octo-work', active: true }],
       active: 'octo-work',
@@ -114,7 +114,7 @@ describe('repown setup, played with key presses', () => {
       gh, owner: 'octo-org', guard: 'off',
       upstream: { supported: true, enabled: null, branch: 'main' },
     });
-    const { outcome, screen } = await play(ctx, [[down], [up, enter], [enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[down], [up, enter], [enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     const opening = screen.split('Which account should this clone belong to?')[0] ?? '';
     assert.match(opening, /How should setup work\?/);
@@ -123,7 +123,7 @@ describe('repown setup, played with key presses', () => {
     const plain = screen.replace(/│/g, ' ').replace(/\s+/g, ' ');
     assert.match(plain, /asks only what it must, fills in the rest, and shows every step before running/);
     assert.match(plain, /asks every question, and explains each change before making it/);
-    assert.doesNotMatch(screen, /Let this clone push to it\?/);
+    assert.match(plain, /This repository belongs to "octo-org"\. Let this clone push to it\?/);
     assert.doesNotMatch(screen, /Turn on the push guard\?/);
     assert.doesNotMatch(screen, /Push new branches without -u\?/);
     assert.doesNotMatch(screen, /Also make this account gh's active account\?/);

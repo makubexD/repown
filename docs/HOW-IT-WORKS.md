@@ -187,7 +187,7 @@ sequenceDiagram
 | Repo owned by an organisation | 🟡 prints the line that allows it ([card 5](#5-check-where-you-are)) |
 | gh is still the credential helper | 🟡 `fix: repown fix` |
 | No stored credential yet | the first push signs in once ([card 6](#6-commit-and-first-push)) |
-| Unpushed commits by another address | 🟡 `N commits on <branch> not on any remote are by <addresses>; the guard will refuse them`, then `re-author them (git rebase with --exec "git commit --amend --no-edit --reset-author"), or pin that address`. Up to three addresses, then `and N more`. Exit code unchanged. A detached HEAD says nothing. If those commits can't be read, the warning says so |
+| Unpushed commits by another address | 🟡 `N commits on <branch> not on any remote are by <addresses>; the guard will refuse them`, then `re-author it` (one commit) or `re-author them` (more): `git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"`, or `git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when that commit has no parent, or pin that address. `<base>` is the short hash of the parent of the oldest of those commits. Up to three addresses, then `and N more`. Exit code unchanged. A detached HEAD says nothing. If those commits can't be read, the warning says so and gives no rebase command |
 
 </details>
 
@@ -212,7 +212,8 @@ After `repown fix`, gh's active account affects only the gh CLI. To keep it in s
 
 To point this clone at an account already recorded, run `repown setup <account>`. That skips
 the mode question and uses Recommended ([card 13](#13-guided-setup)). When gh would not open
-a browser and `fix` does not apply, it goes straight to the review.
+a browser, `fix` does not apply, and origin belongs to the account or is already allowed,
+it goes straight to the review. When origin belongs to someone else, it still asks first.
 </details>
 
 ### 5. Check where you are
@@ -274,8 +275,11 @@ ready: commits and pushes use octocat · 1 warning (optional: gh)
 | (no `upstream` field) | detached HEAD, or no remote | nothing |
 
 🔴 rows exit 1; 🟡 rows alone exit 0. With no problems, stderr ends with
-`ready: commits and pushes use <account>`, plus ` · N warning(s)` when there
-are warnings, tagged `(optional: gh)` when every warning is about gh. With a
+`ready: commits and pushes use <account>` where this host's credentials are
+pinned, or `ready: commits use <account>; pushes use this host's own sign-in`
+where they are not (Azure DevOps, a local path, or any other remote repown does
+not pin). Either way, ` · N warning(s)` follows when there are warnings, tagged
+`(optional: gh)` when every warning is about gh. With a
 problem it ends with a count (`1 problem, 2 warnings`), adding
 `: run repown setup` when an identity problem is among them. Outside a clone,
 `repown status` prints `Not a git repository` and exits 1. Bare `repown` does that only
@@ -389,7 +393,7 @@ Override this one push with: git push --no-verify
 
 | 🔴 Refusal | Typical cause | Fix |
 | --- | --- | --- |
-| **foreign commit**, yours | committed before pinning, or by an IDE with its own identity | last commit: `git commit --amend --reset-author --no-edit`; older ones: `git rebase <last-good> --exec "git commit --amend --reset-author --no-edit"`; then push again |
+| **foreign commit**, yours | committed before pinning, or by an IDE with its own identity | `re-author it` or `re-author them`: `git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"` (`git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when that commit has no parent), or pin that address; then push again |
 | **foreign commit**, a teammate's | cherry-picked, rebased or fetched from their fork, and not on the remote yet | let them push it, then pull; don't re-author their work ([card 9](#9-a-teammate-without-repown)) |
 | **wrong owner** `push goes to "…"` | an organisation repository, or the wrong remote | organisation: `git config --local --add repown.allowOwner octo-org` |
 | **env** `GH_TOKEN is set` | a token or email variable overrides the identity | unset it, then push again |
@@ -578,7 +582,7 @@ flowchart TD
   F -->|--no-input, account incomplete| X5["🔴 exit 2: names the missing flags"]
   F -->|yes| M{"How should setup work?<br/>Recommended, or Step by step"}
   M --> A["account: one already seen, a recorded one, or a new login<br/>(suggests origin's owner when it is a user; then host, name, email)"]
-  A --> Q["only what applies here:<br/>Recommended fills a gh switch, the organisation, the guard and upstream;<br/>both modes still ask a gh sign-in and fix"]
+  A --> Q["only what applies here:<br/>Recommended fills a gh switch, the guard and upstream;<br/>both modes ask allowOwner, a gh sign-in and fix"]
   A -->|Esc or Ctrl-C| N
   Q -->|Esc or Ctrl-C| N
   Q --> K{"already pinned to it, as recorded,<br/>and nothing else to do?"}
@@ -622,12 +626,14 @@ never suggested.
 | Push new branches without -u? (default Yes) | git is 2.37.0 or newer, and `push.autoSetupRemote` is not already true in any scope. The flag is `--auto-upstream`. On older git, or when `git --version` cannot be read, this is not asked and the review notes `git push -u origin <branch>` (the current branch, or `<branch>` when HEAD is detached) | `git config --local push.autoSetupRemote true` |
 | Stop gh answering git's sign-in requests? (whole machine, default No) | a GitHub clone, gh is the helper, and `fix` finds its entries. Still asked in Recommended | `fix --yes` |
 
-**Recommended** does not ask the questions that only change this clone, and answers them
-Yes: allow origin's owner, turn the guard on, push new branches without `-u`, and switch
-gh when gh already lists the account. Each of those is still a step in the review, and
-Change an answer can open it. It still asks for the account, and for a new account the
-host, name and email. It still asks, default No, when signing in to gh would open a
-browser, and when `fix` would change the whole machine. **Step by step** asks every
+**Recommended** answers Yes, and does not ask, the questions that only change this
+clone and need nothing only the user knows: turn the guard on, push new branches
+without `-u`, and switch gh when gh already lists the account. Each of those is
+still a step in the review, and Change an answer can open it. It still asks for
+the account, and for a new account the host, name and email. It always asks,
+default Yes, when origin belongs to someone other than the account. It still
+asks, default No, when signing in to gh would open a browser, and when `fix`
+would change the whole machine. **Step by step** asks every
 question. After Run, before each command, it shows what that step changes (the config
 keys and values, or the gh action), why (the step's own sentence), and the command, then
 asks `Run this step?` with Yes / Skip / Stop. Enter is Yes, except for `fix`, where Enter
@@ -673,7 +679,8 @@ Esc or Ctrl-C end with one line: nothing was changed, and you can run `repown se
 any time.
 
 **Recommended,** in a clone of an organisation's repository: the mode question, the
-account, then the review. The questions it did not ask are still steps.
+account, whether this clone may push to that owner (default Yes), then the review.
+The questions it did not ask are still steps.
 
 ```
 ◇  How should setup work?
@@ -684,6 +691,12 @@ account, then the review. The questions it did not ask are still steps.
 │
 ◇  Which account should this clone belong to?
 │  octocat
+│
+◇  This repository belongs to "octo-org". Let this clone push to it?
+│  Yes if you're a member of that organisation or a collaborator on
+│  it; with No, the push guard refuses pushes there. Saved in this
+│  clone only
+│  Yes
 │
 ◇  Review: nothing has changed yet
 │  1. Let this clone push to octo-org's repositories

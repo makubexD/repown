@@ -86,13 +86,14 @@ repown                 # a new clone: just typing this starts the guided setup
    first: pick the account that owns it.)
    - **It asks how setup should work.** Recommended (the default) asks for the account,
      and for a new account where it is hosted and the name and email, then fills in the
-     rest: allow origin's owner, turn the guard on, push new branches without `-u`, and
-     switch gh when gh already lists the account. Those steps still appear in the review.
-     A gh sign-in, which opens a browser, and taking git's sign-ins back from gh, which
-     changes the whole machine, are still asked, and both default to No. Step by step asks
-     every question. The flag is `--step-by-step`. `repown setup <account>` skips this
-     question and uses Recommended, so a recorded account goes straight to the review when
-     nothing else must be asked.
+     rest: turn the guard on, push new branches without `-u`, and switch gh when gh
+     already lists the account. Those steps still appear in the review. When origin
+     belongs to someone else, Recommended still asks whether this clone may push there
+     (default Yes). A gh sign-in, which opens a browser, and taking git's sign-ins
+     back from gh, which changes the whole machine, are still asked, and both default
+     to No. Step by step asks every question. The flag is `--step-by-step`.
+     `repown setup <account>` skips this question and uses Recommended, so a recorded
+     account goes straight to the review when nothing else must be asked.
    - **In your first clone,** it lists the accounts it can already see on GitHub
      (origin's owner, gh's accounts, Git Credential Manager's) and suggests origin's
      owner when that owner is a user, or asks for the login. Then it asks where the
@@ -100,8 +101,10 @@ repown                 # a new clone: just typing this starts the guided setup
      *noreply* address, shown at github.com/settings/emails (like
      `1234+octocat@users.noreply.github.com`).
    - **In later clones,** it lists the accounts it knows: pick one, or **a new account**.
-   - **The questions.** Recommended answers Yes, and does not ask, the ones that only
-     change this clone. A gh sign-in and taking git's sign-ins back from gh stay
+   - **The questions.** Recommended answers Yes, and does not ask, turn the guard on,
+     push new branches without `-u`, and switch gh when gh already lists the account.
+     Allowing the repository's owner is always asked (default Yes) when origin belongs
+     to someone else. A gh sign-in and taking git's sign-ins back from gh stay
      questions, default No. Step by step asks each of them:
      - *switch gh too:* make the account gh's active one, so `gh pr create` matches;
      - *allow the repository's owner:* for an organisation's repository (answer No and the
@@ -165,7 +168,7 @@ then commit and push.
 | --- | --- | --- |
 | Once per machine | `repown doctor` | what serves credentials on this machine, and whether each account is signed in to git and gh |
 | | `repown fix [--dry-run] [--yes]` | undo `gh auth setup-git`, so each clone's pinned account is used; shows what it removes, and the undo, first |
-| Once per clone | `repown setup [<account>]` | guided: asks how setup should work, shows each step and its command, then runs them. Recommended fills in the clone-only answers; `--step-by-step` asks every question. Every answer has a flag (`--name`, `--email`, `--host`, `--gh`, `--allow-owner <owner>`, `--guard`, `--auto-upstream`, `--fix`, `--step-by-step`); `--no-input` asks nothing ([scripts and CI](docs/CONFIGURATION.md#scripts-and-ci)) |
+| Once per clone | `repown setup [<account>]` | guided: asks how setup should work, shows each step and its command, then runs them. Recommended fills in the guard, pushing new branches without `-u`, and a gh switch when gh already lists the account, and still asks when origin belongs to someone else; `--step-by-step` asks every question. Every answer has a flag (`--name`, `--email`, `--host`, `--gh`, `--allow-owner <owner>`, `--guard`, `--auto-upstream`, `--fix`, `--step-by-step`); `--no-input` asks nothing ([scripts and CI](docs/CONFIGURATION.md#scripts-and-ci)) |
 | | `repown use <account> [--gh]` | what setup runs: pin this clone to an account; `--gh` switches gh's active account, or signs the account in to gh when needed (in a terminal). `--name` with `--email` skips the registry, the file where repown remembers accounts |
 | | `repown guard on \| off \| status` | install, remove or show the pre-push hook (bare `repown guard` shows it) |
 | Any time | `repown` (or `repown status`) | this clone's and this machine's settings, and what to fix; exits 1 on a problem (warnings alone exit 0). In a terminal, bare `repown` starts `repown setup` in a clone that isn't set up, shows status in one that is, and shows the help outside a clone (exit 0). Without a terminal, or with its output redirected, it is always status (exit 1 outside a clone) |

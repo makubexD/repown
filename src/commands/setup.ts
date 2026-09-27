@@ -1,7 +1,8 @@
 // A guided first setup of this clone, for someone new to repown. The first question is
-// how it should work: Recommended fills in the answers that only change this clone,
-// and step by step asks each one. It shows the commands its answers stand for, and
-// runs exactly those -- `accounts add`, `use`, `guard on`, `fix` -- so anything it
+// how it should work: Recommended fills in the guard, upstream and a gh switch, and
+// still asks when origin belongs to someone else. Step by step asks each one.
+// It shows the commands its answers stand for, and runs exactly those --
+// `accounts add`, `use`, `guard on`, `fix` -- so anything it
 // does can be done, or scripted, without it (src/wizard/setup-run.ts).
 
 import { providers } from '../core/hosts/index.ts';

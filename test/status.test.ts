@@ -290,6 +290,27 @@ describe('repown status ready line', () => {
     assert.equal(accountLine(run.stdout), '  account        Octocat  (recorded)');
     assert.equal(closing(run.stderr), 'ready: commits and pushes use Octocat');
   });
+
+  test('a host with no credential pin does not claim the push identity', () => {
+    box.git('remote', 'add', 'origin', 'https://dev.azure.com/octocat/project/_git/repo');
+    box.git('config', '--local', 'user.name', 'Octo Cat');
+    box.git('config', '--local', 'user.email', 'octocat@example.invalid');
+    box.git('config', '--local', 'repown.account', 'octocat');
+    guardOn(box);
+    const clean = repown(['status'], box.dir, quietEnv());
+    assert.equal(clean.status, 0, clean.stderr);
+    assert.equal(closing(clean.stderr), 'ready: commits use octocat; pushes use this host\'s own sign-in');
+    assert.doesNotMatch(clean.stderr, /commits and pushes use/);
+    const warned = repown(['status'], box.dir, fakeGhEnv(box));
+    assert.equal(warned.status, 0, warned.stderr);
+    assert.equal(counted(warned.stderr, 'WARN'), 1, warned.stderr);
+    assert.equal(closing(warned.stderr),
+      'ready: commits use octocat; pushes use this host\'s own sign-in · 1 warning (optional: gh)');
+    box.git('remote', 'set-url', 'origin', join(box.dir, 'elsewhere.git'));
+    const local = repown(['status'], box.dir, quietEnv());
+    assert.equal(local.status, 0, local.stderr);
+    assert.equal(closing(local.stderr), 'ready: commits use octocat; pushes use this host\'s own sign-in');
+  });
 });
 
 describe('repown status account', () => {

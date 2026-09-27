@@ -241,6 +241,17 @@ export class Git {
     return err('tag chain longer than ' + MAX_TAG_CHAIN + ' starting at ' + sha);
   }
 
+  /** Full hash of the oldest commit in `range`, or null when none or git cannot list them. */
+  async oldestIn(range: readonly string[]): Promise<string | null> {
+    const listed = lines(await this.exec(['rev-list', '--reverse', ...range]));
+    return listed[0] ?? null;
+  }
+
+  /** Short hash of the parent. Null when the commit is a root or cannot be read. */
+  async parentShort(sha: string): Promise<string | null> {
+    return output(await this.exec(['rev-parse', '--verify', '--short', sha + '^']));
+  }
+
   /** Whether this clone has the commit at all -- a remote tip it never fetched is absent. */
   async hasCommit(sha: string): Promise<boolean> {
     return succeeded(await this.exec(['cat-file', '-e', sha + '^{commit}']));

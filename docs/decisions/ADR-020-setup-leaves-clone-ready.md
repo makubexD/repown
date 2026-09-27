@@ -24,13 +24,18 @@ from an earlier setup without questions.
   *Recommended* (the default) and *Step by step*. The flag is `--step-by-step`. The
   choice is not stored ([ADR-007](ADR-007-no-profile-store.md)).
   - Recommended asks only for the account (and, for a new one, host, name and
-    address). Every question that changes only this clone takes its recommended value:
-    guard on, allow the origin owner, push new branches without `-u`, and a gh
-    *switch* when gh already lists the account. Each of these is a step in the review,
-    so nothing is hidden, and the review is still the one confirmation.
-  - Two questions are asked in both modes: the gh sign-in, which opens a browser
-    ([ADR-019](ADR-019-repown-signs-accounts-in-to-gh.md)), and `fix`, which changes the
-    whole machine ([ADR-013](ADR-013-deliberately-not-done.md)). Their defaults stay No.
+    address). The questions that change only this clone and need nothing only the
+    user knows take their recommended value: guard on, push new branches without
+    `-u`, and a gh *switch* when gh already lists the account. Each of these is a step
+    in the review, so nothing is hidden, and the review is still the one confirmation.
+  - Three questions are asked in both modes. The gh sign-in opens a browser
+    ([ADR-019](ADR-019-repown-signs-accounts-in-to-gh.md)), and `fix` changes the whole
+    machine ([ADR-013](ADR-013-deliberately-not-done.md)); their defaults stay No.
+    Letting the clone push to an origin owner that isn't the account is a fact only
+    the user knows (membership or collaboration), and it is the guard's check that the
+    chosen account matches the repository ([ADR-004](ADR-004-destination-owner.md)):
+    answering it silently would let a wrong account choice through. It keeps its
+    default Yes, and is always asked.
   - Step by step asks every question. After the review, before each step, it shows
     the config keys and values the step writes (or the gh action), why, and the
     command, then asks `Run this step?` with Yes / Skip / Stop.
@@ -56,9 +61,13 @@ from an earlier setup without questions.
     - `none yet: git push -u origin <b>`
     - `set on the first push (push.autoSetupRemote)`
     - absent on a detached HEAD or with no remote
-  - With no problems, the closing line is `ready: commits and pushes use <account>`.
-    Warnings follow, and when every warning is about gh they are tagged
-    `(optional: gh)`. The severities of ADR-011 and the exit codes are unchanged.
+  - With no problems, the closing line is `ready: commits and pushes use <account>`
+    where credentials are pinned. Where `credentialKeys()` is empty, it is
+    `ready: commits use <account>; pushes use this host's own sign-in`
+    ([ADR-009](ADR-009-hosts-claim-only-measured.md)): a push identity is claimed
+    only where it was measured. Warnings follow, and when every warning is about gh
+    they are tagged `(optional: gh)`. The severities of ADR-011 and the exit codes
+    are unchanged.
 - **Pinning names unpushed commits by another address.** When commits on the current
   branch that no remote has carry an author or committer other than the pinned
   address, setup's review and `repown use` say how many, by whom, and that the guard

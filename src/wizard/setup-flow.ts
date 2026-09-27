@@ -193,7 +193,7 @@ function choiceSteps(ctx: SetupContext): Step<SetupContext>[] {
       message: 'This repository belongs to "' + printable(ctx.owner ?? '') + '". Let this clone push to it?',
       hint: 'Yes if you\'re a member of that organisation or a collaborator on it; with No, ' +
         'the push guard refuses pushes there. Saved in this clone only',
-      when: (answers) => ownerForeign(accountOf(answers), ctx), auto: isRecommended },
+      when: (answers) => ownerForeign(accountOf(answers), ctx) },
     { id: 'guard', kind: 'confirm', flag: '--guard', message: 'Turn on the push guard?',
       hint: 'before each push, it checks that every commit is yours and goes to the right place, and stops the push if not; ' +
         'turn it off any time: repown guard off',

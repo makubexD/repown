@@ -78,10 +78,11 @@ const textOf = (review: Review): string[] =>
 const argvOf = (answers: Answers, ctx: SetupContext): (readonly string[])[] =>
   planCommands(answers, ctx).map((command) => command.argv);
 
-function onBranch(emails: readonly string[]): SetupContext['unpushed'] {
+function onBranch(emails: readonly string[], rebaseBase = 'abc1234'): SetupContext['unpushed'] {
   return {
     branch: 'main',
     commits: ok(emails.map((address) => ({ authorEmail: address, committerEmail: address }))),
+    rebaseBase,
   };
 }
 
@@ -444,14 +445,14 @@ describe('setup flow', () => {
     assert.deepEqual(stepped.asked, ['account', 'guard'], 'a given mode is not asked');
   });
 
-  test('S12 Recommended asks only the account; the filled steps show, and one can be changed', async () => {
+  test('S12 Recommended asks the account and a foreign owner; the filled steps show, and one can be changed', async () => {
     const gh = ok({
       accounts: [{ login: 'octocat', active: false }, { login: 'octo-work', active: true }],
       active: 'octo-work',
     });
     const ctx = context({ gh, owner: 'octo-org', upstream: { supported: true, enabled: null, branch: 'main' } });
     const prompter = scripted([
-      ['mode', 'recommended'], ['account', 'octocat'], ['review', 'edit'],
+      ['mode', 'recommended'], ['account', 'octocat'], ['allowOwner', true], ['review', 'edit'],
       ['pick', 'guard'], ['guard', false], ['review', 'run'],
     ]);
     let offered: string[] = [];
@@ -461,7 +462,7 @@ describe('setup flow', () => {
     });
     assert.equal(outcome.status, 'run');
     if (outcome.status !== 'run') return;
-    assert.deepEqual(prompter.asked, ['mode', 'account', 'guard']);
+    assert.deepEqual(prompter.asked, ['mode', 'account', 'allowOwner', 'guard']);
     assert.deepEqual(offered, ['mode', 'account', 'gh', 'allowOwner', 'guard', 'upstream']);
     const shown = prompter.reviews[0]!.steps.map((item) => item.command).join('\n');
     assert.match(shown, /repown\.allowOwner octo-org/);
@@ -472,6 +473,26 @@ describe('setup flow', () => {
     assert.equal(outcome.answers['gh'], true);
     assert.ok(!argvOf(outcome.answers, ctx).some((argv) => argv[0] === 'guard'));
     assert.ok(argvOf(outcome.answers, ctx).some((argv) => argv.includes('--gh')));
+  });
+
+  test('Recommended with a foreign owner asks to allow it, and No leaves it out of the plan', async () => {
+    const ctx = context({ owner: 'octo-org', upstream: { supported: true, enabled: null, branch: 'main' } });
+    const picked = { account: 'octocat', mode: 'recommended' };
+    const step = stepOf(ctx, 'allowOwner');
+    assert.equal(step.auto, undefined);
+    assert.equal(await step.initial?.(picked, ctx), true);
+    assert.equal(wording(step.message, picked, ctx), 'This repository belongs to "octo-org". Let this clone push to it?');
+    const prompter = scripted([
+      ['mode', 'recommended'], ['account', 'octocat'], ['allowOwner', false], ['review', 'run'],
+    ]);
+    const outcome = await wizard(setupFlow(ctx), ctx, {}, prompter);
+    assert.deepEqual(prompter.asked, ['mode', 'account', 'allowOwner']);
+    assert.equal(outcome.status, 'run');
+    if (outcome.status !== 'run') return;
+    assert.equal(outcome.answers['allowOwner'], false);
+    assert.ok(!argvOf(outcome.answers, ctx).some((argv) => argv.includes('repown.allowOwner')));
+    assert.ok(argvOf(outcome.answers, ctx).some((argv) => argv[0] === 'guard'));
+    assert.ok(argvOf(outcome.answers, ctx).some((argv) => argv.includes('push.autoSetupRemote')));
   });
 
   test('S13 Recommended still asks to sign in to gh, and the default is No', async () => {
@@ -517,7 +538,7 @@ describe('setup flow', () => {
     assert.ok(argvOf(outcome.answers, ctx).some((argv) => argv[0] === 'guard'));
   });
 
-  test('S15 a recorded account given up front uses Recommended and asks nothing before the review', async () => {
+  test('S15 a recorded account given up front uses Recommended and still asks a foreign owner', async () => {
     const gh = ok({
       accounts: [{ login: 'octocat', active: false }, { login: 'octo-work', active: true }],
       active: 'octo-work',
@@ -526,9 +547,9 @@ describe('setup flow', () => {
       gh, owner: 'octo-org', guard: 'off',
       upstream: { supported: true, enabled: null, branch: 'main' },
     });
-    const prompter = scripted([['review', 'decline']]);
+    const prompter = scripted([['allowOwner', true], ['review', 'decline']]);
     await wizard(setupFlow(ctx), ctx, { account: 'octocat', mode: 'recommended' }, prompter);
-    assert.deepEqual(prompter.asked, []);
+    assert.deepEqual(prompter.asked, ['allowOwner']);
     const commands = prompter.reviews[0]!.steps.map((item) => item.command).join('\n');
     assert.match(commands, /allowOwner/);
     assert.match(commands, /guard on/);
@@ -611,7 +632,7 @@ describe('setup flow', () => {
     const ctx = context({ unpushed: onBranch(['old@example.invalid', 'also@example.invalid']) });
     const notes = reviewNotes(ctx);
     assert.match(notes, /2 commits on main not on any remote are by old@example\.invalid, also@example\.invalid; the guard will refuse them/);
-    assert.match(notes, /re-author them \(git rebase with --exec "git commit --amend --no-edit --reset-author"\), or pin that address/);
+    assert.match(notes, /re-author them: git rebase abc1234 --exec "git commit --amend --no-edit --reset-author --allow-empty", or pin that address/);
     const planned = planCommands({ account: 'octocat', mode: 'recommended', guard: true }, ctx);
     assert.equal(planned.some((command) => command.argv.some((arg) => /rebase|amend|reset-author/.test(arg))), false);
     const settled = context({
@@ -621,6 +642,9 @@ describe('setup flow', () => {
     const again = setupFlow(settled).review({ account: 'octocat' }, settled);
     assert.equal(again.settled, true);
     assert.match(again.notes.join('\n'), /1 commit on main not on any remote is by old@example\.invalid; the guard will refuse it/);
+    assert.match(again.notes.join('\n'), /re-author it: git rebase abc1234 --exec "git commit --amend --no-edit --reset-author --allow-empty", or pin that address/);
+    const rooted = context({ unpushed: onBranch(['old@example.invalid'], '--root') });
+    assert.match(reviewNotes(rooted), /re-author it: git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty", or pin that address/);
   });
 
   test('S19 the same commit list is compared with the planned email', () => {
@@ -637,7 +661,7 @@ describe('setup flow', () => {
   });
 
   test('S19 a committer who is not the author counts, and case does not', () => {
-    const mixed = context({ unpushed: { branch: 'main', commits: ok([
+    const mixed = context({ unpushed: { branch: 'main', rebaseBase: 'abc1234', commits: ok([
       { authorEmail: 'octocat@example.invalid', committerEmail: 'Other@example.invalid' },
       { authorEmail: 'other@example.invalid', committerEmail: 'octocat@example.invalid' },
     ]) } });
@@ -651,13 +675,13 @@ describe('setup flow', () => {
   });
 
   test('S19 a log that could not be read is a note, and a detached HEAD is not', () => {
-    const broken = context({ unpushed: { branch: 'feature', commits: err('git log failed') } });
+    const broken = context({ unpushed: { branch: 'feature', commits: err('git log failed'), rebaseBase: null } });
     const notes = reviewNotes(broken);
     assert.match(notes, /commits on feature not on any remote could not be read \(git log failed\), so repown can't say whether the guard will refuse them/);
-    assert.doesNotMatch(notes, /re-author them|are by/);
-    const detached = context({ unpushed: { branch: null, commits: ok([]) } });
+    assert.doesNotMatch(notes, /re-author|are by/);
+    const detached = context({ unpushed: { branch: null, commits: ok([]), rebaseBase: null } });
     assert.doesNotMatch(reviewNotes(detached), /not on any remote/);
-    const hidden = context({ unpushed: { branch: 'main', commits: ok([
+    const hidden = context({ unpushed: { branch: 'main', rebaseBase: 'abc1234', commits: ok([
       { authorEmail: 'bad\x1b@example.invalid', committerEmail: 'octocat@example.invalid' },
     ]) } });
     assert.doesNotMatch(reviewNotes(hidden), /\x1b/);
@@ -1115,6 +1139,7 @@ describe('setup context: would `use` change anything here?', () => {
     const emails = ctx.unpushed.commits.value.map((commit) => commit.authorEmail);
     assert.deepEqual(emails, ['work@example.invalid', 'octocat@example.invalid']);
     assert.match(reviewNotes(ctx, { account: 'octocat' }), /1 commit on main not on any remote is by work@example\.invalid/);
+    assert.match(reviewNotes(ctx, { account: 'octocat' }), /re-author it: git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty", or pin that address/);
     assert.match(reviewNotes(ctx, { account: 'octo-work' }), /1 commit on main not on any remote is by octocat@example\.invalid/);
     assert.doesNotMatch(reviewNotes(ctx, { account: 'octo-work' }), /work@example\.invalid/);
     at.box.git('update-ref', 'refs/remotes/origin/main', foreign);

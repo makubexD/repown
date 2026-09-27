@@ -130,7 +130,11 @@ function base(overrides: Partial<AuthState> = {}): AuthState {
 // pointed at with update-ref so they are actually on the branch `use` reads.
 const OURS = 'octocat@example.invalid';
 const THEIRS = 'other@example.invalid';
-const REAUTHOR = 're-author them (git rebase with --exec "git commit --amend --no-edit --reset-author"), or pin that address';
+const AMEND = '--exec "git commit --amend --no-edit --reset-author --allow-empty"';
+
+function reauthor(which: 'it' | 'them', base: string): string {
+  return 're-author ' + which + ': git rebase ' + base + ' ' + AMEND + ', or pin that address';
+}
 
 describe('repown use warns about unpushed commits by another address (S19)', () => {
   let box: Sandbox;
@@ -147,7 +151,7 @@ describe('repown use warns about unpushed commits by another address (S19)', () 
     assert.equal(box.git('rev-parse', 'HEAD'), sha, 'use must not rewrite the commit');
     assert.equal(box.git('log', '-1', '--format=%ae'), THEIRS);
     assert.match(run.stderr, new RegExp('WARN\\s+commits\\s+1 commit on main not on any remote is by ' + THEIRS + '; the guard will refuse it'));
-    assert.match(run.stderr, new RegExp(escapeRe(REAUTHOR)));
+    assert.match(run.stderr, new RegExp(escapeRe(reauthor('it', '--root'))));
     assert.doesNotMatch(run.stdout, /not on any remote/);
     assert.doesNotMatch(run.stderr, /could not be read/);
   });
@@ -167,6 +171,7 @@ describe('repown use warns about unpushed commits by another address (S19)', () 
     commitAs(box, 'a@example.invalid', 'again', 'a@example.invalid');
     const run = await runUse(box);
     assert.match(run.stderr, /2 commits on main not on any remote are by a@example\.invalid, b@example\.invalid; the guard will refuse them/);
+    assert.match(run.stderr, new RegExp(escapeRe(reauthor('them', '--root'))));
   });
 
   test('an address that only differs by case from the pin is not foreign', async () => {
@@ -193,8 +198,10 @@ describe('repown use warns about unpushed commits by another address (S19)', () 
     assert.equal(quiet.code, 0);
     assert.doesNotMatch(quiet.stderr, /not on any remote/);
     commitAs(box, THEIRS, 'local only');
+    const base = box.git('rev-parse', '--short', 'HEAD^');
     const run = await runUse(box);
     assert.match(run.stderr, /1 commit on main not on any remote is by other@example\.invalid/);
+    assert.match(run.stderr, new RegExp(escapeRe(reauthor('it', base))));
   });
 
   test('a detached HEAD is skipped', async () => {
@@ -229,7 +236,7 @@ describe('repown use warns about unpushed commits by another address (S19)', () 
     assert.equal(run.code, 0, run.stderr);
     assert.match(run.stderr, /WARN\s+commits\s+commits on main not on any remote could not be read \(/);
     assert.match(run.stderr, /so repown can't say whether the guard will refuse them/);
-    assert.doesNotMatch(run.stderr, /are by|re-author them/);
+    assert.doesNotMatch(run.stderr, /are by|re-author/);
   });
 });
 

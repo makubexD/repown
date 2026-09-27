@@ -43,9 +43,11 @@ is a safety net, not a lock
 
 **The guard refuses commits I made before pinning.** They still carry the address they
 were made with. `repown use` warns, and `repown setup`'s review notes it, when the
-current branch has commits no remote has by another address. Re-author them
-(`git rebase` with `--exec "git commit --amend --no-edit --reset-author"`), or pin
-that address. Nothing here rewrites history
+current branch has commits no remote has by another address. Re-author it, or them:
+`git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"`
+(`git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when that
+commit has no parent), or pin that address. `<base>` is the short hash of the parent
+of the oldest of those commits. Nothing here rewrites history
 ([card 3](HOW-IT-WORKS.md#3-pin-a-clone), [card 8](HOW-IT-WORKS.md#8-push-refused-and-the-fix)).
 
 **I ran `repown setup` again and it said "already set up". Is that right?** Yes: the clone

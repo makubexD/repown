@@ -9,11 +9,15 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 - `repown use` warns when the current branch has commits no remote has by another
   address: `N commits on <branch> not on any remote are by <addresses>; the guard
-  will refuse them`, and how to re-author them or pin that address. Up to three
-  addresses are named, then `and N more`. `repown setup`'s review notes the same
-  fact, including in Recommended mode, and does not rewrite the commits. A detached
-  HEAD is skipped. If the commits can't be read, the warning says so. The exit
-  code is unchanged.
+  will refuse them`, then `re-author it` (one commit) or `re-author them` (more):
+  `git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"`, or
+  `git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when
+  that history has no parent, or pin that address. `<base>` is the short hash of
+  the parent of the oldest of those commits. Up to three addresses are named, then
+  `and N more`. `repown setup`'s review notes the same fact, including in
+  Recommended mode, and does not rewrite the commits. A detached HEAD is skipped.
+  If the commits can't be read, the warning says so and gives no rebase command.
+  The exit code is unchanged.
 - After `repown setup` runs (Recommended or Step by step, including skips, Stop,
   a failed step, and **Apply the same settings again**), it prints what changed
   in this clone: `changed in this clone:` and one line per local key,
@@ -33,13 +37,15 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   a skipped step is named with `skipped:`. Recommended mode is unchanged.
 - `repown setup` starts by asking `How should setup work?`. Recommended (the default)
   asks for the account — and the host, name and email when the account is new — and
-  fills in the rest: allow origin's owner, the push guard, push new branches without
-  `-u`, and a gh switch when gh already lists the account. Those steps still appear in
-  the review, and Change an answer can open them. A gh sign-in, which opens a browser,
-  and `fix`, which changes the whole machine, are still asked, default No. Step by step
-  asks every question. The flag is `--step-by-step`. `repown setup <account>` skips the
-  mode question and uses Recommended, so a recorded account goes straight to the review
-  when nothing else must be asked. `--step-by-step --no-input` exits 2.
+  fills in the push guard, push new branches without `-u`, and a gh switch when gh
+  already lists the account. Those steps still appear in the review, and Change an
+  answer can open them. When origin belongs to someone else, Recommended still asks
+  whether this clone may push there (default Yes). A gh sign-in, which opens a
+  browser, and `fix`, which changes the whole machine, are still asked, default No.
+  Step by step asks every question. The flag is `--step-by-step`.
+  `repown setup <account>` skips the mode question and uses Recommended, so a recorded
+  account goes straight to the review when nothing else must be asked.
+  `--step-by-step --no-input` exits 2.
   `--no-input` still answers an ungiven question No. A clone that is otherwise ready,
   where push new branches without `-u` was left off, counts as already set up and notes
   `repown setup --auto-upstream`.
@@ -53,8 +59,10 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   `none yet: git push -u origin <branch>`, or `set on the first push
   (push.autoSetupRemote)`. Missing on a detached HEAD or with no remote, and
   never counted as a warning. With no problems it closes with
-  `ready: commits and pushes use <account>`, plus ` · N warning(s)` when there
-  are warnings, tagged `(optional: gh)` when every warning is about gh.
+  `ready: commits and pushes use <account>` where credentials are pinned, or
+  `ready: commits use <account>; pushes use this host's own sign-in` where they
+  are not. Either way, ` · N warning(s)` follows when there are warnings, tagged
+  `(optional: gh)` when every warning is about gh.
 - `repown setup` offers to sign the account in to gh when gh doesn't already
   know it (default No). Yes runs `repown use <account> --gh` and opens a
   browser. If gh is left acting as another account, the review and the line

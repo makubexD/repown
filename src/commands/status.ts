@@ -185,14 +185,16 @@ interface Problem { readonly what: string; readonly fix: string; }
 
 function closeStatus(repo: RepoState, problems: readonly Problem[], warnings: readonly string[], account: string): void {
   const line = problems.length === 0
-    ? readyLine(account, warnings)
+    ? readyLine(repo, account, warnings)
     : tally(problems.length, warnings.length) + setupHint(repo);
   out.note('');
   out.note(line);
 }
 
-function readyLine(account: string, warnings: readonly string[]): string {
-  const head = 'ready: commits and pushes use ' + account;
+function readyLine(repo: RepoState, account: string, warnings: readonly string[]): string {
+  const head = repo.credentialKeys.length === 0
+    ? 'ready: commits use ' + account + '; pushes use this host\'s own sign-in'
+    : 'ready: commits and pushes use ' + account;
   if (warnings.length === 0) return head;
   return head + ' · ' + howMany(warnings.length, 'warning') + ghTag(warnings);
 }

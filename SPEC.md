@@ -36,21 +36,21 @@ Decision record: [ADR-020](docs/decisions/ADR-020-setup-leaves-clone-ready.md).
 | S2 | Branch tracks `origin/<b>` | Nothing | `upstream   origin/<b>` |
 | S3 | `push.autoSetupRemote=true` (any scope) and no upstream | Nothing | `upstream   set on the first push (push.autoSetupRemote)` |
 | S4 | Detached HEAD, or no remote | Nothing | No `upstream` field |
-| S5 | No problems, only gh warnings | `1 warning` | `ready: commits and pushes use <account> · 1 warning (optional: gh)` |
-| S6 | No problems, a non-gh warning (e.g. guard off) | `1 warning` | `ready: commits and pushes use <account> · 1 warning` |
+| S5 | No problems, only gh warnings | `1 warning` | `ready: commits and pushes use <account> · 1 warning (optional: gh)`. Where credential keys are empty: `ready: commits use <account>; pushes use this host's own sign-in`, with the same warning suffix |
+| S6 | No problems, a non-gh warning (e.g. guard off) | `1 warning` | `ready: commits and pushes use <account> · 1 warning` where credentials are pinned; the unpinned form from S5 otherwise |
 | S7 | A problem (FAIL) | `1 problem: run repown setup` | Unchanged; no `ready:` |
 | S8 | Setup, git ≥ 2.37, autoSetupRemote not effectively true | Not offered | Question `Push new branches without -u?` (default Yes); plans `git config --local push.autoSetupRemote true` |
 | S9 | Setup, git < 2.37 or version unreadable | Not offered | Not asked; review note: `the first push of a new branch needs: git push -u origin <branch>` |
 | S10 | Setup, autoSetupRemote already effectively true | — | Not asked, not planned |
 | S11 | Setup starts (interactive) | First question is the account | First question `How should setup work?`: Recommended (default) / Step by step |
-| S12 | Recommended, recorded account, gh lists it but another is active | gh, allowOwner, guard asked | Asks only the account; gh switch, allowOwner, guard and upstream take their recommended values and show in the review |
+| S12 | Recommended, recorded account, gh lists it but another is active | gh, allowOwner, guard asked | Asks only the account; gh switch, guard and upstream take their recommended values and show in the review. allowOwner (origin owned by someone else) is still asked (ADR-004) |
 | S13 | Recommended, gh doesn't list the account (sign-in would open a browser) | Asked | Still asked (default No) |
 | S14 | Recommended, gh is git's helper (`fix`, whole machine) | Asked | Still asked (default No) |
-| S15 | `repown setup <recorded>` in Recommended mode | Asks gh/allowOwner/guard as needed | No question before the review |
+| S15 | `repown setup <recorded>` in Recommended mode | Asks gh/allowOwner/guard as needed | No question before the review, except allowOwner when origin belongs to someone else (default Yes) |
 | S16 | Step by step, Run | Every step runs after one confirmation | Before each step: what it changes (config keys and values, or the gh action), why, the command; `Run this step?` Yes / Skip / Stop. Skip leaves that step's keys unchanged; Stop runs nothing more |
 | S17 | `--step-by-step --no-input` | — | Usage error (exit 2): step by step needs a terminal |
 | S18 | After any run, including skips, Stop, a failed step, and Apply again | `done:` and `check it any time:` | Plus `changed in this clone:` with `key: old -> new`, `(added)`, or `old -> (removed)`; allowOwner lists added or removed values; `push guard: off -> on`. `nothing changed in this clone` when the clone is unchanged. `use --gh` that leaves the account active: `gh: <a> is now gh's active account (every terminal)`, under `changed on this machine:` with `this machine's account registry: added <a>` when an account was recorded |
-| S19 | Pinning to an address when unpushed commits on the current branch carry another author or committer | Nothing; the guard later refuses the push | Review note (setup) and warning (`use`): `N commits on <branch> not on any remote are by <addresses>; the guard will refuse them: re-author them or pin that address` |
+| S19 | Pinning to an address when unpushed commits on the current branch carry another author or committer | Nothing; the guard later refuses the push | Review note (setup) and warning (`use`): `N commits on <branch> not on any remote are by <addresses>; the guard will refuse them`, then `re-author it` or `re-author them`: `git rebase <base> --exec "git commit --amend --no-edit --reset-author"` (`--root` when that commit has no parent), or pin that address. No rebase command when the log cannot be read |
 | S20 | `--auto-upstream` given | — | Answers S8's question Yes; with `--no-input`, unanswered stays No |
 
 ## Open questions

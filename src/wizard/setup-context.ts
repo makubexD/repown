@@ -1,8 +1,10 @@
 // Everything `repown setup` needs to know before its first question, read once and
-// read-only: the registry, this clone (origin, owner, pin, hook), and the machine
-// (gh, the credential helper, the global identity). Nothing here writes.
+// read-only: the registry, this clone (origin, owner, pin, hook, push.autoSetupRemote),
+// and the machine (gh, the credential helper, the global identity, git's version).
+// Nothing here writes.
 
-import type { Git } from '../core/git.ts';
+import type { CurrentBranch, Git } from '../core/git.ts';
+import { gitSupportsAutoUpstream } from '../core/version.ts';
 import { inspectRepo, inspectAuth, type AuthState, type RepoState } from '../core/inspect.ts';
 import { pinHolds } from '../core/identity.ts';
 import { loadRegistry, type Account, type Registry } from '../core/registry.ts';
@@ -11,7 +13,7 @@ import { isGh, type GhState } from '../core/credential/gh.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { ok, err, type Result } from '../core/result.ts';
 import { previewLines } from '../commands/fix.ts';
-import { SOURCE_GCM, SOURCE_GH, SOURCE_OWNS, type DetectedAccount, type SetupContext } from './setup-flow.ts';
+import { SOURCE_GCM, SOURCE_GH, SOURCE_OWNS, type DetectedAccount, type SetupContext, type UpstreamRead } from './setup-flow.ts';
 
 export interface DetectionInput {
   /** False for any origin that is not GitHub: owner, gh and GCM are GitHub's only. */
@@ -125,6 +127,7 @@ interface Facts {
   readonly ownerIsUser: boolean | null;
   readonly name: string | null;
   readonly email: string | null;
+  readonly upstream: UpstreamRead;
 }
 
 async function readFacts(git: Git, repo: RepoState, recorded: Readonly<Record<string, Account>>, options: ReadOptions): Promise<Facts> {
@@ -142,11 +145,12 @@ interface Loaded {
   readonly name: string | null;
   readonly email: string | null;
   readonly ownerIsUser: boolean | null;
+  readonly upstream: UpstreamRead;
 }
 
 async function loadClone(git: Git, repo: RepoState, options: ReadOptions): Promise<Loaded> {
   const authPromise = inspectAuth(git, repo.originUrl ?? undefined);
-  const [auth, pinned, allowed, planned, addresses, helpers, ownerIsUser] = await Promise.all([
+  const [auth, pinned, allowed, planned, addresses, helpers, ownerIsUser, upstream] = await Promise.all([
     authPromise,
     git.getConfig('repown.account', 'local'),
     git.getAllConfig('repown.allowOwner', 'local'),
@@ -154,9 +158,22 @@ async function loadClone(git: Git, repo: RepoState, options: ReadOptions): Promi
     historyFor(git, repo),
     git.getAllConfigRaw('credential.helper'),
     authPromise.then((auth) => askOwnerIsUser(repo, auth, options)),
+    readUpstream(git),
   ]);
   const { machineName: name, machineEmail: email } = repo.identity;
-  return { auth, pinned, allowed, planned, addresses, helpers, name, email, ownerIsUser };
+  return { auth, pinned, allowed, planned, addresses, helpers, name, email, ownerIsUser, upstream };
+}
+
+/** Version, effective push.autoSetupRemote, and the branch. One read; nothing is written. */
+async function readUpstream(git: Git): Promise<UpstreamRead> {
+  const [version, enabled, head] = await Promise.all([
+    git.version(), git.getBoolConfig('push.autoSetupRemote'), git.currentBranch(),
+  ]);
+  return { supported: gitSupportsAutoUpstream(version ?? ''), enabled, branch: branchOf(head) };
+}
+
+function branchOf(head: CurrentBranch | null): string | null {
+  return head?.kind === 'branch' ? head.name : null;
 }
 
 async function finishFacts(git: Git, repo: RepoState, recorded: Readonly<Record<string, Account>>, loaded: Loaded): Promise<Facts> {
@@ -168,6 +185,7 @@ async function finishFacts(git: Git, repo: RepoState, recorded: Readonly<Record<
     pinIntact: await pinIntact(git, loaded.pinned, recorded[loaded.pinned ?? ''], repo),
     detected: detectedAccounts(detectionOf(repo, loaded.auth, recorded, loaded.ownerIsUser)),
     fixLines: fixPreview(repo, ghIsHelper, loaded.planned),
+    upstream: loaded.upstream,
   };
 }
 
@@ -182,13 +200,13 @@ function assemble(cwd: string | null, recorded: Readonly<Record<string, Account>
     ownerIsUser: facts.ownerIsUser,
     allowed: facts.allowed.map((owner) => owner.toLowerCase()),
     credentialPinned: repo.credentialKeys.length > 0,
-    gh: facts.gh,
-    ghIsHelper: facts.ghIsHelper,
+    gh: facts.gh, ghIsHelper: facts.ghIsHelper,
     guard: repo.guard,
     redirected: repo.hook?.redirected ?? false,
     fixLines: facts.fixLines,
     addresses: facts.addresses,
     machineIdentity: { name: facts.name, email: facts.email },
+    upstream: facts.upstream,
     suggest: suggester(),
   };
 }

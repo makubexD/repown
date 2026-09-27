@@ -547,8 +547,8 @@ To uninstall, follow the [README's steps](../README.md#uninstall), and also:
 In a terminal, **`repown`** with no arguments starts this when the clone isn't set up yet.
 **`repown setup`** asks a few questions, shows the commands it will run, then runs them.
 Each answer maps to an ordinary command (`accounts add`, `use`, `guard on`, `fix`) or to
-the `allowOwner` git line from card 8, so you can run the same thing yourself. If the
-clone needs nothing, it says so.
+a repo-local git line (`repown.allowOwner` from card 8, or `push.autoSetupRemote`), so
+you can run the same thing yourself. If the clone needs nothing, it says so.
 
 <details><summary>Show how</summary>
 
@@ -566,7 +566,7 @@ flowchart TD
   F -->|--no-input| C
   F -->|--no-input, account incomplete| X5["🔴 exit 2: names the missing flags"]
   F -->|yes| A["account: one already seen, a recorded one, or a new login<br/>(suggests origin's owner when it is a user; then host, name, email)"]
-  A --> Q["only what applies here:<br/>switch or sign in to gh · allow the organisation · the guard · gh as helper"]
+  A --> Q["only what applies here:<br/>switch or sign in to gh · allow the organisation · the guard · new branches without -u · gh as helper"]
   A -->|Esc or Ctrl-C| N
   Q -->|Esc or Ctrl-C| N
   Q --> K{"already pinned to it, as recorded,<br/>and nothing else to do?"}
@@ -575,7 +575,7 @@ flowchart TD
   D -->|Apply the same settings again| C
   D -->|Change an answer| Q
   K -->|no| V["review: numbered plain steps, each with its command"]
-  V -->|Run| C["accounts add → allowOwner → fix → use → guard on<br/>stops at the first failure, listing what didn't run"]
+  V -->|Run| C["accounts add → allowOwner → fix → use → guard on → push.autoSetupRemote<br/>stops at the first failure, listing what didn't run"]
   V -->|"Back: the last question · Change an answer: the one you pick"| Q
   V -->|Decline, Esc or Ctrl-C| N["⚪ nothing changed (exit 1, or 130)"]
   C -->|Ctrl-C while running| I["🟡 stops steps not yet run (exit 130).<br/>Ctrl-C during gh sign-in only skips that sign-in;<br/>the clone stays pinned"]
@@ -601,6 +601,7 @@ never suggested.
 | Sign in to gh as that account too? (default No) | the same, except gh does not know the account. Yes opens a browser; gh then acts as that account in every terminal. The line under it names gh's active account, or says gh isn't signed in | `use --gh` |
 | This repository belongs to "octo-org". Let this clone push to it? (default Yes) | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
 | Turn on the push guard? (default Yes) | the guard is off, no other tool owns the hook, and `core.hooksPath` doesn't redirect hooks | `guard on` |
+| Push new branches without -u? (default Yes) | git is 2.37.0 or newer, and `push.autoSetupRemote` is not already true in any scope. The flag is `--auto-upstream`. On older git, or when `git --version` cannot be read, this is not asked and the review notes `git push -u origin <branch>` (the current branch, or `<branch>` when HEAD is detached) | `git config --local push.autoSetupRemote true` |
 | Stop gh answering git's sign-in requests? (whole machine, default No) | a GitHub clone, gh is the helper, and `fix` finds its entries | `fix --yes` |
 
 Before the guard question it says how many other people's email addresses are in this
@@ -618,6 +619,8 @@ Without a terminal (CI, a script): see [Scripts and CI](CONFIGURATION.md#scripts
   URL spelt otherwise);
 - origin's owner is the account, or is already allowed;
 - gh is nowhere in the credential-helper list;
+- `push.autoSetupRemote` is not still something to offer: git is older than 2.37,
+  `git --version` could not be read, or the effective value is already true;
 - your answers add nothing beyond `repown use <that account>`.
 
 A username written into a `pushInsteadOf` URL isn't checked.
@@ -660,6 +663,12 @@ the [README](../README.md#quick-start)):
 │  the right place, and stops the push if not; turn it off any time:
 │  repown guard off
 │  Yes
+│
+◇  Push new branches without -u?
+│  sets push.autoSetupRemote in this clone only, so the first git
+│  push of a new branch creates it on origin; the guard still checks
+│  it
+│  Yes
 ```
 
 **Run:** each step prints what it is, then the command and its own output.
@@ -667,16 +676,20 @@ the [README](../README.md#quick-start)):
 ```
 └  Running the commands
 
-       step 1 of 3: Let this clone push to octo-org's repositories
+       step 1 of 4: Let this clone push to octo-org's repositories
        > git config --local --add repown.allowOwner octo-org
 OK    origin     pushes to octo-org allowed in this clone
 
        ...
 
-       step 3 of 3: Turn on the push guard: each push is checked first
+       step 3 of 4: Turn on the push guard: each push is checked first
        > repown guard on
 OK    guard      on -- every push is checked before it leaves
   /home/you/code/project/.git/hooks/pre-push
+
+       step 4 of 4: Push new branches without -u (this clone only)
+       > git config --local push.autoSetupRemote true
+OK    upstream   new branches push without -u in this clone
 
        done: this clone is set up for octocat
        check it any time: repown (this clone), repown doctor (this machine)

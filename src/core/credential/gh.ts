@@ -23,6 +23,7 @@
 
 import { run, inherit, succeeded, notInstalled, output, type ExecResult, type InheritFn } from '../exec.ts';
 import { ok, err, type Result } from '../result.ts';
+import { versionAtLeast } from '../version.ts';
 
 export interface GhAccount {
   readonly login: string;
@@ -141,7 +142,7 @@ const LOGIN_MIN: readonly [number, number, number] = [2, 40, 0];
 export function ghLoginVersion(text: string): GhLoginVersion {
   const found = /gh version (\d+)\.(\d+)\.(\d+)/.exec(text);
   if (!found) return 'unknown';
-  return atLeast(found, LOGIN_MIN) ? 'ready' : 'old';
+  return versionAtLeast(found, LOGIN_MIN) ? 'ready' : 'old';
 }
 
 export async function readGhLoginVersion(): Promise<GhLoginVersion> {
@@ -187,12 +188,4 @@ function withoutGhTokens(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 function isGhToken(key: string): boolean {
   const name = key.toUpperCase();
   return name === 'GH_TOKEN' || name === 'GITHUB_TOKEN';
-}
-
-function atLeast(found: RegExpMatchArray, min: readonly [number, number, number]): boolean {
-  for (let i = 0; i < min.length; i++) {
-    const got = Number(found[i + 1]);
-    if (got !== min[i]) return got > min[i]!;
-  }
-  return true;
 }

@@ -15,6 +15,7 @@ import { setupContext as context } from './setup-fixtures.ts';
 import { ok, err } from '../src/core/result.ts';
 import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Review, type ReviewChoice } from '../src/wizard/engine.ts';
 import { setupFlow, planCommands, formatCommand, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext } from '../src/wizard/setup-flow.ts';
+import { gitSupportsAutoUpstream } from '../src/core/version.ts';
 import { runSetup } from '../src/wizard/setup-run.ts';
 import { readContext } from '../src/wizard/setup-context.ts';
 import { Git } from '../src/core/git.ts';
@@ -309,7 +310,81 @@ describe('setup flow', () => {
     assert.equal(reviewOf({ owner: 'octo-org', allowed: ['octo-org'] }).settled, true);
     assert.equal(reviewOf({ guard: 'off' }, { account: 'octocat', guard: true }).settled, false);
     assert.equal(reviewOf({}, { account: 'octocat', gh: true }).settled, false);
+    assert.equal(reviewOf({ upstream: { supported: true, enabled: null, branch: 'main' } }).settled, false,
+      'the upstream question is still something to offer');
+    assert.equal(reviewOf({ upstream: { supported: true, enabled: false, branch: 'main' } }).settled, false);
+    assert.equal(reviewOf({ upstream: { supported: false, enabled: null, branch: 'main' } }).settled, true,
+      'old git is not offered the question');
     assert.match(reviewOf({}).title, /already set up/);
+  });
+
+  test('S8 asks to push new branches without -u and plans the local git config after the guard', async () => {
+    const upstream = { supported: true, enabled: null, branch: 'main' };
+    const ctx = context({ upstream });
+    const step = stepOf(ctx, 'upstream');
+    assert.equal(step.kind, 'confirm');
+    assert.equal(step.flag, '--auto-upstream');
+    assert.equal(wording(step.message, {}, ctx), 'Push new branches without -u?');
+    assert.match(wording(step.hint, {}, ctx), /sets push\.autoSetupRemote in this clone only/);
+    assert.match(wording(step.hint, {}, ctx), /first git push of a new branch creates it on origin/);
+    assert.match(wording(step.hint, {}, ctx), /the guard still checks it/);
+    assert.equal(await step.initial?.({}, ctx), true);
+    assert.equal(step.when?.({}, ctx), true);
+    const ids = setupFlow(ctx).steps.map((item) => item.id);
+    assert.ok(ids.indexOf('guard') < ids.indexOf('upstream') && ids.indexOf('upstream') < ids.indexOf('fix'));
+    const answers = await answer(ctx, [['account', 'octocat'], ['guard', true], ['upstream', true], ['review', 'run']]);
+    const planned = planCommands(answers, ctx);
+    assert.deepEqual(planned.map((command) => command.argv), [
+      ['use', '--', 'octocat'], ['guard', 'on'],
+      ['git', 'config', '--local', 'push.autoSetupRemote', 'true'],
+    ]);
+    assert.equal(planned.at(-1)!.what, 'Push new branches without -u (this clone only)');
+    assert.equal(formatCommand(planned.at(-1)!.argv), 'git config --local push.autoSetupRemote true');
+    const elsewhere = context({ upstream, cwd: '/work/project', owner: 'octo-org' });
+    const org = await answer(elsewhere, [
+      ['account', 'octocat'], ['allowOwner', true], ['guard', true], ['upstream', true], ['review', 'run'],
+    ]);
+    assert.deepEqual(argvOf(org, elsewhere), [
+      ['git', '-C', '/work/project', 'config', '--local', '--add', 'repown.allowOwner', 'octo-org'],
+      ['use', '--cwd=/work/project', '--', 'octocat'],
+      ['guard', 'on', '--cwd=/work/project'],
+      ['git', '-C', '/work/project', 'config', '--local', 'push.autoSetupRemote', 'true'],
+    ]);
+  });
+
+  test('S9 old or unreadable git skips the question and notes git push -u', async () => {
+    for (const text of ['git version 2.36.99', 'git version 2.36.1.windows.1', '', 'not a version', 'git version']) {
+      assert.equal(gitSupportsAutoUpstream(text), false, text);
+    }
+    for (const text of ['git version 2.37.0', 'git version 2.50.1.windows.1', 'git version 2.55.0.windows.5']) {
+      assert.equal(gitSupportsAutoUpstream(text), true, text);
+    }
+    const feature = context({ upstream: { supported: false, enabled: null, branch: 'feature' } });
+    assert.equal(stepOf(feature, 'upstream').when?.({}, feature), false);
+    const prompter = scripted([['account', 'octocat'], ['guard', true], ['review', 'decline']]);
+    await wizard(setupFlow(feature), feature, {}, prompter);
+    assert.deepEqual(prompter.asked, ['account', 'guard']);
+    const review = setupFlow(feature).review({ account: 'octocat', guard: true }, feature);
+    assert.match(review.notes.join('\n'), /the first push of a new branch needs: git push -u origin feature/);
+    const detached = context({
+      pinned: 'octocat', pinIntact: true, guard: 'on',
+      upstream: { supported: false, enabled: null, branch: null },
+    });
+    const quiet = setupFlow(detached).review({ account: 'octocat' }, detached);
+    assert.equal(quiet.settled, true);
+    assert.match(quiet.notes.join('\n'), /the first push of a new branch needs: git push -u origin <branch>/);
+    const forced = planCommands({ account: 'octocat', upstream: true, guard: false }, feature);
+    assert.ok(!forced.some((command) => command.argv.includes('push.autoSetupRemote')));
+  });
+
+  test('S10 an effective push.autoSetupRemote is not asked and not planned', async () => {
+    const ctx = context({ upstream: { supported: true, enabled: true, branch: 'main' } });
+    assert.equal(stepOf(ctx, 'upstream').when?.({}, ctx), false);
+    await answer(ctx, [['account', 'octocat'], ['guard', true], ['review', 'run']]);
+    const planned = planCommands({ account: 'octocat', guard: true, upstream: true }, ctx);
+    assert.ok(!planned.some((command) => command.argv.includes('push.autoSetupRemote')));
+    const off = context({ upstream: { supported: true, enabled: false, branch: 'main' } });
+    assert.equal(stepOf(off, 'upstream').when?.({}, off), true, 'an explicit false is not already on');
   });
 
   test('the guard question says when a repository has no commits yet', () => {
@@ -633,6 +708,19 @@ describe('setup context: would `use` change anything here?', () => {
     assert.deepEqual((await read()).machineIdentity, { name: 'Octo Cat', email: 'octocat@example.invalid' });
   });
 
+  test('reads the git version gate and the effective push.autoSetupRemote', async () => {
+    const ctx = await read();
+    assert.equal(ctx.upstream.supported, gitSupportsAutoUpstream(at.box.git('--version')));
+    assert.equal(ctx.upstream.enabled, null);
+    assert.equal(ctx.upstream.branch, 'main');
+    at.box.git('config', '--global', 'push.autoSetupRemote', 'true');
+    assert.equal((await read()).upstream.enabled, true, 'effective value, from any scope');
+    at.box.git('config', '--local', 'push.autoSetupRemote', 'false');
+    assert.equal((await read()).upstream.enabled, false, 'local false wins over global true');
+    at.box.git('checkout', '--detach');
+    assert.equal((await read()).upstream.branch, null);
+  });
+
   test('an origin that is not GitHub detects no accounts and does not classify the owner', async () => {
     at.box.git('remote', 'set-url', 'origin', 'https://dev.azure.com/octo-org/project/_git/repo');
     const ctx = await read();
@@ -805,7 +893,39 @@ describe('repown setup, without a terminal', () => {
     const run = repown(['setup', '--help'], at.box.dir);
     assert.equal(run.status, 0);
     assert.match(run.stdout, /--no-input/);
+    assert.match(run.stdout, /--auto-upstream/);
     assert.doesNotMatch(localConfig(at), /repown/);
+  });
+
+  test('S20 --auto-upstream answers yes in this clone; --no-input without it stays no', () => {
+    record(at, 'octocat', 'octocat@example.invalid');
+    const supported = gitSupportsAutoUpstream(at.box.git('--version'));
+    const skipped = repown(['setup', 'octocat', '--no-input'], at.box.dir);
+    assert.equal(skipped.status, 0, skipped.stderr);
+    assert.throws(() => at.box.git('config', '--local', '--get', 'push.autoSetupRemote'));
+    const run = repown(['setup', 'octocat', '--auto-upstream', '--guard', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    if (!supported) {
+      assert.throws(() => at.box.git('config', '--local', '--get', 'push.autoSetupRemote'));
+      return;
+    }
+    assert.equal(at.box.git('config', '--local', '--get', 'push.autoSetupRemote'), 'true');
+    assert.doesNotMatch(readFileSync(at.box.globalConfig, 'utf8'), /autoSetupRemote/);
+    const guardAt = run.stderr.indexOf('Turn on the push guard');
+    const upAt = run.stderr.indexOf('Push new branches without -u (this clone only)');
+    assert.ok(guardAt >= 0 && upAt > guardAt, run.stderr);
+    assert.match(run.stderr, /git config --local push\.autoSetupRemote true/);
+    assert.equal(repown(['setup', 'octocat', '--auto-upstream', '--no-input'], at.box.dir).status, 0);
+    assert.equal(at.box.git('config', '--local', '--get', 'push.autoSetupRemote'), 'true');
+  });
+
+  test('S10 --auto-upstream writes nothing when push.autoSetupRemote is already effective', () => {
+    record(at, 'octocat', 'octocat@example.invalid');
+    at.box.git('config', '--global', 'push.autoSetupRemote', 'true');
+    const run = repown(['setup', 'octocat', '--auto-upstream', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.throws(() => at.box.git('config', '--local', '--get', 'push.autoSetupRemote'));
+    assert.match(readFileSync(at.box.globalConfig, 'utf8'), /autoSetupRemote/);
   });
 });
 
@@ -817,6 +937,10 @@ describe('repown setup, on a terminal (scripted)', () => {
   beforeEach(() => {
     at = home();
     record(at, 'octocat', 'octocat@example.invalid');
+    // These scripts answer the pin and the guard. On git 2.37+ an unset
+    // push.autoSetupRemote would be asked, and the clone would not count as
+    // already set up, so set it the way a finished setup would.
+    at.box.git('config', '--local', 'push.autoSetupRemote', 'true');
     savedPath = process.env['PATH'];
     process.env['PATH'] = (savedPath ?? '').split(delimiter).filter((dir) => !ghOn(dir)).join(delimiter);
   });

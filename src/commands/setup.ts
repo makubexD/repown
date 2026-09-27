@@ -19,6 +19,7 @@ export default {
     { name: 'gh', kind: 'boolean', help: "also switch the GitHub CLI's active account (use --gh)" },
     { name: 'allow-owner', kind: 'string', help: "allow pushes to origin's owner: an organisation, or an account you collaborate with (repown.allowOwner)" },
     { name: 'guard', kind: 'boolean', help: 'turn the push guard on (guard on)' },
+    { name: 'auto-upstream', kind: 'boolean', help: 'push new branches without -u, in this clone only (push.autoSetupRemote)' },
     { name: 'fix', kind: 'boolean', help: 'stop gh being the credential helper, where it is (fix --yes)' },
     { name: 'no-input', kind: 'boolean', help: 'ask nothing: a question not given as a flag is No; exit 2 if the account is incomplete' },
   ],

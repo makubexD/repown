@@ -85,6 +85,11 @@ export class Git {
     return hash ? { kind: 'detached', hash } : null;
   }
 
+  /** `git --version`, or null when git cannot be run. Unreadable is not a version. */
+  async version(): Promise<string | null> {
+    return output(await this.exec(['--version']));
+  }
+
   /** The tracked ref as git reports it (`origin/main`), or null when none is set. */
   async upstreamRef(): Promise<string | null> {
     return output(await this.exec(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']));

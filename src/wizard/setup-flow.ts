@@ -1,7 +1,8 @@
 // What `repown setup` asks, and what the answers turn into. Every answer becomes a
 // flag or argument of a command that already exists -- `accounts add`, `use`,
-// `guard on`, `fix` -- or the one git line ADR-004 documents for an organisation,
-// so the review can show exactly what will run, and a script can run the same thing.
+// `guard on`, `fix` -- or a repo-local git line (an organisation's allowOwner, or
+// push.autoSetupRemote), so the review can show exactly what will run, and a
+// script can run the same thing.
 //
 // Pure: no I/O. What the clone and the machine look like arrives as a SetupContext
 // (src/wizard/setup-context.ts), read before the first question.
@@ -58,7 +59,18 @@ export interface SetupContext {
   readonly addresses: Result<ReadonlyMap<string, number>>;
   /** Global `user.name` and `user.email`. Shown, never assumed to be this account. */
   readonly machineIdentity: { readonly name: string | null; readonly email: string | null };
+  /** Git's `push.autoSetupRemote`: whether this git has it, the effective value, the branch. */
+  readonly upstream: UpstreamRead;
   suggest(account: string, host: string): Promise<Profile>;
+}
+
+/** Read once, before the first question. `supported` is false when the version cannot be read. */
+export interface UpstreamRead {
+  readonly supported: boolean;
+  /** Effective `push.autoSetupRemote`, or null when unset. */
+  readonly enabled: boolean | null;
+  /** The current branch, when HEAD names one. */
+  readonly branch: string | null;
 }
 
 export interface PlannedCommand {
@@ -140,6 +152,7 @@ function choiceSteps(ctx: SetupContext): Step<SetupContext>[] {
       hint: 'before each push, it checks that every commit is yours and goes to the right place, and stops the push if not; ' +
         'turn it off any time: repown guard off',
       initial: () => true, when: () => ctx.guard === 'off' && !ctx.redirected, detail: (answers) => historyNote(answers, ctx) },
+    upstreamStep(ctx),
     { id: 'fix', kind: 'confirm', flag: '--fix', message: 'Stop gh answering git\'s sign-in requests? (whole machine)',
       hint: 'undo any time: gh auth setup-git', initial: () => false, when: () => ctx.fixLines !== null,
       detail: () => 'gh answers git\'s sign-in requests with its active account only, so clones of your other accounts ' +
@@ -187,6 +200,22 @@ function addressDetail(answers: Answers, ctx: SetupContext): string | undefined 
   const email = ctx.machineIdentity.email;
   if (!isNew(answers) || !email) return undefined;
   return 'not this machine\'s default address (' + printable(email) + '), unless this account uses it';
+}
+
+const UPSTREAM_HINT = 'sets push.autoSetupRemote in this clone only, so the first git push of a new branch ' +
+  'creates it on origin; the guard still checks it';
+
+/** Asked only when git has the key and the effective value is not already true. */
+function offersUpstream(ctx: SetupContext): boolean {
+  return ctx.upstream.supported && ctx.upstream.enabled !== true;
+}
+
+function upstreamStep(ctx: SetupContext): Step<SetupContext> {
+  return {
+    id: 'upstream', kind: 'confirm', flag: '--auto-upstream', initial: () => true,
+    message: 'Push new branches without -u?', hint: UPSTREAM_HINT,
+    when: () => offersUpstream(ctx),
+  };
 }
 
 const SWITCH_MESSAGE = 'Also make this account gh\'s active account?';
@@ -371,19 +400,34 @@ export function planCommands(answers: Answers, ctx: SetupContext): PlannedComman
     answers['fix'] === true ? ['fix', '--yes', ...cwd] : null,
     ['use', ...(answers['gh'] === true ? ['--gh'] : []), ...cwd, '--', account],
     answers['guard'] === true ? ['guard', 'on', ...cwd] : null,
+    upstreamArgv(answers, ctx),
   ];
   return planned.filter((argv): argv is readonly string[] => argv !== null).map((argv) => ({ argv, what: whatOf(argv, answers, ctx) }));
+}
+
+function upstreamArgv(answers: Answers, ctx: SetupContext): string[] | null {
+  if (answers['upstream'] !== true || !offersUpstream(ctx)) return null;
+  return autoUpstreamLine(ctx);
+}
+
+function autoUpstreamLine(ctx: SetupContext): string[] {
+  return ['git', ...(ctx.cwd ? ['-C', ctx.cwd] : []), 'config', '--local', 'push.autoSetupRemote', 'true'];
 }
 
 /** What a planned command does, in words for someone who has never used repown. */
 function whatOf(argv: readonly string[], answers: Answers, ctx: SetupContext): string {
   const account = accountOf(answers);
   if (argv[0] === 'accounts') return 'Record the account ' + account + ' on this machine: ' + String(answers['email']);
-  if (argv[0] === 'git') return 'Let this clone push to ' + ctx.owner + '\'s repositories';
+  if (argv[0] === 'git') return gitWhat(argv, ctx);
   if (argv[0] === 'fix') return 'Stop gh answering git\'s sign-in requests (whole machine)';
   if (argv[0] === 'guard') return 'Turn on the push guard: each push is checked first';
   if (answers['gh'] === true) return ghWhat(account, ctx);
   return 'Pin this clone to ' + account + (ctx.credentialPinned ? ': its commit name, email and push sign-in' : ': its commit name and email');
+}
+
+function gitWhat(argv: readonly string[], ctx: SetupContext): string {
+  if (argv.includes('push.autoSetupRemote')) return 'Push new branches without -u (this clone only)';
+  return 'Let this clone push to ' + ctx.owner + '\'s repositories';
 }
 
 function ghWhat(account: string, ctx: SetupContext): string {
@@ -446,11 +490,28 @@ function review(answers: Answers, ctx: SetupContext): Review {
   }));
   if (settled(answers, ctx, plan)) {
     return { title: 'This clone is already set up', headline: settledLines(answers, ctx).map(printable), steps,
-      notes: ['Checked: the settings git uses here are ' + printable(accountOf(answers)) + '\'s, as recorded.',
-        'See it any time: repown (this clone), repown doctor (this machine)'].concat(ghNote(answers, ctx)), settled: true };
+      notes: noted(settledNotes(answers), answers, ctx), settled: true };
   }
   return { title: 'Review: nothing has changed yet', headline: [printable(headline(answers, ctx))], steps,
-    notes: notes(answers, ctx).map(printable).concat(ghNote(answers, ctx)), settled: false };
+    notes: noted(notes(answers, ctx), answers, ctx), settled: false };
+}
+
+function settledNotes(answers: Answers): string[] {
+  return ['Checked: the settings git uses here are ' + printable(accountOf(answers)) + '\'s, as recorded.',
+    'See it any time: repown (this clone), repown doctor (this machine)'];
+}
+
+function noted(lines: readonly string[], answers: Answers, ctx: SetupContext): string[] {
+  const extra = upstreamNote(ctx);
+  const body = extra ? [...lines, extra] : lines;
+  return body.map(printable).concat(ghNote(answers, ctx));
+}
+
+/** Old git, or a version that could not be read: say the push the question would have replaced. */
+function upstreamNote(ctx: SetupContext): string | null {
+  if (ctx.upstream.supported) return null;
+  const branch = ctx.upstream.branch ?? '<branch>';
+  return 'the first push of a new branch needs: git push -u origin ' + branch;
 }
 
 /** gh still acts as someone else, and this run will not change that. */
@@ -470,14 +531,16 @@ function ghLeft(answers: Answers, ctx: SetupContext): string | null {
 /**
  * Nothing to do: the only command left is pinning this clone to the account it is
  * already pinned to, as recorded and as git would use it (see pinIntact), with no
- * organisation the guard would refuse and gh nowhere in the helper list. `use` may
- * still say, on a host it can't pin, that it doesn't pin the sign-in; the settled
- * screen says so too.
+ * organisation the guard would refuse, gh nowhere in the helper list, and the
+ * upstream question not still waiting (git too old, or push.autoSetupRemote
+ * already on). `use` may still say, on a host it can't pin, that it doesn't pin
+ * the sign-in; the settled screen says so too.
  */
 function settled(answers: Answers, ctx: SetupContext, plan: readonly PlannedCommand[]): boolean {
   const account = accountOf(answers);
   const onlyPin = plan.length === 1 && plan[0]!.argv[0] === 'use' && !plan[0]!.argv.includes('--gh');
-  return onlyPin && !isNew(answers) && account === ctx.pinned && ctx.pinIntact && !ctx.ghIsHelper && !ownerForeign(account, ctx);
+  const same = !isNew(answers) && account === ctx.pinned && ctx.pinIntact;
+  return onlyPin && same && !ctx.ghIsHelper && !ownerForeign(account, ctx) && !offersUpstream(ctx);
 }
 
 function headline(answers: Answers, ctx: SetupContext): string {

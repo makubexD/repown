@@ -233,6 +233,30 @@ describe('repown setup, played with key presses', () => {
     assert.doesNotMatch(screen, /octo-work@example\.invalid█/);
   });
 
+  test('pushing a new branch without -u is one question, default Yes, and a review step', async () => {
+    const ctx = setupContext({ upstream: { supported: true, enabled: null, branch: 'main' } });
+    const { outcome, screen } = await play(ctx, [[enter], [enter], [enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    const plain = screen.replace(/\n│\s*/g, ' ');
+    assert.ok(screen.indexOf('Turn on the push guard?') < screen.indexOf('Push new branches without -u?'), screen);
+    assert.match(plain, /Push new branches without -u\?/);
+    assert.match(plain, /sets push\.autoSetupRemote in this clone only, so the first git push of a new branch creates it on origin; the guard still checks it/);
+    assert.match(plain, /Push new branches without -u \(this clone only\)/);
+    assert.match(plain, /git config --local push\.autoSetupRemote true/);
+  });
+
+  test('old git skips that question and the review names git push -u', async () => {
+    const ctx = setupContext({
+      pinned: 'octocat', guard: 'on', pinIntact: true,
+      upstream: { supported: false, enabled: null, branch: 'main' },
+    });
+    const { outcome, screen } = await play(ctx, [[enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    assert.doesNotMatch(screen, /Push new branches without -u/);
+    const plain = screen.replace(/\n│\s*/g, ' ');
+    assert.match(plain, /the first push of a new branch needs: git push -u origin main/);
+  });
+
   test('D11 a recorded owner is preselected over the account recorded first', async () => {
     const ctx = setupContext({
       recorded: {

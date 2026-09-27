@@ -96,6 +96,9 @@ repown                 # a new clone: just typing this starts the guided setup
      - *allow the repository's owner:* for an organisation's repository (answer No and the
        guard refuses pushes there);
      - *turn the guard on;*
+     - *push new branches without -u:* on git 2.37 or newer, default Yes. Sets
+       `push.autoSetupRemote` in this clone only, so the first push of a new branch
+       creates it on origin; the guard still checks it. The flag is `--auto-upstream`;
      - *take git's sign-ins back from gh:* answer Yes if `repown doctor` said gh is the
        helper, or pushes from your other account's clones fail.
 3. **Check the review, then choose Run them.** Nothing changes before that:
@@ -112,13 +115,15 @@ repown                 # a new clone: just typing this starts the guided setup
    │       repown use octocat                                                │
    │  3. Turn on the push guard: each push is checked first                  │
    │       repown guard on                                                   │
+   │  4. Push new branches without -u (this clone only)                      │
+   │       git config --local push.autoSetupRemote true                      │
    │                                                                         │
    │  These are ordinary commands: run them yourself, or in a script.        │
    │  This clone's settings go in its .git/config, which is never pushed.    │
    │                                                                         │
    ├─────────────────────────────────────────────────────────────────────────╯
    │
-   ◆  Run these 3 steps?
+   ◆  Run these 4 steps?
    │  ● Run them
    │  ○ Back
    │  ○ Change an answer
@@ -128,7 +133,10 @@ repown                 # a new clone: just typing this starts the guided setup
 
 4. **Push.** The first push from each account signs in once: GCM opens a browser, and
    you sign in as *that* clone's account, not whichever you used last. After that, pushes
-   from that clone use it without asking.
+   from that clone use it without asking. When setup set `push.autoSetupRemote`, the
+   first `git push` of a new branch also creates it on origin. When it did not (older
+   git, a version repown could not read, or you answered No), use
+   `git push -u origin <branch>` once.
 
 **Keys:** ↑/↓ choose, Enter confirms, Esc or Ctrl-C stops with nothing changed. From the
 second question on, each list ends with **← Back**; at a typed answer, enter `<`. In a
@@ -146,7 +154,7 @@ then commit and push.
 | --- | --- | --- |
 | Once per machine | `repown doctor` | what serves credentials on this machine, and whether each account is signed in to git and gh |
 | | `repown fix [--dry-run] [--yes]` | undo `gh auth setup-git`, so each clone's pinned account is used; shows what it removes, and the undo, first |
-| Once per clone | `repown setup [<account>]` | guided: asks, shows each step and its command, then runs them. Every answer has a flag (`--name`, `--email`, `--host`, `--gh`, `--allow-owner <owner>`, `--guard`, `--fix`); `--no-input` asks nothing ([scripts and CI](docs/CONFIGURATION.md#scripts-and-ci)) |
+| Once per clone | `repown setup [<account>]` | guided: asks, shows each step and its command, then runs them. Every answer has a flag (`--name`, `--email`, `--host`, `--gh`, `--allow-owner <owner>`, `--guard`, `--auto-upstream`, `--fix`); `--no-input` asks nothing ([scripts and CI](docs/CONFIGURATION.md#scripts-and-ci)) |
 | | `repown use <account> [--gh]` | what setup runs: pin this clone to an account; `--gh` switches gh's active account, or signs the account in to gh when needed (in a terminal). `--name` with `--email` skips the registry, the file where repown remembers accounts |
 | | `repown guard on \| off \| status` | install, remove or show the pre-push hook (bare `repown guard` shows it) |
 | Any time | `repown` (or `repown status`) | this clone's and this machine's settings, and what to fix; exits 1 on a problem (warnings alone exit 0). In a terminal, bare `repown` starts `repown setup` in a clone that isn't set up, shows status in one that is, and shows the help outside a clone (exit 0). Without a terminal, or with its output redirected, it is always status (exit 1 outside a clone) |

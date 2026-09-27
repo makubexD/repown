@@ -107,10 +107,19 @@ function givenFrom(args: Args, recorded: Recorded): Result<Answers> {
     return err('"' + account + '" is already recorded: --name, --email and --host describe a new account' +
                '\nto change it, record it again: repown accounts add ' + account + ' --name "..." --email "..."');
   }
-  for (const key of ['gh', 'guard', 'fix'] as const) if (flagBool(args, key)) answers[key] = true;
-  if (flagString(args, 'allow-owner') !== null) answers['allowOwner'] = true;
-  if (flagBool(args, 'no-input')) for (const key of ['gh', 'allowOwner', 'guard', 'fix']) answers[key] ??= false;
+  applyConfirms(args, answers);
   return ok(answers);
+}
+
+const CONFIRM_FLAGS = ['gh', 'guard', 'fix'] as const;
+const CONFIRM_DEFAULTS = ['gh', 'allowOwner', 'guard', 'fix', 'upstream'] as const;
+
+/** A passed flag is Yes. With --no-input, a confirm that was not passed is No. */
+function applyConfirms(args: Args, answers: Answers): void {
+  for (const key of CONFIRM_FLAGS) if (flagBool(args, key)) answers[key] = true;
+  if (flagBool(args, 'auto-upstream')) answers['upstream'] = true;
+  if (flagString(args, 'allow-owner') !== null) answers['allowOwner'] = true;
+  if (flagBool(args, 'no-input')) for (const key of CONFIRM_DEFAULTS) answers[key] ??= false;
 }
 
 function usage(message: string): number {
@@ -124,7 +133,7 @@ function usage(message: string): number {
 function needsTerminal(given: Answers, recorded: Recorded): number {
   out.fail('setup', 'needs a terminal to ask its questions.');
   out.detail('without one, give the answers as flags and add --no-input:');
-  out.detail('  repown setup <account> [--name "..." --email "..."] [--gh] [--allow-owner <owner>] [--guard] [--fix] --no-input');
+  out.detail('  repown setup <account> [--name "..." --email "..."] [--gh] [--allow-owner <owner>] [--guard] [--auto-upstream] [--fix] --no-input');
   const missing = missingFlags(given, recorded);
   if (missing.length > 0) out.detail('still needed: ' + missing.join(', '));
   return 2;
@@ -287,7 +296,7 @@ async function withoutLine<T>(hidden: string, run: () => Promise<T>): Promise<T>
 // -------------------------------------------------------- one planned command
 
 async function runOne(argv: readonly string[], git: Git): Promise<number> {
-  if (argv[0] === 'git') return allowOwner(argv.at(-1)!, git);
+  if (argv[0] === 'git') return gitLine(argv, git);
   const [command, rest] = commandFor(argv);
   const parsed = parseArgs(rest, specFor(command));
   if (!parsed.ok) { out.fail('setup', 'could not run ' + formatCommand(argv) + ': ' + parsed.error); return 2; }
@@ -300,6 +309,26 @@ function commandFor(argv: readonly string[]): [Command, readonly string[]] {
   if (argv[0] === 'fix') return [fixCommand, argv.slice(1)];
   if (argv[0] === 'guard') return [guardGroup.actions['on']!, argv.slice(2)];
   return [accountsGroup.actions['add']!, argv.slice(2)];
+}
+
+/** A planned git line. Both are repo-local; neither shells out past the Git wrapper. */
+function gitLine(argv: readonly string[], git: Git): Promise<number> {
+  if (argv.includes('push.autoSetupRemote')) return setAutoUpstream(git);
+  return allowOwner(argv.at(-1)!, git);
+}
+
+/** push.autoSetupRemote, in this clone only, and only when it does not already say true. */
+async function setAutoUpstream(git: Git): Promise<number> {
+  if (await git.getBoolConfig('push.autoSetupRemote', 'local') === true) {
+    out.pass('upstream', 'push.autoSetupRemote is already set in this clone');
+    return 0;
+  }
+  if (!(await git.setConfig('push.autoSetupRemote', 'true', 'local'))) {
+    out.fail('upstream', 'could not write push.autoSetupRemote');
+    return 1;
+  }
+  out.pass('upstream', 'new branches push without -u in this clone');
+  return 0;
 }
 
 /** ADR-004's line, run through the Git wrapper: repo-local, and only if not there already. */

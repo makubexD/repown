@@ -7,6 +7,25 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+- `repown setup` offers to sign the account in to gh when gh doesn't already
+  know it (default No). Yes runs `repown use <account> --gh` and opens a
+  browser. If gh is left acting as another account, the review and the line
+  after "done" say what's left: `gh auth switch -u <account>` when gh already
+  lists it, otherwise `repown use <account> --gh`.
+- In a terminal, `repown use <account> --gh` signs the account in to gh when gh
+  doesn't list it. gh before 2.40.0 replaces an account, so that sign-in is
+  refused until gh is upgraded. Outside a terminal there is no sign-in: repown
+  says the account isn't signed in to gh and names `gh auth login`, then
+  `repown use <account> --gh`.
+- `repown status` names a gh fix that works. When gh already lists the account,
+  the line is `gh auth switch -u <account>`, in gh's own spelling. When it
+  doesn't, the line is `repown use <account> --gh`, which signs that account in.
+- `repown doctor` says what it shows. The title is
+  `repown doctor · how this machine signs in to git hosts`. "This machine" is
+  the helper, Git Credential Manager and gh's active account. "Accounts" is one
+  row per account repown, Git Credential Manager or gh knows: whether git has a
+  sign-in for it, and whether gh does.
+
 - In a terminal, bare `repown` in a clone that isn't set up starts `repown setup`.
   Outside a clone it shows help. Otherwise, and always without a terminal, it's status
   as before, so a script, CI or an alias still gets the report.

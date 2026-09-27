@@ -9,9 +9,9 @@
 
 import { styleText } from 'node:util';
 import * as p from '@clack/prompts';
-import { BACK, CANCEL, type Asked, type Drawn, type Prompter, type Reply, type Review, type ReviewChoice } from './engine.ts';
+import { BACK, CANCEL, type Asked, type Drawn, type Prompter, type Reply, type Review, type ReviewChoice, type StepChoice, type StepConfirm } from './engine.ts';
 import { BACK_WORD, type Streams } from './plain.ts';
-import { BACK_TO_REVIEW, PICK_QUESTION, reviewDefault, reviewLines, reviewOptions, reviewQuestion, textWidth, wrap } from './review-text.ts';
+import { BACK_TO_REVIEW, PICK_QUESTION, RUN_THIS_STEP, reviewDefault, reviewLines, reviewOptions, reviewQuestion, stepConfirmLines, stepOptions, textWidth, wrap } from './review-text.ts';
 
 /** A value no real choice can have. */
 const GO_BACK = '\u0000back';
@@ -31,6 +31,7 @@ export function clackPrompter(streams: Streams): Prompter {
       return id === GO_BACK ? BACK : id;
     },
     note: (message) => p.log.warn(wrap(message, widthOf(io, GUTTER)).join('\n'), io),
+    confirmStep: (confirm) => showStep(confirm, io),
     close: () => {},
     intro: (title) => p.intro(title, io),
     // After a cancel, clack has already drawn the gutter's last line.
@@ -106,6 +107,17 @@ function messageOf(step: Drawn, io: Io, extra?: string): string {
   const hint = [step.hint, extra].filter((part) => part).join(' · ');
   const gutter = step.kind === 'text' ? TEXT_GUTTER : '';
   return [step.message, ...(hint ? wrap(hint, widthOf(io, GUTTER)) : [])].join('\n' + gutter);
+}
+
+async function showStep(confirm: StepConfirm, io: Io): Promise<StepChoice | typeof CANCEL> {
+  const lines = stepConfirmLines(confirm).flatMap((text) => wrap(text, widthOf(io, GUTTER)));
+  p.log.message(lines.join('\n'), io);
+  return chosen(confirm, io);
+}
+
+async function chosen(confirm: StepConfirm, io: Io): Promise<StepChoice | typeof CANCEL> {
+  const choice = await p.select({ ...io, message: RUN_THIS_STEP, options: stepOptions(), initialValue: confirm.initial });
+  return p.isCancel(choice) ? CANCEL : choice;
 }
 
 async function showReview(review: Review, io: Io): Promise<ReviewChoice> {

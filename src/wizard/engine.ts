@@ -15,6 +15,17 @@ export type Answer = string | boolean;
 export type Answers = Record<string, Answer>;
 export type Reply = Answer | typeof BACK | typeof CANCEL;
 export type ReviewChoice = 'run' | 'back' | 'edit' | 'decline' | 'done' | typeof CANCEL;
+export type StepChoice = 'yes' | 'skip' | 'stop';
+
+/** What one planned step would change, shown before it runs in step-by-step mode. */
+export interface StepConfirm {
+  readonly changes: readonly string[];
+  /** One sentence: the step's own words. */
+  readonly why: string;
+  readonly command: string;
+  /** The choice Enter takes. */
+  readonly initial: 'yes' | 'skip';
+}
 
 export interface Choice {
   readonly value: string;
@@ -97,6 +108,10 @@ export interface Prompter {
   /** "Change an answer": one of the steps that were asked, or BACK to the review. */
   pickStep(steps: readonly Drawn[]): Promise<string | typeof BACK | typeof CANCEL>;
   note(message: string): void;
+  /** Step by step, before one command. Cancel means Stop. */
+  confirmStep(confirm: StepConfirm): Promise<StepChoice | typeof CANCEL>;
+  /** Hand the terminal to the command that follows a confirmation. */
+  suspend?(): void;
   /** Releases the terminal once the questions are over; safe to call more than once. */
   close(): void;
   /** Optional framing: a title, a closing line (`cancelled` after Esc or Ctrl-C), and a line while the state is read. */

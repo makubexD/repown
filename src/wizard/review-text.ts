@@ -3,7 +3,7 @@
 // choices and which one Enter takes, and "Change an answer". What goes IN the review
 // comes from the flow (setup-flow.ts).
 
-import type { Review, ReviewChoice } from './engine.ts';
+import type { Review, ReviewChoice, StepChoice } from './engine.ts';
 
 export interface ReviewOption {
   readonly value: Exclude<ReviewChoice, symbol>;
@@ -14,6 +14,29 @@ export interface ReviewOption {
 /** "Change an answer": the question, and the choice that returns to the review. */
 export const PICK_QUESTION = 'Which answer do you want to change?';
 export const BACK_TO_REVIEW = 'Back to the review';
+export const RUN_THIS_STEP = 'Run this step?';
+
+/** Yes, unless the command changes the whole machine: that needs a deliberate yes, as in the review. */
+export function stepDefault(command: string): 'yes' | 'skip' {
+  return changesMachine(command) ? 'skip' : 'yes';
+}
+
+export function stepOptions(): Array<{ value: StepChoice; label: string }> {
+  return [
+    { value: 'yes', label: 'Yes' },
+    { value: 'skip', label: 'Skip' },
+    { value: 'stop', label: 'Stop' },
+  ];
+}
+
+/** What a step changes, why, and the command, in that order. */
+export function stepConfirmLines(brief: { readonly changes: readonly string[]; readonly why: string; readonly command: string }): string[] {
+  return [...brief.changes, '', brief.why, '> ' + brief.command];
+}
+
+function changesMachine(command: string): boolean {
+  return command.startsWith('repown fix');
+}
 
 /**
  * The body of the review, line by line, wrapped to `width`. `command` styles each
@@ -65,7 +88,7 @@ function notesOf(review: Review): string[] {
 
 export function reviewQuestion(review: Review): string {
   if (review.settled) return 'What now?';
-  return review.steps.length === 1 ? 'Run this step?' : 'Run these ' + review.steps.length + ' steps?';
+  return review.steps.length === 1 ? RUN_THIS_STEP : 'Run these ' + review.steps.length + ' steps?';
 }
 
 export function reviewOptions(review: Review): ReviewOption[] {
@@ -90,6 +113,6 @@ export function reviewOptions(review: Review): ReviewOption[] {
  * (`fix`), which, like its own question, needs a deliberate yes.
  */
 export function reviewDefault(review: Review): ReviewOption['value'] {
-  const machineWide = review.steps.some((step) => step.command.startsWith('repown fix'));
+  const machineWide = review.steps.some((step) => changesMachine(step.command));
   return !review.settled && machineWide ? 'decline' : reviewOptions(review)[0]!.value;
 }

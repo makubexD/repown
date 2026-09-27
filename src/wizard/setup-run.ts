@@ -18,8 +18,8 @@ import useCommand, { NEXT_GUARD } from '../commands/use.ts';
 import fixCommand from '../commands/fix.ts';
 import guardGroup from '../commands/guard.ts';
 import accountsGroup from '../commands/accounts.ts';
-import { wizard, refusedGiven, type Answers, type Prompter } from './engine.ts';
-import { setupFlow, planCommands, formatCommand, missingFlags, printable, NEW_ACCOUNT, type PlannedCommand, type SetupContext } from './setup-flow.ts';
+import { wizard, refusedGiven, CANCEL, type Answers, type Prompter, type StepChoice } from './engine.ts';
+import { setupFlow, planCommands, formatCommand, briefOf, missingFlags, printable, NEW_ACCOUNT, type PlannedCommand, type SetupContext } from './setup-flow.ts';
 import { readContext, readRegistry, type ReadOptions } from './setup-context.ts';
 import { plainPrompter } from './plain.ts';
 
@@ -185,14 +185,34 @@ interface Guided {
   readonly readAuth: ReadAuth;
 }
 
-async function runGuided(given: Answers, ctx: SetupContext, { git, prompter, readAuth }: Guided): Promise<number> {
-  const outcome = await wizard(setupFlow(ctx), ctx, given, prompter);
-  if (outcome.status === 'done') { prompter.outro?.('Nothing changed: this clone was already set up'); return 0; }
-  if (outcome.status !== 'run') return stoppedBefore(outcome.status, prompter);
+async function runGuided(given: Answers, ctx: SetupContext, guided: Guided): Promise<number> {
+  const outcome = await wizard(setupFlow(ctx), ctx, given, guided.prompter);
+  if (outcome.status === 'done') { guided.prompter.outro?.('Nothing changed: this clone was already set up'); return 0; }
+  if (outcome.status !== 'run') return stoppedBefore(outcome.status, guided.prompter);
+  return runAccepted(outcome.answers, ctx, guided);
+}
+
+async function runAccepted(answers: Answers, ctx: SetupContext, { git, prompter, readAuth }: Guided): Promise<number> {
   prompter.outro?.('Running the commands');
-  // The commands own the terminal from here: none of them may find it held.
-  prompter.close();
-  return execute(planCommands(outcome.answers, ctx), git, readAuth);
+  const confirm = gateFor(prompter, answers, ctx);
+  // Recommended hands the terminal over now. Step by step keeps it for each question.
+  if (!confirm) prompter.close();
+  const code = await execute(planCommands(answers, ctx), git, readAuth, confirm);
+  if (confirm) prompter.close();
+  return code;
+}
+
+type Confirm = (planned: PlannedCommand) => Promise<StepChoice | typeof CANCEL>;
+
+function gateFor(prompter: Prompter, answers: Answers, ctx: SetupContext): Confirm | undefined {
+  if (answers['mode'] !== 'step') return undefined;
+  return (planned) => askStep(prompter, planned, answers, ctx);
+}
+
+async function askStep(prompter: Prompter, planned: PlannedCommand, answers: Answers, ctx: SetupContext): Promise<StepChoice | typeof CANCEL> {
+  const choice = await prompter.confirmStep(briefOf(planned, answers, ctx));
+  prompter.suspend?.();
+  return choice;
 }
 
 /** One closing line: what happened, that nothing changed, and how to start again. */
@@ -221,34 +241,107 @@ async function choosePrompter(): Promise<Prompter> {
 }
 
 /**
- * Runs the plan in order and stops at the first failure. Ctrl-C stops the steps
- * that have not run (exit 130), except while an inherited child is running:
- * that Ctrl-C belongs to gh, and the remaining steps still run.
+ * Runs the plan in order and stops at the first failure. In step-by-step mode each
+ * step is confirmed first: Skip leaves it unrun, Stop (and Esc) runs nothing more.
+ * Ctrl-C stops the steps that have not run (exit 130), except while an inherited
+ * child is running: that Ctrl-C belongs to gh, and the remaining steps still run.
  */
-async function execute(plan: readonly PlannedCommand[], git: Git, readAuth: ReadAuth): Promise<number> {
+async function execute(plan: readonly PlannedCommand[], git: Git, readAuth: ReadAuth, confirm?: Confirm): Promise<number> {
+  const ran = await walk(plan, git, confirm);
+  if (typeof ran === 'number') return ran;
+  await finishRun(ran.done, ran.skipped, git, readAuth);
+  return 0;
+}
+
+interface WalkResult {
+  readonly done: readonly PlannedCommand[];
+  readonly skipped: readonly PlannedCommand[];
+}
+
+async function walk(plan: readonly PlannedCommand[], git: Git, confirm?: Confirm): Promise<WalkResult | number> {
   let interrupted = false;
   const onInterrupt = (): void => { if (!handingOver()) interrupted = true; };
   process.on('SIGINT', onInterrupt);
   try {
-    for (const [index, planned] of plan.entries()) {
-      // A blank line between steps, so each command's output reads as its own.
-      if (index > 0) process.stderr.write('\n');
-      out.detail('step ' + (index + 1) + ' of ' + plan.length + ': ' + printable(planned.what));
-      out.detail('> ' + formatCommand(planned.argv));
-      const guardNext = plan[index + 1]?.argv[0] === 'guard';
-      const code = await (guardNext ? withoutLine(NEXT_GUARD, () => runOne(planned.argv, git)) : runOne(planned.argv, git));
-      if (code !== 0 || interrupted) return stopped(plan.slice(index + 1), interrupted ? CANCELLED : code);
-    }
+    return await eachStep(plan, git, confirm, () => interrupted);
   } finally {
     process.off('SIGINT', onInterrupt);
   }
-  await finishRun(plan, git, readAuth);
-  return 0;
 }
 
-async function finishRun(plan: readonly PlannedCommand[], git: Git, readAuth: ReadAuth): Promise<void> {
-  finished(plan);
-  const left = await ghLeftover(plan, git, readAuth);
+async function eachStep(
+  plan: readonly PlannedCommand[],
+  git: Git,
+  confirm: Confirm | undefined,
+  interrupted: () => boolean,
+): Promise<WalkResult | number> {
+  const done: PlannedCommand[] = [];
+  const skipped: PlannedCommand[] = [];
+  for (const [index, planned] of plan.entries()) {
+    const choice = await offer(plan, index, planned, confirm);
+    const halted = await actOn(choice, { plan, index, git, interrupted, confirming: confirm !== undefined });
+    if (halted !== null) return halted;
+    (choice === 'skip' ? skipped : done).push(planned);
+  }
+  return { done, skipped };
+}
+
+async function offer(
+  plan: readonly PlannedCommand[],
+  index: number,
+  planned: PlannedCommand,
+  confirm: Confirm | undefined,
+): Promise<StepChoice | typeof CANCEL> {
+  // A blank line between steps, so each command's output reads as its own.
+  if (index > 0) process.stderr.write('\n');
+  out.detail('step ' + (index + 1) + ' of ' + plan.length + ': ' + printable(planned.what));
+  if (!confirm) {
+    out.detail('> ' + formatCommand(planned.argv));
+    return 'yes';
+  }
+  return confirm(planned);
+}
+
+interface Act {
+  readonly plan: readonly PlannedCommand[];
+  readonly index: number;
+  readonly git: Git;
+  readonly interrupted: () => boolean;
+  readonly confirming: boolean;
+}
+
+async function actOn(choice: StepChoice | typeof CANCEL, at: Act): Promise<number | null> {
+  if (choice === 'skip') return null;
+  if (choice !== 'yes') return halt(at.plan.slice(at.index), CANCELLED, 'stopped');
+  const code = await runPlanned(at.plan[at.index]!, at.git, hideGuard(at));
+  if (code === 0 && !at.interrupted()) return null;
+  return halt(at.plan.slice(at.index + 1), at.interrupted() ? CANCELLED : code);
+}
+
+function hideGuard(at: Act): boolean {
+  return !at.confirming && at.plan[at.index + 1]?.argv[0] === 'guard';
+}
+
+function runPlanned(planned: PlannedCommand, git: Git, hideNext: boolean): Promise<number> {
+  const run = (): Promise<number> => runOne(planned.argv, git);
+  return hideNext ? withoutLine(NEXT_GUARD, run) : run();
+}
+
+function halt(remaining: readonly PlannedCommand[], code: number, why?: string): number {
+  out.fail('setup', why ?? (code === CANCELLED ? 'interrupted' : 'stopped: that command exited ' + code));
+  if (remaining.length > 0) out.detail('not run:');
+  for (const planned of remaining) out.detail('  ' + formatCommand(planned.argv));
+  return code;
+}
+
+async function finishRun(
+  done: readonly PlannedCommand[],
+  skipped: readonly PlannedCommand[],
+  git: Git,
+  readAuth: ReadAuth,
+): Promise<void> {
+  finished(done, skipped);
+  const left = await ghLeftover(done, git, readAuth);
   if (left) out.detail(left);
 }
 
@@ -263,18 +356,12 @@ async function ghLeftover(plan: readonly PlannedCommand[], git: Git, readAuth: R
  * The account the plan pinned, and where to look next. On stderr, like the step lines:
  * stdout carries only what the commands themselves print.
  */
-function finished(plan: readonly PlannedCommand[]): void {
+function finished(done: readonly PlannedCommand[], skipped: readonly PlannedCommand[]): void {
   process.stderr.write('\n');
-  const pinned = plan.find((planned) => planned.argv[0] === 'use')?.argv.at(-1) ?? '';
-  out.detail('done: this clone is set up for ' + printable(pinned));
+  const pinned = done.find((planned) => planned.argv[0] === 'use')?.argv.at(-1);
+  if (pinned) out.detail('done: this clone is set up for ' + printable(pinned));
+  for (const planned of skipped) out.detail('skipped: ' + printable(planned.what));
   out.detail('check it any time: repown (this clone), repown doctor (this machine)');
-}
-
-function stopped(remaining: readonly PlannedCommand[], code: number): number {
-  out.fail('setup', code === CANCELLED ? 'interrupted' : 'stopped: that command exited ' + code);
-  if (remaining.length > 0) out.detail('not run:');
-  for (const planned of remaining) out.detail('  ' + formatCommand(planned.argv));
-  return code;
 }
 
 /**

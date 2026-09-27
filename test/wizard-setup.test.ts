@@ -7,14 +7,17 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { sandbox, type Sandbox } from './helpers.ts';
 import { setupContext as context } from './setup-fixtures.ts';
 import { ok, err } from '../src/core/result.ts';
-import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Review, type ReviewChoice } from '../src/wizard/engine.ts';
-import { setupFlow, planCommands, formatCommand, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext } from '../src/wizard/setup-flow.ts';
+import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Review, type ReviewChoice, type StepConfirm } from '../src/wizard/engine.ts';
+import { setupFlow, planCommands, formatCommand, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext } from '../src/wizard/setup-flow.ts';
+import { pinWrites } from '../src/core/identity.ts';
+import { plainPrompter } from '../src/wizard/plain.ts';
 import { gitSupportsAutoUpstream } from '../src/core/version.ts';
 import { runSetup } from '../src/wizard/setup-run.ts';
 import { readContext } from '../src/wizard/setup-context.ts';
@@ -31,7 +34,7 @@ for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name]
 
 type Entry = readonly [string, Reply | ReviewChoice];
 
-function scripted(script: Entry[]): Prompter & { readonly asked: string[]; readonly reviews: Review[] } {
+function scripted(script: Entry[]): Prompter & { readonly asked: string[]; readonly reviews: Review[]; readonly confirms: StepConfirm[] } {
   const queue = [...script];
   const next = (id: string): Reply | ReviewChoice => {
     const entry = queue.shift();
@@ -41,14 +44,21 @@ function scripted(script: Entry[]): Prompter & { readonly asked: string[]; reado
   };
   const asked: string[] = [];
   const reviews: Review[] = [];
+  const confirms: StepConfirm[] = [];
   return {
     asked,
     reviews,
+    confirms,
     ask: async (step) => { asked.push(step.id); return next(step.id) as Reply; },
     review: async (review) => { reviews.push(review); return next('review') as ReviewChoice; },
     pickStep: async () => next('pick') as string,
     note: () => {},
     close: () => {},
+    confirmStep: async (brief) => {
+      confirms.push(brief);
+      const choice = next('step');
+      return choice === CANCEL ? CANCEL : choice as 'yes' | 'skip' | 'stop';
+    },
   };
 }
 
@@ -740,7 +750,113 @@ describe('setup flow', () => {
     const ctx = context({ recorded, pinned: 'Octo-Work', owner: 'octocat', ownerIsUser: true });
     assert.equal(stepOf(ctx, 'account').initial?.({}, ctx), 'octo-work');
   });
+
+  test('S16 a pin lists the keys pinWrites would write, and nothing else', () => {
+    const ctx = context();
+    const answers = { account: 'octocat', mode: 'step' as const };
+    const lines = changesOf(['use', '--', 'octocat'], answers, ctx);
+    const written = pinWrites(
+      { name: 'Octo Cat', email: 'octocat@example.invalid', account: 'octocat' },
+      ctx.credentialKeys,
+    ).map(([key, value]) => key + ' = ' + value);
+    assert.deepEqual(lines, written);
+    assert.deepEqual(lines, [
+      'user.name = Octo Cat',
+      'user.email = octocat@example.invalid',
+      'user.useConfigOnly = true',
+      'repown.account = octocat',
+      'credential.https://github.com.username = octocat',
+    ]);
+  });
+
+  test('S16 a host repown does not pin omits the credential key', () => {
+    const ctx = context({ credentialPinned: false, credentialKeys: ['credential.https://github.com.username'] });
+    assert.deepEqual(changesOf(['use', '--', 'octocat'], { account: 'octocat' }, ctx), [
+      'user.name = Octo Cat',
+      'user.email = octocat@example.invalid',
+      'user.useConfigOnly = true',
+      'repown.account = octocat',
+    ]);
+  });
+
+  test('S16 use --gh names a switch when gh lists the account, and a browser sign-in otherwise', () => {
+    const listed = context({ gh: ok({ accounts: [{ login: 'octocat', active: false }], active: 'octo-work' }) });
+    const switched = changesOf(['use', '--gh', '--', 'octocat'], { account: 'octocat', gh: true }, listed);
+    assert.ok(switched.includes('gh: switch the active account to octocat'));
+    assert.ok(switched.includes('user.name = Octo Cat'));
+    const fresh = context({ gh: ok({ accounts: [], active: null }) });
+    const signingIn = changesOf(['use', '--gh', '--', 'octocat'], { account: 'octocat', gh: true }, fresh);
+    assert.ok(signingIn.includes('gh: sign in as octocat (opens a browser)'));
+    assert.equal(signingIn.includes('gh: switch the active account to octocat'), false);
+  });
+
+  test('S16 every other planned command says what it writes', () => {
+    const ctx = context({
+      owner: 'octo-org',
+      hookPath: '/work/project/.git/hooks/pre-push',
+      fixLines: ['    global:  credential.https://github.com.helper', ''],
+    });
+    const allow = ['git', 'config', '--local', '--add', 'repown.allowOwner', 'octo-org'];
+    assert.deepEqual(changesOf(allow, {}, ctx), ['repown.allowOwner += octo-org']);
+    assert.deepEqual(changesOf(['git', 'config', '--local', 'push.autoSetupRemote', 'true'], {}, ctx), ['push.autoSetupRemote = true']);
+    const hook = 'pre-push hook: /work/project/.git/hooks/pre-push runs repown guard check';
+    assert.deepEqual(changesOf(['guard', 'on'], {}, ctx), [hook]);
+    const fallback = 'pre-push hook: this clone\'s pre-push hook runs repown guard check';
+    assert.deepEqual(changesOf(['guard', 'on'], {}, context()), [fallback]);
+    const added = changesOf(['accounts', 'add', '--', 'octo-work'], {
+      account: NEW_ACCOUNT, newAccount: 'octo-work', name: 'Octo Work', email: 'work@example.invalid',
+    }, ctx);
+    assert.deepEqual(added, ['this machine\'s account registry: octo-work = Octo Work work@example.invalid']);
+    assert.deepEqual(changesOf(['fix', '--yes'], {}, ctx), ['    global:  credential.https://github.com.helper']);
+  });
+
+  test('S16 Enter is Yes, and Skip when the step is fix; why is the step\'s own words', () => {
+    const ctx = context({ fixLines: ['    global:  credential.https://github.com.helper'] });
+    const answers = { account: 'octocat', fix: true, guard: true, mode: 'step' as const };
+    const plan = planCommands(answers, ctx);
+    const fix = plan.find((item) => item.argv[0] === 'fix');
+    const use = plan.find((item) => item.argv[0] === 'use');
+    assert.ok(fix && use);
+    assert.equal(briefOf(fix, answers, ctx).initial, 'skip');
+    assert.equal(briefOf(use, answers, ctx).initial, 'yes');
+    assert.equal(briefOf(use, answers, ctx).why, use.what);
+    assert.equal(briefOf(use, answers, ctx).command, formatCommand(use.argv));
+    assert.ok(briefOf(fix, answers, ctx).why.includes('whole machine'));
+  });
+
+  test('the plain prompter shows the change, the reason and the command, and Enter takes the default', async () => {
+    const yes = await plainChoice('\n', 'yes');
+    assert.equal(yes.choice, 'yes');
+    assert.match(yes.shown, /user\.name = Octo Cat/);
+    assert.match(yes.shown, /Pin this clone to octocat: its commit name, email and push sign-in/);
+    assert.match(yes.shown, /> repown use octocat/);
+    assert.match(yes.shown, /Run this step\?/);
+    assert.match(yes.shown, /1\) Yes/);
+    assert.match(yes.shown, /2\) Skip/);
+    assert.match(yes.shown, /3\) Stop/);
+    assert.equal((await plainChoice('\n', 'skip')).choice, 'skip');
+    assert.equal((await plainChoice('3\n', 'yes')).choice, 'stop');
+    assert.equal((await plainChoice('', 'yes')).choice, CANCEL);
+  });
 });
+
+async function plainChoice(keys: string, initial: 'yes' | 'skip'): Promise<{ choice: unknown; shown: string }> {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  let shown = '';
+  output.on('data', (chunk: Buffer) => { shown += chunk.toString(); });
+  const prompter = plainPrompter({ input, output });
+  if (keys) input.write(keys);
+  else input.end();
+  const choice = await prompter.confirmStep({
+    changes: ['user.name = Octo Cat'],
+    why: 'Pin this clone to octocat: its commit name, email and push sign-in',
+    command: 'repown use octocat',
+    initial,
+  });
+  prompter.close();
+  return { choice, shown };
+}
 
 function stepOf(ctx: SetupContext, id: string) {
   const found = setupFlow(ctx).steps.find((item) => item.id === id);
@@ -811,6 +927,12 @@ describe('setup context: would `use` change anything here?', () => {
     assert.equal((await read()).pinIntact, false);
     pin();
     assert.equal((await read()).pinIntact, true);
+  });
+
+  test('the context keeps the credential keys and the hook path a step explains', async () => {
+    const ctx = await read();
+    assert.deepEqual(ctx.credentialKeys, ['credential.https://github.com.username']);
+    assert.match(ctx.hookPath ?? '', /[\\/]pre-push$/);
   });
 
   test('any key `use` writes that differs, repeats, is blank or carries spaces is not intact', async () => {
@@ -1102,6 +1224,18 @@ describe('repown setup, on a terminal (scripted)', () => {
     runSetup({ positional: [], flags: new Map([['cwd', at.box.dir]]) }, { prompter, interactive: true });
   const run = (script: Entry[]): Promise<number> => runWith(scripted(script));
 
+  async function runCaptured(script: Entry[]): Promise<{ code: number; stderr: string; confirms: StepConfirm[] }> {
+    let stderr = '';
+    const write = process.stderr.write;
+    process.stderr.write = ((chunk: string | Uint8Array) => { stderr += String(chunk); return true; }) as typeof process.stderr.write;
+    const prompter = scripted(script);
+    try {
+      return { code: await runWith(prompter), stderr, confirms: prompter.confirms };
+    } finally {
+      process.stderr.write = write;
+    }
+  }
+
   test('S15 setup <recorded account> asks nothing before the review', async () => {
     const supported = gitSupportsAutoUpstream(at.box.git('--version'));
     if (supported) at.box.git('config', '--local', '--unset', 'push.autoSetupRemote');
@@ -1129,13 +1263,15 @@ describe('repown setup, on a terminal (scripted)', () => {
   });
 
   test('Run pins the clone and turns the guard on', async () => {
-    assert.equal(await run([['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run']]), 0);
+    assert.equal(await run([
+      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'], ['step', 'yes'], ['step', 'yes'],
+    ]), 0);
     assert.match(localConfig(at), /account = octocat/);
     assert.ok(existsSync(hook(at)));
   });
 
   test('already set up: Done exits 0 and writes nothing; Apply again pins as before', async () => {
-    const first = scripted([['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'run']]);
+    const first = scripted([['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'run'], ['step', 'yes']]);
     assert.equal(await runWith(first), 0);
     assert.equal(first.reviews[0]!.settled, false, 'not set up before the first run');
     const before = localConfig(at);
@@ -1143,7 +1279,9 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.equal(await runWith(again), 0);
     assert.equal(again.reviews[0]!.settled, true, 'the clone, read back from git, counts as set up');
     assert.equal(localConfig(at), before);
-    assert.equal(await run([['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'run']]), 0);
+    assert.equal(await run([
+      ['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'run'], ['step', 'yes'],
+    ]), 0);
     assert.equal(localConfig(at), before);
   });
 
@@ -1163,6 +1301,91 @@ describe('repown setup, on a terminal (scripted)', () => {
       ['Declined: nothing was changed. Run repown setup again any time.', false],
       ['Cancelled: nothing was changed. Run repown setup again any time.', true],
     ]);
+  });
+
+  test('S16 Skip leaves that step unchanged and the next one still runs', async () => {
+    const seen = await runCaptured([
+      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'],
+      ['step', 'skip'], ['step', 'yes'],
+    ]);
+    assert.equal(seen.code, 0, seen.stderr);
+    assert.doesNotMatch(localConfig(at), /account = octocat/);
+    assert.ok(existsSync(hook(at)));
+    assert.match(seen.stderr, /skipped: Pin this clone to octocat/);
+    assert.doesNotMatch(seen.stderr, /done: this clone is set up/);
+    assert.deepEqual(seen.confirms[0]?.changes, [
+      'user.name = Octo Cat',
+      'user.email = octocat@example.invalid',
+      'user.useConfigOnly = true',
+      'repown.account = octocat',
+    ]);
+    assert.equal(seen.confirms[0]?.initial, 'yes');
+    assert.match(seen.confirms[0]?.command ?? '', /repown use octocat/);
+    assert.match(seen.confirms[1]?.changes.join('\n') ?? '', /pre-push hook: .+pre-push runs repown guard check/);
+    for (const line of seen.confirms.flatMap((item) => item.changes)) assert.doesNotMatch(line, /token|password|secret/i);
+  });
+
+  test('S16 done is said only when the pin ran', async () => {
+    const seen = await runCaptured([
+      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'],
+      ['step', 'yes'], ['step', 'skip'],
+    ]);
+    assert.equal(seen.code, 0, seen.stderr);
+    assert.match(localConfig(at), /account = octocat/);
+    assert.equal(existsSync(hook(at)), false);
+    assert.match(seen.stderr, /done: this clone is set up for octocat/);
+    assert.match(seen.stderr, /skipped: Turn on the push guard: each push is checked first/);
+  });
+
+  test('S16 skipping every step writes nothing and does not say the clone is set up', async () => {
+    const seen = await runCaptured([
+      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'],
+      ['step', 'skip'], ['step', 'skip'],
+    ]);
+    assert.equal(seen.code, 0, seen.stderr);
+    assert.doesNotMatch(localConfig(at), /repown/);
+    assert.equal(existsSync(hook(at)), false);
+    assert.doesNotMatch(seen.stderr, /done: this clone is set up/);
+    assert.match(seen.stderr, /skipped: Pin this clone to octocat/);
+    assert.match(seen.stderr, /skipped: Turn on the push guard/);
+  });
+
+  test('S16 Stop and Esc run nothing further and list the steps not run', async () => {
+    const stopped = await runCaptured([
+      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'],
+      ['step', 'stop'],
+    ]);
+    assert.equal(stopped.code, 130);
+    assert.doesNotMatch(localConfig(at), /repown/);
+    assert.equal(existsSync(hook(at)), false);
+    assert.match(stopped.stderr, /stopped/);
+    assert.doesNotMatch(stopped.stderr, /interrupted/);
+    assert.match(stopped.stderr, /not run:/);
+    assert.match(stopped.stderr, /repown use octocat/);
+    assert.match(stopped.stderr, /repown guard on/);
+    assert.doesNotMatch(stopped.stderr, /done: this clone is set up/);
+
+    const cancelled = await runCaptured([
+      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'],
+      ['step', 'yes'], ['step', CANCEL],
+    ]);
+    assert.equal(cancelled.code, 130);
+    assert.match(localConfig(at), /account = octocat/);
+    assert.equal(existsSync(hook(at)), false);
+    const rest = cancelled.stderr.split('not run:')[1] ?? '';
+    assert.match(rest, /repown guard on/);
+    assert.doesNotMatch(rest, /repown use/);
+  });
+
+  test('Recommended runs every planned step without asking again', async () => {
+    const seen = await runCaptured([['mode', 'recommended'], ['account', 'octocat'], ['review', 'run']]);
+    assert.equal(seen.code, 0, seen.stderr);
+    assert.deepEqual(seen.confirms, []);
+    assert.match(localConfig(at), /account = octocat/);
+    assert.ok(existsSync(hook(at)));
+    assert.match(seen.stderr, /> repown use octocat/);
+    assert.match(seen.stderr, /done: this clone is set up for octocat/);
+    assert.doesNotMatch(seen.stderr, /skipped:/);
   });
 
   test('Cancel at a step or at the review exits 130 and writes nothing', async () => {

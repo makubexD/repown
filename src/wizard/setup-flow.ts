@@ -14,7 +14,9 @@ import type { Account } from '../core/registry.ts';
 import type { GhState } from '../core/credential/gh.ts';
 import type { GuardState } from '../core/guard/hook.ts';
 import type { Result } from '../core/result.ts';
-import type { Answers, Choice, Flow, Review, Step } from './engine.ts';
+import { pinWrites, type IdentityValues } from '../core/identity.ts';
+import { stepDefault } from './review-text.ts';
+import type { Answers, Choice, Flow, Review, Step, StepConfirm } from './engine.ts';
 
 /** The "a new account" choice. Empty, so it can never be a real account's name. */
 export const NEW_ACCOUNT = '';
@@ -47,6 +49,10 @@ export interface SetupContext {
   readonly allowed: readonly string[];
   /** False where the host has no per-account credential pin (ADR-009). */
   readonly credentialPinned: boolean;
+  /** The credential keys `use` writes here. Empty where the host cannot be pinned. */
+  readonly credentialKeys: readonly string[];
+  /** The pre-push hook git will run, when this clone's hook path is known. */
+  readonly hookPath: string | null;
   /** Null when gh isn't installed; an error when it couldn't be queried. */
   readonly gh: Result<GhState> | null;
   /** gh is git's credential helper, so pushes sign in as gh's active account, not the pin. */
@@ -426,6 +432,11 @@ function emailOf(answers: Answers, ctx: SetupContext): string | undefined {
   return ctx.recorded[accountOf(answers)]?.email;
 }
 
+function nameOf(answers: Answers, ctx: SetupContext): string | undefined {
+  if (isNew(answers)) return typeof answers['name'] === 'string' ? answers['name'] : undefined;
+  return ctx.recorded[accountOf(answers)]?.name;
+}
+
 // ------------------------------------------------------------------ the plan
 
 /** The commands the answers stand for, in the order they run. */
@@ -650,4 +661,65 @@ function guardNote(answers: Answers, ctx: SetupContext): string | null {
   if (ctx.guard === 'on') return 'The push guard is already on in this clone.';
   return answers['guard'] === true ? null
     : 'The push guard stays off: pushes are not checked (turn it on later: repown guard on).';
+}
+
+// ------------------------------------------------- what one step would change
+
+/** The config lines, or the gh action, a planned command writes. Pure. */
+export function changesOf(argv: readonly string[], answers: Answers, ctx: SetupContext): string[] {
+  if (argv[0] === 'accounts') return [registryChange(answers)];
+  if (argv[0] === 'git') return [gitChange(argv)];
+  if (argv[0] === 'fix') return fixChanges(ctx);
+  if (argv[0] === 'guard') return [guardChange(ctx)];
+  return useChanges(argv, answers, ctx);
+}
+
+/** The confirmation shown before a step in step-by-step mode. */
+export function briefOf(planned: PlannedCommand, answers: Answers, ctx: SetupContext): StepConfirm {
+  const command = formatCommand(planned.argv);
+  return {
+    changes: changesOf(planned.argv, answers, ctx).map(printable),
+    why: printable(planned.what),
+    command,
+    initial: stepDefault(command),
+  };
+}
+
+function registryChange(answers: Answers): string {
+  const account = accountOf(answers);
+  const name = String(answers['name'] ?? '');
+  const email = String(answers['email'] ?? '');
+  return 'this machine\'s account registry: ' + account + ' = ' + name + ' ' + email;
+}
+
+function gitChange(argv: readonly string[]): string {
+  if (argv.includes('push.autoSetupRemote')) return 'push.autoSetupRemote = true';
+  return 'repown.allowOwner += ' + (argv.at(-1) ?? '');
+}
+
+function fixChanges(ctx: SetupContext): string[] {
+  return (ctx.fixLines ?? []).filter((line) => line.trim() !== '');
+}
+
+function guardChange(ctx: SetupContext): string {
+  const hook = ctx.hookPath ?? 'this clone\'s pre-push hook';
+  return 'pre-push hook: ' + hook + ' runs repown guard check';
+}
+
+function useChanges(argv: readonly string[], answers: Answers, ctx: SetupContext): string[] {
+  const keys = ctx.credentialPinned ? ctx.credentialKeys : [];
+  const lines = pinWrites(identityOf(answers, ctx), keys).map(([key, value]) => key + ' = ' + value);
+  const gh = ghChange(argv, answers, ctx);
+  return gh ? [...lines, gh] : lines;
+}
+
+function identityOf(answers: Answers, ctx: SetupContext): IdentityValues {
+  return { name: nameOf(answers, ctx) ?? '', email: emailOf(answers, ctx) ?? '', account: accountOf(answers) };
+}
+
+function ghChange(argv: readonly string[], answers: Answers, ctx: SetupContext): string | null {
+  if (!argv.includes('--gh')) return null;
+  const account = accountOf(answers);
+  if (inGh(account, ctx)) return 'gh: switch the active account to ' + account;
+  return 'gh: sign in as ' + account + ' (opens a browser)';
 }

@@ -582,7 +582,12 @@ flowchart TD
   D -->|Apply the same settings again| C
   D -->|Change an answer| Q
   K -->|no| V["review: numbered plain steps, each with its command"]
-  V -->|Run| C["accounts add → allowOwner → fix → use → guard on → push.autoSetupRemote<br/>stops at the first failure, listing what didn't run"]
+  V -->|Run| SB{"Step by step?"}
+  SB -->|no| C["accounts add → allowOwner → fix → use → guard on → push.autoSetupRemote<br/>stops at the first failure, listing what didn't run"]
+  SB -->|yes| SC["before each step: what it changes, why, the command<br/>Run this step? Yes / Skip / Stop"]
+  SC -->|Yes| C
+  SC -->|Skip| SC
+  SC -->|Stop or Esc| NR["remaining steps listed as not run (exit 130)"]
   V -->|"Back: the last question · Change an answer: the one you pick"| Q
   V -->|Decline, Esc or Ctrl-C| N["⚪ nothing changed (exit 1, or 130)"]
   C -->|Ctrl-C while running| I["🟡 stops steps not yet run (exit 130).<br/>Ctrl-C during gh sign-in only skips that sign-in;<br/>the clone stays pinned"]
@@ -618,7 +623,13 @@ gh when gh already lists the account. Each of those is still a step in the revie
 Change an answer can open it. It still asks for the account, and for a new account the
 host, name and email. It still asks, default No, when signing in to gh would open a
 browser, and when `fix` would change the whole machine. **Step by step** asks every
-question. `--no-input` does not use Recommended's answers: a question not given as a flag
+question. After Run, before each command, it shows what that step changes (the config
+keys and values, or the gh action), why (the step's own sentence), and the command, then
+asks `Run this step?` with Yes / Skip / Stop. Enter is Yes, except for `fix`, where Enter
+is Skip: that step changes the whole machine, the same reason the review's Enter is
+Decline when `fix` is one of the steps. Skip leaves that step unchanged and continues.
+Stop, or Esc, runs nothing further and lists the steps that were not run.
+`--no-input` does not use Recommended's answers: a question not given as a flag
 is No. `--step-by-step --no-input` exits 2.
 
 Before the guard question it says how many other people's email addresses are in this
@@ -719,7 +730,7 @@ account, then the review. The questions it did not ask are still steps.
 │  Yes
 ```
 
-**Run:** each step prints what it is, then the command and its own output.
+**Run:** in Recommended, each step prints what it is, then the command and its own output.
 
 ```
 └  Running the commands
@@ -745,6 +756,38 @@ OK    upstream   new branches push without -u in this clone
 ```
 
 The last line is only when gh still acts as someone else. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh`. The review says the same thing (`gh still acts as <active>… If you use gh here, later:`). The first push's sign-in is said by `use`, not again here.
+
+**Step by step, after Run.** The same steps, one confirmation each. Enter takes Yes. The lines under the step are the config keys and values it writes (or the gh action), then why, then the command. Nothing secret is shown: config values only.
+
+```
+       step 2 of 4: Pin this clone to octocat: its commit name, email and push sign-in
+│
+│  user.name = Octo Cat
+│  user.email = octocat@example.invalid
+│  user.useConfigOnly = true
+│  repown.account = octocat
+│  credential.https://github.com.username = octocat
+│
+│  Pin this clone to octocat: its commit name, email and push sign-in
+│  > repown use octocat
+│
+◆  Run this step?
+│  ● Yes
+│  ○ Skip
+│  ○ Stop
+```
+
+`use --gh` adds one line: `gh: switch the active account to octocat`, or `gh: sign in as octocat (opens a browser)`. The guard's line is `pre-push hook: <path> runs repown guard check` (or `this clone's pre-push hook` when the path isn't known). Allowing an owner is `repown.allowOwner += octo-org`. Pushing new branches without `-u` is `push.autoSetupRemote = true`. Recording an account is `this machine's account registry: octocat = Octo Cat octocat@example.invalid`. `fix` lists the lines it removes, and Enter there is Skip.
+
+Skip does not run that step. The closing lines name every skipped step, and say the clone is set up only when the pin ran:
+
+```
+       done: this clone is set up for octocat
+       skipped: Turn on the push guard: each push is checked first
+       check it any time: repown (this clone), repown doctor (this machine)
+```
+
+Stop, or Esc, prints `not run:` and the commands that did not get their turn. Exit 130.
 
 **Already set up:** run it again in a clone that needs nothing.
 

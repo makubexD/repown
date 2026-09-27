@@ -9,8 +9,8 @@
 
 import { createInterface, type Interface } from 'node:readline/promises';
 import type { Readable, Writable } from 'node:stream';
-import { BACK, CANCEL, type Asked, type Drawn, type Prompter, type Reply, type Review, type ReviewChoice } from './engine.ts';
-import { BACK_TO_REVIEW, PICK_QUESTION, reviewDefault, reviewLines, reviewOptions, reviewQuestion, textWidth, wrap } from './review-text.ts';
+import { BACK, CANCEL, type Asked, type Drawn, type Prompter, type Reply, type Review, type ReviewChoice, type StepChoice, type StepConfirm } from './engine.ts';
+import { BACK_TO_REVIEW, PICK_QUESTION, RUN_THIS_STEP, reviewDefault, reviewLines, reviewOptions, reviewQuestion, stepConfirmLines, stepOptions, textWidth, wrap } from './review-text.ts';
 
 export interface Streams {
   readonly input: Readable;
@@ -21,26 +21,48 @@ export interface Streams {
 export const BACK_WORD = '<';
 
 export function plainPrompter(streams: Streams): Prompter {
+  const session = plainSession(streams);
+  // Text is indented two spaces, the review's four.
+  const width = textWidth((streams.output as { columns?: number }).columns, 4);
+  const wide = (): Io & { width: number } => ({ ...session.io(), width });
+  return {
+    ask: (step, asked) => askStep(wide(), step, asked),
+    review: (review) => showReview(session.io(), review, width),
+    pickStep: (steps) => pickPlain(session.io(), steps),
+    note: (message) => { for (const line of wrap(message, width)) session.io().say('  ' + line); },
+    close: () => session.close(),
+    outro: (message) => session.io().say(message),
+    confirmStep: (confirm) => askStepConfirm(wide(), confirm),
+    suspend: () => session.suspend(),
+  };
+}
+
+interface Session {
+  io(): Io;
+  close(): void;
+  suspend(): void;
+}
+
+function plainSession(streams: Streams): Session {
   // On a real terminal, readline must own it: only then does Ctrl-C arrive as its
   // SIGINT event (a cancel) instead of ending the process with a signal.
   const terminal = (streams.input as { isTTY?: boolean }).isTTY === true;
-  const rl = createInterface({ input: streams.input, output: streams.output, terminal });
-  const io = ioFor(rl, streams.output, terminal);
-  // Text is indented two spaces, the review's four.
-  const width = textWidth((streams.output as { columns?: number }).columns, 4);
-  return {
-    ask: (step, asked) => askStep({ ...io, width }, step, asked),
-    review: (review) => showReview(io, review, width),
-    pickStep: async (steps) => {
-      io.say(PICK_QUESTION);
-      const index = await pickNumber(io, [...steps.map((step) => step.message), BACK_TO_REVIEW], 1);
-      if (index === CANCEL) return CANCEL;
-      return index === steps.length ? BACK : steps[index]!.id;
-    },
-    note: (message) => { for (const line of wrap(message, width)) io.say('  ' + line); },
-    close: () => rl.close(),
-    outro: (message) => io.say(message),
+  let rl = openReadline(streams, terminal);
+  let io = ioFor(rl, streams.output, terminal);
+  let held = true;
+  const reopen = (): Io => {
+    if (held) return io;
+    rl = openReadline(streams, terminal);
+    io = ioFor(rl, streams.output, terminal);
+    held = true;
+    return io;
   };
+  const shut = (): void => { if (!held) return; held = false; rl.close(); };
+  return { io: reopen, close: shut, suspend: shut };
+}
+
+function openReadline(streams: Streams, terminal: boolean): Interface {
+  return createInterface({ input: streams.input, output: streams.output, terminal });
 }
 
 type Next = () => Promise<string | null>;
@@ -96,6 +118,22 @@ async function askStep(io: Io & { width: number }, step: Drawn, asked: Asked): P
   if (line === null) return CANCEL;
   if (line === BACK_WORD && asked.canGoBack) return BACK;
   return line || (typeof initial === 'string' ? initial : '');
+}
+
+async function pickPlain(io: Io, steps: readonly Drawn[]): Promise<string | typeof BACK | typeof CANCEL> {
+  io.say(PICK_QUESTION);
+  const index = await pickNumber(io, [...steps.map((step) => step.message), BACK_TO_REVIEW], 1);
+  if (index === CANCEL) return CANCEL;
+  return index === steps.length ? BACK : steps[index]!.id;
+}
+
+async function askStepConfirm(io: Io & { width: number }, confirm: StepConfirm): Promise<StepChoice | typeof CANCEL> {
+  for (const line of stepConfirmLines(confirm).flatMap((text) => wrap(text, io.width))) io.say('  ' + line);
+  io.say(RUN_THIS_STEP);
+  const options = stepOptions();
+  const preset = options.findIndex((option) => option.value === confirm.initial) + 1;
+  const index = await pickNumber(io, options.map((option) => option.label), preset);
+  return index === CANCEL ? CANCEL : options[index]!.value;
 }
 
 async function askSelect(io: Io, { choices, initial, canGoBack }: Asked): Promise<Reply> {

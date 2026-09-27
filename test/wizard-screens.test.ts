@@ -265,6 +265,35 @@ describe('repown setup, played with key presses', () => {
     assert.doesNotMatch(screen, /octo-work@example\.invalid█/);
   });
 
+  test('S16 step by step shows what each step changes, then Yes / Skip / Stop', async () => {
+    const ctx = setupContext({
+      owner: 'octo-org',
+      hookPath: '/work/project/.git/hooks/pre-push',
+      upstream: { supported: true, enabled: null, branch: 'main' },
+    });
+    // Step by step, accept the account and the three clone questions, Run, Yes, Yes, then Stop.
+    const keys = [[down, enter], [enter], [enter], [enter], [enter], [enter], [enter], [enter], [down, down, enter]];
+    const { outcome, screen } = await play(ctx, keys);
+    assert.equal(outcome.status, 'run', screen);
+    const plain = screen.replace(/\n│\s*/g, ' ');
+    assert.match(plain, /repown\.allowOwner \+= octo-org/);
+    assert.match(plain, /Let this clone push to octo-org's repositories/);
+    assert.match(plain, /> git config --local --add repown\.allowOwner octo-org/);
+    assert.match(plain, /user\.name = Octo Cat/);
+    assert.match(plain, /user\.email = octocat@example\.invalid/);
+    assert.match(plain, /user\.useConfigOnly = true/);
+    assert.match(plain, /repown\.account = octocat/);
+    assert.match(plain, /credential\.https:\/\/github\.com\.username = octocat/);
+    assert.match(plain, /Pin this clone to octocat: its commit name, email and push sign-in/);
+    assert.match(plain, /> repown use octocat/);
+    assert.match(plain, /pre-push hook: \/work\/project\/\.git\/hooks\/pre-push runs repown guard check/);
+    assert.match(screen, /Run this step\?/);
+    assert.match(screen, /Yes/);
+    assert.match(screen, /Skip/);
+    assert.match(screen, /Stop/);
+    assert.doesNotMatch(plain, /push\.autoSetupRemote = true/);
+  });
+
   test('pushing a new branch without -u is one question, default Yes, and a review step', async () => {
     const ctx = setupContext({ upstream: { supported: true, enabled: null, branch: 'main' } });
     const { outcome, screen } = await play(ctx, [[down, enter], [enter], [enter], [enter], [esc]]);

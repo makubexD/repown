@@ -7,6 +7,13 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+- In Step by step, after Run, `repown setup` confirms each step before running it.
+  It shows what the step changes (the config keys and values, or the gh action),
+  why, and the command, then asks `Run this step?` (Yes / Skip / Stop). Enter is
+  Yes, except for `fix`, where Enter is Skip. Skip leaves that step unchanged.
+  Stop, or Esc, runs nothing further and lists the steps that were not run.
+  `done: this clone is set up for <account>` is printed only when the pin ran;
+  a skipped step is named with `skipped:`. Recommended mode is unchanged.
 - `repown setup` starts by asking `How should setup work?`. Recommended (the default)
   asks for the account — and the host, name and email when the account is new — and
   fills in the rest: allow origin's owner, the push guard, push new branches without

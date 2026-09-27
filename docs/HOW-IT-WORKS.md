@@ -208,6 +208,10 @@ flowchart LR
 Compare `gh auth switch`, which is **machine-wide** ([why that breaks clones](#1-set-up-the-machine)).
 After `repown fix`, gh's active account affects only the gh CLI. To keep it in step with a clone, run
 `repown use <account> --gh`.
+
+To point this clone at an account already recorded, run `repown setup <account>`. That skips
+the mode question and uses Recommended ([card 13](#13-guided-setup)). When gh would not open
+a browser and `fix` does not apply, it goes straight to the review.
 </details>
 
 ### 5. Check where you are
@@ -545,7 +549,8 @@ To uninstall, follow the [README's steps](../README.md#uninstall), and also:
 ### 13. Guided setup
 
 In a terminal, **`repown`** with no arguments starts this when the clone isn't set up yet.
-**`repown setup`** asks a few questions, shows the commands it will run, then runs them.
+**`repown setup`** asks how it should work, then the questions that mode still needs, shows
+the commands it will run, and runs them.
 Each answer maps to an ordinary command (`accounts add`, `use`, `guard on`, `fix`) or to
 a repo-local git line (`repown.allowOwner` from card 8, or `push.autoSetupRemote`), so
 you can run the same thing yourself. If the clone needs nothing, it says so.
@@ -557,6 +562,7 @@ flowchart TD
   S[repown setup] --> G{"registry readable, and<br/>flags fit each other?"}
   G -->|registry unreadable| X0["🔴 exit 1"]
   G -->|a recorded account with --name/--email/--host| X4["🔴 exit 2"]
+  G -->|--step-by-step with --no-input| X6["🔴 exit 2: step by step needs a terminal"]
   G -->|yes| T{"a terminal,<br/>or --no-input?"}
   T -->|neither| X2["🔴 exit 2: names the flags to pass"]
   T -->|yes| R{"a git repository?"}
@@ -565,8 +571,9 @@ flowchart TD
   F -->|no| X3["🔴 exit 2 (or 1): nothing written"]
   F -->|--no-input| C
   F -->|--no-input, account incomplete| X5["🔴 exit 2: names the missing flags"]
-  F -->|yes| A["account: one already seen, a recorded one, or a new login<br/>(suggests origin's owner when it is a user; then host, name, email)"]
-  A --> Q["only what applies here:<br/>switch or sign in to gh · allow the organisation · the guard · new branches without -u · gh as helper"]
+  F -->|yes| M{"How should setup work?<br/>Recommended, or Step by step"}
+  M --> A["account: one already seen, a recorded one, or a new login<br/>(suggests origin's owner when it is a user; then host, name, email)"]
+  A --> Q["only what applies here:<br/>Recommended fills a gh switch, the organisation, the guard and upstream;<br/>both modes still ask a gh sign-in and fix"]
   A -->|Esc or Ctrl-C| N
   Q -->|Esc or Ctrl-C| N
   Q --> K{"already pinned to it, as recorded,<br/>and nothing else to do?"}
@@ -584,7 +591,7 @@ flowchart TD
 With `--no-input` there is no review and no "already set up" check: the commands the
 flags stand for run, `use` included.
 
-The first question lists the accounts already recorded and the GitHub logins repown can
+The account question lists the accounts already recorded and the GitHub logins repown can
 already see (origin's owner, gh's accounts, Git Credential Manager's), then **a new
 account**. An owner known to be an organisation is left out of the list, and an owner
 whose kind couldn't be checked is listed but not suggested. It suggests origin's owner
@@ -594,6 +601,7 @@ never suggested.
 
 | It asks | Only when | Becomes |
 | --- | --- | --- |
+| How should setup work? Recommended (default) or Step by step | unless `--step-by-step` is passed, or an `<account>` is given (that uses Recommended and skips this question). Not stored ([ADR-007](decisions/ADR-007-no-profile-store.md), [ADR-020](decisions/ADR-020-setup-leaves-clone-ready.md)). The flag is `--step-by-step` | nothing by itself |
 | Which account should this clone belong to? | an account is recorded, or a GitHub login can already be seen. Default: the one pinned here if it is recorded, else origin's owner when it is recorded and not known to be an organisation, else origin's owner when that owner is a user, else the first other recorded account, else a new account | `use <account>`, after `accounts add` when the login is not recorded |
 | The account's user name (login) | "a new account", or nothing recorded and nothing detected. Starts as origin's owner only when that owner is a user and is not recorded. Refused if already recorded | the `<account>` of `accounts add` |
 | Where it's hosted, and your name and email as commits show them (on GitHub, with where to find your noreply address; this machine's default is shown, never filled in) | the login is new: "a new account", or one picked from the logins already seen | `accounts add <account> --name --email --host` |
@@ -602,7 +610,16 @@ never suggested.
 | This repository belongs to "octo-org". Let this clone push to it? (default Yes) | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
 | Turn on the push guard? (default Yes) | the guard is off, no other tool owns the hook, and `core.hooksPath` doesn't redirect hooks | `guard on` |
 | Push new branches without -u? (default Yes) | git is 2.37.0 or newer, and `push.autoSetupRemote` is not already true in any scope. The flag is `--auto-upstream`. On older git, or when `git --version` cannot be read, this is not asked and the review notes `git push -u origin <branch>` (the current branch, or `<branch>` when HEAD is detached) | `git config --local push.autoSetupRemote true` |
-| Stop gh answering git's sign-in requests? (whole machine, default No) | a GitHub clone, gh is the helper, and `fix` finds its entries | `fix --yes` |
+| Stop gh answering git's sign-in requests? (whole machine, default No) | a GitHub clone, gh is the helper, and `fix` finds its entries. Still asked in Recommended | `fix --yes` |
+
+**Recommended** does not ask the questions that only change this clone, and answers them
+Yes: allow origin's owner, turn the guard on, push new branches without `-u`, and switch
+gh when gh already lists the account. Each of those is still a step in the review, and
+Change an answer can open it. It still asks for the account, and for a new account the
+host, name and email. It still asks, default No, when signing in to gh would open a
+browser, and when `fix` would change the whole machine. **Step by step** asks every
+question. `--no-input` does not use Recommended's answers: a question not given as a flag
+is No. `--step-by-step --no-input` exits 2.
 
 Before the guard question it says how many other people's email addresses are in this
 repository's commits, or that it has none yet: the guard suits clones where you push only
@@ -619,8 +636,12 @@ Without a terminal (CI, a script): see [Scripts and CI](CONFIGURATION.md#scripts
   URL spelt otherwise);
 - origin's owner is the account, or is already allowed;
 - gh is nowhere in the credential-helper list;
-- `push.autoSetupRemote` is not still something to offer: git is older than 2.37,
-  `git --version` could not be read, or the effective value is already true;
+- push new branches without `-u` is not something this run will change. Answering No,
+  or never being offered the question (git older than 2.37, or `git --version` could
+  not be read), still counts. The screen then says
+  `optional: push new branches without -u: repown setup --auto-upstream` when git could
+  still set it. Recommended answers Yes, so that clone is not already set up until the
+  setting is on;
 - your answers add nothing beyond `repown use <that account>`.
 
 A username written into a `pushInsteadOf` URL isn't checked.
@@ -635,13 +656,40 @@ it; at a text question, type `<`). "Change an answer" lists the questions, with
 Esc or Ctrl-C end with one line: nothing was changed, and you can run `repown setup` again
 any time.
 
-**The questions,** in a clone of an organisation's repository (the review follows, as in
-the [README](../README.md#quick-start)):
+**Recommended,** in a clone of an organisation's repository: the mode question, the
+account, then the review. The questions it did not ask are still steps.
+
+```
+◇  How should setup work?
+│  Recommended fills in the answers that only change this clone; Step by
+│  step asks each one
+│  ● Recommended
+│  ○ Step by step
+│
+◇  Which account should this clone belong to?
+│  octocat
+│
+◇  Review: nothing has changed yet
+│  1. Let this clone push to octo-org's repositories
+│       git config --local --add repown.allowOwner octo-org
+│  2. Pin this clone to octocat, and make it gh's active account
+│       repown use octocat --gh
+│  3. Turn on the push guard: each push is checked first
+│       repown guard on
+│  4. Push new branches without -u (this clone only)
+│       git config --local push.autoSetupRemote true
+```
+
+**Step by step** asks each of those questions. The same clone, after choosing Step by step
+(the review follows, as in the [README](../README.md#quick-start)):
 
 ```
 ┌  repown setup
 │
 ◇  Reading this clone and this machine
+│
+◇  How should setup work?
+│  Step by step
 │
 ●  right now this clone isn't pinned to any account
 │

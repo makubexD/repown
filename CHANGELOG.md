@@ -7,13 +7,24 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+- `repown setup` starts by asking `How should setup work?`. Recommended (the default)
+  asks for the account — and the host, name and email when the account is new — and
+  fills in the rest: allow origin's owner, the push guard, push new branches without
+  `-u`, and a gh switch when gh already lists the account. Those steps still appear in
+  the review, and Change an answer can open them. A gh sign-in, which opens a browser,
+  and `fix`, which changes the whole machine, are still asked, default No. Step by step
+  asks every question. The flag is `--step-by-step`. `repown setup <account>` skips the
+  mode question and uses Recommended, so a recorded account goes straight to the review
+  when nothing else must be asked. `--step-by-step --no-input` exits 2.
+  `--no-input` still answers an ungiven question No. A clone that is otherwise ready,
+  where push new branches without `-u` was left off, counts as already set up and notes
+  `repown setup --auto-upstream`.
 - `repown setup` asks `Push new branches without -u?` (default Yes) when git is
   2.37.0 or newer and `push.autoSetupRemote` is not already true. Yes runs
   `git config --local push.autoSetupRemote true` in this clone only. The flag is
   `--auto-upstream`. With `--no-input`, leaving the flag off keeps the answer No.
   On older git, or when `git --version` cannot be read, the question is not asked
-  and the review notes `git push -u origin <branch>`. A clone that would still be
-  asked is not shown as already set up.
+  and the review notes `git push -u origin <branch>`.
 - `repown status` shows the branch's `upstream`: the tracked remote branch,
   `none yet: git push -u origin <branch>`, or `set on the first push
   (push.autoSetupRemote)`. Missing on a detached HEAD or with no remote, and

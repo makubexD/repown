@@ -39,8 +39,10 @@ export interface Step<C> {
   detail?(answers: Answers, context: C): string | undefined;
   /** The same rule the command applies; a message when the value is refused. */
   validate?(value: Answer): string | null;
-  /** Asked only when this holds; absent means always. */
+  /** Asked only when this holds; absent means always. A false here drops the answer. */
   when?(answers: Answers, context: C): boolean;
+  /** Skipped on the way through. Change an answer can still open it, and that ask is once. */
+  auto?(answers: Answers, context: C): boolean;
 }
 
 /** A step whose question has already been chosen for the answers so far. */
@@ -85,6 +87,8 @@ export interface Asked {
 export interface Flow<C> {
   readonly steps: readonly Step<C>[];
   review(answers: Answers, context: C): Review;
+  /** Answers for steps the walk did not ask. Applied before prune, so the review can list them. */
+  fill?(answers: Answers, context: C): Answers;
 }
 
 export interface Prompter {
@@ -124,7 +128,8 @@ export async function runFlow<C>(flow: Flow<C>, context: C, pass: Pass, prompter
   let index = pass.start;
   while (index < flow.steps.length) {
     const step = flow.steps[index]!;
-    if (!askable(step, answers, context, pass.given)) { index++; continue; }
+    const resume = index === pass.start;
+    if (!shouldAsk(step, { answers, context, given: pass.given, resume })) { index++; continue; }
     const reply = await ask(step, { answers, canGoBack: asked.length > 0 }, context, prompter);
     if (reply === CANCEL) return { status: 'cancelled' };
     if (reply === BACK) { index = asked.pop() ?? index; continue; }
@@ -133,7 +138,21 @@ export async function runFlow<C>(flow: Flow<C>, context: C, pass: Pass, prompter
     answers[step.id] = reply;
     asked.push(index++);
   }
-  return { status: 'answered', answers: prune(flow, answers, context, pass.given), asked };
+  return { status: 'answered', answers: filled(flow, answers, context, pass.given), asked };
+}
+
+/** The step this walk resumed on is asked even when `auto` would skip it. */
+function shouldAsk<C>(step: Step<C>, at: { answers: Answers; context: C; given: ReadonlySet<string>; resume: boolean }): boolean {
+  if (!applicable(step, at.answers, at.context, at.given)) return false;
+  return at.resume || !step.auto?.(at.answers, at.context);
+}
+
+function applicable<C>(step: Step<C>, answers: Answers, context: C, given: ReadonlySet<string>): boolean {
+  return !given.has(step.id) && (step.when?.(answers, context) ?? true);
+}
+
+function filled<C>(flow: Flow<C>, answers: Answers, context: C, given: ReadonlySet<string>): Answers {
+  return prune(flow, flow.fill?.(answers, context) ?? answers, context, given);
 }
 
 async function ask<C>(step: Step<C>, at: { answers: Answers; canGoBack: boolean }, context: C, prompter: Prompter): Promise<Reply> {
@@ -154,10 +173,6 @@ function drawn<C>(step: Step<C>, answers: Answers, context: C): Drawn {
 
 function wording<C>(text: Wording<C>, answers: Answers, context: C): string {
   return typeof text === 'function' ? text(answers, context) : text;
-}
-
-function askable<C>(step: Step<C>, answers: Answers, context: C, given: ReadonlySet<string>): boolean {
-  return !given.has(step.id) && (step.when?.(answers, context) ?? true);
 }
 
 /** Drops answers whose step is no longer reachable, so a stale branch never reaches the plan. */
@@ -182,7 +197,7 @@ export function refusedGiven<C>(flow: Flow<C>, given: Answers): string[] {
 
 /** Steps the user can return to from the review: reachable, and not given as a flag. */
 export function reachable<C>(flow: Flow<C>, answers: Answers, context: C, given: ReadonlySet<string>): Step<C>[] {
-  return flow.steps.filter((step) => answers[step.id] !== undefined && askable(step, answers, context, given));
+  return flow.steps.filter((step) => answers[step.id] !== undefined && applicable(step, answers, context, given));
 }
 
 /** The whole wizard: ask, review, and loop back on Back or Change an answer. */

@@ -106,11 +106,30 @@ function asksForLogin(answers: Answers): boolean {
 }
 
 export function setupFlow(ctx: SetupContext): Flow<SetupContext> {
-  return { steps: steps(ctx), review: (answers) => review(answers, ctx) };
+  return { steps: steps(ctx), review: (answers) => review(answers, ctx), fill: (answers) => recommendedAnswers(answers, ctx) };
+}
+
+/** Yes for confirms Recommended skips. An answer already given, including from Change an answer, stays. */
+export function recommendedAnswers(answers: Answers, ctx: SetupContext): Answers {
+  if (!isRecommended(answers)) return answers;
+  const filled = { ...answers };
+  for (const step of steps(ctx)) fillRecommended(step, filled, ctx);
+  return filled;
+}
+
+function fillRecommended(step: Step<SetupContext>, filled: Answers, ctx: SetupContext): void {
+  if (filled[step.id] !== undefined || !step.auto?.(filled, ctx)) return;
+  if (step.when && !step.when(filled, ctx)) return;
+  filled[step.id] = true;
+}
+
+function isRecommended(answers: Answers): boolean {
+  return answers['mode'] === 'recommended';
 }
 
 function steps(ctx: SetupContext): Step<SetupContext>[] {
   return [
+    modeStep(),
     ...accountSteps(ctx),
     { id: 'host', kind: 'select', flag: '--host', message: 'Where is this account hosted?',
       hint: 'on GitHub, repown also makes pushes sign in as this account', when: (answers) => isNew(answers),
@@ -124,6 +143,24 @@ function steps(ctx: SetupContext): Step<SetupContext>[] {
       initial: async (answers) => (await ctx.suggest(accountOf(answers), hostOf(answers, ctx))).email,
       detail: (answers) => emailDetail(answers, ctx) },
     ...choiceSteps(ctx),
+  ];
+}
+
+function modeStep(): Step<SetupContext> {
+  return {
+    id: 'mode', kind: 'select', flag: '--step-by-step',
+    message: 'How should setup work?',
+    hint: 'Recommended fills in the answers that only change this clone; Step by step asks each one',
+    choices: () => modeChoices(), initial: () => 'recommended',
+  };
+}
+
+function modeChoices(): Choice[] {
+  return [
+    { value: 'recommended', label: 'Recommended',
+      hint: 'asks only what it must, fills in the rest, and shows every step before running' },
+    { value: 'step', label: 'Step by step',
+      hint: 'asks every question, and explains each change before making it' },
   ];
 }
 
@@ -147,11 +184,12 @@ function choiceSteps(ctx: SetupContext): Step<SetupContext>[] {
       message: 'This repository belongs to "' + printable(ctx.owner ?? '') + '". Let this clone push to it?',
       hint: 'Yes if you\'re a member of that organisation or a collaborator on it; with No, ' +
         'the push guard refuses pushes there. Saved in this clone only',
-      when: (answers) => ownerForeign(accountOf(answers), ctx) },
+      when: (answers) => ownerForeign(accountOf(answers), ctx), auto: isRecommended },
     { id: 'guard', kind: 'confirm', flag: '--guard', message: 'Turn on the push guard?',
       hint: 'before each push, it checks that every commit is yours and goes to the right place, and stops the push if not; ' +
         'turn it off any time: repown guard off',
-      initial: () => true, when: () => ctx.guard === 'off' && !ctx.redirected, detail: (answers) => historyNote(answers, ctx) },
+      initial: () => true, when: () => ctx.guard === 'off' && !ctx.redirected, auto: isRecommended,
+      detail: (answers) => historyNote(answers, ctx) },
     upstreamStep(ctx),
     { id: 'fix', kind: 'confirm', flag: '--fix', message: 'Stop gh answering git\'s sign-in requests? (whole machine)',
       hint: 'undo any time: gh auth setup-git', initial: () => false, when: () => ctx.fixLines !== null,
@@ -214,7 +252,7 @@ function upstreamStep(ctx: SetupContext): Step<SetupContext> {
   return {
     id: 'upstream', kind: 'confirm', flag: '--auto-upstream', initial: () => true,
     message: 'Push new branches without -u?', hint: UPSTREAM_HINT,
-    when: () => offersUpstream(ctx),
+    when: () => offersUpstream(ctx), auto: isRecommended,
   };
 }
 
@@ -228,6 +266,7 @@ function ghStep(ctx: SetupContext): Step<SetupContext> {
     hint: (answers) => ghHint(accountOf(answers), ctx),
     detail: () => ghDetail(ctx),
     when: (answers) => ghAsked(accountOf(answers), ctx),
+    auto: (answers) => isRecommended(answers) && inGh(accountOf(answers), ctx),
   };
 }
 
@@ -490,15 +529,22 @@ function review(answers: Answers, ctx: SetupContext): Review {
   }));
   if (settled(answers, ctx, plan)) {
     return { title: 'This clone is already set up', headline: settledLines(answers, ctx).map(printable), steps,
-      notes: noted(settledNotes(answers), answers, ctx), settled: true };
+      notes: noted(settledNotes(answers, ctx), answers, ctx), settled: true };
   }
   return { title: 'Review: nothing has changed yet', headline: [printable(headline(answers, ctx))], steps,
     notes: noted(notes(answers, ctx), answers, ctx), settled: false };
 }
 
-function settledNotes(answers: Answers): string[] {
-  return ['Checked: the settings git uses here are ' + printable(accountOf(answers)) + '\'s, as recorded.',
+function settledNotes(answers: Answers, ctx: SetupContext): string[] {
+  const lines = ['Checked: the settings git uses here are ' + printable(accountOf(answers)) + '\'s, as recorded.',
     'See it any time: repown (this clone), repown doctor (this machine)'];
+  const offer = upstreamOffer(ctx);
+  return offer ? [...lines, offer] : lines;
+}
+
+function upstreamOffer(ctx: SetupContext): string | null {
+  if (!offersUpstream(ctx)) return null;
+  return 'optional: push new branches without -u: repown setup --auto-upstream';
 }
 
 function noted(lines: readonly string[], answers: Answers, ctx: SetupContext): string[] {
@@ -531,16 +577,16 @@ function ghLeft(answers: Answers, ctx: SetupContext): string | null {
 /**
  * Nothing to do: the only command left is pinning this clone to the account it is
  * already pinned to, as recorded and as git would use it (see pinIntact), with no
- * organisation the guard would refuse, gh nowhere in the helper list, and the
- * upstream question not still waiting (git too old, or push.autoSetupRemote
- * already on). `use` may still say, on a host it can't pin, that it doesn't pin
- * the sign-in; the settled screen says so too.
+ * organisation the guard would refuse and gh nowhere in the helper list. Saying No
+ * to push.autoSetupRemote still counts; the settled screen names the flag. Recommended
+ * answers Yes, so that step is in the plan and the clone is not settled.
+ * `use` may still say, on a host it can't pin, that it doesn't pin the sign-in.
  */
 function settled(answers: Answers, ctx: SetupContext, plan: readonly PlannedCommand[]): boolean {
   const account = accountOf(answers);
   const onlyPin = plan.length === 1 && plan[0]!.argv[0] === 'use' && !plan[0]!.argv.includes('--gh');
   const same = !isNew(answers) && account === ctx.pinned && ctx.pinIntact;
-  return onlyPin && same && !ctx.ghIsHelper && !ownerForeign(account, ctx) && !offersUpstream(ctx);
+  return onlyPin && same && !ctx.ghIsHelper && !ownerForeign(account, ctx);
 }
 
 function headline(answers: Answers, ctx: SetupContext): string {

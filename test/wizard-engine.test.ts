@@ -4,7 +4,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { wizard, BACK, CANCEL, type Answer, type Flow, type Prompter, type Reply, type ReviewChoice } from '../src/wizard/engine.ts';
+import { wizard, BACK, CANCEL, type Answer, type Drawn, type Flow, type Prompter, type Reply, type ReviewChoice } from '../src/wizard/engine.ts';
 
 type Entry =
   | readonly ['ask', string, Reply]
@@ -68,6 +68,32 @@ describe('wizard engine', () => {
   test('asks each reachable step in order, then runs what the review accepted', async () => {
     const prompter = scripted([['ask', 'account', 'octocat'], ['ask', 'name', 'Octo Cat'], ['ask', 'guard', true], ['review', 'run']]);
     assert.deepEqual(await wizard(FLOW, NONE, {}, prompter), { status: 'run', answers: { account: 'octocat', name: 'Octo Cat', guard: true } });
+  });
+
+  test('an auto step is skipped, filled in, and still opened from Change an answer', async () => {
+    const flow: Flow<Context> = {
+      steps: [
+        { id: 'account', kind: 'text', message: 'Account', hint: 'which account', flag: '<account>' },
+        { id: 'guard', kind: 'confirm', message: 'Guard', hint: 'the guard', flag: '--guard', initial: () => false, auto: () => true },
+      ],
+      fill: (answers) => (answers['guard'] === undefined ? { ...answers, guard: true } : answers),
+      review: FLOW.review,
+    };
+    const base = scripted([
+      ['ask', 'account', 'octocat'], ['review', 'edit'], ['pick', 'guard'], ['ask', 'guard', false], ['review', 'run'],
+    ]);
+    let offered: string[] = [];
+    const prompter: Prompter = {
+      ...base,
+      pickStep: async (steps: readonly Drawn[]) => {
+        offered = steps.map((step) => step.id);
+        return base.pickStep(steps);
+      },
+    };
+    const outcome = await wizard(flow, NONE, {}, prompter);
+    assert.deepEqual(offered, ['account', 'guard']);
+    assert.deepEqual(outcome, { status: 'run', answers: { account: 'octocat', guard: false } });
+    assert.deepEqual(base.reviews[0], ['account=octocat', 'guard=true']);
   });
 
   test('a step whose condition fails is skipped', async () => {

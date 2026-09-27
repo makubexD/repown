@@ -84,7 +84,9 @@ Nothing is written when `repown setup` refuses:
 
 - **exit `2`:** no terminal and no `--no-input` (it names the flags it needs); no
   `<account>`, or a new one without `--name`/`--email`; `--name`/`--email`/`--host` for an
-  account already recorded; `--allow-owner` that isn't origin's owner.
+  account already recorded; `--allow-owner` that isn't origin's owner;
+  `--step-by-step` together with `--no-input` (step by step needs a terminal).
+  `--no-input` does not use Recommended's Yes answers.
 - **exit `1`:** not in a clone; an unreadable registry; `--guard` where another tool owns the hook or
   `core.hooksPath` points elsewhere. `--fix` when gh isn't the helper is dropped with a note.
 

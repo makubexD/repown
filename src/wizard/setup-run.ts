@@ -108,13 +108,21 @@ function givenFrom(args: Args, recorded: Recorded): Result<Answers> {
                '\nto change it, record it again: repown accounts add ' + account + ' --name "..." --email "..."');
   }
   applyConfirms(args, answers);
+  return modeOf(args, answers);
+}
+
+/** `--step-by-step` asks every question. An account on the command line uses Recommended and skips the question. */
+function modeOf(args: Args, answers: Answers): Result<Answers> {
+  if (flagBool(args, 'step-by-step') && flagBool(args, 'no-input')) return err('--step-by-step needs a terminal to ask');
+  if (flagBool(args, 'step-by-step')) answers['mode'] = 'step';
+  else if (args.positional[0] !== undefined) answers['mode'] = 'recommended';
   return ok(answers);
 }
 
 const CONFIRM_FLAGS = ['gh', 'guard', 'fix'] as const;
 const CONFIRM_DEFAULTS = ['gh', 'allowOwner', 'guard', 'fix', 'upstream'] as const;
 
-/** A passed flag is Yes. With --no-input, a confirm that was not passed is No. */
+/** A passed flag is Yes. With --no-input, a confirm that was not passed is No, not Recommended's Yes. */
 function applyConfirms(args: Args, answers: Answers): void {
   for (const key of CONFIRM_FLAGS) if (flagBool(args, key)) answers[key] = true;
   if (flagBool(args, 'auto-upstream')) answers['upstream'] = true;

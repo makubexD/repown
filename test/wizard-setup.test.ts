@@ -52,8 +52,10 @@ function scripted(script: Entry[]): Prompter & { readonly asked: string[]; reado
   };
 }
 
+/** Step by step, so a script is asked every question. Pass `mode` in `given` to drive Recommended. */
 async function answer(ctx: SetupContext, script: Entry[], given: Answers = {}): Promise<Answers> {
-  const outcome = await wizard(setupFlow(ctx), ctx, given, scripted(script));
+  const mode = given['mode'] === undefined ? { mode: 'step' } : {};
+  const outcome = await wizard(setupFlow(ctx), ctx, { ...mode, ...given }, scripted(script));
   assert.equal(outcome.status, 'run');
   return outcome.status === 'run' ? outcome.answers : {};
 }
@@ -95,7 +97,7 @@ describe('setup flow', () => {
     const notes: string[] = [];
     const prompter = scripted([['account', NEW_ACCOUNT], ['newAccount', 'OctoCat'], ['newAccount', 'octo-work'],
       ['host', 'github'], ['name', 'x'], ['email', 'y'], ['allowOwner', false], ['guard', false], ['review', 'decline']]);
-    await wizard(setupFlow(context()), context(), {}, { ...prompter, note: (message) => notes.push(message) });
+    await wizard(setupFlow(context()), context(), { mode: 'step' }, { ...prompter, note: (message) => notes.push(message) });
     assert.match(notes.join('\n'), /already recorded/);
   });
 
@@ -195,7 +197,7 @@ describe('setup flow', () => {
     const ctx = context({ fixLines: ['    global:  credential.https://github.com.helper'] });
     const prompter = scripted([['account', 'octocat'], ['guard', true], ['fix', true], ['review', 'run']]);
     let initial: unknown;
-    const outcome = await wizard(setupFlow(ctx), ctx, {}, { ...prompter, ask: async (step, asked) => {
+    const outcome = await wizard(setupFlow(ctx), ctx, { mode: 'step' }, { ...prompter, ask: async (step, asked) => {
       if (step.id === 'fix') initial = asked.initial;
       return prompter.ask(step, asked);
     } });
@@ -215,7 +217,7 @@ describe('setup flow', () => {
     const ctx = context({ pinned: 'octocat', cwd: '/work/project' });
     const prompter = scripted([['account', 'octocat'], ['guard', true], ['review', 'run']]);
     let initial: unknown;
-    const outcome = await wizard(setupFlow(ctx), ctx, {}, { ...prompter, ask: async (step, asked) => {
+    const outcome = await wizard(setupFlow(ctx), ctx, { mode: 'step' }, { ...prompter, ask: async (step, asked) => {
       if (step.id === 'account') initial = asked.initial;
       return prompter.ask(step, asked);
     } });
@@ -310,9 +312,12 @@ describe('setup flow', () => {
     assert.equal(reviewOf({ owner: 'octo-org', allowed: ['octo-org'] }).settled, true);
     assert.equal(reviewOf({ guard: 'off' }, { account: 'octocat', guard: true }).settled, false);
     assert.equal(reviewOf({}, { account: 'octocat', gh: true }).settled, false);
-    assert.equal(reviewOf({ upstream: { supported: true, enabled: null, branch: 'main' } }).settled, false,
-      'the upstream question is still something to offer');
-    assert.equal(reviewOf({ upstream: { supported: true, enabled: false, branch: 'main' } }).settled, false);
+    assert.equal(reviewOf({ upstream: { supported: true, enabled: null, branch: 'main' } }).settled, true,
+      'leaving the upstream question unanswered is still nothing this run must do');
+    assert.match(reviewOf({ upstream: { supported: true, enabled: null, branch: 'main' } }).notes.join('\n'),
+      /optional: push new branches without -u: repown setup --auto-upstream/);
+    assert.equal(reviewOf({ upstream: { supported: true, enabled: false, branch: 'main' } }).settled, true);
+    assert.doesNotMatch(reviewOf({}).notes.join('\n'), /optional: push new branches/);
     assert.equal(reviewOf({ upstream: { supported: false, enabled: null, branch: 'main' } }).settled, true,
       'old git is not offered the question');
     assert.match(reviewOf({}).title, /already set up/);
@@ -362,7 +367,7 @@ describe('setup flow', () => {
     const feature = context({ upstream: { supported: false, enabled: null, branch: 'feature' } });
     assert.equal(stepOf(feature, 'upstream').when?.({}, feature), false);
     const prompter = scripted([['account', 'octocat'], ['guard', true], ['review', 'decline']]);
-    await wizard(setupFlow(feature), feature, {}, prompter);
+    await wizard(setupFlow(feature), feature, { mode: 'step' }, prompter);
     assert.deepEqual(prompter.asked, ['account', 'guard']);
     const review = setupFlow(feature).review({ account: 'octocat', guard: true }, feature);
     assert.match(review.notes.join('\n'), /the first push of a new branch needs: git push -u origin feature/);
@@ -375,6 +380,139 @@ describe('setup flow', () => {
     assert.match(quiet.notes.join('\n'), /the first push of a new branch needs: git push -u origin <branch>/);
     const forced = planCommands({ account: 'octocat', upstream: true, guard: false }, feature);
     assert.ok(!forced.some((command) => command.argv.includes('push.autoSetupRemote')));
+  });
+
+  test('S11 the first question is how setup should work, and Recommended is the default', async () => {
+    const ctx = context();
+    assert.equal(setupFlow(ctx).steps[0]?.id, 'mode');
+    const step = stepOf(ctx, 'mode');
+    assert.equal(step.kind, 'select');
+    assert.equal(step.flag, '--step-by-step');
+    assert.equal(wording(step.message, {}, ctx), 'How should setup work?');
+    assert.equal(await step.initial?.({}, ctx), 'recommended');
+    const choices = step.choices?.({}, ctx) ?? [];
+    assert.deepEqual(choices.map((choice) => [choice.value, choice.label]), [
+      ['recommended', 'Recommended'], ['step', 'Step by step'],
+    ]);
+    assert.equal(choices[0]?.hint, 'asks only what it must, fills in the rest, and shows every step before running');
+    assert.equal(choices[1]?.hint, 'asks every question, and explains each change before making it');
+    const recommended = scripted([['mode', 'recommended'], ['account', 'octocat'], ['review', 'decline']]);
+    await wizard(setupFlow(ctx), ctx, {}, recommended);
+    assert.deepEqual(recommended.asked, ['mode', 'account']);
+    const stepped = scripted([['account', 'octocat'], ['guard', true], ['review', 'decline']]);
+    await wizard(setupFlow(ctx), ctx, { mode: 'step' }, stepped);
+    assert.deepEqual(stepped.asked, ['account', 'guard'], 'a given mode is not asked');
+  });
+
+  test('S12 Recommended asks only the account; the filled steps show, and one can be changed', async () => {
+    const gh = ok({
+      accounts: [{ login: 'octocat', active: false }, { login: 'octo-work', active: true }],
+      active: 'octo-work',
+    });
+    const ctx = context({ gh, owner: 'octo-org', upstream: { supported: true, enabled: null, branch: 'main' } });
+    const prompter = scripted([
+      ['mode', 'recommended'], ['account', 'octocat'], ['review', 'edit'],
+      ['pick', 'guard'], ['guard', false], ['review', 'run'],
+    ]);
+    let offered: string[] = [];
+    const outcome = await wizard(setupFlow(ctx), ctx, {}, {
+      ...prompter,
+      pickStep: async (steps) => { offered = steps.map((step) => step.id); return prompter.pickStep(steps); },
+    });
+    assert.equal(outcome.status, 'run');
+    if (outcome.status !== 'run') return;
+    assert.deepEqual(prompter.asked, ['mode', 'account', 'guard']);
+    assert.deepEqual(offered, ['mode', 'account', 'gh', 'allowOwner', 'guard', 'upstream']);
+    const shown = prompter.reviews[0]!.steps.map((item) => item.command).join('\n');
+    assert.match(shown, /repown\.allowOwner octo-org/);
+    assert.match(shown, /repown use octocat --gh/);
+    assert.match(shown, /repown guard on/);
+    assert.match(shown, /push\.autoSetupRemote true/);
+    assert.equal(outcome.answers['guard'], false);
+    assert.equal(outcome.answers['gh'], true);
+    assert.ok(!argvOf(outcome.answers, ctx).some((argv) => argv[0] === 'guard'));
+    assert.ok(argvOf(outcome.answers, ctx).some((argv) => argv.includes('--gh')));
+  });
+
+  test('S13 Recommended still asks to sign in to gh, and the default is No', async () => {
+    const gh = ok({ accounts: [{ login: 'octo-work', active: true }], active: 'octo-work' });
+    const ctx = context({ gh, upstream: { supported: true, enabled: null, branch: 'main' } });
+    const picked = { account: 'octocat', mode: 'recommended' };
+    assert.equal(stepOf(ctx, 'gh').auto?.(picked, ctx), false);
+    assert.equal(await stepOf(ctx, 'gh').initial?.(picked, ctx), false);
+    let initial: unknown;
+    const prompter = scripted([['mode', 'recommended'], ['account', 'octocat'], ['gh', false], ['review', 'run']]);
+    const outcome = await wizard(setupFlow(ctx), ctx, {}, {
+      ...prompter,
+      ask: async (step, asked) => {
+        if (step.id === 'gh') initial = asked.initial;
+        return prompter.ask(step, asked);
+      },
+    });
+    assert.equal(initial, false);
+    assert.deepEqual(prompter.asked, ['mode', 'account', 'gh']);
+    assert.equal(outcome.status, 'run');
+    if (outcome.status !== 'run') return;
+    assert.ok(!argvOf(outcome.answers, ctx).some((argv) => argv.includes('--gh')));
+    assert.ok(argvOf(outcome.answers, ctx).some((argv) => argv[0] === 'guard'));
+    assert.ok(argvOf(outcome.answers, ctx).some((argv) => argv.includes('push.autoSetupRemote')));
+  });
+
+  test('S14 Recommended still asks fix, and the default is No', async () => {
+    const ctx = context({ fixLines: ['    global:  credential.https://github.com.helper'] });
+    let initial: unknown;
+    const prompter = scripted([['mode', 'recommended'], ['account', 'octocat'], ['fix', false], ['review', 'run']]);
+    const outcome = await wizard(setupFlow(ctx), ctx, {}, {
+      ...prompter,
+      ask: async (step, asked) => {
+        if (step.id === 'fix') initial = asked.initial;
+        return prompter.ask(step, asked);
+      },
+    });
+    assert.equal(initial, false);
+    assert.deepEqual(prompter.asked, ['mode', 'account', 'fix']);
+    assert.equal(outcome.status, 'run');
+    if (outcome.status !== 'run') return;
+    assert.ok(!argvOf(outcome.answers, ctx).some((argv) => argv[0] === 'fix'));
+    assert.ok(argvOf(outcome.answers, ctx).some((argv) => argv[0] === 'guard'));
+  });
+
+  test('S15 a recorded account given up front uses Recommended and asks nothing before the review', async () => {
+    const gh = ok({
+      accounts: [{ login: 'octocat', active: false }, { login: 'octo-work', active: true }],
+      active: 'octo-work',
+    });
+    const ctx = context({
+      gh, owner: 'octo-org', guard: 'off',
+      upstream: { supported: true, enabled: null, branch: 'main' },
+    });
+    const prompter = scripted([['review', 'decline']]);
+    await wizard(setupFlow(ctx), ctx, { account: 'octocat', mode: 'recommended' }, prompter);
+    assert.deepEqual(prompter.asked, []);
+    const commands = prompter.reviews[0]!.steps.map((item) => item.command).join('\n');
+    assert.match(commands, /allowOwner/);
+    assert.match(commands, /guard on/);
+    assert.match(commands, /--gh/);
+    assert.match(commands, /push\.autoSetupRemote/);
+    assert.equal(prompter.reviews[0]!.settled, false);
+  });
+
+  test('an otherwise settled clone names --auto-upstream, unless Recommended will set it', async () => {
+    const ctx = context({
+      pinned: 'octocat', pinIntact: true, guard: 'on',
+      upstream: { supported: true, enabled: null, branch: 'main' },
+    });
+    const quiet = setupFlow(ctx).review({ account: 'octocat', upstream: false }, ctx);
+    assert.equal(quiet.settled, true, 'No to upstream is still nothing this run must do');
+    assert.match(quiet.notes.join('\n'), /optional: push new branches without -u: repown setup --auto-upstream/);
+    const already = context({ pinned: 'octocat', pinIntact: true, guard: 'on' });
+    const done = setupFlow(already).review({ account: 'octocat' }, already);
+    assert.doesNotMatch(done.notes.join('\n'), /optional: push new branches/);
+    const prompter = scripted([['review', 'decline']]);
+    await wizard(setupFlow(ctx), ctx, { account: 'octocat', mode: 'recommended' }, prompter);
+    assert.deepEqual(prompter.asked, []);
+    assert.equal(prompter.reviews[0]!.settled, false);
+    assert.ok(prompter.reviews[0]!.steps.some((item) => item.command.includes('push.autoSetupRemote')));
   });
 
   test('S10 an effective push.autoSetupRemote is not asked and not planned', async () => {
@@ -894,7 +1032,17 @@ describe('repown setup, without a terminal', () => {
     assert.equal(run.status, 0);
     assert.match(run.stdout, /--no-input/);
     assert.match(run.stdout, /--auto-upstream/);
+    assert.match(run.stdout, /--step-by-step/);
     assert.doesNotMatch(localConfig(at), /repown/);
+  });
+
+  test('S17 --step-by-step --no-input is a usage error and writes nothing', () => {
+    record(at, 'octocat', 'octocat@example.invalid');
+    const before = localConfig(at);
+    const run = repown(['setup', 'octocat', '--step-by-step', '--no-input'], at.box.dir);
+    assert.equal(run.status, 2);
+    assert.match(run.stderr, /--step-by-step needs a terminal to ask/);
+    assert.equal(localConfig(at), before);
   });
 
   test('S20 --auto-upstream answers yes in this clone; --no-input without it stays no', () => {
@@ -937,9 +1085,9 @@ describe('repown setup, on a terminal (scripted)', () => {
   beforeEach(() => {
     at = home();
     record(at, 'octocat', 'octocat@example.invalid');
-    // These scripts answer the pin and the guard. On git 2.37+ an unset
-    // push.autoSetupRemote would be asked, and the clone would not count as
-    // already set up, so set it the way a finished setup would.
+    // These scripts are step by step, about the pin and the guard. On git 2.37+
+    // an unset push.autoSetupRemote would be another question, so set it the
+    // way a finished setup would. Recommended would fill that answer itself.
     at.box.git('config', '--local', 'push.autoSetupRemote', 'true');
     savedPath = process.env['PATH'];
     process.env['PATH'] = (savedPath ?? '').split(delimiter).filter((dir) => !ghOn(dir)).join(delimiter);
@@ -954,28 +1102,54 @@ describe('repown setup, on a terminal (scripted)', () => {
     runSetup({ positional: [], flags: new Map([['cwd', at.box.dir]]) }, { prompter, interactive: true });
   const run = (script: Entry[]): Promise<number> => runWith(scripted(script));
 
+  test('S15 setup <recorded account> asks nothing before the review', async () => {
+    const supported = gitSupportsAutoUpstream(at.box.git('--version'));
+    if (supported) at.box.git('config', '--local', '--unset', 'push.autoSetupRemote');
+    const prompter = scripted([['review', 'decline']]);
+    const code = await runSetup(
+      { positional: ['octocat'], flags: new Map<string, string | boolean>([['cwd', at.box.dir]]) },
+      { prompter, interactive: true },
+    );
+    assert.equal(code, 1);
+    assert.deepEqual(prompter.asked, []);
+    const commands = prompter.reviews[0]!.steps.map((step) => step.command).join('\n');
+    assert.match(commands, /guard on/);
+    if (supported) assert.match(commands, /push\.autoSetupRemote/);
+    assert.equal(prompter.reviews[0]!.settled, false);
+  });
+
+  test('--step-by-step skips the mode question and asks the guard', async () => {
+    const prompter = scripted([['account', 'octocat'], ['guard', false], ['review', 'decline']]);
+    const code = await runSetup(
+      { positional: [], flags: new Map<string, string | boolean>([['cwd', at.box.dir], ['step-by-step', true]]) },
+      { prompter, interactive: true },
+    );
+    assert.equal(code, 1);
+    assert.deepEqual(prompter.asked, ['account', 'guard']);
+  });
+
   test('Run pins the clone and turns the guard on', async () => {
-    assert.equal(await run([['account', 'octocat'], ['guard', true], ['review', 'run']]), 0);
+    assert.equal(await run([['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run']]), 0);
     assert.match(localConfig(at), /account = octocat/);
     assert.ok(existsSync(hook(at)));
   });
 
   test('already set up: Done exits 0 and writes nothing; Apply again pins as before', async () => {
-    const first = scripted([['account', 'octocat'], ['guard', false], ['review', 'run']]);
+    const first = scripted([['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'run']]);
     assert.equal(await runWith(first), 0);
     assert.equal(first.reviews[0]!.settled, false, 'not set up before the first run');
     const before = localConfig(at);
-    const again = scripted([['account', 'octocat'], ['guard', false], ['review', 'done']]);
+    const again = scripted([['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'done']]);
     assert.equal(await runWith(again), 0);
     assert.equal(again.reviews[0]!.settled, true, 'the clone, read back from git, counts as set up');
     assert.equal(localConfig(at), before);
-    assert.equal(await run([['account', 'octocat'], ['guard', false], ['review', 'run']]), 0);
+    assert.equal(await run([['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'run']]), 0);
     assert.equal(localConfig(at), before);
   });
 
   test('Decline exits 1 and writes nothing', async () => {
     const before = localConfig(at);
-    assert.equal(await run([['account', 'octocat'], ['guard', true], ['review', 'decline']]), 1);
+    assert.equal(await run([['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'decline']]), 1);
     assert.equal(localConfig(at), before);
     assert.equal(existsSync(hook(at)), false);
   });
@@ -983,8 +1157,8 @@ describe('repown setup, on a terminal (scripted)', () => {
   test('Decline and cancel each end with one line: nothing changed, and how to start again', async () => {
     const endings: [string, boolean | undefined][] = [];
     const closing = (script: Entry[]): Prompter => ({ ...scripted(script), outro: (message, cancelled) => { endings.push([message, cancelled]); } });
-    assert.equal(await runWith(closing([['account', 'octocat'], ['guard', true], ['review', 'decline']])), 1);
-    assert.equal(await runWith(closing([['account', CANCEL]])), 130);
+    assert.equal(await runWith(closing([['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'decline']])), 1);
+    assert.equal(await runWith(closing([['mode', CANCEL]])), 130);
     assert.deepEqual(endings, [
       ['Declined: nothing was changed. Run repown setup again any time.', false],
       ['Cancelled: nothing was changed. Run repown setup again any time.', true],
@@ -993,8 +1167,8 @@ describe('repown setup, on a terminal (scripted)', () => {
 
   test('Cancel at a step or at the review exits 130 and writes nothing', async () => {
     const before = localConfig(at);
-    assert.equal(await run([['account', CANCEL]]), 130);
-    assert.equal(await run([['account', 'octocat'], ['guard', true], ['review', CANCEL]]), 130);
+    assert.equal(await run([['mode', CANCEL]]), 130);
+    assert.equal(await run([['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', CANCEL]]), 130);
     assert.equal(localConfig(at), before);
   });
 

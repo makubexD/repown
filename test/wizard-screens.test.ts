@@ -21,7 +21,7 @@ const twoAccounts = {
 describe('repown setup, played with key presses', () => {
   test('S1 a clone already set up says so, and Done changes nothing', async () => {
     const ctx = setupContext({ pinned: 'octocat', guard: 'on', pinIntact: true });
-    const { outcome, screen } = await play(ctx, [[enter], [enter]]);
+    const { outcome, screen } = await play(ctx, [[down, enter], [enter], [enter]]);
     assert.equal(outcome.status, 'done', screen);
     assert.match(screen, /right now this clone is pinned to octocat/);
     assert.doesNotMatch(screen, /pinned to octocat now/);
@@ -36,7 +36,7 @@ describe('repown setup, played with key presses', () => {
       addresses: ok(new Map([['a@example.invalid', 3], ['b@example.invalid', 1], ['c@example.invalid', 9]])),
       suggest: async () => ({ name: 'Octo Work', email: 'work@example.invalid' }),
     });
-    const { outcome, screen } = await play(ctx, [[...typed('octo-work'), enter], [enter], [enter], [enter], [enter], [enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[down, enter], [...typed('octo-work'), enter], [enter], [enter], [enter], [enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     for (const hint of ['the name you sign in with', 'anyone who can see the repository sees it', 'anyone who can see the repository can read it']) {
       const lines = linesWith(screen, hint);
@@ -52,7 +52,7 @@ describe('repown setup, played with key presses', () => {
 
   test('G1 an account gh does not know is offered a sign-in', async () => {
     const gh = ok({ accounts: [{ login: 'octo-work', active: true }], active: 'octo-work' });
-    const { outcome, screen } = await play(setupContext({ gh }), [[enter], [esc]]);
+    const { outcome, screen } = await play(setupContext({ gh }), [[down, enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     const plain = screen.replace(/\n│\s*/g, ' ');
     assert.match(plain, /Sign in to gh as octocat too\?/);
@@ -62,7 +62,7 @@ describe('repown setup, played with key presses', () => {
 
   test('S3 gh as the credential helper is explained in plain words', async () => {
     const ctx = setupContext({ fixLines: ['  global  credential.https://github.com.helper = !gh auth git-credential'] });
-    const { outcome, screen } = await play(ctx, [[enter], [enter], [up, enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[down, enter], [enter], [enter], [up, enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /gh answers git's sign-in requests with its active account only/);
     assert.match(screen, /Stop gh answering git's sign-in requests/);
@@ -70,42 +70,73 @@ describe('repown setup, played with key presses', () => {
 
   test('S4 on Azure DevOps the review says who decides the push sign-in', async () => {
     const ctx = setupContext({ host: 'azdo', owner: 'octo-org', credentialPinned: false });
-    const { outcome, screen } = await play(ctx, [[enter], [enter], [enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[down, enter], [enter], [enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /repown pins the sign-in on GitHub only/);
     assert.doesNotMatch(screen, /not pinned by repown on this host/);
   });
 
   test('S5 a hook another tool owns comes with what to do about it', async () => {
-    const { outcome, screen } = await play(setupContext({ guard: 'foreign' }), [[enter], [esc]]);
+    const { outcome, screen } = await play(setupContext({ guard: 'foreign' }), [[down, enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /another tool \(husky, for example\) owns/);
     assert.match(screen, /repown guard check/);
   });
 
   test('S6 a login already recorded says how to pick it', async () => {
-    const { outcome, screen } = await play(setupContext(), [[down, enter], [...typed('OctoCat'), enter], [esc]]);
+    const { outcome, screen } = await play(setupContext(), [[down, enter], [down, enter], [...typed('OctoCat'), enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     assert.ok(screen.includes('"octocat" is already recorded on this machine: use it by that name'), screen);
     assert.doesNotMatch(screen, /type < to go back and pick it/, 'the same words serve a flag, where there is no prompt');
   });
 
   test('S6 a login with a space is refused with the characters allowed', async () => {
-    const { outcome, screen } = await play(setupContext(), [[down, enter], [...typed('octo cat'), enter], [esc]]);
+    const { outcome, screen } = await play(setupContext(), [[down, enter], [down, enter], [...typed('octo cat'), enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /use letters, digits and \. _ @ - only/);
   });
 
   test('S7 the first question asked has no Back', async () => {
     const recorded = await play(setupContext(), [[esc]]);
+    assert.match(recorded.screen, /How should setup work\?/);
     assert.doesNotMatch(recorded.screen, /← Back/);
     const fresh = await play(setupContext({ recorded: {} }), [[esc]]);
+    assert.match(fresh.screen, /How should setup work\?/);
     assert.doesNotMatch(fresh.screen, /type < to go back/);
+  });
+
+  test('Recommended asks how setup should work, then only the account, and the review lists the rest', async () => {
+    const gh = ok({
+      accounts: [{ login: 'octocat', active: false }, { login: 'octo-work', active: true }],
+      active: 'octo-work',
+    });
+    const ctx = setupContext({
+      gh, owner: 'octo-org', guard: 'off',
+      upstream: { supported: true, enabled: null, branch: 'main' },
+    });
+    const { outcome, screen } = await play(ctx, [[down], [up, enter], [enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    const opening = screen.split('Which account should this clone belong to?')[0] ?? '';
+    assert.match(opening, /How should setup work\?/);
+    assert.doesNotMatch(opening, /← Back/);
+    assert.ok(marked(opening, 'Recommended'), opening);
+    const plain = screen.replace(/│/g, ' ').replace(/\s+/g, ' ');
+    assert.match(plain, /asks only what it must, fills in the rest, and shows every step before running/);
+    assert.match(plain, /asks every question, and explains each change before making it/);
+    assert.doesNotMatch(screen, /Let this clone push to it\?/);
+    assert.doesNotMatch(screen, /Turn on the push guard\?/);
+    assert.doesNotMatch(screen, /Push new branches without -u\?/);
+    assert.doesNotMatch(screen, /Also make this account gh's active account\?/);
+    assert.match(screen, /Let this clone push to octo-org's repositories/);
+    assert.match(screen, /make it gh's active account/);
+    assert.match(screen, /Turn on the push guard: each push is checked first/);
+    assert.match(screen, /Push new branches without -u \(this clone only\)/);
+    assert.match(screen, /git config --local push\.autoSetupRemote true/);
   });
 
   test('S8 Change an answer can return to the review', async () => {
     const ctx = setupContext({ owner: 'octo-org' });
-    const { outcome, screen } = await play(ctx, [[enter], [enter], [enter], [down, down, enter], [up, enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[down, enter], [enter], [enter], [enter], [down, down, enter], [up, enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /← Back to the review/);
     assert.ok(screen.split('Review: nothing has changed yet').length > 2, 'the review is shown again\n' + screen);
@@ -113,21 +144,21 @@ describe('repown setup, played with key presses', () => {
 
   test('S9 a new GitHub account without a profile gets an example address', async () => {
     const ctx = setupContext({ recorded: {}, owner: null });
-    const { outcome, screen } = await play(ctx, [[...typed('octocat'), enter], [enter], [enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[down, enter], [...typed('octocat'), enter], [enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen.replace(/\n│  /g, ' '), /github\.com\/settings\/emails, like 1234\+octocat@users\.noreply\.github\.com/);
   });
 
   test('S10 moving a clone to another account says what changes', async () => {
     const ctx = setupContext({ pinned: 'octo-work', recorded: twoAccounts, addresses: err('git log failed') });
-    const { outcome, screen } = await play(ctx, [[up, enter], [enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[down, enter], [up, enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /This clone moves from octo-work to octocat/);
     assert.match(screen, /commits could not be read/);
   });
 
   test('S11 the hosts are named so a newcomer can tell them apart', async () => {
-    const { outcome, screen } = await play(setupContext({ recorded: {} }), [[...typed('octocat'), enter], [esc]]);
+    const { outcome, screen } = await play(setupContext({ recorded: {} }), [[down, enter], [...typed('octocat'), enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /another host \(GitLab, Bitbucket, self-hosted\)/);
     assert.doesNotMatch(screen, /this host/);
@@ -135,7 +166,7 @@ describe('repown setup, played with key presses', () => {
 
   test('S12 in a narrow window every line fits, and hints stay in the gutter', async () => {
     const ctx = setupContext({ pinned: 'octocat', guard: 'on', pinIntact: true });
-    const keys = [[down, enter], [...typed('octo-work'), enter], [enter], [enter], [...typed('octo-work@example.invalid'), enter], [down, enter], [esc]];
+    const keys = [[down, enter], [down, enter], [...typed('octo-work'), enter], [enter], [enter], [...typed('octo-work@example.invalid'), enter], [down, enter], [esc]];
     const { outcome, screen } = await play(ctx, keys, { columns: 60 });
     assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /This clone moves from octocat to octo-work/);
@@ -149,7 +180,7 @@ describe('repown setup, played with key presses', () => {
   });
 
   test('S13 Back says where it goes, since ↑ from the first choice lands on it', async () => {
-    const { outcome, screen } = await play(setupContext(), [[enter], [up], [esc]]);
+    const { outcome, screen } = await play(setupContext(), [[down, enter], [enter], [up], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /← Back \(to the previous question\)/);
   });
@@ -159,7 +190,7 @@ describe('repown setup, played with key presses', () => {
       recorded: {}, owner: 'octocat', ownerIsUser: true, detected: detectedPair,
       suggest: async () => ({ name: 'Octo Cat', email: 'octocat@example.invalid' }),
     });
-    const { outcome, screen } = await play(ctx, [[enter], [enter], [enter], [enter], [enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[down, enter], [enter], [enter], [enter], [enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     const first = screen.slice(0, screen.indexOf('Where is this account hosted?'));
     assert.match(first, /right now this clone isn't pinned to any account/);
@@ -184,7 +215,7 @@ describe('repown setup, played with key presses', () => {
       recorded: {}, owner: 'octo-org', ownerIsUser: false,
       detected: [{ login: 'octo-work', from: ['signed in to gh'] }],
     });
-    const { outcome, screen } = await play(ctx, [[esc]]);
+    const { outcome, screen } = await play(ctx, [[down, enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     assert.match(screen, /octo-work/);
     assert.doesNotMatch(screen, /octo-org/);
@@ -197,9 +228,10 @@ describe('repown setup, played with key presses', () => {
       recorded: {}, owner: 'octocat', ownerIsUser: null,
       detected: [{ login: 'octocat', from: ['owns this repository'] }],
     });
-    const { outcome, screen } = await play(ctx, [[up], [esc]]);
+    const { outcome, screen } = await play(ctx, [[down, enter], [up], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
-    const opened = screen.split('↑/↓ to navigate')[0] ?? '';
+    const account = screen.slice(screen.indexOf('Which account should this clone belong to?'));
+    const opened = account.split('↑/↓ to navigate')[0] ?? '';
     assert.ok(marked(opened, 'a new account'), opened);
     assert.ok(!marked(opened, 'octocat'), opened);
     assert.match(screen, /octocat \(owns this repository; may be an organisation\)/);
@@ -207,7 +239,7 @@ describe('repown setup, played with key presses', () => {
 
   test('D9 Back from the next question keeps the detected account selected', async () => {
     const ctx = setupContext({ recorded: {}, owner: 'octocat', ownerIsUser: true, detected: detectedPair });
-    const { outcome, screen } = await play(ctx, [[down, enter], [up, enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[down, enter], [down, enter], [up, enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     const restored = screen.split('Where is this account hosted?').at(-1) ?? '';
     assert.ok(marked(restored, 'octo-work'), restored);
@@ -221,7 +253,7 @@ describe('repown setup, played with key presses', () => {
       machineIdentity: { name: 'Octo Work', email: 'octo-work@example.invalid' },
       suggest: async () => ({ name: 'Octo Cat', email: 'octocat@example.invalid' }),
     });
-    const { outcome, screen } = await play(ctx, [[enter], [enter], [enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[down, enter], [enter], [enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     const flat = screen.replace(/│/g, ' ').replace(/\s+/g, ' ');
     assert.match(flat, /not this machine's default name \(Octo Work\), unless this account uses it/);
@@ -235,7 +267,7 @@ describe('repown setup, played with key presses', () => {
 
   test('pushing a new branch without -u is one question, default Yes, and a review step', async () => {
     const ctx = setupContext({ upstream: { supported: true, enabled: null, branch: 'main' } });
-    const { outcome, screen } = await play(ctx, [[enter], [enter], [enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[down, enter], [enter], [enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     const plain = screen.replace(/\n│\s*/g, ' ');
     assert.ok(screen.indexOf('Turn on the push guard?') < screen.indexOf('Push new branches without -u?'), screen);
@@ -250,7 +282,7 @@ describe('repown setup, played with key presses', () => {
       pinned: 'octocat', guard: 'on', pinIntact: true,
       upstream: { supported: false, enabled: null, branch: 'main' },
     });
-    const { outcome, screen } = await play(ctx, [[enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[down, enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     assert.doesNotMatch(screen, /Push new branches without -u/);
     const plain = screen.replace(/\n│\s*/g, ' ');
@@ -265,7 +297,7 @@ describe('repown setup, played with key presses', () => {
       },
       owner: 'octocat',
     });
-    const { outcome, screen } = await play(ctx, [[esc]]);
+    const { outcome, screen } = await play(ctx, [[down, enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     assert.ok(marked(screen, 'octocat'), screen);
     assert.ok(!marked(screen, 'octo-work'), screen);
@@ -280,7 +312,7 @@ describe('D7 on the plain prompter, at the default width', () => {
       machineIdentity: { name: 'Octo Work', email: 'octo-work@example.invalid' },
       suggest: async () => ({ name: 'Octo Cat', email: 'octocat@example.invalid' }),
     });
-    const screen = await playPlain(ctx, '\n\n\n\n');
+    const screen = await playPlain(ctx, '\n\n\n\n\n');
     const flat = screen.replace(/\s+/g, ' ');
     assert.match(flat, /not this machine's default name \(Octo Work\), unless this account uses it/);
     assert.match(flat, /not this machine's default address \(octo-work@example\.invalid\)/);

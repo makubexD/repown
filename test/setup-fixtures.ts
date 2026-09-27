@@ -41,9 +41,9 @@ function baseline(): Omit<SetupContext, 'recorded' | 'addresses' | 'suggest'> {
     redirected: false,
     fixLines: null,
     machineIdentity: { name: null, email: null },
-    // Already on, so these screens are not the upstream question. A clone where
-    // git can set it and the effective value is not true still has something to
-    // offer, and is not settled; a test for that question passes enabled: null.
+    // Already on, so these screens are not the upstream question. A test for that
+    // question passes enabled: null. An otherwise settled clone where it is still
+    // offered counts as settled and names `repown setup --auto-upstream`.
     upstream: { supported: true, enabled: true, branch: 'main' },
   };
 }

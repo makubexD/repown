@@ -199,6 +199,38 @@ describe('repown setup, played with key presses', () => {
     assert.ok(marked(restored, 'octo-work'), restored);
     assert.ok(!marked(restored, 'octocat'), restored);
   });
+
+  test('D7 a new account shows the machine default, and the typed value stays the profile suggestion', async () => {
+    const ctx = setupContext({
+      recorded: {}, owner: 'octocat', ownerIsUser: true,
+      detected: [{ login: 'octocat', from: ['owns this repository'] }],
+      machineIdentity: { name: 'Octo Work', email: 'octo-work@example.invalid' },
+      suggest: async () => ({ name: 'Octo Cat', email: 'octocat@example.invalid' }),
+    });
+    const { outcome, screen } = await play(ctx, [[enter], [enter], [enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    const machine = 'this machine\'s default is Octo Work <octo-work@example.invalid>; type it only if this account should use it';
+    const flat = screen.replace(/\n│  /g, ' ');
+    assert.equal(flat.split(machine).length - 1, 2, screen);
+    assert.match(screen, /Octo Cat█/);
+    assert.match(screen, /octocat@example\.invalid█/);
+    assert.doesNotMatch(screen, /Octo Work█/);
+    assert.doesNotMatch(screen, /octo-work@example\.invalid█/);
+  });
+
+  test('D11 a recorded owner is preselected over the account recorded first', async () => {
+    const ctx = setupContext({
+      recorded: {
+        'octo-work': { name: 'Octo Work', email: 'octo-work@example.invalid', host: 'github' },
+        octocat: { name: 'Octo Cat', email: 'octocat@example.invalid', host: 'github' },
+      },
+      owner: 'octocat',
+    });
+    const { outcome, screen } = await play(ctx, [[esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    assert.ok(marked(screen, 'octocat'), screen);
+    assert.ok(!marked(screen, 'octo-work'), screen);
+  });
 });
 
 const detectedPair = [

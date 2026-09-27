@@ -368,6 +368,61 @@ describe('setup flow', () => {
     const cased = context({ owner: 'Octocat', ownerIsUser: true });
     assert.equal(stepOf(cased, 'newAccount').initial?.({}, cased), undefined);
   });
+
+  test('D7 a new account is shown the machine default, which is never filled in', async () => {
+    const machine = { name: 'Octo Work', email: 'octo-work@example.invalid' };
+    const line = 'this machine\'s default is Octo Work <octo-work@example.invalid>; type it only if this account should use it';
+    const ctx = context({
+      recorded: {}, owner: 'octocat', ownerIsUser: true, machineIdentity: machine,
+      suggest: async () => ({ name: 'Octo Cat', email: 'octocat@example.invalid' }),
+    });
+    const fresh = { account: NEW_ACCOUNT, newAccount: 'octocat', host: 'github' };
+    const name = stepOf(ctx, 'name');
+    const email = stepOf(ctx, 'email');
+    assert.equal(name.detail?.(fresh, ctx), line);
+    const shown = email.detail?.(fresh, ctx) ?? '';
+    assert.equal(shown.startsWith(line + ' · '), true, shown);
+    assert.match(shown, /tip: to keep your own address private[\s\S]*1234\+octocat@users\.noreply\.github\.com/);
+    assert.equal(await name.initial?.(fresh, ctx), 'Octo Cat');
+    assert.equal(await email.initial?.(fresh, ctx), 'octocat@example.invalid');
+
+    const unnamed = context({ recorded: {}, machineIdentity: { name: null, email: 'octo-work@example.invalid' } });
+    const emailOnly = 'this machine\'s default is octo-work@example.invalid; type it only if this account should use it';
+    assert.equal(stepOf(unnamed, 'name').detail?.(fresh, unnamed), emailOnly);
+    assert.equal(stepOf(unnamed, 'email').detail?.(fresh, unnamed)?.startsWith(emailOnly + ' · '), true);
+
+    const recorded = context({ machineIdentity: machine });
+    const known = { account: 'octocat' };
+    assert.equal(stepOf(recorded, 'name').detail?.(known, recorded), undefined);
+    assert.doesNotMatch(stepOf(recorded, 'email').detail?.(known, recorded) ?? '', /this machine's default/);
+
+    const noEmail = context({ recorded: {}, machineIdentity: { name: 'Octo Work', email: null } });
+    assert.equal(stepOf(noEmail, 'name').detail?.(fresh, noEmail), undefined);
+    const tipOnly = stepOf(noEmail, 'email').detail?.(fresh, noEmail) ?? '';
+    assert.doesNotMatch(tipOnly, /this machine's default/);
+    assert.match(tipOnly, /noreply/);
+
+    const bare = context({ recorded: {}, machineIdentity: machine });
+    const typed = { account: NEW_ACCOUNT, newAccount: 'octocat' };
+    assert.equal(await stepOf(bare, 'name').initial?.(typed, bare), 'octocat');
+    assert.equal(await stepOf(bare, 'email').initial?.(typed, bare), undefined);
+  });
+
+  test('D11 a recorded owner is preselected over the first recorded account', () => {
+    const recorded = {
+      'octo-work': { name: 'Octo Work', email: 'octo-work@example.invalid', host: 'github' },
+      octocat: { name: 'Octo Cat', email: 'octocat@example.invalid', host: 'github' },
+    };
+    const ctx = context({ recorded, owner: 'octocat', ownerIsUser: null });
+    assert.equal(stepOf(ctx, 'account').initial?.({}, ctx), 'octocat');
+    const pinned = context({ recorded, owner: 'octocat', pinned: 'octo-work' });
+    assert.equal(stepOf(pinned, 'account').initial?.({}, pinned), 'octo-work');
+    const spelled = context({
+      recorded: { 'octo-work': recorded['octo-work'], Octocat: recorded.octocat },
+      owner: 'octocat',
+    });
+    assert.equal(stepOf(spelled, 'account').initial?.({}, spelled), 'Octocat');
+  });
 });
 
 function stepOf(ctx: SetupContext, id: string) {

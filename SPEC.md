@@ -36,6 +36,7 @@ test/wizard-setup.test.ts; `npm run build` and `npm test` pass.
 | D8 | "a new account" picked | Login with no default | Login defaults to the owner only when it's a confirmed User |
 | D9 | Picks a detected account, then ← Back | n/a | Back at the list with that choice kept |
 | D10 | `repown setup octocat --no-input …` | Works | Unchanged |
+| D11 | Later clone: origin's owner `octocat` already recorded, `octo-work` recorded first, clone not pinned | First recorded (`octo-work`) preselected | The recorded owner `octocat` is preselected, unless the clone is pinned to another recorded account |
 
 ## Open questions
 None.

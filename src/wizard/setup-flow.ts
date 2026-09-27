@@ -104,11 +104,12 @@ function steps(ctx: SetupContext): Step<SetupContext>[] {
       choices: () => hostChoices(), initial: () => ctx.host },
     { id: 'name', kind: 'text', flag: '--name', message: 'Your name, as your commits show it',
       hint: 'e.g. Octo Cat; anyone who can see the repository sees it', when: (answers) => isNew(answers), validate: required,
-      initial: async (answers) => (await ctx.suggest(accountOf(answers), hostOf(answers, ctx))).name ?? accountOf(answers) },
+      initial: async (answers) => (await ctx.suggest(accountOf(answers), hostOf(answers, ctx))).name ?? accountOf(answers),
+      detail: (answers) => machineLine(answers, ctx) },
     { id: 'email', kind: 'text', flag: '--email', message: 'Your email, as your commits show it',
       hint: 'anyone who can see the repository can read it once you push', when: (answers) => isNew(answers), validate: required,
       initial: async (answers) => (await ctx.suggest(accountOf(answers), hostOf(answers, ctx))).email,
-      detail: (answers) => noreplyExample(answers, ctx) },
+      detail: (answers) => emailDetail(answers, ctx) },
     ...choiceSteps(ctx),
   ];
 }
@@ -168,6 +169,23 @@ function noreplyExample(answers: Answers, ctx: SetupContext): string | undefined
     'github.com/settings/emails, like 1234+' + printable(accountOf(answers)) + '@users.noreply.github.com';
 }
 
+/** The machine's git identity, beside a new account. Never that account's initial value. */
+function machineLine(answers: Answers, ctx: SetupContext): string | undefined {
+  const email = ctx.machineIdentity.email;
+  if (!isNew(answers) || !email) return undefined;
+  const name = ctx.machineIdentity.name;
+  const who = name ? printable(name) + ' <' + printable(email) + '>' : printable(email);
+  return 'this machine\'s default is ' + who + '; type it only if this account should use it';
+}
+
+/** Machine line, then the noreply tip. One string: both prompters wrap a detail as one paragraph. */
+function emailDetail(answers: Answers, ctx: SetupContext): string | undefined {
+  const line = machineLine(answers, ctx);
+  const tip = noreplyExample(answers, ctx);
+  if (line && tip) return line + ' · ' + tip;
+  return line ?? tip;
+}
+
 function ghActive(ctx: SetupContext): string {
   return ctx.gh?.ok ? printable(ctx.gh.value.active ?? 'none') : 'unknown';
 }
@@ -201,7 +219,12 @@ function sourceText(source: string, account: DetectedAccount, ctx: SetupContext)
 
 function defaultAccount(ctx: SetupContext): string {
   if (ctx.pinned && Object.hasOwn(ctx.recorded, ctx.pinned)) return ctx.pinned;
-  return detectedOwnerValue(ctx) ?? Object.keys(ctx.recorded)[0] ?? NEW_ACCOUNT;
+  return recordedOwner(ctx) ?? detectedOwnerValue(ctx) ?? Object.keys(ctx.recorded)[0] ?? NEW_ACCOUNT;
+}
+
+/** Registry spelling of origin's owner when it is already recorded. A recorded account is a user, so its kind is not required. */
+function recordedOwner(ctx: SetupContext): string | undefined {
+  return Object.keys(ctx.recorded).find((account) => sameLogin(account, ctx.owner));
 }
 
 /** The detected spelling, which is the choice the list can highlight. */

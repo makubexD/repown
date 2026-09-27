@@ -20,6 +20,7 @@ import guardGroup from '../commands/guard.ts';
 import accountsGroup from '../commands/accounts.ts';
 import { wizard, refusedGiven, CANCEL, type Answers, type Prompter, type StepChoice } from './engine.ts';
 import { setupFlow, planCommands, formatCommand, briefOf, missingFlags, printable, NEW_ACCOUNT, type PlannedCommand, type SetupContext } from './setup-flow.ts';
+import { cloneChangeLines, machineChangeLines, readCloneSnapshot, type CloneSnapshot } from './setup-changes.ts';
 import { readContext, readRegistry, type ReadOptions } from './setup-context.ts';
 import { plainPrompter } from './plain.ts';
 
@@ -174,7 +175,7 @@ function checkAgainst(given: Answers, ctx: SetupContext, allowOwner: string | nu
 async function runUnattended(answers: Answers, ctx: SetupContext, git: Git, readAuth: ReadAuth): Promise<number> {
   const missing = missingFlags(answers, ctx.recorded);
   if (missing.length > 0) return usage('--no-input, but still needed: ' + missing.join(', '));
-  return execute(planCommands(answers, ctx), git, readAuth);
+  return execute(planCommands(answers, ctx), runState(git, readAuth, ctx));
 }
 
 type ReadAuth = (git: Git, probeUrl?: string) => Promise<AuthState>;
@@ -197,7 +198,8 @@ async function runAccepted(answers: Answers, ctx: SetupContext, { git, prompter,
   const confirm = gateFor(prompter, answers, ctx);
   // Recommended hands the terminal over now. Step by step keeps it for each question.
   if (!confirm) prompter.close();
-  const code = await execute(planCommands(answers, ctx), git, readAuth, confirm);
+  const state = runState(git, readAuth, ctx);
+  const code = await execute(planCommands(answers, ctx), confirm ? { ...state, confirm } : state);
   if (confirm) prompter.close();
   return code;
 }
@@ -240,25 +242,39 @@ async function choosePrompter(): Promise<Prompter> {
   }
 }
 
+interface RunState {
+  readonly git: Git;
+  readonly readAuth: ReadAuth;
+  readonly confirm?: Confirm;
+  readonly credentialKeys: readonly string[];
+}
+
+function runState(git: Git, readAuth: ReadAuth, ctx: SetupContext): RunState {
+  return { git, readAuth, credentialKeys: ctx.credentialKeys };
+}
+
 /**
  * Runs the plan in order and stops at the first failure. In step-by-step mode each
  * step is confirmed first: Skip leaves it unrun, Stop (and Esc) runs nothing more.
  * Ctrl-C stops the steps that have not run (exit 130), except while an inherited
  * child is running: that Ctrl-C belongs to gh, and the remaining steps still run.
+ * The clone is read before the first step and again after, including a stop or a failure.
  */
-async function execute(plan: readonly PlannedCommand[], git: Git, readAuth: ReadAuth, confirm?: Confirm): Promise<number> {
-  const ran = await walk(plan, git, confirm);
-  if (typeof ran === 'number') return ran;
-  await finishRun(ran.done, ran.skipped, git, readAuth);
-  return 0;
+async function execute(plan: readonly PlannedCommand[], state: RunState): Promise<number> {
+  const before = await readCloneSnapshot(state.git, state.credentialKeys);
+  const ran = await walk(plan, state.git, state.confirm);
+  await reportRun(before, ran, state);
+  return ran.code ?? 0;
 }
 
 interface WalkResult {
   readonly done: readonly PlannedCommand[];
   readonly skipped: readonly PlannedCommand[];
+  /** Null when the plan finished. A stop or a failed step is that exit code. */
+  readonly code: number | null;
 }
 
-async function walk(plan: readonly PlannedCommand[], git: Git, confirm?: Confirm): Promise<WalkResult | number> {
+async function walk(plan: readonly PlannedCommand[], git: Git, confirm?: Confirm): Promise<WalkResult> {
   let interrupted = false;
   const onInterrupt = (): void => { if (!handingOver()) interrupted = true; };
   process.on('SIGINT', onInterrupt);
@@ -274,16 +290,16 @@ async function eachStep(
   git: Git,
   confirm: Confirm | undefined,
   interrupted: () => boolean,
-): Promise<WalkResult | number> {
+): Promise<WalkResult> {
   const done: PlannedCommand[] = [];
   const skipped: PlannedCommand[] = [];
   for (const [index, planned] of plan.entries()) {
     const choice = await offer(plan, index, planned, confirm);
     const halted = await actOn(choice, { plan, index, git, interrupted, confirming: confirm !== undefined });
-    if (halted !== null) return halted;
+    if (halted !== null) return { done, skipped, code: halted };
     (choice === 'skip' ? skipped : done).push(planned);
   }
-  return { done, skipped };
+  return { done, skipped, code: null };
 }
 
 async function offer(
@@ -334,34 +350,65 @@ function halt(remaining: readonly PlannedCommand[], code: number, why?: string):
   return code;
 }
 
-async function finishRun(
-  done: readonly PlannedCommand[],
-  skipped: readonly PlannedCommand[],
-  git: Git,
-  readAuth: ReadAuth,
-): Promise<void> {
-  finished(done, skipped);
-  const left = await ghLeftover(done, git, readAuth);
-  if (left) out.detail(left);
+/** On stderr, like the step lines: stdout carries only what the commands themselves print. */
+async function reportRun(before: CloneSnapshot, ran: WalkResult, state: RunState): Promise<void> {
+  if (ran.code === null) announce(ran.done, ran.skipped);
+  await printClone(before, state);
+  const auth = wantsAuth(ran) ? await state.readAuth(state.git) : null;
+  printMachine(ran.done, auth);
+  if (ran.code === null) closeRun(ran.done, auth);
 }
 
-async function ghLeftover(plan: readonly PlannedCommand[], git: Git, readAuth: ReadAuth): Promise<string | null> {
-  const account = plan.find((item) => item.argv[0] === 'use')?.argv.at(-1);
-  if (!account) return null;
-  const advice = ghAdvice(account, await readAuth(git));
-  return advice ? 'optional, only if you use gh here: ' + advice.detail.replace(/^fix: /, '') : null;
-}
-
-/**
- * The account the plan pinned, and where to look next. On stderr, like the step lines:
- * stdout carries only what the commands themselves print.
- */
-function finished(done: readonly PlannedCommand[], skipped: readonly PlannedCommand[]): void {
+function announce(done: readonly PlannedCommand[], skipped: readonly PlannedCommand[]): void {
   process.stderr.write('\n');
   const pinned = done.find((planned) => planned.argv[0] === 'use')?.argv.at(-1);
   if (pinned) out.detail('done: this clone is set up for ' + printable(pinned));
   for (const planned of skipped) out.detail('skipped: ' + printable(planned.what));
+}
+
+async function printClone(before: CloneSnapshot, state: RunState): Promise<void> {
+  const lines = cloneChangeLines(before, await readCloneSnapshot(state.git, state.credentialKeys));
+  if (lines.length === 0) { out.detail('nothing changed in this clone'); return; }
+  out.detail('changed in this clone:');
+  for (const line of lines) out.detail(printable(line));
+}
+
+/** Success re-reads gh for the optional line. A later failure still does, once, when `--gh` already ran. */
+function wantsAuth(ran: WalkResult): boolean {
+  const use = ran.done.find((item) => item.argv[0] === 'use');
+  if (!use) return false;
+  return ran.code === null || use.argv.includes('--gh');
+}
+
+function printMachine(done: readonly PlannedCommand[], auth: AuthState | null): void {
+  const lines = machineChangeLines(addedAccount(done), activeGh(done, auth));
+  if (lines.length === 0) return;
+  out.detail('changed on this machine:');
+  for (const line of lines) out.detail(printable(line));
+}
+
+function addedAccount(done: readonly PlannedCommand[]): string | null {
+  return done.find((item) => item.argv[0] === 'accounts')?.argv.at(-1) ?? null;
+}
+
+function activeGh(done: readonly PlannedCommand[], auth: AuthState | null): string | null {
+  const account = done.find((item) => item.argv[0] === 'use' && item.argv.includes('--gh'))?.argv.at(-1);
+  const active = auth?.gh.ok ? auth.gh.value.active : null;
+  if (!account || active === null) return null;
+  return active.toLowerCase() === account.toLowerCase() ? account : null;
+}
+
+function closeRun(done: readonly PlannedCommand[], auth: AuthState | null): void {
   out.detail('check it any time: repown (this clone), repown doctor (this machine)');
+  const left = ghLeftover(done, auth);
+  if (left) out.detail(left);
+}
+
+function ghLeftover(plan: readonly PlannedCommand[], auth: AuthState | null): string | null {
+  const account = plan.find((item) => item.argv[0] === 'use')?.argv.at(-1);
+  if (!account || !auth) return null;
+  const advice = ghAdvice(account, auth);
+  return advice ? 'optional, only if you use gh here: ' + advice.detail.replace(/^fix: /, '') : null;
 }
 
 /**

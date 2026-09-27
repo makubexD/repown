@@ -7,6 +7,16 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+- After `repown setup` runs (Recommended or Step by step, including skips, Stop,
+  a failed step, and **Apply the same settings again**), it prints what changed
+  in this clone: `changed in this clone:` and one line per local key,
+  `key: old -> new`, `(added)`, or `old -> (removed)`. `repown.allowOwner`
+  lists the values added or removed. The guard is `push guard: off -> on`.
+  When nothing in the clone changed, the line is `nothing changed in this clone`.
+  Recording an account adds `changed on this machine:` and
+  `this machine's account registry: added <account>`. A `use --gh` step that
+  leaves that account active adds `gh: <account> is now gh's active account
+  (every terminal)`. Only config values are shown.
 - In Step by step, after Run, `repown setup` confirms each step before running it.
   It shows what the step changes (the config keys and values, or the gh action),
   why, and the command, then asks `Run this step?` (Yes / Skip / Stop). Enter is

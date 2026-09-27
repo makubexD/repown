@@ -751,11 +751,31 @@ OK    guard      on -- every push is checked before it leaves
 OK    upstream   new branches push without -u in this clone
 
        done: this clone is set up for octocat
+       changed in this clone:
+         user.name: (added) Octo Cat
+         user.email: (added) octocat@example.invalid
+         user.useConfigOnly: (added) true
+         repown.account: (added) octocat
+         credential.https://github.com.username: (added) octocat
+         repown.allowOwner: (added) octo-org
+         push.autoSetupRemote: (added) true
+         push guard: off -> on
        check it any time: repown (this clone), repown doctor (this machine)
        optional, only if you use gh here: gh auth switch -u octocat
 ```
 
 The last line is only when gh still acts as someone else. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh`. The review says the same thing (`gh still acts as <active>… If you use gh here, later:`). The first push's sign-in is said by `use`, not again here.
+
+`changed in this clone:` is what this run wrote in the clone, read before the first step and again after it (also after Stop, or after a step fails). A key that was unset is `(added)`; one that is gone is `old -> (removed)`. A key that did not change is left out. `repown.allowOwner` lists the values added or removed. The guard is `push guard: off -> on`. Only these config values are shown, never what a credential helper prints. When nothing in the clone changed, including **Apply the same settings again** on a clone that was already set up, that block is the one line `nothing changed in this clone`.
+
+Recording an account is not in the clone. That run adds a separate section:
+
+```
+       changed on this machine:
+         this machine's account registry: added octocat
+```
+
+When a `use --gh` step ran and gh's active account afterwards is that account, the same section adds `gh: octocat is now gh's active account (every terminal)`. `use` has already said so; this line is the run's summary, not a second copy of that sentence.
 
 **Step by step, after Run.** The same steps, one confirmation each. Enter takes Yes. The lines under the step are the config keys and values it writes (or the gh action), then why, then the command. Nothing secret is shown: config values only.
 
@@ -784,6 +804,12 @@ Skip does not run that step. The closing lines name every skipped step, and say 
 ```
        done: this clone is set up for octocat
        skipped: Turn on the push guard: each push is checked first
+       changed in this clone:
+         user.name: (added) Octo Cat
+         user.email: (added) octocat@example.invalid
+         user.useConfigOnly: (added) true
+         repown.account: (added) octocat
+         credential.https://github.com.username: (added) octocat
        check it any time: repown (this clone), repown doctor (this machine)
 ```
 
@@ -811,5 +837,7 @@ Stop, or Esc, prints `not run:` and the commands that did not get their turn. Ex
 │  ○ Change an answer
 └
 ```
+
+**Apply the same settings again** runs the pin once more. When every watched key already holds, the run says `nothing changed in this clone`.
 
 </details>

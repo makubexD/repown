@@ -123,7 +123,7 @@ and help text in its own file under `src/commands/`, so help can't drift from th
 | `repown guard on`, `repown guard off`, `repown guard status` | `src/commands/guard.ts`, `src/core/guard/hook.ts` | [card 7](docs/HOW-IT-WORKS.md#7-push-what-the-guard-checks), [card 10](docs/HOW-IT-WORKS.md#10-other-hook-tools) |
 | `repown guard check` (the hook calls it) | `src/commands/guard.ts`, `src/core/guard/check.ts` | [card 7](docs/HOW-IT-WORKS.md#7-push-what-the-guard-checks), [card 8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
 | `repown scan` | `src/commands/scan.ts`, `src/core/inspect.ts`, `src/core/git.ts` | [card 11](docs/HOW-IT-WORKS.md#11-audit-re-point-move-machines), [JSON](docs/CONFIGURATION.md#scripts-and-ci) |
-| `repown setup` | `src/commands/setup.ts`, `src/wizard/setup-run.ts`, `src/wizard/setup-context.ts`, `src/wizard/setup-flow.ts`, `src/wizard/engine.ts`, `src/wizard/review-text.ts`, `src/wizard/clack.ts`, `src/wizard/plain.ts` | [card 13](docs/HOW-IT-WORKS.md#13-guided-setup), [scripts and CI](docs/CONFIGURATION.md#scripts-and-ci) |
+| `repown setup` | `src/commands/setup.ts`, `src/wizard/setup-run.ts`, `src/wizard/setup-context.ts`, `src/wizard/setup-flow.ts`, `src/wizard/setup-changes.ts`, `src/wizard/engine.ts`, `src/wizard/review-text.ts`, `src/wizard/clack.ts`, `src/wizard/plain.ts` | [card 13](docs/HOW-IT-WORKS.md#13-guided-setup), [scripts and CI](docs/CONFIGURATION.md#scripts-and-ci) |
 
 Shared by all of them:
 - **Parsing, help and dispatch:** `src/cli.ts`, `src/ui/dispatch.ts`, `src/ui/command.ts`

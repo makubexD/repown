@@ -11,6 +11,8 @@ import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { ghAdvice } from '../src/commands/status.ts';
 import type { AuthState } from '../src/core/inspect.ts';
+import { ghStateFrom } from '../src/core/credential/gh.ts';
+import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 import { loadRegistry, registryPath } from '../src/core/registry.ts';
 import { err, ok } from '../src/core/result.ts';
 import { sandbox, type Sandbox } from './helpers.ts';
@@ -246,6 +248,13 @@ describe('gh warning account', () => {
     assert.ok(advice);
     assert.match(advice.warn, /active as "octocat"/);
     assert.equal(advice.detail, 'fix: repown use octo-work --gh   (signs octo-work in to gh)');
+  });
+
+  test('empty hosts is nobody signed in, not an unverified gh', () => {
+    const parsed = ghStateFrom({ code: 0, stdout: GH_EMPTY_HOSTS, stderr: '' });
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    assert.equal(ghAdvice('octocat', { ghPresent: true, gh: parsed }), null);
   });
 
   test('unverified gh stays a check of gh auth status', () => {

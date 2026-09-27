@@ -49,25 +49,57 @@ export async function ghInstalled(): Promise<boolean> {
 }
 
 export async function ghState(host = 'github.com'): Promise<Result<GhState>> {
-  const result = await run('gh', ['auth', 'status', '--json', 'hosts']);
+  return ghStateFrom(await run('gh', ['auth', 'status', '--json', 'hosts']), host);
+}
+
+/** A finished `gh auth status --json hosts`. Exit 0 with no host entry is nobody signed in. */
+export function ghStateFrom(result: ExecResult, host = 'github.com'): Result<GhState> {
   if (notInstalled(result)) return err('gh is not installed');
   if (!succeeded(result)) return err('gh auth status failed');
-
   const parsed = parseHosts(result.stdout, host);
   if (!parsed) return err('gh auth status returned nothing usable');
   return ok(parsed);
 }
 
+/**
+ * gh 2.88.1 exits 0 and prints `{"hosts":{}}` when it is signed in to nobody.
+ * A missing host key, or an empty list, is that same answer.
+ */
 function parseHosts(raw: string, host: string): GhState | null {
-  let hosts: Record<string, unknown>;
+  const hosts = hostsObject(raw);
+  if (hosts === null) return null;
+  if (!Object.hasOwn(hosts, host)) return { accounts: [], active: null };
+  const entries = hosts[host];
+  if (!Array.isArray(entries)) return null;
+  return accountsFrom(entries);
+}
+
+function hostsObject(raw: string): Record<string, unknown> | null {
+  const parsed = jsonObject(raw);
+  if (parsed === null) return null;
+  const hosts = parsed['hosts'];
+  return isRecord(hosts) ? hosts : null;
+}
+
+function jsonObject(raw: string): Record<string, unknown> | null {
   try {
-    hosts = (JSON.parse(raw) as { hosts?: Record<string, unknown> }).hosts ?? {};
+    const parsed = JSON.parse(plainJson(raw)) as unknown;
+    return isRecord(parsed) ? parsed : null;
   } catch {
     return null;
   }
-  const entries = hosts[host];
-  if (!Array.isArray(entries)) return null;
+}
 
+/** gh paints `--json` when colour is forced, even on a pipe. The object is unchanged. */
+function plainJson(raw: string): string {
+  return raw.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function accountsFrom(entries: readonly unknown[]): GhState {
   const accounts = entries.flatMap(toAccount);
   const active = accounts.find((account) => account.active)?.login ?? null;
   return { accounts, active };

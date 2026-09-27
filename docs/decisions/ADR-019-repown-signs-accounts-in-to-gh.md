@@ -63,11 +63,14 @@ dates from gh 1.4.0 (2020-12-15, PR #2449).
 - **The parent ignores SIGINT while that child runs.** Node's default is to
   exit the process on SIGINT. An empty listener replaces that default for the
   child's lifetime, so Ctrl-C belongs to gh and the parent stays up until gh
-  exits. The listener is removed when the child closes or fails to spawn, and
-  a Ctrl-C after that is repown's again. It does not replace listeners already
-  registered: `repown setup` still notices the interrupt and stops the steps
-  that have not run. gh's own survey cancellation exits 2, which repown reports
-  as `gh sign-in cancelled`. A Ctrl-C while the device flow is polling was not
+  exits. On Windows the child is started with `windowsHide: false`, so it stays
+  attached to the console and receives that Ctrl-C; `run` still hides its
+  window. The listener is removed when the child closes or fails to spawn, and
+  a Ctrl-C after that is repown's again. `repown setup` ignores a SIGINT that
+  arrives while the child is running, so cancelling the browser only skips the
+  gh sign-in and the remaining steps still run, the same as when gh exits 2 on
+  its own. gh's own survey cancellation exits 2, which repown reports as
+  `gh sign-in cancelled`. A Ctrl-C while the device flow is polling was not
   measured; any other non-zero is a failed login (`gh auth login exited N`),
   and the account list is not assumed to have changed.
 
@@ -75,16 +78,15 @@ dates from gh 1.4.0 (2020-12-15, PR #2449).
   and then checks what git's helper became.** With `--git-protocol https`, on
   a terminal, gh asks `Authenticate Git with your GitHub credentials?` unless
   gh is already the helper (`Helper.IsOurs` in `pkg/cmd/auth/shared/git_credential.go`,
-  unchanged from the 1.x flow through v2.88.1 and v2.101.0). repown says so
-  before the child starts, from the helper it already read:
+  unchanged from the 1.x flow through v2.88.1 and v2.101.0). Before the child
+  starts, repown says this clone is already pinned, and that cancelling the
+  browser (Ctrl-C) only skips the gh sign-in. It then says what to answer,
+  from the helper it already read:
   - gh is already the helper: gh will not ask, and repown says nothing about
     the question.
-  - no helper is configured: answer No. Yes would make gh answer git's sign-in
-    requests for every repository, and repown would then need `repown fix`.
-  - some other helper is configured, Git Credential Manager included
-    (`credential.helper=manager` counts): Yes also stores this sign-in there,
-    so the first push won't ask again. The line names Git Credential Manager
-    when that is the helper, and otherwise names the helper's value.
+  - no helper is configured: `When gh asks "Authenticate Git with your GitHub credentials?", type n and press Enter. Enter alone means Yes, and Yes makes gh answer git's sign-in requests for every repository.`
+  - Git Credential Manager (`credential.helper=manager` counts): `When gh asks "Authenticate Git with your GitHub credentials?", press Enter (Yes): it also stores this sign-in in Git Credential Manager, so the first push won't ask again.`
+  - some other helper: that same sentence, naming the helper's value.
 
   Yes is decided before the browser opens. What it writes, from the same
   source: when a helper is configured and it is not gh, gh runs
@@ -97,8 +99,11 @@ dates from gh 1.4.0 (2020-12-15, PR #2449).
   ([ADR-001](ADR-001-credential-manager-not-gh.md)). After a login that exits
   0, repown reads gh and the helper again. The active login is whoever finished
   the browser flow. When it is the named account, compared case-insensitively,
-  the line is `signed in as <account>, now gh's active account`. Anyone else is
-  a warning that names who signed in, and how to retry in a private window.
+  the line is `signed in as <account>, now gh's active account`. Anyone else,
+  when that login was actually read, is a warning that names who signed in,
+  and how to retry in a private window. When the re-read fails, the warning is
+  `gh signed in, but who is active could not be read (<error>)` and the detail
+  is `check it yourself: gh auth status`.
   When gh was not the helper before and is afterwards, the warning's fix is
   `repown fix`. Answering Yes on the user's behalf, or writing global git
   config so the question would not appear, is the sort of new global behaviour
@@ -149,7 +154,9 @@ dates from gh 1.4.0 (2020-12-15, PR #2449).
   is the helper, Git Credential Manager, and gh's active account. **Accounts**
   is one row for every login the registry, Git Credential Manager or gh knows:
   recorded accounts in registry order, then the others alphabetically. git is
-  `stored` when Git Credential Manager's store holds the account;
+  `stored` when Git Credential Manager is the helper and its store holds the
+  account; `stored in Git Credential Manager, which git isn't using` when that
+  store holds the account and the helper is not Git Credential Manager;
   `not signed in yet (the first push signs in)` when that store was read, Git
   Credential Manager is the helper, and the account is absent;
   `unknown` when Git Credential Manager is missing, its store could not be
@@ -165,8 +172,12 @@ dates from gh 1.4.0 (2020-12-15, PR #2449).
   never presented as "not signed in". Names that only the failed source knew
   are absent, because they could not be read; the warning says so. When every
   source that could be read named nobody (gh not installed counts as no gh
-  accounts), the table says `none recorded, stored or signed in yet` and
-  points at `repown setup`. The diagnosis under the table, including the SSO
+  accounts) and Git Credential Manager's store was read, the table says
+  `none recorded, stored or signed in yet` and points at `repown setup`.
+  When there are no rows because Git Credential Manager is not installed, and
+  the registry and gh were read and named nobody, the table says
+  `no accounts recorded or signed in to gh; Git Credential Manager isn't installed`
+  and points at `repown setup`. The diagnosis under the table, including the SSO
   note, is unchanged
   ([ADR-013](ADR-013-deliberately-not-done.md)). `repown doctor` still exits 1
   only when gh is the helper.

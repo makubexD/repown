@@ -57,6 +57,14 @@ export type InheritFn = (
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+/** How many `inherit` children are running. `handingOver` is the read-only view. */
+let inherited = 0;
+
+/** True while an inherited child is running. Ctrl-C then belongs to that child. */
+export function handingOver(): boolean {
+  return inherited > 0;
+}
+
 /**
  * The timeout is our own timer, NOT spawn's `timeout` option. Node clears that
  * one only on 'exit', which a spawn that fails (ENOENT) never emits -- so every
@@ -100,13 +108,15 @@ export function inherit(
   options: InheritOptions = {},
 ): Promise<ExecResult> {
   return new Promise((resolve) => {
+    inherited += 1;
     const ignore = (): void => {};
     process.on('SIGINT', ignore);
     const child = spawn(file, [...args], {
       env: options.env ?? process.env,
       shell: false,
       stdio: 'inherit',
-      windowsHide: true,
+      // gh must stay attached to the console so it receives Ctrl-C.
+      windowsHide: false,
     });
     settleInherit(child, ignore, resolve);
   });
@@ -118,6 +128,7 @@ function settleInherit(child: ChildProcess, ignore: () => void, resolve: (result
   const done = (result: ExecResult): void => {
     if (settled) return;
     settled = true;
+    inherited -= 1;
     process.off('SIGINT', ignore);
     resolve(result);
   };

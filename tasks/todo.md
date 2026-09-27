@@ -24,5 +24,5 @@ Each task: failing test, code, docs on its `Docs:` line, one commit.
   deliberately. Docs: HOW-IT-WORKS doctor card, README doctor row
 - [x] 6. ADR-019 (repown can sign an account in to gh; the terminal is handed over,
   never read) and a CHANGELOG Unreleased entry
-- [ ] 7. Review phase
+- [x] 7. Review phase
 - [ ] 8. Close-out

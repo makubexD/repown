@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { sandbox, type Sandbox } from './helpers.ts';
 import { setupContext as context } from './setup-fixtures.ts';
 import { ok, err } from '../src/core/result.ts';
@@ -19,6 +19,9 @@ import { runSetup } from '../src/wizard/setup-run.ts';
 import { readContext } from '../src/wizard/setup-context.ts';
 import { Git } from '../src/core/git.ts';
 import type { AuthState } from '../src/core/inspect.ts';
+import { ghStateFrom } from '../src/core/credential/gh.ts';
+import { inherit, handingOver } from '../src/core/exec.ts';
+import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name];
@@ -153,6 +156,18 @@ describe('setup flow', () => {
     const ctx = context({ gh: none });
     assert.equal(stepOf(ctx, 'gh').detail?.({ account: 'octocat' }, ctx), 'gh isn\'t signed in to any account');
     assert.equal(stepOf(ctx, 'gh').when?.({ account: 'octocat' }, ctx), true);
+  });
+
+  test('a fresh gh, from the empty hosts fixture, is offered a sign-in', () => {
+    const parsed = ghStateFrom({ code: 0, stdout: GH_EMPTY_HOSTS, stderr: '' });
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    const ctx = context({ gh: parsed });
+    const step = stepOf(ctx, 'gh');
+    const picked = { account: 'octocat' };
+    assert.equal(step.when?.(picked, ctx), true);
+    assert.equal(wording(step.message, picked, ctx), 'Sign in to gh as octocat too?');
+    assert.equal(step.detail?.(picked, ctx), 'gh isn\'t signed in to any account');
   });
 
   test('when gh stays someone else, the review says so and names ghAdvice\'s fix', () => {
@@ -796,8 +811,20 @@ describe('repown setup, without a terminal', () => {
 
 describe('repown setup, on a terminal (scripted)', () => {
   let at: Home;
-  beforeEach(() => { at = home(); record(at, 'octocat', 'octocat@example.invalid'); });
-  afterEach(() => at.dispose());
+  let savedPath: string | undefined;
+  // These scripts are about the pin and the guard. A gh on PATH that is signed
+  // in to nobody would insert the sign-in question; keep that off this path.
+  beforeEach(() => {
+    at = home();
+    record(at, 'octocat', 'octocat@example.invalid');
+    savedPath = process.env['PATH'];
+    process.env['PATH'] = (savedPath ?? '').split(delimiter).filter((dir) => !ghOn(dir)).join(delimiter);
+  });
+  afterEach(() => {
+    if (savedPath === undefined) delete process.env['PATH'];
+    else process.env['PATH'] = savedPath;
+    at.dispose();
+  });
 
   const runWith = (prompter: Prompter): Promise<number> =>
     runSetup({ positional: [], flags: new Map([['cwd', at.box.dir]]) }, { prompter, interactive: true });
@@ -881,3 +908,85 @@ describe('repown setup, on a terminal (scripted)', () => {
     }
   }
 });
+
+const WAIT_CHILD = 'const fs=require("fs");fs.writeFileSync(process.argv[1],"up");' +
+  'const stop=process.argv[1]+".stop";' +
+  'const wait=()=>{if(fs.existsSync(stop))process.exit(0);else setTimeout(wait,15)};wait()';
+
+describe('Ctrl-C during gh sign-in', () => {
+  test('a SIGINT while inherit is running still runs the next setup step', async () => {
+    const at = home();
+    record(at, 'octocat', 'octocat@example.invalid');
+    const captured = captureStep(() => { process.emit('SIGINT'); });
+    let release: (() => Promise<void>) | undefined;
+    try {
+      release = await holdInherit();
+      captured.begin();
+      const code = await runSetup(guarded(at), { interactive: false });
+      assert.equal(code, 0, captured.text());
+      assert.match(captured.text(), /step 2 of 2/);
+      assert.doesNotMatch(captured.text(), /interrupted/);
+      assert.ok(existsSync(hook(at)));
+    } finally {
+      captured.end();
+      await release?.();
+      at.dispose();
+    }
+  });
+});
+
+function ghOn(dir: string): boolean {
+  return ['gh', 'gh.exe', 'gh.cmd', 'gh.bat'].some((name) => dir !== '' && existsSync(join(dir, name)));
+}
+
+function guarded(at: Home): { positional: readonly string[]; flags: Map<string, string | boolean> } {
+  const flags = new Map<string, string | boolean>([['cwd', at.box.dir], ['guard', true], ['no-input', true]]);
+  return { positional: ['octocat'], flags };
+}
+
+async function holdInherit(): Promise<() => Promise<void>> {
+  const marker = join(tmpdir(), 'repown-hold-' + process.pid);
+  const stop = marker + '.stop';
+  rmSync(marker, { force: true });
+  rmSync(stop, { force: true });
+  const pending = inherit(process.execPath, ['-e', WAIT_CHILD, marker]);
+  const release = (): Promise<void> => releaseInherit(pending, marker, stop);
+  try {
+    await untilUp(marker);
+  } catch (error) {
+    await release();
+    throw error;
+  }
+  return release;
+}
+
+async function untilUp(marker: string): Promise<void> {
+  const started = Date.now();
+  while (!existsSync(marker)) {
+    if (Date.now() - started > 5_000) throw new Error('child did not start');
+    await new Promise((resolve) => setTimeout(resolve, 15));
+  }
+  assert.equal(handingOver(), true);
+}
+
+async function releaseInherit(pending: Promise<unknown>, marker: string, stop: string): Promise<void> {
+  writeFileSync(stop, 'x');
+  await pending;
+  rmSync(marker, { force: true });
+  rmSync(stop, { force: true });
+}
+
+function captureStep(onFirst: () => void): { text: () => string; begin: () => void; end: () => void } {
+  let stderr = '';
+  let emitted = false;
+  const write = process.stderr.write;
+  const begin = (): void => {
+    process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+      const text = String(chunk);
+      stderr += text;
+      if (!emitted && text.includes('step 1 of')) { emitted = true; onFirst(); }
+      return true;
+    }) as typeof process.stderr.write;
+  };
+  return { text: () => stderr, begin, end: () => { process.stderr.write = write; } };
+}

@@ -15,12 +15,17 @@ import type { Result } from '../src/core/result.ts';
 import {
   accountRows, formatAccountLines, type AccountReport, type DoctorAuth,
 } from '../src/commands/doctor.ts';
+import { activeAccountLabel, type AuthState } from '../src/core/inspect.ts';
+import { ghStateFrom } from '../src/core/credential/gh.ts';
+import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 
 for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name];
 
 const GITHUB: Account = { name: 'Octo Cat', email: 'octocat@example.invalid' };
 const NOT_YET = 'not signed in yet (the first push signs in)';
 const HOST_SIGN_IN = 'your host\'s own sign-in';
+const STORED_UNUSED = 'stored in Git Credential Manager, which git isn\'t using';
+const NO_GCM = '  no accounts recorded or signed in to gh; Git Credential Manager isn\'t installed';
 
 function registry(accounts: Readonly<Record<string, Account>>): Result<Registry> {
   return ok({ accounts, unreadable: [] });
@@ -100,7 +105,8 @@ describe('accountRows: git cell', () => {
   });
 
   // "The first push signs in" is a promise that GCM will do it. gh as the
-  // helper will not. An account the store does hold is still `stored`.
+  // helper will not. An account the store does hold is said to live there,
+  // and not to be what git will use.
   test('a missing account is unknown when GCM is not the helper', () => {
     const held = accountRows(registry({ octocat: GITHUB }), auth({
       stored: ok(['Octocat']), helperIsGcm: false,
@@ -108,7 +114,7 @@ describe('accountRows: git cell', () => {
     const missing = accountRows(registry({ octocat: GITHUB }), auth({
       stored: ok([]), helperIsGcm: false,
     }), null);
-    assert.equal(held.rows[0]!.git, 'stored');
+    assert.equal(held.rows[0]!.git, STORED_UNUSED);
     assert.equal(missing.rows[0]!.git, 'unknown');
     assert.notEqual(missing.rows[0]!.git, NOT_YET);
   });
@@ -264,6 +270,30 @@ describe('accountRows: nothing to list', () => {
       gcmPresent: false, stored: err('Git Credential Manager is not installed'),
     }), null);
     assert.equal(report.none, false);
+    assert.equal(report.gcmMissing, true);
+    assert.deepEqual(formatAccountLines(report), [NO_GCM, '  repown setup']);
+  });
+
+  test('GCM not installed does not describe a gh query that failed as an empty list', () => {
+    const report = accountRows(registry({}), auth({
+      gcmPresent: false,
+      stored: err('Git Credential Manager is not installed'),
+      gh: err('gh auth status failed'),
+    }), null);
+    assert.equal(report.none, false);
+    assert.equal(report.gcmMissing, false);
+    assert.deepEqual(formatAccountLines(report), []);
+  });
+
+  test('the empty hosts fixture is gh active none and not signed in, with no gh warning', () => {
+    const parsed = ghStateFrom({ code: 0, stdout: GH_EMPTY_HOSTS, stderr: '' });
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    const report = accountRows(registry({ octocat: GITHUB }), auth({ gh: parsed }), 'octocat');
+    assert.equal(report.rows[0]!.gh, 'not signed in');
+    assert.deepEqual(report.warnings, []);
+    assert.match(formatAccountLines(report)[0]!, /gh: not signed in/);
+    assert.equal(activeAccountLabel(fullAuth(parsed)), 'none');
   });
 
   test('names line up the way a status field does', () => {
@@ -282,6 +312,13 @@ function repown(args: readonly string[], cwd: string, env: NodeJS.ProcessEnv): {
 
 function field(label: string, value: string): string {
   return '  ' + label.padEnd(14) + ' ' + value;
+}
+
+function fullAuth(gh: AuthState['gh']): AuthState {
+  return {
+    gcmPath: null, gcmPresent: true, stored: ok([]), ghPresent: true, gh,
+    helper: 'manager', ghIsHelper: false, helperIsGcm: true, ghHelperOrigins: [],
+  };
 }
 
 describe('repown doctor output', () => {
@@ -334,6 +371,18 @@ describe('repown doctor output', () => {
     assert.match(outside.stdout, /octocat/);
     assert.doesNotMatch(outside.stdout, /this clone/);
   });
+
+  test('a gh signed in to nobody is none and not signed in, with no gh warning', () => {
+    const file = join(box.dir, '..', 'gh-empty-hosts.txt');
+    writeFileSync(file, GH_EMPTY_HOSTS);
+    const run = repown(['doctor'], box.dir, { ...doctorEnv(bin), GH_FAKE_STATUS_FILE: file });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stderr, '');
+    assert.match(run.stdout, /gh active\s+none/);
+    assert.match(run.stdout, /octocat.*gh: not signed in/);
+    assert.doesNotMatch(run.stdout, /unknown -- gh could not be queried/);
+    assert.doesNotMatch(run.stderr, /WARN/);
+  });
 });
 
 function writeRegistry(): void {
@@ -380,6 +429,7 @@ function cscPath(): string {
 
 const FAKE_GH_CS = `
 using System;
+using System.IO;
 class FakeGh {
   static int Main(string[] args) {
     if (args.Length == 1 && args[0] == "--version") {
@@ -387,6 +437,11 @@ class FakeGh {
       return 0;
     }
     if (args.Length >= 2 && args[0] == "auth" && args[1] == "status") {
+      var file = Environment.GetEnvironmentVariable("GH_FAKE_STATUS_FILE");
+      if (!string.IsNullOrEmpty(file)) {
+        Console.Write(File.ReadAllText(file));
+        return 0;
+      }
       Console.WriteLine("{\\"hosts\\":{\\"github.com\\":[{\\"login\\":\\"octo-work\\",\\"active\\":true}]}}");
       return 0;
     }
@@ -415,6 +470,7 @@ class FakeGcm {
 const FAKE_GH_SH = `#!/bin/sh
 if [ "$1" = "--version" ]; then echo "gh version 2.88.1"; exit 0; fi
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  if [ -n "$GH_FAKE_STATUS_FILE" ]; then cat "$GH_FAKE_STATUS_FILE"; exit 0; fi
   echo '{"hosts":{"github.com":[{"login":"octo-work","active":true}]}}'
   exit 0
 fi

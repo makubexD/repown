@@ -146,8 +146,12 @@ function knownToGh(account: string, auth: AuthState): boolean {
   return auth.gh.value.accounts.some((item) => item.login.toLowerCase() === wanted);
 }
 
-const ANSWER_NO = 'answer No: Yes would make gh answer git\'s sign-in requests for every repository,' +
-  ' and repown would then need `repown fix`';
+const ASK = 'When gh asks "Authenticate Git with your GitHub credentials?", ';
+
+const ANSWER_NO = ASK + 'type n and press Enter. Enter alone means Yes, and Yes makes gh ' +
+  'answer git\'s sign-in requests for every repository.';
+
+const PIN_KEPT = 'This clone is already pinned. Cancelling the browser (Ctrl-C) only skips the gh sign-in.';
 
 /** What to say about "Authenticate Git with your GitHub credentials?". Null when gh will not ask. */
 export function ghCredentialAnswer(auth: AuthState): string | null {
@@ -158,7 +162,7 @@ export function ghCredentialAnswer(auth: AuthState): string | null {
 
 function storesIn(gcm: boolean, helper: string): string {
   const where = gcm ? 'Git Credential Manager' : helper;
-  return 'Yes also stores this sign-in in ' + where + ', so the first push won\'t ask again';
+  return ASK + 'press Enter (Yes): it also stores this sign-in in ' + where + ', so the first push won\'t ask again.';
 }
 
 async function applyGh(account: string, repo: RepoState): Promise<void> {
@@ -193,13 +197,12 @@ function versionReason(verdict: Exclude<GhLoginVersion, 'ready'>): string {
   return 'gh\'s version could not be read, so sign-in was skipped';
 }
 
-function announceLogin(account: string, auth: AuthState): void {
+export function announceLogin(account: string, auth: AuthState): void {
   out.note('Your browser will open. Sign in to GitHub as ' + account + ' there.');
   out.detail('a private window helps if the browser is signed in as someone else.');
+  out.note(PIN_KEPT);
   const answer = ghCredentialAnswer(auth);
-  if (answer === null) return;
-  out.note('gh asks: Authenticate Git with your GitHub credentials?');
-  out.detail(answer);
+  if (answer !== null) out.note(answer);
 }
 
 function loginFailed(failure: GhLoginError): void {
@@ -214,13 +217,29 @@ async function reportLogin(account: string, repo: RepoState, before: AuthState):
   if (!before.ghIsHelper && after.ghIsHelper) helperTakenOver();
 }
 
-function reportActive(account: string, auth: AuthState): void {
-  const who = auth.gh.ok ? auth.gh.value.active : null;
+export function reportActive(account: string, auth: AuthState): void {
+  if (!auth.gh.ok) return unreadActive(auth.gh.error);
+  const who = auth.gh.value.active;
   if (who !== null && who.toLowerCase() === account.toLowerCase()) {
     out.pass('gh', 'signed in as ' + account + ', now gh\'s active account');
     return;
   }
-  out.warn('gh', 'gh signed in as "' + (who ?? 'unknown') + '", not ' + account);
+  if (who === null) return noActive();
+  otherActive(account, who);
+}
+
+function unreadActive(error: string): void {
+  out.warn('gh', 'gh signed in, but who is active could not be read (' + error + ')');
+  out.detail('check it yourself: gh auth status');
+}
+
+function noActive(): void {
+  out.warn('gh', 'gh signed in, but no account is active');
+  out.detail('check it yourself: gh auth status');
+}
+
+function otherActive(account: string, who: string): void {
+  out.warn('gh', 'gh signed in as "' + who + '", not ' + account);
   out.detail('sign out of github.com in the browser (or use a private window), then: repown use ' + account + ' --gh');
 }
 

@@ -3,8 +3,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ghProfileArgs, ghLogin, ghLoginVersion } from '../src/core/credential/gh.ts';
+import { ghProfileArgs, ghLogin, ghLoginVersion, ghStateFrom } from '../src/core/credential/gh.ts';
 import type { ExecResult } from '../src/core/exec.ts';
+import { err } from '../src/core/result.ts';
+import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 
 test('a github.com profile lookup names the host, so GH_HOST cannot redirect it', () => {
   assert.deepEqual(
@@ -18,6 +20,39 @@ test('a github.com profile lookup names the host, so GH_HOST cannot redirect it'
   const source = readFileSync(new URL('../src/core/credential/gh.ts', import.meta.url), 'utf8');
   assert.match(source, /run\('gh', ghProfileArgs\(login, field\)\)/);
 });
+
+test('exit 0 and {"hosts":{}} is nobody signed in, and so is a missing host or an empty list', () => {
+  const nobody = { accounts: [], active: null };
+  assert.deepEqual(ghStateFrom(status(GH_EMPTY_HOSTS)), { ok: true, value: nobody });
+  const elsewhere = '{"hosts":{"git.example.invalid":[{"login":"octocat","active":true}]}}\n';
+  assert.deepEqual(ghStateFrom(status(elsewhere)), { ok: true, value: nobody });
+  assert.deepEqual(ghStateFrom(status('{"hosts":{"github.com":[]}}\n')), { ok: true, value: nobody });
+  const coloured = '\x1b[1;37m{\x1b[m\n  \x1b[1;34m"hosts"\x1b[m\x1b[1;37m:\x1b[m \x1b[1;37m{\x1b[m\x1b[1;37m}\x1b[m\n\x1b[1;37m}\x1b[m\n';
+  assert.deepEqual(ghStateFrom(status(coloured)), { ok: true, value: nobody });
+});
+
+test('a non-zero exit, a spawn error, or JSON of the wrong shape is a failed query', () => {
+  assert.deepEqual(ghStateFrom(status(GH_EMPTY_HOSTS, 1)), err('gh auth status failed'));
+  assert.deepEqual(ghStateFrom(status('', -1, enoent())), err('gh is not installed'));
+  const denied = Object.assign(new Error('boom'), { code: 'EACCES' });
+  assert.deepEqual(ghStateFrom(status('', -1, denied)), err('gh auth status failed'));
+  for (const stdout of ['not json', '{"hosts":"nope"}', '{"hosts":{"github.com":{}}}', 'null', '[]', '{}']) {
+    assert.deepEqual(ghStateFrom(status(stdout)), err('gh auth status returned nothing usable'), stdout);
+  }
+});
+
+test('a listed account still parses, including which one is active', () => {
+  const raw = '{"hosts":{"github.com":[{"login":"octocat","active":true},{"login":"octo-org","active":false}]}}\n';
+  const parsed = ghStateFrom(status(raw));
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) return;
+  assert.equal(parsed.value.active, 'octocat');
+  assert.deepEqual(parsed.value.accounts.map((account) => account.login), ['octocat', 'octo-org']);
+});
+
+function status(stdout: string, code = 0, spawnError?: NodeJS.ErrnoException): ExecResult {
+  return { code, stdout, stderr: '', ...(spawnError ? { spawnError } : {}) };
+}
 
 test('gh before 2.40.0 must not log in; 2.40.0 may; an unreadable version is unknown', () => {
   assert.equal(ghLoginVersion('gh version 2.39.9 (2023-12-01)'), 'old');

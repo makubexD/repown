@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { sandbox, type Sandbox } from './helpers.ts';
+import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 import { runProgram, type Loader, type Program } from '../src/ui/dispatch.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
@@ -554,6 +555,23 @@ describe('repown use --gh with no terminal', () => {
     assert.match(calls, /auth status/);
     assert.doesNotMatch(calls, /login|logout|switch|setup-git/);
   });
+
+  test('G3: a gh signed in to nobody warns and never calls auth switch', () => {
+    const file = join(box.dir, '..', 'gh-empty-hosts.txt');
+    writeFileSync(file, GH_EMPTY_HOSTS);
+    const env = { ...ghEnv(bin, log), GH_FAKE_STATUS_FILE: file };
+    const run = repown(['use', 'octocat', '--gh'], { cwd: box.dir, env });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /WARN\s+gh\s+octocat isn't signed in to gh/);
+    assert.match(run.stderr, /fix: gh auth login, then repown use octocat --gh/);
+    const calls = readFileSync(log, 'utf8');
+    assert.match(calls, /auth status/);
+    assert.doesNotMatch(calls, /auth switch/);
+    assert.doesNotMatch(calls, /auth login|logout|setup-git/);
+    const status = repown(['status'], { cwd: box.dir, env });
+    assert.doesNotMatch(status.stderr, /UNVERIFIED/);
+    assert.match(status.stdout, /gh active\s+none/);
+  });
 });
 
 describe('repown scan', () => {
@@ -932,6 +950,11 @@ class FakeGh {
       return 0;
     }
     if (args.Length >= 2 && args[0] == "auth" && args[1] == "status") {
+      var file = Environment.GetEnvironmentVariable("GH_FAKE_STATUS_FILE");
+      if (!string.IsNullOrEmpty(file)) {
+        Console.Write(File.ReadAllText(file));
+        return 0;
+      }
       Console.WriteLine("{\\"hosts\\":{\\"github.com\\":[{\\"login\\":\\"octo-work\\",\\"active\\":true}]}}");
       return 0;
     }
@@ -948,6 +971,7 @@ if [ "$1" = "--version" ]; then
   exit 0
 fi
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  if [ -n "$GH_FAKE_STATUS_FILE" ]; then cat "$GH_FAKE_STATUS_FILE"; exit 0; fi
   echo '{"hosts":{"github.com":[{"login":"octo-work","active":true}]}}'
   exit 0
 fi

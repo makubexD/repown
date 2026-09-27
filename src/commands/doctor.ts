@@ -26,6 +26,8 @@ const NAME_WIDTH = 14;
 const NOT_YET = 'not signed in yet (the first push signs in)';
 const HOST_SIGN_IN = 'your host\'s own sign-in';
 const NONE_YET = 'none recorded, stored or signed in yet';
+const NO_GCM = 'no accounts recorded or signed in to gh; Git Credential Manager isn\'t installed';
+const STORED_UNUSED = 'stored in Git Credential Manager, which git isn\'t using';
 const SETUP_POINTER = 'repown setup';
 
 export default {
@@ -65,6 +67,8 @@ export interface AccountReport {
   readonly rows: readonly AccountRow[];
   /** Every source was read and named nobody. A failed read is never this. */
   readonly none: boolean;
+  /** No rows, GCM is not installed, and the registry and gh were read and named nobody. */
+  readonly gcmMissing: boolean;
   readonly warnings: readonly SourceWarning[];
 }
 
@@ -76,7 +80,24 @@ interface Named {
 
 export function accountRows(registry: Result<Registry>, auth: DoctorAuth, pinned: string | null): AccountReport {
   const rows = mergeNames(registry, auth).map((item) => toRow(item, auth, pinned));
-  return { rows, none: rows.length === 0 && sourcesEmpty(registry, auth), warnings: sourceWarnings(registry, auth) };
+  return reportOf(rows, registry, auth);
+}
+
+function reportOf(rows: AccountRow[], registry: Result<Registry>, auth: DoctorAuth): AccountReport {
+  return {
+    rows,
+    none: rows.length === 0 && sourcesEmpty(registry, auth),
+    gcmMissing: noGcmEmpty(rows, registry, auth),
+    warnings: sourceWarnings(registry, auth),
+  };
+}
+
+/** No rows, GCM is absent, and the registry and gh were read and named nobody. */
+function noGcmEmpty(rows: readonly AccountRow[], registry: Result<Registry>, auth: DoctorAuth): boolean {
+  if (rows.length > 0 || auth.gcmPresent) return false;
+  if (!registry.ok || Object.keys(registry.value.accounts).length > 0) return false;
+  if (!auth.ghPresent) return true;
+  return auth.gh.ok && auth.gh.value.accounts.length === 0;
 }
 
 function mergeNames(registry: Result<Registry>, auth: DoctorAuth): Named[] {
@@ -131,19 +152,21 @@ function toRow(item: Named, auth: DoctorAuth, pinned: string | null): AccountRow
 }
 
 /**
- * GCM's store is a fact about credentials it holds (`stored`), and it decides
- * a push only when GCM is the helper (ADR-001). "The first push signs in" is
- * that promise, so a missing account gets it only then. Any other helper
- * (gh, none, or one repown does not recognise) makes a missing account
- * `unknown`: that push will not sign in through GCM. GCM missing, or a store
- * that could not be read, is `unknown` too. A failed read must not look like
- * "not signed in".
+ * `stored` only when GCM is the helper and holds the account. Held under
+ * another helper is named, not called `stored`. "The first push signs in"
+ * is GCM's promise, so only then. A missing account is otherwise `unknown`,
+ * including a store that could not be read: a failed read must not look
+ * like "not signed in".
  */
 function gitCell(item: Named, auth: DoctorAuth): string {
   if (item.entry && !githubHost(item.entry)) return HOST_SIGN_IN;
   if (!auth.gcmPresent || !auth.stored.ok) return 'unknown';
-  if (listed(auth.stored.value, item.name)) return 'stored';
+  if (listed(auth.stored.value, item.name)) return storedHow(auth);
   return auth.helperIsGcm ? NOT_YET : 'unknown';
+}
+
+function storedHow(auth: DoctorAuth): string {
+  return auth.helperIsGcm ? 'stored' : STORED_UNUSED;
 }
 
 /**
@@ -222,10 +245,19 @@ function listed(names: readonly string[], name: string): boolean {
 }
 
 export function formatAccountLines(report: AccountReport): string[] {
+  if (report.rows.length === 0) return emptyLines(report);
   const width = Math.max(NAME_WIDTH, ...report.rows.map((row) => row.name.length + 1));
-  if (report.rows.length > 0) return report.rows.map((row) => formatRow(row, width));
-  if (!report.none) return [];
-  return ['  ' + NONE_YET, '  ' + SETUP_POINTER];
+  return report.rows.map((row) => formatRow(row, width));
+}
+
+function emptyLines(report: AccountReport): string[] {
+  if (report.none) return pointed(NONE_YET);
+  if (report.gcmMissing) return pointed(NO_GCM);
+  return [];
+}
+
+function pointed(line: string): string[] {
+  return ['  ' + line, '  ' + SETUP_POINTER];
 }
 
 /** Names share one column, widened for the longest so no row runs into the next cell. */

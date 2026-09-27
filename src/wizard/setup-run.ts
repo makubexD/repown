@@ -6,6 +6,7 @@
 // Nothing is written before the commands run. Cancelling exits 130, declining 1.
 
 import { ghAdvice } from '../commands/status.ts';
+import { handingOver } from '../core/exec.ts';
 import { ok, err, type Result } from '../core/result.ts';
 import type { Git } from '../core/git.ts';
 import { inspectAuth, type AuthState } from '../core/inspect.ts';
@@ -203,13 +204,13 @@ async function choosePrompter(): Promise<Prompter> {
 }
 
 /**
- * Runs the plan in order and stops at the first failure. Ctrl-C while a command runs
- * reaches the git and gh processes it has started; the command itself finishes what it
- * is doing, and nothing after it runs (exit 130).
+ * Runs the plan in order and stops at the first failure. Ctrl-C stops the steps
+ * that have not run (exit 130), except while an inherited child is running:
+ * that Ctrl-C belongs to gh, and the remaining steps still run.
  */
 async function execute(plan: readonly PlannedCommand[], git: Git, readAuth: ReadAuth): Promise<number> {
   let interrupted = false;
-  const onInterrupt = (): void => { interrupted = true; };
+  const onInterrupt = (): void => { if (!handingOver()) interrupted = true; };
   process.on('SIGINT', onInterrupt);
   try {
     for (const [index, planned] of plan.entries()) {

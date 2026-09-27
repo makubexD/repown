@@ -82,7 +82,8 @@ Accounts
 
 | Cell | Means |
 | --- | --- |
-| `git: stored` | GCM holds a sign-in for this GitHub account |
+| `git: stored` | GCM is the helper and holds a sign-in for this GitHub account |
+| `git: stored in Git Credential Manager, which git isn't using` | GCM holds a sign-in, and git's helper is not GCM |
 | `git: not signed in yet (the first push signs in)` | GCM is the helper, the store was read, and this account is not in it |
 | `git: unknown` | GCM is missing, its store could not be read, or another helper serves pushes and this account is not stored |
 | `git: your host's own sign-in` | The account's host is not GitHub, so no credential is pinned ([ADR-009](decisions/ADR-009-hosts-claim-only-measured.md)). No gh cell |
@@ -93,11 +94,13 @@ Accounts
 | `not recorded by repown` | Only GCM or gh knows the account |
 | `recorded: unknown` | The registry could not be read. One WARN says why |
 | `none recorded, stored or signed in yet` | The registry, the store and gh were read and named nobody. Next: `repown setup` |
+| `no accounts recorded or signed in to gh; Git Credential Manager isn't installed` | No rows. The registry and gh were read and named nobody, and GCM is not installed. Next: `repown setup` |
 
 Recorded accounts stay in registry order; the others follow, alphabetically.
 A failed registry, store or gh read is `unknown` in the cells that depend on
 it, and one WARN per source. GCM not installed is the `GCM` line (`not found`),
-not a second warning. The diagnosis under the list is unchanged.
+not a second warning. When that also leaves the list with no rows, the line
+above says why and points at `repown setup`. The diagnosis under the list is unchanged.
 
 ```mermaid
 flowchart TD
@@ -174,8 +177,8 @@ sequenceDiagram
 | Variant | What happens |
 | --- | --- |
 | `--gh`, already signed in | `gh auth switch`, so `gh pr create` acts as the same account |
-| `--gh`, not signed in, in a terminal | `gh auth login` opens the browser; sign in there as this account (a private window helps). gh before 2.40.0 replaces an account, so repown refuses and tells you to upgrade |
-| gh's question | "Authenticate Git with your GitHub credentials?": not asked when gh is already the helper. Another helper (Git Credential Manager, or whatever is configured): Yes also stores this sign-in there, so the first push won't ask again. No helper: answer No. Yes would make gh answer git's sign-in requests for every repository, and repown would then need `repown fix` |
+| `--gh`, not signed in, in a terminal | `gh auth login` opens the browser. Before it, repown says this clone is already pinned, and that cancelling the browser (Ctrl-C) only skips the gh sign-in. Sign in there as this account (a private window helps). gh before 2.40.0 replaces an account, so repown refuses and tells you to upgrade |
+| gh's question | Not asked when gh is already the helper. No helper: `When gh asks "Authenticate Git with your GitHub credentials?", type n and press Enter. Enter alone means Yes, and Yes makes gh answer git's sign-in requests for every repository.` Git Credential Manager: `When gh asks "Authenticate Git with your GitHub credentials?", press Enter (Yes): it also stores this sign-in in Git Credential Manager, so the first push won't ask again.` Another helper: that same sentence, naming the helper |
 | `--gh`, gh becomes the helper | 🟡 when gh was not the helper before the login and is afterwards: `fix: repown fix` |
 | `--gh`, no terminal, not signed in | 🟡 `<account> isn't signed in to gh`. `fix: gh auth login, then repown use <account> --gh`. No login |
 | No terminal and no record | 🔴 stops and tells you to run `repown accounts add <account> …` |
@@ -567,7 +570,7 @@ flowchart TD
   V -->|Run| C["accounts add → allowOwner → fix → use → guard on<br/>stops at the first failure, listing what didn't run"]
   V -->|"Back: the last question · Change an answer: the one you pick"| Q
   V -->|Decline, Esc or Ctrl-C| N["⚪ nothing changed (exit 1, or 130)"]
-  C -->|Ctrl-C while running| I["🟡 the running command reacts as usual;<br/>nothing after it runs (exit 130)"]
+  C -->|Ctrl-C while running| I["🟡 stops steps not yet run (exit 130).<br/>Ctrl-C during gh sign-in only skips that sign-in;<br/>the clone stays pinned"]
 ```
 
 With `--no-input` there is no review and no "already set up" check: the commands the

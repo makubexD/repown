@@ -78,8 +78,17 @@ function inheritEnvScript(marker: string): string {
     `if (r.code !== 0) process.exit(4);`;
 }
 
+test('inherit keeps gh on the console; run still hides its window', () => {
+  const source = readFileSync(new URL('../src/core/exec.ts', import.meta.url), 'utf8');
+  const run = source.slice(source.indexOf('export function run'), source.indexOf('export function inherit'));
+  const inherit = source.slice(source.indexOf('export function inherit'));
+  assert.match(run, /windowsHide: true/);
+  assert.match(inherit, /windowsHide: false/);
+  assert.match(inherit, /gh must stay attached to the console so it receives Ctrl-C/);
+});
+
 test('inherit ignores SIGINT only while its child runs', async () => {
-  const { inherit } = await import('../src/core/exec.ts');
+  const { inherit, handingOver } = await import('../src/core/exec.ts');
   const marker = join(tmpdir(), 'repown-sigint-' + process.pid);
   const stop = marker + '.stop';
   rmSync(marker, { force: true });
@@ -96,6 +105,7 @@ test('inherit ignores SIGINT only while its child runs', async () => {
       await new Promise((resolve) => setTimeout(resolve, 15));
     }
     assert.equal(process.listenerCount('SIGINT'), before + 1);
+    assert.equal(handingOver(), true);
     writeFileSync(stop, 'x');
     assert.equal((await pending).code, 0);
     assert.equal(process.listenerCount('SIGINT'), before);

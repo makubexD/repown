@@ -7,6 +7,13 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+- `repown use` warns when the current branch has commits no remote has by another
+  address: `N commits on <branch> not on any remote are by <addresses>; the guard
+  will refuse them`, and how to re-author them or pin that address. Up to three
+  addresses are named, then `and N more`. `repown setup`'s review notes the same
+  fact, including in Recommended mode, and does not rewrite the commits. A detached
+  HEAD is skipped. If the commits can't be read, the warning says so. The exit
+  code is unchanged.
 - After `repown setup` runs (Recommended or Step by step, including skips, Stop,
   a failed step, and **Apply the same settings again**), it prints what changed
   in this clone: `changed in this clone:` and one line per local key,

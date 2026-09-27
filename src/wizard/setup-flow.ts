@@ -10,6 +10,7 @@
 import { ghAdvice } from '../commands/status.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { shellWord } from '../core/guard/check.ts';
+import { unpushedLines, type UnpushedFact } from '../core/unpushed.ts';
 import type { Account } from '../core/registry.ts';
 import type { GhState } from '../core/credential/gh.ts';
 import type { GuardState } from '../core/guard/hook.ts';
@@ -63,6 +64,8 @@ export interface SetupContext {
   readonly fixLines: readonly string[] | null;
   /** Author and committer addresses in this clone's history. */
   readonly addresses: Result<ReadonlyMap<string, number>>;
+  /** Commits on the current branch that no remote has. Compared here with the planned email. */
+  readonly unpushed: UnpushedFact;
   /** Global `user.name` and `user.email`. Shown, never assumed to be this account. */
   readonly machineIdentity: { readonly name: string | null; readonly email: string | null };
   /** Git's `push.autoSetupRemote`: whether this git has it, the effective value, the branch. */
@@ -559,9 +562,20 @@ function upstreamOffer(ctx: SetupContext): string | null {
 }
 
 function noted(lines: readonly string[], answers: Answers, ctx: SetupContext): string[] {
-  const extra = upstreamNote(ctx);
-  const body = extra ? [...lines, extra] : lines;
+  const body = [...lines, ...extraNotes(answers, ctx)];
   return body.map(printable).concat(ghNote(answers, ctx));
+}
+
+function extraNotes(answers: Answers, ctx: SetupContext): string[] {
+  const upstream = upstreamNote(ctx);
+  return [...(upstream ? [upstream] : []), ...unpushedNote(answers, ctx)];
+}
+
+/** The address depends on the account, so the commits were read once and are compared here. */
+function unpushedNote(answers: Answers, ctx: SetupContext): string[] {
+  const email = emailOf(answers, ctx) ?? '';
+  if (!email && ctx.unpushed.commits.ok) return [];
+  return unpushedLines(ctx.unpushed, email);
 }
 
 /** Old git, or a version that could not be read: say the push the question would have replaced. */

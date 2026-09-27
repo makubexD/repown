@@ -25,6 +25,7 @@ import {
   ghSwitch, ghLogin, readGhLoginVersion, type GhLoginError, type GhLoginVersion,
 } from '../core/credential/gh.ts';
 import { allowedOwners, shellWord } from '../core/guard/check.ts';
+import { readUnpushed, unpushedLines } from '../core/unpushed.ts';
 import { ask, interactive } from '../ui/prompt.ts';
 import { flagString, flagBool, gitFor, type Args } from '../ui/args.ts';
 import type { Command } from '../ui/command.ts';
@@ -56,7 +57,7 @@ export default {
     out.pass('identity', values.name + ' <' + values.email + '>  push-as:' + account);
 
     if (flagBool(args, 'gh')) await applyGh(account, repo);
-    await reportConcerns(account, repo);
+    await reportConcerns(account, repo, values.email);
     return 0;
   },
 } satisfies Command;
@@ -255,7 +256,8 @@ async function switchCli(account: string): Promise<void> {
 }
 
 /** Everything that is now true but not yet right. Warnings, never refusals. */
-async function reportConcerns(account: string, repo: RepoState): Promise<void> {
+async function reportConcerns(account: string, repo: RepoState, email: string): Promise<void> {
+  await reportUnpushed(repo, email);
   if (repo.credentialKeys.length === 0 && repo.url) {
     out.warn('host', repo.provider.label + ' credentials are not pinned by repown.');
     out.detail('commits are pinned and the guard still runs; only credential');
@@ -267,6 +269,14 @@ async function reportConcerns(account: string, repo: RepoState): Promise<void> {
     out.line();
     out.line(NEXT_GUARD);
   }
+}
+
+/** A warning only. Rewriting the commits stays the owner's call (ADR-013). */
+async function reportUnpushed(repo: RepoState, email: string): Promise<void> {
+  const [first, ...rest] = unpushedLines(await readUnpushed(repo.git), email);
+  if (!first) return;
+  out.warn('commits', first);
+  for (const line of rest) out.detail(line);
 }
 
 async function ownerConcern(account: string, repo: RepoState): Promise<void> {

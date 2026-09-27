@@ -78,6 +78,35 @@ const textOf = (review: Review): string[] =>
 const argvOf = (answers: Answers, ctx: SetupContext): (readonly string[])[] =>
   planCommands(answers, ctx).map((command) => command.argv);
 
+function onBranch(emails: readonly string[]): SetupContext['unpushed'] {
+  return {
+    branch: 'main',
+    commits: ok(emails.map((address) => ({ authorEmail: address, committerEmail: address }))),
+  };
+}
+
+function reviewNotes(ctx: SetupContext, answers: Answers = { account: 'octocat' }): string {
+  return setupFlow(ctx).review(answers, ctx).notes.join('\n');
+}
+
+/** A commit-tree whose committer date is fixed, so log order does not depend on the clock. */
+function commitAt(box: Sandbox, date: string, args: readonly string[]): string {
+  const saved = { author: process.env['GIT_AUTHOR_DATE'], committer: process.env['GIT_COMMITTER_DATE'] };
+  process.env['GIT_AUTHOR_DATE'] = date;
+  process.env['GIT_COMMITTER_DATE'] = date;
+  try {
+    return box.git(...args);
+  } finally {
+    restoreEnv('GIT_AUTHOR_DATE', saved.author);
+    restoreEnv('GIT_COMMITTER_DATE', saved.committer);
+  }
+}
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
+
 describe('setup flow', () => {
   test('a recorded account in its own repo: pin it and turn the guard on', async () => {
     const ctx = context();
@@ -578,6 +607,63 @@ describe('setup flow', () => {
     assert.match(guard.detail?.({ account: 'octocat' }, context({ addresses: err('git log failed') })) ?? '', /could not be read/);
   });
 
+  test('S19 the review notes unpushed commits by another address, and Recommended does not rewrite them', () => {
+    const ctx = context({ unpushed: onBranch(['old@example.invalid', 'also@example.invalid']) });
+    const notes = reviewNotes(ctx);
+    assert.match(notes, /2 commits on main not on any remote are by old@example\.invalid, also@example\.invalid; the guard will refuse them/);
+    assert.match(notes, /re-author them \(git rebase with --exec "git commit --amend --no-edit --reset-author"\), or pin that address/);
+    const planned = planCommands({ account: 'octocat', mode: 'recommended', guard: true }, ctx);
+    assert.equal(planned.some((command) => command.argv.some((arg) => /rebase|amend|reset-author/.test(arg))), false);
+    const settled = context({
+      pinned: 'octocat', pinIntact: true, guard: 'on',
+      unpushed: onBranch(['old@example.invalid']),
+    });
+    const again = setupFlow(settled).review({ account: 'octocat' }, settled);
+    assert.equal(again.settled, true);
+    assert.match(again.notes.join('\n'), /1 commit on main not on any remote is by old@example\.invalid; the guard will refuse it/);
+  });
+
+  test('S19 the same commit list is compared with the planned email', () => {
+    const recorded = {
+      octocat: { name: 'Octo Cat', email: 'octocat@example.invalid', host: 'github' },
+      'octo-work': { name: 'Octo Work', email: 'work@example.invalid', host: 'github' },
+    };
+    const ctx = context({ recorded, unpushed: onBranch(['work@example.invalid']) });
+    assert.match(reviewNotes(ctx, { account: 'octocat' }), /1 commit on main not on any remote is by work@example\.invalid/);
+    assert.doesNotMatch(reviewNotes(ctx, { account: 'octo-work' }), /not on any remote/);
+    const fresh = context({ recorded: {}, unpushed: onBranch(['old@example.invalid']) });
+    const answers = { account: NEW_ACCOUNT, newAccount: 'octocat', email: 'octocat@example.invalid' };
+    assert.match(reviewNotes(fresh, answers), /old@example\.invalid/);
+  });
+
+  test('S19 a committer who is not the author counts, and case does not', () => {
+    const mixed = context({ unpushed: { branch: 'main', commits: ok([
+      { authorEmail: 'octocat@example.invalid', committerEmail: 'Other@example.invalid' },
+      { authorEmail: 'other@example.invalid', committerEmail: 'octocat@example.invalid' },
+    ]) } });
+    assert.match(reviewNotes(mixed), /2 commits on main not on any remote are by Other@example\.invalid; the guard will refuse them/);
+    const same = context({ unpushed: onBranch(['Octocat@example.invalid']) });
+    assert.doesNotMatch(reviewNotes(same), /not on any remote/);
+    const capped = context({ unpushed: onBranch([
+      'a@example.invalid', 'b@example.invalid', 'c@example.invalid', 'd@example.invalid', 'e@example.invalid',
+    ]) });
+    assert.match(reviewNotes(capped), /5 commits on main not on any remote are by a@example\.invalid, b@example\.invalid, c@example\.invalid and 2 more/);
+  });
+
+  test('S19 a log that could not be read is a note, and a detached HEAD is not', () => {
+    const broken = context({ unpushed: { branch: 'feature', commits: err('git log failed') } });
+    const notes = reviewNotes(broken);
+    assert.match(notes, /commits on feature not on any remote could not be read \(git log failed\), so repown can't say whether the guard will refuse them/);
+    assert.doesNotMatch(notes, /re-author them|are by/);
+    const detached = context({ unpushed: { branch: null, commits: ok([]) } });
+    assert.doesNotMatch(reviewNotes(detached), /not on any remote/);
+    const hidden = context({ unpushed: { branch: 'main', commits: ok([
+      { authorEmail: 'bad\x1b@example.invalid', committerEmail: 'octocat@example.invalid' },
+    ]) } });
+    assert.doesNotMatch(reviewNotes(hidden), /\x1b/);
+    assert.match(reviewNotes(hidden), /bad\?@example\.invalid/);
+  });
+
   test('a detected choice is a new account under its login', () => {
     assert.equal(accountOf({ account: DETECTED_PREFIX + 'octocat' }), 'octocat');
     assert.equal(accountOf({ account: DETECTED_PREFIX + 'octo-work', newAccount: 'octocat' }), 'octo-work');
@@ -1004,6 +1090,40 @@ describe('setup context: would `use` change anything here?', () => {
     );
     assert.equal(status, 0);
     assert.equal(calls, 0);
+  });
+
+  test('S19 readContext reads unpushed commits once, and the review compares the account email', async () => {
+    const tree = at.box.git('rev-parse', 'HEAD^{tree}');
+    const ours = commitAt(at.box, '1700000000', [
+      '-c', 'user.name=Octo Cat', '-c', 'user.email=octocat@example.invalid',
+      'commit-tree', tree, '-m', 'ours',
+    ]);
+    const foreign = commitAt(at.box, '1700000060', [
+      '-c', 'user.name=Author', '-c', 'user.email=work@example.invalid',
+      '-c', 'committer.name=Author', '-c', 'committer.email=work@example.invalid',
+      'commit-tree', tree, '-p', ours, '-m', 'foreign',
+    ]);
+    at.box.git('update-ref', 'HEAD', foreign);
+    writeFileSync(join(at.registry, 'accounts.json'), JSON.stringify({ accounts: {
+      octocat: { name: 'Octo Cat', email: 'octocat@example.invalid', host: 'github' },
+      'octo-work': { name: 'Octo Work', email: 'work@example.invalid', host: 'github' },
+    } }));
+    const ctx = await read();
+    assert.equal(ctx.unpushed.branch, 'main');
+    assert.equal(ctx.unpushed.commits.ok, true);
+    if (!ctx.unpushed.commits.ok) return;
+    const emails = ctx.unpushed.commits.value.map((commit) => commit.authorEmail);
+    assert.deepEqual(emails, ['work@example.invalid', 'octocat@example.invalid']);
+    assert.match(reviewNotes(ctx, { account: 'octocat' }), /1 commit on main not on any remote is by work@example\.invalid/);
+    assert.match(reviewNotes(ctx, { account: 'octo-work' }), /1 commit on main not on any remote is by octocat@example\.invalid/);
+    assert.doesNotMatch(reviewNotes(ctx, { account: 'octo-work' }), /work@example\.invalid/);
+    at.box.git('update-ref', 'refs/remotes/origin/main', foreign);
+    const published = await read();
+    assert.equal(published.unpushed.commits.ok && published.unpushed.commits.value.length, 0);
+    assert.doesNotMatch(reviewNotes(published, { account: 'octocat' }), /not on any remote/);
+    at.box.git('checkout', '--detach');
+    const detached = await read();
+    assert.equal(detached.unpushed.branch, null);
   });
 
   test('what git actually uses must agree: an include or a differently-cased credential entry is not intact', async () => {

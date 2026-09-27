@@ -13,6 +13,7 @@ import { isGh, type GhState } from '../core/credential/gh.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { ok, err, type Result } from '../core/result.ts';
 import { previewLines } from '../commands/fix.ts';
+import { readUnpushed, type UnpushedFact } from '../core/unpushed.ts';
 import { SOURCE_GCM, SOURCE_GH, SOURCE_OWNS, type DetectedAccount, type SetupContext, type UpstreamRead } from './setup-flow.ts';
 
 export interface DetectionInput {
@@ -122,6 +123,7 @@ interface Facts {
   readonly gh: Result<GhState> | null;
   readonly ghIsHelper: boolean;
   readonly addresses: Result<ReadonlyMap<string, number>>;
+  readonly unpushed: UnpushedFact;
   readonly fixLines: readonly string[] | null;
   readonly detected: readonly DetectedAccount[];
   readonly ownerIsUser: boolean | null;
@@ -141,6 +143,7 @@ interface Loaded {
   readonly allowed: readonly string[];
   readonly planned: readonly RemovalOutcome[];
   readonly addresses: Result<ReadonlyMap<string, number>>;
+  readonly unpushed: UnpushedFact;
   readonly helpers: readonly string[];
   readonly name: string | null;
   readonly email: string | null;
@@ -150,7 +153,7 @@ interface Loaded {
 
 async function loadClone(git: Git, repo: RepoState, options: ReadOptions): Promise<Loaded> {
   const authPromise = inspectAuth(git, repo.originUrl ?? undefined);
-  const [auth, pinned, allowed, planned, addresses, helpers, ownerIsUser, upstream] = await Promise.all([
+  const [auth, pinned, allowed, planned, addresses, helpers, ownerIsUser, upstream, unpushed] = await Promise.all([
     authPromise,
     git.getConfig('repown.account', 'local'),
     git.getAllConfig('repown.allowOwner', 'local'),
@@ -159,9 +162,10 @@ async function loadClone(git: Git, repo: RepoState, options: ReadOptions): Promi
     git.getAllConfigRaw('credential.helper'),
     authPromise.then((auth) => askOwnerIsUser(repo, auth, options)),
     readUpstream(git),
+    readUnpushed(git),
   ]);
   const { machineName: name, machineEmail: email } = repo.identity;
-  return { auth, pinned, allowed, planned, addresses, helpers, name, email, ownerIsUser, upstream };
+  return { auth, pinned, allowed, planned, addresses, unpushed, helpers, name, email, ownerIsUser, upstream };
 }
 
 /** Version, effective push.autoSetupRemote, and the branch. One read; nothing is written. */
@@ -179,7 +183,7 @@ function branchOf(head: CurrentBranch | null): string | null {
 async function finishFacts(git: Git, repo: RepoState, recorded: Readonly<Record<string, Account>>, loaded: Loaded): Promise<Facts> {
   const ghIsHelper = anyGhHelper(loaded.auth, loaded.planned, loaded.helpers);
   return {
-    pinned: loaded.pinned, allowed: loaded.allowed, addresses: loaded.addresses,
+    pinned: loaded.pinned, allowed: loaded.allowed, addresses: loaded.addresses, unpushed: loaded.unpushed,
     name: loaded.name, email: loaded.email, ownerIsUser: loaded.ownerIsUser, ghIsHelper,
     gh: loaded.auth.ghPresent ? loaded.auth.gh : null,
     pinIntact: await pinIntact(git, loaded.pinned, recorded[loaded.pinned ?? ''], repo),
@@ -204,7 +208,7 @@ function assemble(cwd: string | null, recorded: Readonly<Record<string, Account>
     guard: repo.guard,
     redirected: repo.hook?.redirected ?? false, hookPath: repo.hook?.path ?? null,
     fixLines: facts.fixLines,
-    addresses: facts.addresses,
+    addresses: facts.addresses, unpushed: facts.unpushed,
     machineIdentity: { name: facts.name, email: facts.email },
     upstream: facts.upstream,
     suggest: suggester(),
@@ -272,7 +276,7 @@ function asUser(kind: 'user' | 'organization' | null): boolean | null {
   return null;
 }
 
-/** The history is read only for the guard question, which needs it; it can be long. */
+/** Every ref, for the guard question only. Unpushed commits on this branch are readUnpushed. */
 function historyFor(git: Git, repo: RepoState): Promise<Result<ReadonlyMap<string, number>>> {
   const guardAsked = repo.guard === 'off' && !repo.hook?.redirected;
   return guardAsked ? git.emailCounts() : Promise.resolve(ok(new Map<string, number>()));

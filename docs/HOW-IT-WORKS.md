@@ -187,6 +187,7 @@ sequenceDiagram
 | Repo owned by an organisation | 🟡 prints the line that allows it ([card 5](#5-check-where-you-are)) |
 | gh is still the credential helper | 🟡 `fix: repown fix` |
 | No stored credential yet | the first push signs in once ([card 6](#6-commit-and-first-push)) |
+| Unpushed commits by another address | 🟡 `N commits on <branch> not on any remote are by <addresses>; the guard will refuse them`, then `re-author them (git rebase with --exec "git commit --amend --no-edit --reset-author"), or pin that address`. Up to three addresses, then `and N more`. Exit code unchanged. A detached HEAD says nothing. If those commits can't be read, the warning says so |
 
 </details>
 
@@ -367,7 +368,11 @@ flowchart TD
 ### 8. Push refused, and the fix
 
 **Each refusal says what's wrong and how to fix it;** a commit refusal also lists the
-commits. Nothing leaves until you fix it, or skip the check once.
+commits. Nothing leaves until you fix it, or skip the check once. Before that push,
+`repown use` warns and `repown setup`'s review notes the same fact, including in
+Recommended mode, when the current branch has commits no remote has by another
+address. Neither rewrites them. If those commits can't be read, that is said
+rather than treated as clean ([card 3](#3-pin-a-clone)).
 
 <details><summary>Show how</summary>
 

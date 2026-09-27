@@ -41,6 +41,13 @@ committed ([card 9](HOW-IT-WORKS.md#9-a-teammate-without-repown)).
 is a safety net, not a lock
 ([SECURITY.md](../SECURITY.md#what-repown-protects-and-what-it-doesnt)).
 
+**The guard refuses commits I made before pinning.** They still carry the address they
+were made with. `repown use` warns, and `repown setup`'s review notes it, when the
+current branch has commits no remote has by another address. Re-author them
+(`git rebase` with `--exec "git commit --amend --no-edit --reset-author"`), or pin
+that address. Nothing here rewrites history
+([card 3](HOW-IT-WORKS.md#3-pin-a-clone), [card 8](HOW-IT-WORKS.md#8-push-refused-and-the-fix)).
+
 **I ran `repown setup` again and it said "already set up". Is that right?** Yes: the clone
 already uses that account exactly as recorded. Choose **Done**, or **Apply the same
 settings again** to re-run `repown use` ([card 13](HOW-IT-WORKS.md#13-guided-setup)).

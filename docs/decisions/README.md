@@ -28,6 +28,7 @@ name was free on npm, and is now this package.
 | [015](ADR-015-releases-from-tags.md) | Releases are tag-driven and published from CI by trusted publishing |
 | [016](ADR-016-clack-for-the-setup-wizard.md) | One optional runtime dependency, @clack/prompts, for the setup wizard |
 | [017](ADR-017-setup-suggests-detected-accounts.md) | Setup suggests the accounts it can see, never the machine default |
+| [018](ADR-018-bare-repown-guides-new-clones.md) | Bare repown guides a clone that isn't set up; scripts still get status |
 
 **Adding one:** create the next number, using the same sections: Status, Context,
 Decision, Alternatives considered, Consequences. Cite it as `ADR-0NN`. Never delete or

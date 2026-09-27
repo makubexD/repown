@@ -7,6 +7,15 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+- In a terminal, bare `repown` in a clone that isn't set up starts `repown setup`.
+  Outside a clone it shows help. Otherwise, and always without a terminal, it's status
+  as before, so a script, CI or an alias still gets the report.
+- `repown status` now says what it shows: a title, the clone's path and branch, "This
+  clone" and "This machine" groups with the machine's default identity, whether the
+  clone's account is recorded (a warning when its name or email drifted), a
+  `repown setup` pointer for a clone that isn't set up, and a closing count of
+  problems and warnings.
+
 - New: `repown setup`, a guided setup of the clone you're in. It asks which account owns
   it (recording a new one), whether to switch gh, whether this clone may push to origin's
   owner (an organisation or a collaborator), whether to turn the guard on, and whether to

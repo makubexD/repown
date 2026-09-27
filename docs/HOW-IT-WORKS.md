@@ -62,10 +62,42 @@ only when you run them: `repown fix` removes gh's helper entries from your git c
 ### 1. Set up the machine
 
 **Once per machine.** `repown doctor` checks which program hands git your sign-in (the
-*credential helper*). 🟢 Git
+*credential helper*), then lists every account repown, GCM or gh knows. 🟢 Git
 Credential Manager (GCM) needs nothing more. 🔴 If gh has become the helper, run `repown fix`.
 
 <details><summary>Show how</summary>
+
+```
+repown doctor · how this machine signs in to git hosts
+
+This machine
+  helper         manager
+  GCM            git-credential-manager
+  gh active      octo-work
+
+Accounts
+  octocat        (this clone)  git: not signed in yet (the first push signs in) · gh: not signed in
+  octo-work      not recorded by repown · git: stored · gh: active
+```
+
+| Cell | Means |
+| --- | --- |
+| `git: stored` | GCM holds a sign-in for this GitHub account |
+| `git: not signed in yet (the first push signs in)` | GCM is the helper, the store was read, and this account is not in it |
+| `git: unknown` | GCM is missing, its store could not be read, or another helper serves pushes and this account is not stored |
+| `git: your host's own sign-in` | The account's host is not GitHub, so no credential is pinned ([ADR-009](decisions/ADR-009-hosts-claim-only-measured.md)). No gh cell |
+| `gh: active` / `signed in` / `not signed in` | gh acts as this account, knows it, or was queried and does not have it |
+| `gh: unknown` | gh could not be queried. One WARN says why |
+| `gh active` shows `not installed` | gh is absent. Said once, on that line, not on every account |
+| `(this clone)` | This clone is pinned to that account. Outside a clone, no marker |
+| `not recorded by repown` | Only GCM or gh knows the account |
+| `recorded: unknown` | The registry could not be read. One WARN says why |
+| `none recorded, stored or signed in yet` | The registry, the store and gh were read and named nobody. Next: `repown setup` |
+
+Recorded accounts stay in registry order; the others follow, alphabetically.
+A failed registry, store or gh read is `unknown` in the cells that depend on
+it, and one WARN per source. GCM not installed is the `GCM` line (`not found`),
+not a second warning. The diagnosis under the list is unchanged.
 
 ```mermaid
 flowchart TD

@@ -144,7 +144,7 @@ then commit and push.
 
 | When | Command | What it does |
 | --- | --- | --- |
-| Once per machine | `repown doctor` | what serves credentials on this machine, and to whom |
+| Once per machine | `repown doctor` | what serves credentials on this machine, and whether each account is signed in to git and gh |
 | | `repown fix [--dry-run] [--yes]` | undo `gh auth setup-git`, so each clone's pinned account is used; shows what it removes, and the undo, first |
 | Once per clone | `repown setup [<account>]` | guided: asks, shows each step and its command, then runs them. Every answer has a flag (`--name`, `--email`, `--host`, `--gh`, `--allow-owner <owner>`, `--guard`, `--fix`); `--no-input` asks nothing ([scripts and CI](docs/CONFIGURATION.md#scripts-and-ci)) |
 | | `repown use <account> [--gh]` | what setup runs: pin this clone to an account; `--gh` switches gh's active account, or signs the account in to gh when needed (in a terminal). `--name` with `--email` skips the registry, the file where repown remembers accounts |

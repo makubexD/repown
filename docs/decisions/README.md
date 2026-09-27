@@ -27,6 +27,7 @@ name was free on npm, and is now this package.
 | [014](ADR-014-json-for-scripts.md) | `--format json` is the contract for scripts; text is for people |
 | [015](ADR-015-releases-from-tags.md) | Releases are tag-driven and published from CI by trusted publishing |
 | [016](ADR-016-clack-for-the-setup-wizard.md) | One optional runtime dependency, @clack/prompts, for the setup wizard |
+| [017](ADR-017-setup-suggests-detected-accounts.md) | Setup suggests the accounts it can see, never the machine default |
 
 **Adding one:** create the next number, using the same sections: Status, Context,
 Decision, Alternatives considered, Consequences. Cite it as `ADR-0NN`. Never delete or

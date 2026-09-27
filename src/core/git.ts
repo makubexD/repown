@@ -85,6 +85,16 @@ export class Git {
     return hash ? { kind: 'detached', hash } : null;
   }
 
+  /** The tracked ref as git reports it (`origin/main`), or null when none is set. */
+  async upstreamRef(): Promise<string | null> {
+    return output(await this.exec(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']));
+  }
+
+  /** Remote names, in the order git lists them. */
+  async remotes(): Promise<string[]> {
+    return lines(await this.exec(['remote']));
+  }
+
   /**
    * The directory every worktree shares -- where hooks and config actually live.
    * In a linked worktree `.git` is a FILE, so joining '.git' to the root gives a
@@ -114,6 +124,12 @@ export class Git {
   /** The value, or null when unset. Omit `scope` to read what git would EFFECTIVELY use. */
   async getConfig(key: string, scope?: ConfigScope): Promise<string | null> {
     return output(await this.exec(this.scoped(scope, ['--get', key])));
+  }
+
+  /** Effective boolean, or null when unset or not a bool. Omit `scope` for any-scope. */
+  async getBoolConfig(key: string, scope?: ConfigScope): Promise<boolean | null> {
+    const value = output(await this.exec(this.scoped(scope, ['--type=bool', '--get', key])));
+    return value === 'true' ? true : value === 'false' ? false : null;
   }
 
   async getAllConfig(key: string, scope?: ConfigScope): Promise<string[]> {

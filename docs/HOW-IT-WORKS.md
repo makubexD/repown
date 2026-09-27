@@ -230,6 +230,7 @@ This clone
   pushes as      octocat
   account        octocat  (recorded)
   origin         octocat  (GitHub)
+  upstream       origin/main
   push guard     on
 
 This machine
@@ -241,7 +242,7 @@ WARN  gh         active as "octo-work", so `gh pr create` here would act as that
        fix: gh auth switch -u octocat
 OK    identity   this clone is pinned, and its credential mechanism honours it
 
-1 warning
+ready: commits and pushes use octocat · 1 warning (optional: gh)
 ```
 
 | You see | Meaning | Fix |
@@ -262,9 +263,16 @@ OK    identity   this clone is pinned, and its credential mechanism honours it
 | `pushes as not pinned by repown on …` | a host where credentials aren't pinned | nothing: expected |
 | `account … (not in this machine's registry)` | pinned by hand or on another machine | `repown accounts add <account> --name "..." --email "..."` |
 | `origin no remote` | nothing to push to yet | nothing |
+| `upstream origin/<branch>` | this branch tracks that remote branch | nothing |
+| `upstream none yet: git push -u origin <branch>` | the branch has no upstream | `git push -u origin <branch>` |
+| `upstream set on the first push (push.autoSetupRemote)` | git will set the upstream on the first push | nothing |
+| (no `upstream` field) | detached HEAD, or no remote | nothing |
 
-🔴 rows exit 1; 🟡 rows alone exit 0. Stderr then ends with a count (`1 problem, 2 warnings`),
-adding `: run repown setup` when an identity problem is among them. Outside a clone,
+🔴 rows exit 1; 🟡 rows alone exit 0. With no problems, stderr ends with
+`ready: commits and pushes use <account>`, plus ` · N warning(s)` when there
+are warnings, tagged `(optional: gh)` when every warning is about gh. With a
+problem it ends with a count (`1 problem, 2 warnings`), adding
+`: run repown setup` when an identity problem is among them. Outside a clone,
 `repown status` prints `Not a git repository` and exits 1. Bare `repown` does that only
 without a terminal or with its output redirected; in a terminal it shows the help and
 exits 0. A bare repository takes that same path.

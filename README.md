@@ -167,6 +167,7 @@ This clone
   pushes as      octocat
   account        octocat  (recorded)
   origin         octocat  (GitHub)
+  upstream       origin/main
   push guard     on
 
 This machine
@@ -178,7 +179,7 @@ WARN  gh         active as "octo-work", so `gh pr create` here would act as that
        fix: gh auth switch -u octocat
 OK    identity   this clone is pinned, and its credential mechanism honours it
 
-1 warning
+ready: commits and pushes use octocat · 1 warning (optional: gh)
 ```
 
 Here git is right, and only `gh` commands would act as another account. Every warning it

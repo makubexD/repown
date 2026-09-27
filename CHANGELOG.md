@@ -7,6 +7,12 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+- `repown status` shows the branch's `upstream`: the tracked remote branch,
+  `none yet: git push -u origin <branch>`, or `set on the first push
+  (push.autoSetupRemote)`. Missing on a detached HEAD or with no remote, and
+  never counted as a warning. With no problems it closes with
+  `ready: commits and pushes use <account>`, plus ` · N warning(s)` when there
+  are warnings, tagged `(optional: gh)` when every warning is about gh.
 - `repown setup` offers to sign the account in to gh when gh doesn't already
   know it (default No). Yes runs `repown use <account> --gh` and opens a
   browser. If gh is left acting as another account, the review and the line

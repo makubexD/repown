@@ -36,11 +36,11 @@ export default {
     const auth = await inspectAuth(git, repo.originUrl ?? undefined);
     const registry = await loadRegistry();
 
-    summary(repo, auth, registry);
+    await summary(repo, auth, registry);
     const problems = collectProblems(repo, auth);
     const warnings = await reportWarnings(repo, auth, registry);
     const code = verdict(repo, auth, problems);
-    closeStatus(repo, problems, warnings);
+    closeStatus(repo, problems, warnings, accountShown(repo, registry));
     return code;
   },
 } satisfies Command;
@@ -60,10 +60,10 @@ function verdict(repo: RepoState, auth: AuthState, problems: readonly Problem[])
 
 const STATUS_TITLE = 'repown status · current settings of this clone';
 
-function summary(repo: RepoState, auth: AuthState, registry: LoadedRegistry): void {
+async function summary(repo: RepoState, auth: AuthState, registry: LoadedRegistry): Promise<void> {
   out.heading(STATUS_TITLE);
   out.line(place(repo));
-  cloneSettings(repo, registry);
+  await cloneSettings(repo, registry);
   machineSettings(repo, auth);
   out.line();
 }
@@ -78,14 +78,37 @@ function headLabel(branch: NonNullable<RepoState['branch']>): string {
   return '(branch ' + branch.name + ')';
 }
 
-function cloneSettings(repo: RepoState, registry: LoadedRegistry): void {
+async function cloneSettings(repo: RepoState, registry: LoadedRegistry): Promise<void> {
   const id = repo.identity;
   out.heading('This clone');
   out.field('commits as', person(id.name, id.email, 'NOT SET LOCALLY'));
   out.field('pushes as', pushesAs(repo));
   out.field('account', accountOf(repo, registry));
   out.field('origin', originOf(repo));
+  await writeUpstream(repo);
   out.field('push guard', repo.guard);
+}
+
+async function writeUpstream(repo: RepoState): Promise<void> {
+  const value = await upstreamField(repo);
+  if (value !== null) out.field('upstream', value);
+}
+
+async function upstreamField(repo: RepoState): Promise<string | null> {
+  const branch = repo.branch;
+  if (branch?.kind !== 'branch') return null;
+  const remotes = await repo.git.remotes();
+  if (remotes.length === 0) return null;
+  const tracked = await repo.git.upstreamRef();
+  if (tracked !== null) return tracked;
+  if (await repo.git.getBoolConfig('push.autoSetupRemote') === true) {
+    return 'set on the first push (push.autoSetupRemote)';
+  }
+  return 'none yet: git push -u ' + pushRemote(remotes) + ' ' + branch.name;
+}
+
+function pushRemote(remotes: readonly string[]): string {
+  return remotes.includes('origin') ? 'origin' : remotes[0]!;
 }
 
 function machineSettings(repo: RepoState, auth: AuthState): void {
@@ -160,11 +183,26 @@ function matchesRecord(repo: RepoState, entry: Account): boolean {
 
 interface Problem { readonly what: string; readonly fix: string; }
 
-function closeStatus(repo: RepoState, problems: readonly Problem[], warnings: number): void {
-  if (problems.length === 0 && warnings === 0) return;
-  const hint = identityProblems(repo).length > 0 ? ': run repown setup' : '';
+function closeStatus(repo: RepoState, problems: readonly Problem[], warnings: readonly string[], account: string): void {
+  const line = problems.length === 0
+    ? readyLine(account, warnings)
+    : tally(problems.length, warnings.length) + setupHint(repo);
   out.note('');
-  out.note(tally(problems.length, warnings) + hint);
+  out.note(line);
+}
+
+function readyLine(account: string, warnings: readonly string[]): string {
+  const head = 'ready: commits and pushes use ' + account;
+  if (warnings.length === 0) return head;
+  return head + ' · ' + howMany(warnings.length, 'warning') + ghTag(warnings);
+}
+
+function ghTag(warnings: readonly string[]): string {
+  return warnings.every((tag) => tag === 'gh') ? ' (optional: gh)' : '';
+}
+
+function setupHint(repo: RepoState): string {
+  return identityProblems(repo).length > 0 ? ': run repown setup' : '';
 }
 
 function tally(problems: number, warnings: number): string {
@@ -205,8 +243,9 @@ export function identityProblems(repo: RepoState): Problem[] {
   }];
 }
 
-async function reportWarnings(repo: RepoState, auth: AuthState, registry: LoadedRegistry): Promise<number> {
-  const warned = [
+async function reportWarnings(repo: RepoState, auth: AuthState, registry: LoadedRegistry): Promise<readonly string[]> {
+  const tags = ['origin', 'account', 'guard', 'submodule', 'helper', 'gh'] as const;
+  const fired = [
     await ownerWarning(repo),
     accountWarning(repo, registry),
     guardWarning(repo),
@@ -214,7 +253,14 @@ async function reportWarnings(repo: RepoState, auth: AuthState, registry: Loaded
     helperWarning(repo, auth),
     ghWarning(pinnedAccount(repo), auth),
   ];
-  return warned.filter((flag) => flag).length;
+  return tags.filter((_, i) => fired[i]);
+}
+
+function accountShown(repo: RepoState, registry: LoadedRegistry): string {
+  const pinned = pinnedAccount(repo);
+  if (pinned === null) return repo.identity.email ?? 'this clone\'s identity';
+  if (!registry.ok) return pinned;
+  return recordedAs(registry.value, pinned)?.key ?? pinned;
 }
 
 function accountWarning(repo: RepoState, registry: LoadedRegistry): boolean {

@@ -1,6 +1,7 @@
 // `repown status` says where the clone is and which settings are its own.
 // S6 title, path and branch; S7 the two groups; S8 the recorded account;
 // S9 what to run next; S10 outside a repository.
+// SPEC.md S1-S7: the upstream field and the ready: summary (ADR-020).
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -127,6 +128,170 @@ describe('repown status layout', () => {
   });
 });
 
+describe('repown status upstream', () => {
+  let box: Sandbox;
+  beforeEach(() => { box = sandbox(); });
+  afterEach(() => box.dispose());
+
+  test('S1: no upstream prints the push -u form, after origin, not as a warning', () => {
+    pinGithub(box);
+    guardOn(box);
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 0, run.stderr);
+    assert.deepEqual(fieldsUnder(run.stdout, 'This clone'),
+      ['commits as', 'pushes as', 'account', 'origin', 'upstream', 'push guard']);
+    assert.equal(upstreamLine(run.stdout), fieldLine('upstream', 'none yet: git push -u origin main'));
+    assert.equal(counted(run.stderr, 'WARN'), 0, run.stderr);
+    assert.doesNotMatch(run.stderr, /upstream|none yet|push -u/);
+  });
+
+  test('S1: with no origin, the push -u form uses the first remote', () => {
+    box.git('remote', 'add', 'work', 'https://github.com/octocat/project.git');
+    guardOn(box);
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(upstreamLine(run.stdout), fieldLine('upstream', 'none yet: git push -u work main'));
+  });
+
+  test('S1: origin wins over another remote in the push -u form', () => {
+    box.git('remote', 'add', 'work', 'https://github.com/octocat/other.git');
+    pinGithub(box);
+    guardOn(box);
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(upstreamLine(run.stdout), fieldLine('upstream', 'none yet: git push -u origin main'));
+  });
+
+  test('S2: a tracked branch shows the ref git reports', () => {
+    pinGithub(box);
+    guardOn(box);
+    track(box, 'origin/develop');
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(upstreamLine(run.stdout), fieldLine('upstream', 'origin/develop'));
+  });
+
+  test('S3: autoSetupRemote true locally, no upstream', () => {
+    pinGithub(box);
+    guardOn(box);
+    box.git('config', '--local', 'push.autoSetupRemote', 'true');
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(upstreamLine(run.stdout), fieldLine('upstream', 'set on the first push (push.autoSetupRemote)'));
+  });
+
+  test('S3: autoSetupRemote true in global config, no upstream', () => {
+    pinGithub(box);
+    guardOn(box);
+    box.writeGlobalConfig('[push]\n\tautoSetupRemote = true\n');
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(upstreamLine(run.stdout), fieldLine('upstream', 'set on the first push (push.autoSetupRemote)'));
+  });
+
+  test('S3: a truthy non-true value still counts (push.autoSetupRemote)', () => {
+    pinGithub(box);
+    guardOn(box);
+    box.git('config', '--local', 'push.autoSetupRemote', 'yes');
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(upstreamLine(run.stdout), fieldLine('upstream', 'set on the first push (push.autoSetupRemote)'));
+  });
+
+  test('S3: autoSetupRemote false still shows the push -u form', () => {
+    pinGithub(box);
+    guardOn(box);
+    box.git('config', '--local', 'push.autoSetupRemote', 'false');
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(upstreamLine(run.stdout), fieldLine('upstream', 'none yet: git push -u origin main'));
+  });
+
+  test('S4: a detached HEAD has no upstream field, even with a remote', () => {
+    pinGithub(box);
+    box.git('commit', '--allow-empty', '-m', 'base');
+    box.git('checkout', '--detach');
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.match(run.stdout, /\(detached at /);
+    assert.equal(upstreamLine(run.stdout), undefined);
+  });
+
+  test('S4: no remote means no upstream field', () => {
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.deepEqual(fieldsUnder(run.stdout, 'This clone'),
+      ['commits as', 'pushes as', 'account', 'origin', 'push guard']);
+    assert.equal(upstreamLine(run.stdout), undefined);
+  });
+});
+
+describe('repown status ready line', () => {
+  let box: Sandbox;
+  beforeEach(() => { box = sandbox(); });
+  afterEach(() => box.dispose());
+
+  test('S5: no problems, only a gh active-as-other warning', () => {
+    pinGithub(box);
+    guardOn(box);
+    const run = repown(['status'], box.dir, fakeGhEnv(box));
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /WARN {2}gh/);
+    assert.equal(counted(run.stderr, 'WARN'), 1, run.stderr);
+    assert.equal(counted(run.stderr, 'FAIL'), 0, run.stderr);
+    assert.equal(closing(run.stderr), 'ready: commits and pushes use octocat · 1 warning (optional: gh)');
+  });
+
+  test('S5: no problems, only a gh could-not-be-queried warning', () => {
+    pinGithub(box);
+    guardOn(box);
+    const run = repown(['status'], box.dir, fakeGhEnv(box, { GH_FAKE_FAIL: '1' }));
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /could not be queried/);
+    assert.equal(counted(run.stderr, 'WARN'), 1, run.stderr);
+    assert.equal(closing(run.stderr), 'ready: commits and pushes use octocat · 1 warning (optional: gh)');
+  });
+
+  test('S6: a non-gh warning is ready with the count, not tagged optional', () => {
+    pinGithub(box);
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /WARN {2}guard/);
+    assert.equal(counted(run.stderr, 'WARN'), 1, run.stderr);
+    assert.equal(closing(run.stderr), 'ready: commits and pushes use octocat · 1 warning');
+    assert.doesNotMatch(run.stderr, /optional: gh/);
+  });
+
+  test('S6: a gh warning mixed with another is not tagged optional', () => {
+    pinGithub(box);
+    const run = repown(['status'], box.dir, fakeGhEnv(box));
+    assert.equal(run.status, 0, run.stderr);
+    assert.ok(counted(run.stderr, 'WARN') >= 2, run.stderr);
+    assert.equal(closing(run.stderr), 'ready: commits and pushes use octocat · ' +
+      counted(run.stderr, 'WARN') + ' warnings');
+    assert.doesNotMatch(run.stderr, /optional: gh/);
+  });
+
+  test('S7: a problem keeps today\'s tally and prints no ready line', () => {
+    unpin(box);
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 1);
+    assert.equal(closing(run.stderr), '1 problem, 1 warning: run repown setup');
+    assert.doesNotMatch(run.stderr, /ready:/);
+  });
+
+  test('S7: gh as the helper still ends with 1 problem, no ready line', () => {
+    pinGithub(box);
+    box.git('config', '--local', 'credential.helper', '!gh auth git-credential');
+    guardOn(box);
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 1);
+    assert.equal(closing(run.stderr), '1 problem');
+    assert.doesNotMatch(run.stderr, /ready:/);
+  });
+
+  test('the ready account matches the account field\'s spelling', () => {
+    pinGithub(box);
+    record(box, 'Octocat', 'Octo Cat', 'octocat@example.invalid');
+    guardOn(box);
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(accountLine(run.stdout), '  account        Octocat  (recorded)');
+    assert.equal(closing(run.stderr), 'ready: commits and pushes use Octocat');
+  });
+});
+
 describe('repown status account', () => {
   let box: Sandbox;
   beforeEach(() => { box = sandbox(); });
@@ -213,7 +378,7 @@ describe('repown status account', () => {
     assert.equal(accountLine(run.stdout), '  account        registry could not be read: ' + error);
     assert.doesNotMatch(run.stdout, /none recorded/);
     assertRegistryWarning(run.stderr);
-    assert.equal(closing(run.stderr), '2 warnings');
+    assert.equal(closing(run.stderr), 'ready: commits and pushes use octocat · 2 warnings');
     assert.doesNotMatch(run.stderr, /run repown setup/);
   });
 
@@ -343,15 +508,16 @@ describe('repown status failure pointers', () => {
     assert.equal(run.status, 0);
     assert.equal(counted(run.stderr, 'FAIL'), 0, run.stderr);
     assert.equal(counted(run.stderr, 'WARN'), 1, run.stderr);
-    assert.equal(closing(run.stderr), '1 warning');
+    assert.equal(closing(run.stderr), 'ready: commits and pushes use octocat · 1 warning');
   });
 
-  test('S9: a clean run prints no closing line and leaves stderr empty', () => {
+  test('S9: a clean run still says ready, on stderr', () => {
     pinGithub(box);
     guardOn(box);
     const run = repown(['status'], box.dir, quietEnv());
     assert.equal(run.status, 0, run.stderr);
-    assert.equal(run.stderr, '');
+    assert.equal(closing(run.stderr), 'ready: commits and pushes use octocat');
+    assert.doesNotMatch(run.stdout, /ready:/);
   });
 
   test('S9: a foreign pre-push hook is counted in the closing tally', () => {
@@ -412,6 +578,20 @@ function accountLine(stdout: string): string {
   return found;
 }
 
+function upstreamLine(stdout: string): string | undefined {
+  return stdout.split('\n').find((text) => text.startsWith('  upstream '));
+}
+
+function fieldLine(label: string, value: string): string {
+  return '  ' + label.padEnd(14) + ' ' + value;
+}
+
+function track(box: Sandbox, ref: string): void {
+  box.git('commit', '--allow-empty', '-m', 'base');
+  box.git('update-ref', 'refs/remotes/' + ref, 'HEAD');
+  box.git('branch', '--set-upstream-to=' + ref);
+}
+
 function record(box: Sandbox, account: string, name: string, email: string): void {
   const run = repown(['accounts', 'add', account, '--name', name, '--email', email], box.dir);
   assert.equal(run.status, 0, run.stderr);
@@ -455,6 +635,63 @@ function quietEnv(): NodeJS.ProcessEnv {
   return { ...process.env, PATH: dirs.join(delimiter) };
 }
 
+function fakeGhEnv(box: Sandbox, extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const bin = join(box.dir, '..', 'fake-gh-bin');
+  mkdirSync(bin, { recursive: true });
+  installFakeGh(bin);
+  const env = quietEnv();
+  return { ...env, ...extra, PATH: bin + delimiter + (env['PATH'] ?? '') };
+}
+
+function installFakeGh(bin: string): void {
+  if (process.platform === 'win32') compileFakeGh(bin);
+  else writeFileSync(join(bin, 'gh'), FAKE_GH_SH, { mode: 0o755 });
+}
+
+function compileFakeGh(bin: string): void {
+  const source = join(bin, 'fake-gh.cs');
+  writeFileSync(source, FAKE_GH_CS);
+  const run = spawnSync(cscPath(), ['/nologo', '/out:' + join(bin, 'gh.exe'), source], { encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+}
+
+function cscPath(): string {
+  const root = join(process.env['WINDIR'] ?? 'C:\\Windows', 'Microsoft.NET');
+  const found = ['Framework64', 'Framework']
+    .map((name) => join(root, name, 'v4.0.30319', 'csc.exe'))
+    .find((path) => existsSync(path));
+  if (!found) throw new Error('csc.exe is not installed');
+  return found;
+}
+
+const FAKE_GH_CS = `
+using System;
+class FakeGh {
+  static int Main(string[] args) {
+    if (args.Length == 1 && args[0] == "--version") {
+      Console.WriteLine("gh version 2.88.1 (2026-03-12)");
+      return 0;
+    }
+    if (Environment.GetEnvironmentVariable("GH_FAKE_FAIL") == "1") return 1;
+    if (args.Length >= 2 && args[0] == "auth" && args[1] == "status") {
+      Console.WriteLine("{\\"hosts\\":{\\"github.com\\":[{\\"login\\":\\"octo-work\\",\\"active\\":true}]}}");
+      return 0;
+    }
+    return 97;
+  }
+}
+`;
+
+const FAKE_GH_SH = `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "gh version 2.88.1 (2026-03-12)"; exit 0; fi
+if [ "$GH_FAKE_FAIL" = "1" ]; then exit 1; fi
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo '{"hosts":{"github.com":[{"login":"octo-work","active":true}]}}'
+  exit 0
+fi
+exit 97
+`;
+
 function namesGh(dir: string): boolean {
   return ['gh', 'gh.exe', 'gh.cmd', 'gh.bat'].some((name) => dir !== '' && existsSync(join(dir, name)));
 }
@@ -472,7 +709,10 @@ function counted(stderr: string, word?: 'FAIL' | 'WARN'): number {
 
 /** Problems plus warnings named by the closing tally. */
 function tallyCount(stderr: string): number {
-  const line = closing(stderr).replace(/: run repown setup$/, '');
+  const line = closing(stderr)
+    .replace(/^ready: commits and pushes use \S+ · /, '')
+    .replace(/ \(optional: gh\)$/, '')
+    .replace(/: run repown setup$/, '');
   return [...line.matchAll(/(\d+) /g)].reduce((sum, match) => sum + Number(match[1]), 0);
 }
 

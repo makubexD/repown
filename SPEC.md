@@ -32,11 +32,13 @@ test/wizard-setup.test.ts; `npm run build` and `npm test` pass.
 | D4 | Same login from owner, gh and GCM, differing in case | n/a | One entry; every source in its hint |
 | D5 | A detected login is already recorded | n/a | Listed once, as the recorded account |
 | D6 | Origin not on GitHub (Azure DevOps, generic) | Types a login | Nothing detected: owner, gh and GCM candidates are GitHub's only |
-| D7 | New account; global `user.email` set | Not mentioned | name/email keep the profile suggestion as default; detail: "this machine's default is <name> <email>; type it only if this account should use it" |
+| D7 | New account; the machine has a global name or email | Not mentioned | name and email keep the profile suggestion as the initial value; name detail, when the machine has a name: "not this machine's default name (<name>), unless this account uses it"; email detail: the noreply tip first, then "; not this machine's default address (<email>), unless this account uses it" |
 | D8 | "a new account" picked | Login with no default | Login defaults to the owner only when it's a confirmed User |
 | D9 | Picks a detected account, then ← Back | n/a | Back at the list with that choice kept |
 | D10 | `repown setup octocat --no-input …` | Works | Unchanged |
 | D11 | Later clone: origin's owner `octocat` already recorded, `octo-work` recorded first, clone not pinned | First recorded (`octo-work`) preselected | The recorded owner `octocat` is preselected, unless the clone is pinned to another recorded account |
+| D12 | Owner `octo-org` is an organisation and is already recorded, with `octocat` recorded too | n/a | `octo-org` stays listed and is not preselected; the default is the first other recorded account, or the pin if the clone is pinned |
+| D13 | Registry key `octo-work`, this clone's pin `Octo-Work`, owner `octocat` also recorded | n/a | The default is the registry spelling `octo-work`; the pin wins over the recorded owner |
 
 ## Open questions
 None.

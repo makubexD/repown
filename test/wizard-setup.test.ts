@@ -339,6 +339,22 @@ describe('setup flow', () => {
     assert.equal(stepOf(recorded, 'account').initial?.({}, recorded), 'octocat');
   });
 
+  test('D12 a recorded organisation stays listed and is not preselected', () => {
+    const recorded = {
+      'octo-org': { name: 'Octo Org', email: 'octo-org@example.invalid', host: 'github' },
+      octocat: { name: 'Octo Cat', email: 'octocat@example.invalid', host: 'github' },
+    };
+    const ctx = context({ recorded, owner: 'octo-org', ownerIsUser: false, detected: [] });
+    const account = stepOf(ctx, 'account');
+    const values = (account.choices?.({}, ctx) ?? []).map((choice) => choice.value);
+    assert.ok(values.includes('octo-org'));
+    assert.equal(account.initial?.({}, ctx), 'octocat');
+    const pinned = context({ recorded, owner: 'octo-org', ownerIsUser: false, pinned: 'octo-org' });
+    assert.equal(stepOf(pinned, 'account').initial?.({}, pinned), 'octo-org');
+    const unknown = context({ recorded, owner: 'octo-org', ownerIsUser: null });
+    assert.equal(stepOf(unknown, 'account').initial?.({}, unknown), 'octo-org');
+  });
+
   test('D3 an owner of unknown kind is listed, not preselected, and may be an organisation', () => {
     const ctx = context({ recorded: {}, owner: 'octocat', ownerIsUser: null,
       detected: [{ login: 'octocat', from: ['owns this repository', 'signed in to gh'] }] });
@@ -371,7 +387,8 @@ describe('setup flow', () => {
 
   test('D7 a new account is shown the machine default, which is never filled in', async () => {
     const machine = { name: 'Octo Work', email: 'octo-work@example.invalid' };
-    const line = 'this machine\'s default is Octo Work <octo-work@example.invalid>; type it only if this account should use it';
+    const nameLine = 'not this machine\'s default name (Octo Work), unless this account uses it';
+    const addressLine = 'not this machine\'s default address (octo-work@example.invalid), unless this account uses it';
     const ctx = context({
       recorded: {}, owner: 'octocat', ownerIsUser: true, machineIdentity: machine,
       suggest: async () => ({ name: 'Octo Cat', email: 'octocat@example.invalid' }),
@@ -379,17 +396,19 @@ describe('setup flow', () => {
     const fresh = { account: NEW_ACCOUNT, newAccount: 'octocat', host: 'github' };
     const name = stepOf(ctx, 'name');
     const email = stepOf(ctx, 'email');
-    assert.equal(name.detail?.(fresh, ctx), line);
+    assert.equal(name.detail?.(fresh, ctx), nameLine);
     const shown = email.detail?.(fresh, ctx) ?? '';
-    assert.equal(shown.startsWith(line + ' · '), true, shown);
-    assert.match(shown, /tip: to keep your own address private[\s\S]*1234\+octocat@users\.noreply\.github\.com/);
+    assert.equal(shown.endsWith('; ' + addressLine), true, shown);
+    assert.match(shown, /^tip: to keep your own address private[\s\S]*1234\+octocat@users\.noreply\.github\.com; not this machine's default address/);
+    assert.doesNotMatch(shown, /Octo Work <|·|type it/);
     assert.equal(await name.initial?.(fresh, ctx), 'Octo Cat');
     assert.equal(await email.initial?.(fresh, ctx), 'octocat@example.invalid');
 
     const unnamed = context({ recorded: {}, machineIdentity: { name: null, email: 'octo-work@example.invalid' } });
-    const emailOnly = 'this machine\'s default is octo-work@example.invalid; type it only if this account should use it';
-    assert.equal(stepOf(unnamed, 'name').detail?.(fresh, unnamed), emailOnly);
-    assert.equal(stepOf(unnamed, 'email').detail?.(fresh, unnamed)?.startsWith(emailOnly + ' · '), true);
+    assert.equal(stepOf(unnamed, 'name').detail?.(fresh, unnamed), undefined);
+    const unnamedEmail = stepOf(unnamed, 'email').detail?.(fresh, unnamed) ?? '';
+    assert.match(unnamedEmail, /not this machine's default address \(octo-work@example\.invalid\)/);
+    assert.doesNotMatch(unnamedEmail, /Octo Work </);
 
     const recorded = context({ machineIdentity: machine });
     const known = { account: 'octocat' };
@@ -397,7 +416,7 @@ describe('setup flow', () => {
     assert.doesNotMatch(stepOf(recorded, 'email').detail?.(known, recorded) ?? '', /this machine's default/);
 
     const noEmail = context({ recorded: {}, machineIdentity: { name: 'Octo Work', email: null } });
-    assert.equal(stepOf(noEmail, 'name').detail?.(fresh, noEmail), undefined);
+    assert.equal(stepOf(noEmail, 'name').detail?.(fresh, noEmail), nameLine);
     const tipOnly = stepOf(noEmail, 'email').detail?.(fresh, noEmail) ?? '';
     assert.doesNotMatch(tipOnly, /this machine's default/);
     assert.match(tipOnly, /noreply/);
@@ -422,6 +441,15 @@ describe('setup flow', () => {
       owner: 'octocat',
     });
     assert.equal(stepOf(spelled, 'account').initial?.({}, spelled), 'Octocat');
+  });
+
+  test('D13 a pin matches the registry without case and wins over the recorded owner', () => {
+    const recorded = {
+      'octo-work': { name: 'Octo Work', email: 'octo-work@example.invalid', host: 'github' },
+      octocat: { name: 'Octo Cat', email: 'octocat@example.invalid', host: 'github' },
+    };
+    const ctx = context({ recorded, pinned: 'Octo-Work', owner: 'octocat', ownerIsUser: true });
+    assert.equal(stepOf(ctx, 'account').initial?.({}, ctx), 'octo-work');
   });
 });
 
@@ -531,6 +559,22 @@ describe('setup context: would `use` change anything here?', () => {
     assert.equal(ctx.owner, 'octo-org');
     assert.equal(ctx.detected.length, 0);
     assert.equal(ctx.ownerIsUser, null);
+  });
+
+  test('--no-input does not classify the owner', async () => {
+    at.box.git('remote', 'set-url', 'origin', 'https://github.com/octo-org/project.git');
+    let calls = 0;
+    const accountKind = async (): Promise<'organization'> => { calls += 1; return 'organization'; };
+    const ctx = await readContext(new Git(at.box.dir), null, { classifyOwner: false, accountKind });
+    assert.ok(ctx.ok, ctx.ok ? '' : ctx.error);
+    assert.equal(calls, 0);
+    assert.equal(ctx.value.ownerIsUser, null);
+    const status = await runSetup(
+      { positional: ['octocat'], flags: new Map<string, string | boolean>([['no-input', true], ['cwd', at.box.dir]]) },
+      { interactive: true, accountKind },
+    );
+    assert.equal(status, 0);
+    assert.equal(calls, 0);
   });
 
   test('what git actually uses must agree: an include or a differently-cased credential entry is not intact', async () => {

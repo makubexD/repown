@@ -25,28 +25,36 @@ address ([ADR-011](ADR-011-refuse-vs-warn.md)).
   for GitHub, and a host claims only what was measured
   ([ADR-009](ADR-009-hosts-claim-only-measured.md)).
 - **Preselect the owner, and only an owner that is an account.** In order: the
-  account this clone is already pinned to, when that account is recorded; else
-  origin's owner when it is already recorded (the registry's spelling; a recorded
-  account is a user, so its kind is not required); else the owner only when GitHub
-  says it is a user. That is one `gh api users/<owner>` lookup, reading `type`:
-  `User` is a user, `Organization` is an organisation. A login seen only in gh or
-  Git Credential Manager is never preselected. An organisation owner is not listed;
-  the allow-owner question covers pushing to it. With no owner to preselect, the
-  first recorded account is the default, or **a new account** when nothing is
-  recorded.
+  account this clone is already pinned to, when that account is recorded (the
+  registry's spelling); else origin's owner when it is already recorded and is
+  not known to be an organisation (the registry's spelling; a recorded account
+  whose kind is unknown is still preselected); else the owner only when GitHub
+  says it is a user. A recorded organisation stays in the list and is not the
+  default: the next recorded account is, or **a new account** when it is the
+  only one. The kind comes from one `gh api --hostname github.com users/<owner>`
+  lookup, reading `type`: `User` is a user, `Organization` is an organisation.
+  That lookup is skipped when the owner is already one of gh's accounts on
+  github.com (gh lists accounts that signed in, never organisations) and when
+  setup will not prompt (`--no-input`). A login seen only in gh or Git Credential
+  Manager is never preselected. An organisation owner that is not recorded is
+  not listed; the allow-owner question covers pushing to it. With no owner to
+  preselect, the first recorded account is the default, or **a new account**
+  when nothing is recorded.
 - **The machine identity is shown on the name and email questions, and never
-  filled in.** When a global `user.email` is set and the account still has to be
-  recorded, both questions say what this machine's default is, and to type it only
-  if this account should use it. The name starts from the account's profile, or
-  from the login; the email starts from the profile. On GitHub the profile's
-  address is the noreply address
+  filled in.** When the account still has to be recorded and this machine has a
+  default name, the name question says "not this machine's default name
+  (<name>), unless this account uses it". The email question gives the GitHub
+  noreply tip first, then, when this machine has a default address, "; not this
+  machine's default address (<email>), unless this account uses it". The name
+  starts from the account's profile, or from the login; the email starts from
+  the profile. On GitHub the profile's address is the noreply address
   ([ADR-008](ADR-008-no-identifiers-in-repos.md)).
 - **A failed lookup only shortens the list.** When gh's accounts or Git Credential
   Manager's can't be read, those logins are absent. The failure stays a `Result`.
   A shorter list is not a passed check that found nothing
   ([CLAUDE.md](../../CLAUDE.md#hard-rules)). A `type` lookup that fails leaves the
   kind unknown: the owner stays on the list, the hint says it may be an
-  organisation, and it is not preselected.
+  organisation, and it is not preselected unless that login is already recorded.
 
 ## Alternatives considered
 
@@ -59,7 +67,10 @@ address ([ADR-011](ADR-011-refuse-vs-warn.md)).
 
 ## Consequences
 
-- Setup makes one extra gh call when origin is on GitHub and gh is present:
-  `gh api users/<owner>` for `type`, and only when origin has an owner.
-  [docs/FAQ.md](../FAQ.md#questions) lists it.
-- Without gh, the owner is listed and not preselected.
+- Setup asks `gh api --hostname github.com users/<owner>` for `type` only when
+  origin is on GitHub, origin has an owner, setup will prompt, and that owner
+  is not already one of gh's accounts on github.com. `--hostname github.com`
+  keeps `GH_HOST` from sending the lookup to another host.
+  [docs/FAQ.md](../FAQ.md#questions) lists the call.
+- Without gh, or when that lookup fails, the owner is listed and not preselected.
+- A recorded organisation stays in the list and is not preselected.

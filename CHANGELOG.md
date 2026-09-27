@@ -21,8 +21,10 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 - Every `repown setup` question is also a flag; add `--no-input` to run it from a script.
 - `repown setup`'s first question lists the GitHub accounts it can already see (origin's
   owner, gh's, Git Credential Manager's) and suggests the one that owns the repository,
-  never one it only found in gh or Git Credential Manager. The machine's own identity is
-  shown on the name and email questions, never filled in.
+  never one it only found in gh or Git Credential Manager. An owner known to be an
+  organisation is left out of the list, and an owner whose kind couldn't be checked is
+  listed but not suggested. The machine's own identity is shown on the name and email
+  questions, never filled in.
 
 - Docs: the README starts with `repown setup` and keeps what a new user needs, with one
   table of commands ordered by when you run them; the configuration (environment

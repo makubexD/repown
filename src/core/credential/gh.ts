@@ -75,9 +75,14 @@ function toAccount(raw: unknown): GhAccount[] {
   return [{ login: entry.login, active: entry.active === true }];
 }
 
-/** A profile field from the public API, or null. Absence here is unremarkable. */
+/** Arguments for a github.com profile field. `--hostname` so GH_HOST cannot redirect the call. */
+export function ghProfileArgs(login: string, field: string): readonly string[] {
+  return ['api', '--hostname', 'github.com', `users/${login}`, '--jq', `.${field}`];
+}
+
+/** A profile field from github.com, or null. Absence here is unremarkable. */
 export async function ghProfileField(login: string, field: string): Promise<string | null> {
-  const result = await run('gh', ['api', `users/${login}`, '--jq', `.${field}`]);
+  const result = await run('gh', ghProfileArgs(login, field));
   const value = output(result);
   return value && value !== 'null' ? value : null;
 }

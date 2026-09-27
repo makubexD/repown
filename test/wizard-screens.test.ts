@@ -4,9 +4,12 @@
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { PassThrough } from 'node:stream';
 import { ok, err } from '../src/core/result.ts';
 import { KEY, typed, play, linesWith, setupContext } from './setup-fixtures.ts';
-import { setupFlow } from '../src/wizard/setup-flow.ts';
+import { wizard } from '../src/wizard/engine.ts';
+import { plainPrompter } from '../src/wizard/plain.ts';
+import { setupFlow, type SetupContext } from '../src/wizard/setup-flow.ts';
 import { textWidth, wrap } from '../src/wizard/review-text.ts';
 
 const { enter, up, down, esc } = KEY;
@@ -209,9 +212,10 @@ describe('repown setup, played with key presses', () => {
     });
     const { outcome, screen } = await play(ctx, [[enter], [enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
-    const machine = 'this machine\'s default is Octo Work <octo-work@example.invalid>; type it only if this account should use it';
-    const flat = screen.replace(/\n│  /g, ' ');
-    assert.equal(flat.split(machine).length - 1, 2, screen);
+    const flat = screen.replace(/│/g, ' ').replace(/\s+/g, ' ');
+    assert.match(flat, /not this machine's default name \(Octo Work\), unless this account uses it/);
+    assert.match(flat, /not this machine's default address \(octo-work@example\.invalid\), unless this account uses it/);
+    assert.doesNotMatch(flat, /type it|Octo Work </);
     assert.match(screen, /Octo Cat█/);
     assert.match(screen, /octocat@example\.invalid█/);
     assert.doesNotMatch(screen, /Octo Work█/);
@@ -232,6 +236,41 @@ describe('repown setup, played with key presses', () => {
     assert.ok(!marked(screen, 'octo-work'), screen);
   });
 });
+
+describe('D7 on the plain prompter, at the default width', () => {
+  test('the machine address is a warning, and no wrapped line tells you to type it', async () => {
+    const ctx = setupContext({
+      recorded: {}, owner: 'octocat', ownerIsUser: true,
+      detected: [{ login: 'octocat', from: ['owns this repository'] }],
+      machineIdentity: { name: 'Octo Work', email: 'octo-work@example.invalid' },
+      suggest: async () => ({ name: 'Octo Cat', email: 'octocat@example.invalid' }),
+    });
+    const screen = await playPlain(ctx, '\n\n\n\n');
+    const flat = screen.replace(/\s+/g, ' ');
+    assert.match(flat, /not this machine's default name \(Octo Work\), unless this account uses it/);
+    assert.match(flat, /not this machine's default address \(octo-work@example\.invalid\)/);
+    for (const line of screen.split('\n')) {
+      assert.doesNotMatch(line, /(?:Octo Work|octo-work@example\.invalid)\)?\s+type it\s*$/);
+    }
+  });
+});
+
+/** Columns unset: the plain prompter wraps as it does in an 80-column window. */
+async function playPlain(ctx: SetupContext, lines: string): Promise<string> {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  let screen = '';
+  output.on('data', (chunk: Buffer) => { screen += chunk.toString(); });
+  input.write(lines);
+  input.end();
+  const prompter = plainPrompter({ input, output });
+  try {
+    await wizard(setupFlow(ctx), ctx, {}, prompter);
+  } finally {
+    prompter.close();
+  }
+  return screen;
+}
 
 const detectedPair = [
   { login: 'octocat', from: ['owns this repository'] },

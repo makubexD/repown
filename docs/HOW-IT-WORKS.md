@@ -519,13 +519,15 @@ flags stand for run, `use` included.
 
 The first question lists the accounts already recorded and the GitHub logins repown can
 already see (origin's owner, gh's accounts, Git Credential Manager's), then **a new
-account**. It suggests origin's owner when that owner is recorded, and otherwise when
+account**. An owner known to be an organisation is left out of the list, and an owner
+whose kind couldn't be checked is listed but not suggested. It suggests origin's owner
+when that owner is recorded and not known to be an organisation, and otherwise when
 that owner is a user. A login seen only in gh or Git Credential Manager is listed,
 never suggested.
 
 | It asks | Only when | Becomes |
 | --- | --- | --- |
-| Which account should this clone belong to? | an account is recorded, or a GitHub login can already be seen. Default: the one pinned here if it is recorded, else origin's owner when it is recorded, else origin's owner when that owner is a user, else the first recorded, else a new account | `use <account>`, after `accounts add` when the login is not recorded |
+| Which account should this clone belong to? | an account is recorded, or a GitHub login can already be seen. Default: the one pinned here if it is recorded, else origin's owner when it is recorded and not known to be an organisation, else origin's owner when that owner is a user, else the first other recorded account, else a new account | `use <account>`, after `accounts add` when the login is not recorded |
 | The account's user name (login) | "a new account", or nothing recorded and nothing detected. Starts as origin's owner only when that owner is a user and is not recorded. Refused if already recorded | the `<account>` of `accounts add` |
 | Where it's hosted, and your name and email as commits show them (on GitHub, with where to find your noreply address; this machine's default is shown, never filled in) | the login is new: "a new account", or one picked from the logins already seen | `accounts add <account> --name --email --host` |
 | Also make this account gh's active account? (default No) | a GitHub clone (or one whose origin isn't a URL), gh knows the account, another is active | `use --gh` |

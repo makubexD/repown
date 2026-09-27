@@ -17,7 +17,7 @@ import guardGroup from '../commands/guard.ts';
 import accountsGroup from '../commands/accounts.ts';
 import { wizard, refusedGiven, type Answers, type Prompter } from './engine.ts';
 import { setupFlow, planCommands, formatCommand, missingFlags, printable, NEW_ACCOUNT, type PlannedCommand, type SetupContext } from './setup-flow.ts';
-import { readContext, readRegistry } from './setup-context.ts';
+import { readContext, readRegistry, type ReadOptions } from './setup-context.ts';
 import { plainPrompter } from './plain.ts';
 
 export interface SetupDeps {
@@ -25,6 +25,8 @@ export interface SetupDeps {
   readonly prompter?: Prompter;
   /** stdin and stderr are both terminals. */
   readonly interactive: boolean;
+  /** Tests pass a spy. Production leaves it unset, and the provider classifies. */
+  readonly accountKind?: ReadOptions['accountKind'];
 }
 
 const CANCELLED = 130;
@@ -45,7 +47,7 @@ export async function runSetup(args: Args, deps: SetupDeps): Promise<number> {
   }
   const prompter = unattended ? null : deps.prompter ?? await choosePrompter();
   try {
-    return await continueSetup({ args, git, given: given.value, prompter });
+    return await continueSetup({ args, git, given: given.value, prompter, accountKind: deps.accountKind });
   } finally {
     prompter?.close();
   }
@@ -57,17 +59,23 @@ interface Setup {
   readonly given: Answers;
   /** Null with --no-input: nothing is asked. */
   readonly prompter: Prompter | null;
+  readonly accountKind?: ReadOptions['accountKind'];
 }
 
-async function continueSetup({ args, git, given, prompter }: Setup): Promise<number> {
+async function continueSetup({ args, git, given, prompter, accountKind }: Setup): Promise<number> {
   prompter?.intro?.('repown setup');
   prompter?.busy?.('Reading this clone and this machine');
-  const ctx = await readContext(git, flagString(args, 'cwd'));
+  const ctx = await readContext(git, flagString(args, 'cwd'), contextOptions(prompter, accountKind));
   if (!ctx.ok) { out.fail('setup', ctx.error); return 1; }
   const answers = checkAgainst(given, ctx.value, flagString(args, 'allow-owner'));
   if (!answers.ok) return answers.error;
   if (!prompter) return runUnattended(answers.value, ctx.value, git);
   return runGuided(answers.value, ctx.value, { git, prompter });
+}
+
+function contextOptions(prompter: Prompter | null, accountKind: ReadOptions['accountKind']): ReadOptions {
+  const classifyOwner = prompter !== null;
+  return accountKind ? { classifyOwner, accountKind } : { classifyOwner };
 }
 
 // ------------------------------------------------------------ flags -> answers

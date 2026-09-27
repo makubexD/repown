@@ -11,11 +11,7 @@ import { isGh, type GhState } from '../core/credential/gh.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { ok, err, type Result } from '../core/result.ts';
 import { previewLines } from '../commands/fix.ts';
-import type { DetectedAccount, SetupContext } from './setup-flow.ts';
-
-const OWNS = 'owns this repository';
-const SIGNED_IN = 'signed in to gh';
-const STORED_IN = 'stored in Git Credential Manager';
+import { SOURCE_GCM, SOURCE_GH, SOURCE_OWNS, type DetectedAccount, type SetupContext } from './setup-flow.ts';
 
 export interface DetectionInput {
   /** False for any origin that is not GitHub: owner, gh and GCM are GitHub's only. */
@@ -51,14 +47,14 @@ export function detectedAccounts(input: DetectionInput): DetectedAccount[] {
 function sightings(input: DetectionInput): Sighting[] {
   return [
     ...ownerSighting(input),
-    ...tagged(input.gh, SIGNED_IN),
-    ...tagged(input.stored, STORED_IN),
+    ...tagged(input.gh, SOURCE_GH),
+    ...tagged(input.stored, SOURCE_GCM),
   ];
 }
 
 function ownerSighting(input: DetectionInput): Sighting[] {
   if (!input.owner) return [];
-  return [{ login: input.owner, from: OWNS }];
+  return [{ login: input.owner, from: SOURCE_OWNS }];
 }
 
 /** A failed or absent lookup is no logins. That is a shorter list, not a passed check. */
@@ -101,12 +97,19 @@ export async function readRegistry(): Promise<Result<Registry>> {
              ') -- fix or remove them first');
 }
 
-export async function readContext(git: Git, cwd: string | null): Promise<Result<SetupContext>> {
+export interface ReadOptions {
+  /** False when setup will not prompt: the kind is unused, so this path never calls gh api. */
+  readonly classifyOwner?: boolean;
+  /** When set, classifies the owner instead of the provider. Tests pass a spy. */
+  readonly accountKind?: (login: string) => Promise<'user' | 'organization' | null>;
+}
+
+export async function readContext(git: Git, cwd: string | null, options: ReadOptions = {}): Promise<Result<SetupContext>> {
   const registry = await readRegistry();
   if (!registry.ok) return registry;
   const repo = await inspectRepo(git);
   const recorded = registry.value.accounts;
-  const facts = await readFacts(git, repo, recorded);
+  const facts = await readFacts(git, repo, recorded, options);
   return ok(assemble(cwd, recorded, repo, facts));
 }
 
@@ -124,9 +127,27 @@ interface Facts {
   readonly email: string | null;
 }
 
-async function readFacts(git: Git, repo: RepoState, recorded: Readonly<Record<string, Account>>): Promise<Facts> {
+async function readFacts(git: Git, repo: RepoState, recorded: Readonly<Record<string, Account>>, options: ReadOptions): Promise<Facts> {
+  const loaded = await loadClone(git, repo, options);
+  return finishFacts(git, repo, recorded, loaded);
+}
+
+interface Loaded {
+  readonly auth: AuthState;
+  readonly pinned: string | null;
+  readonly allowed: readonly string[];
+  readonly planned: readonly RemovalOutcome[];
+  readonly addresses: Result<ReadonlyMap<string, number>>;
+  readonly helpers: readonly string[];
+  readonly name: string | null;
+  readonly email: string | null;
+  readonly ownerIsUser: boolean | null;
+}
+
+async function loadClone(git: Git, repo: RepoState, options: ReadOptions): Promise<Loaded> {
+  const authPromise = inspectAuth(git, repo.originUrl ?? undefined);
   const [auth, pinned, allowed, planned, addresses, helpers, name, email, ownerIsUser] = await Promise.all([
-    inspectAuth(git, repo.originUrl ?? undefined),
+    authPromise,
     git.getConfig('repown.account', 'local'),
     git.getAllConfig('repown.allowOwner', 'local'),
     planRepair(git),
@@ -134,15 +155,20 @@ async function readFacts(git: Git, repo: RepoState, recorded: Readonly<Record<st
     git.getAllConfigRaw('credential.helper'),
     git.getConfig('user.name', 'global'),
     git.getConfig('user.email', 'global'),
-    askOwnerIsUser(repo),
+    authPromise.then((auth) => askOwnerIsUser(repo, auth, options)),
   ]);
-  const ghIsHelper = anyGhHelper(auth, planned, helpers);
+  return { auth, pinned, allowed, planned, addresses, helpers, name, email, ownerIsUser };
+}
+
+async function finishFacts(git: Git, repo: RepoState, recorded: Readonly<Record<string, Account>>, loaded: Loaded): Promise<Facts> {
+  const ghIsHelper = anyGhHelper(loaded.auth, loaded.planned, loaded.helpers);
   return {
-    pinned, allowed, addresses, name, email, ownerIsUser, ghIsHelper,
-    gh: auth.ghPresent ? auth.gh : null,
-    pinIntact: await pinIntact(git, pinned, recorded[pinned ?? ''], repo),
-    detected: detectedAccounts(detectionOf(repo, auth, recorded, ownerIsUser)),
-    fixLines: fixPreview(repo, ghIsHelper, planned),
+    pinned: loaded.pinned, allowed: loaded.allowed, addresses: loaded.addresses,
+    name: loaded.name, email: loaded.email, ownerIsUser: loaded.ownerIsUser, ghIsHelper,
+    gh: loaded.auth.ghPresent ? loaded.auth.gh : null,
+    pinIntact: await pinIntact(git, loaded.pinned, recorded[loaded.pinned ?? ''], repo),
+    detected: detectedAccounts(detectionOf(repo, loaded.auth, recorded, loaded.ownerIsUser)),
+    fixLines: fixPreview(repo, ghIsHelper, loaded.planned),
   };
 }
 
@@ -204,11 +230,23 @@ function ghLogins(gh: Result<GhState>): Result<readonly string[]> {
   return ok(gh.value.accounts.map((account) => account.login));
 }
 
-/** Null unless this is GitHub, there is an owner, and the provider can classify it. */
-async function askOwnerIsUser(repo: RepoState): Promise<boolean | null> {
-  const ask = repo.provider.accountKind;
-  if (repo.provider.id !== 'github' || !repo.owner || !ask) return null;
+/**
+ * True when the owner is a user, false for an organisation, null when unknown.
+ * A gh account on github.com is a user: gh lists sign-ins, never organisations.
+ * No lookup when setup will not prompt. A recorded owner is still classified.
+ */
+export async function askOwnerIsUser(repo: RepoState, auth: AuthState, options: ReadOptions = {}): Promise<boolean | null> {
+  if (options.classifyOwner === false) return null;
+  if (repo.provider.id !== 'github' || !repo.owner) return null;
+  if (signedIn(auth, repo.owner)) return true;
+  const ask = options.accountKind ?? repo.provider.accountKind;
+  if (!ask) return null;
   return asUser(await ask(repo.owner));
+}
+
+function signedIn(auth: AuthState, owner: string): boolean {
+  if (!auth.gh.ok) return false;
+  return auth.gh.value.accounts.some((account) => account.login.toLowerCase() === owner.toLowerCase());
 }
 
 function asUser(kind: 'user' | 'organization' | null): boolean | null {

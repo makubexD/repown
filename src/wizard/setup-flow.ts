@@ -105,7 +105,7 @@ function steps(ctx: SetupContext): Step<SetupContext>[] {
     { id: 'name', kind: 'text', flag: '--name', message: 'Your name, as your commits show it',
       hint: 'e.g. Octo Cat; anyone who can see the repository sees it', when: (answers) => isNew(answers), validate: required,
       initial: async (answers) => (await ctx.suggest(accountOf(answers), hostOf(answers, ctx))).name ?? accountOf(answers),
-      detail: (answers) => machineLine(answers, ctx) },
+      detail: (answers) => nameDetail(answers, ctx) },
     { id: 'email', kind: 'text', flag: '--email', message: 'Your email, as your commits show it',
       hint: 'anyone who can see the repository can read it once you push', when: (answers) => isNew(answers), validate: required,
       initial: async (answers) => (await ctx.suggest(accountOf(answers), hostOf(answers, ctx))).email,
@@ -169,29 +169,37 @@ function noreplyExample(answers: Answers, ctx: SetupContext): string | undefined
     'github.com/settings/emails, like 1234+' + printable(accountOf(answers)) + '@users.noreply.github.com';
 }
 
-/** The machine's git identity, beside a new account. Never that account's initial value. */
-function machineLine(answers: Answers, ctx: SetupContext): string | undefined {
-  const email = ctx.machineIdentity.email;
-  if (!isNew(answers) || !email) return undefined;
+/** The machine's name, beside a new account. Never that account's initial value. */
+function nameDetail(answers: Answers, ctx: SetupContext): string | undefined {
   const name = ctx.machineIdentity.name;
-  const who = name ? printable(name) + ' <' + printable(email) + '>' : printable(email);
-  return 'this machine\'s default is ' + who + '; type it only if this account should use it';
+  if (!isNew(answers) || !name) return undefined;
+  return 'not this machine\'s default name (' + printable(name) + '), unless this account uses it';
 }
 
-/** Machine line, then the noreply tip. One string: both prompters wrap a detail as one paragraph. */
+/** Noreply tip first, then the machine address. Two sentences; both prompters wrap one detail. */
 function emailDetail(answers: Answers, ctx: SetupContext): string | undefined {
-  const line = machineLine(answers, ctx);
   const tip = noreplyExample(answers, ctx);
-  if (line && tip) return line + ' · ' + tip;
-  return line ?? tip;
+  const line = addressDetail(answers, ctx);
+  if (tip && line) return tip + '; ' + line;
+  return tip ?? line;
+}
+
+function addressDetail(answers: Answers, ctx: SetupContext): string | undefined {
+  const email = ctx.machineIdentity.email;
+  if (!isNew(answers) || !email) return undefined;
+  return 'not this machine\'s default address (' + printable(email) + '), unless this account uses it';
 }
 
 function ghActive(ctx: SetupContext): string {
   return ctx.gh?.ok ? printable(ctx.gh.value.active ?? 'none') : 'unknown';
 }
 
-const OWNER_SOURCE = 'owns this repository';
-const OWNER_UNKNOWN = 'owns this repository; may be an organisation';
+/** Where a detected login was seen. Detection records these; the account hint prints them. */
+export const SOURCE_OWNS = 'owns this repository';
+export const SOURCE_GH = 'signed in to gh';
+export const SOURCE_GCM = 'stored in Git Credential Manager';
+
+const OWNER_UNKNOWN = SOURCE_OWNS + '; may be an organisation';
 
 function accountChoices(ctx: SetupContext): Choice[] {
   const recorded = Object.entries(ctx.recorded).map(([account, entry]) =>
@@ -213,18 +221,37 @@ function detectedHint(account: DetectedAccount, ctx: SetupContext): string {
 }
 
 function sourceText(source: string, account: DetectedAccount, ctx: SetupContext): string {
-  if (source !== OWNER_SOURCE || ctx.ownerIsUser !== null) return source;
+  if (source !== SOURCE_OWNS || ctx.ownerIsUser !== null) return source;
   return sameLogin(account.login, ctx.owner) ? OWNER_UNKNOWN : source;
 }
 
 function defaultAccount(ctx: SetupContext): string {
-  if (ctx.pinned && Object.hasOwn(ctx.recorded, ctx.pinned)) return ctx.pinned;
-  return recordedOwner(ctx) ?? detectedOwnerValue(ctx) ?? Object.keys(ctx.recorded)[0] ?? NEW_ACCOUNT;
+  return pinnedAccount(ctx) ?? recordedOwner(ctx) ?? detectedOwnerValue(ctx) ?? firstRecorded(ctx) ?? NEW_ACCOUNT;
 }
 
-/** Registry spelling of origin's owner when it is already recorded. A recorded account is a user, so its kind is not required. */
+/** Registry spelling of the pin. Case differs after a login is recorded again; the pin still wins. */
+function pinnedAccount(ctx: SetupContext): string | undefined {
+  return registrySpelling(ctx.recorded, ctx.pinned);
+}
+
+/** Registry spelling of the owner. A known organisation is listed with the recorded accounts and is not the default. */
 function recordedOwner(ctx: SetupContext): string | undefined {
-  return Object.keys(ctx.recorded).find((account) => sameLogin(account, ctx.owner));
+  if (ctx.ownerIsUser === false) return undefined;
+  return registrySpelling(ctx.recorded, ctx.owner);
+}
+
+function registrySpelling(recorded: Readonly<Record<string, unknown>>, login: string | null): string | undefined {
+  if (login === null) return undefined;
+  return Object.keys(recorded).find((account) => sameLogin(account, login));
+}
+
+/** The first recorded account, other than an owner known to be an organisation. */
+function firstRecorded(ctx: SetupContext): string | undefined {
+  return Object.keys(ctx.recorded).find((account) => !knownOrganisation(ctx, account));
+}
+
+function knownOrganisation(ctx: SetupContext, account: string): boolean {
+  return ctx.ownerIsUser === false && sameLogin(account, ctx.owner);
 }
 
 /** The detected spelling, which is the choice the list can highlight. */

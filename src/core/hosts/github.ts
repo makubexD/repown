@@ -22,19 +22,36 @@ export function githubProvider(): HostProvider {
     label: 'GitHub',
     matches: (url: GitUrl) => HOSTS.includes(url.host),
     ownerOf: (url: GitUrl) => url.segments[0] ?? null,
-    credentialKeys: (url: GitUrl) =>
-      url.scheme === 'https' ? [`credential.${credentialPrefix(url)}.username`] : [],
-    resolveProfile: async (account: string): Promise<Profile | null> => {
-      const [name, id] = await Promise.all([
-        ghProfileField(account, 'name'),
-        ghProfileField(account, 'id'),
-      ]);
-      // GitHub's own noreply address: publishable by design, and it still links
-      // the commit to the account. Offered as a default so a private address
-      // need never be published to get working attribution.
-      const email = id ? `${id}+${account}@users.noreply.github.com` : undefined;
-      if (!name && !email) return null;
-      return { ...(name ? { name } : {}), ...(email ? { email } : {}) };
-    },
+    credentialKeys,
+    resolveProfile,
+    accountKind,
   };
+}
+
+function credentialKeys(url: GitUrl): readonly string[] {
+  return url.scheme === 'https' ? [`credential.${credentialPrefix(url)}.username`] : [];
+}
+
+async function resolveProfile(account: string): Promise<Profile | null> {
+  const [name, id] = await Promise.all([
+    ghProfileField(account, 'name'),
+    ghProfileField(account, 'id'),
+  ]);
+  // GitHub's own noreply address: publishable by design, and it still links
+  // the commit to the account. Offered as a default so a private address
+  // need never be published to get working attribution.
+  const email = id ? `${id}+${account}@users.noreply.github.com` : undefined;
+  if (!name && !email) return null;
+  return { ...(name ? { name } : {}), ...(email ? { email } : {}) };
+}
+
+/**
+ * The users endpoint answers for an organisation too, with type Organization.
+ * Anything else, including a failed call, is unknown -- not a user.
+ */
+async function accountKind(login: string): Promise<'user' | 'organization' | null> {
+  const type = await ghProfileField(login, 'type');
+  if (type === 'User') return 'user';
+  if (type === 'Organization') return 'organization';
+  return null;
 }

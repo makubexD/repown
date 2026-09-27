@@ -17,6 +17,12 @@ import type { Answers, Choice, Flow, Review, Step } from './engine.ts';
 /** The "a new account" choice. Empty, so it can never be a real account's name. */
 export const NEW_ACCOUNT = '';
 
+/** A GitHub login repown can already see, and every place it was seen. */
+export interface DetectedAccount {
+  readonly login: string;
+  readonly from: readonly string[];
+}
+
 export interface SetupContext {
   /** `--cwd` as given, passed on to every command that acts on the clone. */
   readonly cwd: string | null;
@@ -28,6 +34,10 @@ export interface SetupContext {
   /** The provider of origin's host (`github`, only as a default, without an origin), and who owns origin. */
   readonly host: string;
   readonly owner: string | null;
+  /** GitHub logins not already recorded. Empty when origin is not GitHub. */
+  readonly detected: readonly DetectedAccount[];
+  /** True for a user, false for an organisation, null when unknown. Null is not a user. */
+  readonly ownerIsUser: boolean | null;
   /** `repown.allowOwner` entries in this clone, lowercased. */
   readonly allowed: readonly string[];
   /** False where the host has no per-account credential pin (ADR-009). */
@@ -42,6 +52,8 @@ export interface SetupContext {
   readonly fixLines: readonly string[] | null;
   /** Author and committer addresses in this clone's history. */
   readonly addresses: Result<ReadonlyMap<string, number>>;
+  /** Global `user.name` and `user.email`. Shown, never assumed to be this account. */
+  readonly machineIdentity: { readonly name: string | null; readonly email: string | null };
   suggest(account: string, host: string): Promise<Profile>;
 }
 

@@ -58,4 +58,5 @@ from that tool's hook instead ([card 10](HOW-IT-WORKS.md#10-other-hook-tools)).
 `git` and `gh`: gh may contact GitHub when `repown`, `repown doctor`, `repown setup`,
 `repown use` or `repown fix` asks for its accounts, and `use --gh` switches its account. For an account that isn't recorded yet, on a terminal, `repown setup`,
 `repown use` or `repown accounts add` (without both `--name` and `--email`) asks gh for
-its public profile to suggest a name and noreply address.
+its public profile to suggest a name and noreply address. `repown setup` may also ask
+GitHub whether origin's owner is a user or an organisation.

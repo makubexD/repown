@@ -16,12 +16,23 @@ export const typed = (text: string): string[] => [...text];
 
 export function setupContext(overrides: Partial<SetupContext> = {}): SetupContext {
   return {
-    cwd: null,
+    ...baseline(),
     recorded: { octocat: { name: 'Octo Cat', email: 'octocat@example.invalid', host: 'github' } },
+    addresses: ok(new Map()),
+    suggest: async () => ({}),
+    ...overrides,
+  };
+}
+
+function baseline(): Omit<SetupContext, 'recorded' | 'addresses' | 'suggest'> {
+  return {
+    cwd: null,
     pinned: null,
     pinIntact: false,
     host: 'github',
     owner: 'octocat',
+    detected: [],
+    ownerIsUser: null,
     allowed: [],
     credentialPinned: true,
     gh: null,
@@ -29,9 +40,7 @@ export function setupContext(overrides: Partial<SetupContext> = {}): SetupContex
     guard: 'off',
     redirected: false,
     fixLines: null,
-    addresses: ok(new Map()),
-    suggest: async () => ({}),
-    ...overrides,
+    machineIdentity: { name: null, email: null },
   };
 }
 

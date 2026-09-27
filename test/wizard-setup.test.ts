@@ -366,6 +366,21 @@ describe('setup context: would `use` change anything here?', () => {
     assert.equal((await read()).ghIsHelper, true, 'gh asked first, even with another helper after it');
   });
 
+  test('machine identity is global user.name and user.email, not the clone\'s', async () => {
+    assert.deepEqual((await read()).machineIdentity, { name: null, email: null });
+    at.box.git('config', '--global', 'user.name', 'Octo Cat');
+    at.box.git('config', '--global', 'user.email', 'octocat@example.invalid');
+    assert.deepEqual((await read()).machineIdentity, { name: 'Octo Cat', email: 'octocat@example.invalid' });
+  });
+
+  test('an origin that is not GitHub detects no accounts and does not classify the owner', async () => {
+    at.box.git('remote', 'set-url', 'origin', 'https://dev.azure.com/octo-org/project/_git/repo');
+    const ctx = await read();
+    assert.equal(ctx.owner, 'octo-org');
+    assert.equal(ctx.detected.length, 0);
+    assert.equal(ctx.ownerIsUser, null);
+  });
+
   test('what git actually uses must agree: an include or a differently-cased credential entry is not intact', async () => {
     pin();
     const extra = join(at.registry, 'extra.gitconfig');

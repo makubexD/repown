@@ -1,9 +1,9 @@
 # Bare repown outside a clone: the start screen
 
-Status: Task 0 done (plan committed); next: Task 1.
+Status: Task 1 done; next: Task 2.
 
 - [x] 0. Plan: SPEC.md + tasks/todo.md
-- [ ] 1. ADR-024 (supersedes ADR-018/021's help-outside-a-clone branch; records the redirected-stdout drift) - Docs: ADR index, ADR-018/021 Status lines
+- [x] 1. ADR-024 (supersedes ADR-018/021's help-outside-a-clone branch; records the redirected-stdout drift) - Docs: ADR index, ADR-018/021 Status lines
 - [ ] 2. Routing: chooseDefault may return a runner; start.ts returns the home runner (H1-H4) - Docs: none yet (sweep in 5)
 - [ ] 3. Pure home context + flow: discovery bounds, summary, menu items (H5-H10) - Docs: none yet
 - [ ] 4. Prompter choose() in plain + clack; home-run drives it; actions run each command's own run() (H11-H14) - Docs: none yet

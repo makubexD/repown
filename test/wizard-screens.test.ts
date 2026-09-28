@@ -30,6 +30,26 @@ describe('repown setup, played with key presses', () => {
     assert.match(screen, /Apply the same settings again/);
   });
 
+  test('Recommended on a fully set-up clone still shows the settled screen', async () => {
+    const ctx = setupContext({ pinned: 'octocat', guard: 'on', pinIntact: true });
+    const { outcome, screen } = await play(ctx, [[enter], [enter], [enter]]);
+    assert.equal(outcome.status, 'done', screen);
+    assert.match(screen, /This clone is already set up/);
+    assert.match(screen, /Nothing needs to change/);
+  });
+
+  test('Recommended on a pinned clone with auto-upstream unset lists that step', async () => {
+    const ctx = setupContext({
+      pinned: 'octocat', guard: 'on', pinIntact: true,
+      upstream: { supported: true, enabled: null, branch: 'main' },
+    });
+    const { outcome, screen } = await play(ctx, [[enter], [enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    assert.doesNotMatch(screen, /This clone is already set up/);
+    assert.match(screen, /Push new branches without -u \(this clone only\)/);
+    assert.match(screen, /git config --local push\.autoSetupRemote true/);
+  });
+
   test('S2 a new user on an organisation repository reads every hint and a numbered review', async () => {
     const ctx = setupContext({
       recorded: {}, owner: 'octo-org',

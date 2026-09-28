@@ -1,6 +1,6 @@
 # ADR-018: Bare repown guides a clone that isn't set up; scripts still get status
 
-**Status:** Accepted
+**Status:** Accepted; routing superseded in part by [ADR-021](ADR-021-bare-repown-always-opens-setup.md)
 
 ## Context
 

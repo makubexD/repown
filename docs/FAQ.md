@@ -52,7 +52,10 @@ of the oldest of those commits. Nothing here rewrites history
 
 **I ran `repown setup` again and it said "already set up". Is that right?** Yes: the clone
 already uses that account exactly as recorded. Choose **Done**, or **Apply the same
-settings again** to re-run `repown use` ([card 13](HOW-IT-WORKS.md#13-guided-setup)).
+settings again** to re-run `repown use`. Bare `repown` in a terminal opens setup too, even
+when the clone is already pinned, so it can check what is left (for example pushing new
+branches without `-u`). `repown status` shows the settings without asking
+([card 13](HOW-IT-WORKS.md#13-guided-setup)).
 
 **Can I run it in CI or a script?** Yes, with flags instead of questions:
 [Scripts and CI](CONFIGURATION.md#scripts-and-ci).

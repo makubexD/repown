@@ -28,13 +28,13 @@ describe('chooseStart', () => {
     assert.equal(await chooseStart(deps(box, true, true)), 'setup');
   });
 
-  test('S2: a pinned clone in a terminal shows status', async () => {
+  test('S2: a pinned clone in a terminal starts setup', async () => {
     pinGithub(box);
-    assert.equal(await chooseStart(deps(box, true, true)), 'status');
+    assert.equal(await chooseStart(deps(box, true, true)), 'setup');
   });
 
-  test('S2: name and email, with no credential key to pin, shows status', async () => {
-    assert.equal(await chooseStart(deps(box, true, true)), 'status');
+  test('S2: name and email, with no credential key to pin, starts setup', async () => {
+    assert.equal(await chooseStart(deps(box, true, true)), 'setup');
   });
 
   test('S3: an unpinned clone without a terminal shows status', async () => {
@@ -47,6 +47,11 @@ describe('chooseStart', () => {
     assert.equal(await chooseStart(deps(box, true, false)), 'status');
   });
 
+  test('S3: a pinned clone with stdout redirected shows status', async () => {
+    pinGithub(box);
+    assert.equal(await chooseStart(deps(box, true, false)), 'status');
+  });
+
   test('S11: a bare repository in a terminal shows help', async () => {
     assert.equal(await chooseStart({ interactive: true, stdoutIsTerminal: true, git: new Git(bareRepo(box)) }), 'help');
   });
@@ -55,10 +60,10 @@ describe('chooseStart', () => {
     assert.equal(await chooseStart({ interactive: false, stdoutIsTerminal: false, git: new Git(bareRepo(box)) }), 'status');
   });
 
-  test('S12: an unreadable registry does not start setup', async () => {
+  test('S12: an unreadable registry in a terminal still starts setup', async () => {
     pinGithub(box);
     breakRegistry();
-    assert.equal(await chooseStart(deps(box, true, true)), 'status');
+    assert.equal(await chooseStart(deps(box, true, true)), 'setup');
   });
 });
 
@@ -88,21 +93,30 @@ describe('chooseStart outside a repository', () => {
 
 const SETUP_SENTENCE =
   'This clone isn\'t set up yet, so repown is starting setup (repown status shows its settings).\n';
+const PINNED_SENTENCE =
+  'Starting setup to check this clone (repown status shows its settings without asking anything).\n';
 
 describe('startDefault', () => {
   let box: Sandbox;
   beforeEach(() => { box = sandbox(); });
   afterEach(() => box.dispose());
 
-  test('S1: setup prints exactly that sentence on stderr', async () => {
+  test('S1: an unpinned clone prints the not-set-up sentence on stderr', async () => {
     unpin(box);
     const run = await captured(() => startDefault(deps(box, true, true)));
     assert.equal(run.choice, 'setup');
     assert.equal(run.stderr, SETUP_SENTENCE);
   });
 
+  test('a pinned clone prints the check-this-clone sentence on stderr', async () => {
+    pinGithub(box);
+    const run = await captured(() => startDefault(deps(box, true, true)));
+    assert.equal(run.choice, 'setup');
+    assert.equal(run.stderr, PINNED_SENTENCE);
+  });
+
   test('status and help print nothing', async () => {
-    const status = await captured(() => startDefault(deps(box, true, true)));
+    const status = await captured(() => startDefault(deps(box, true, false)));
     assert.equal(status.choice, 'status');
     assert.equal(status.stderr, '');
     await outside(async (git) => {

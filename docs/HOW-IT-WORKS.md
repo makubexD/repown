@@ -218,15 +218,15 @@ it goes straight to the review. When origin belongs to someone else, it still as
 
 ### 5. Check where you are
 
-In a terminal, bare **`repown`** starts `repown setup` in a clone that isn't set up, shows
-status in one that is, and shows the help outside a clone (exit 0). Without a terminal, or
-with its output redirected, it is always status (exit 1 outside a clone). **`repown status`**
-prints all three identities and changes nothing.
+In a terminal, bare **`repown`** starts `repown setup` in a clone, pinned or not, and shows
+the help outside a clone (exit 0). Without a terminal, or with its output redirected, it is
+always status (exit 1 outside a clone). **`repown status`** prints all three identities and
+changes nothing.
 
 <details><summary>Show how</summary>
 
 ```
-$ repown
+$ repown status
 
 repown status · current settings of this clone
   ~/code/personal  (branch main)
@@ -557,7 +557,8 @@ To uninstall, follow the [README's steps](../README.md#uninstall), and also:
 
 ### 13. Guided setup
 
-In a terminal, **`repown`** with no arguments starts this when the clone isn't set up yet.
+In a terminal, **`repown`** with no arguments starts this, whether or not the clone is
+already set up. A clone that needs nothing lands on the "already set up" screen.
 **`repown setup`** asks how it should work, then the questions that mode still needs, shows
 the commands it will run, and runs them.
 Each answer maps to an ordinary command (`accounts add`, `use`, `guard on`, `fix`) or to

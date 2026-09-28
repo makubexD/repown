@@ -82,9 +82,12 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   row per account repown, Git Credential Manager or gh knows: whether git has a
   sign-in for it, and whether gh does.
 
-- In a terminal, bare `repown` in a clone that isn't set up starts `repown setup`.
-  Outside a clone it shows help. Otherwise, and always without a terminal, it's status
-  as before, so a script, CI or an alias still gets the report.
+- In a terminal, bare `repown` in a clone always starts `repown setup`, pinned or not.
+  An unpinned clone prints `This clone isn't set up yet, so repown is starting setup
+  (repown status shows its settings).` A pinned clone prints `Starting setup to check
+  this clone (repown status shows its settings without asking anything).` Outside a
+  clone it shows help. Without a terminal, or with stdout redirected, it is always
+  status, so a script, CI or an alias still gets the report.
 - `repown status` now says what it shows: a title, the clone's path and branch, "This
   clone" and "This machine" groups with the machine's default identity, whether the
   clone's account is recorded (a warning when its name or email drifted), a

@@ -39,7 +39,7 @@ export default {
     const repo = await inspectRepo(git);
     const auth = await inspectAuth(git, repo.originUrl ?? undefined);
     const warned = printReport(repo, auth, await loadRegistry());
-    const found = diagnose(auth, repo.provider.label);
+    const found = diagnose(auth, ssoTarget(repo));
     closeDoctor(found.verdict + warningTally(warned));
     return found.code;
   },
@@ -324,10 +324,16 @@ interface Diagnosis {
   readonly verdict: string;
 }
 
-function diagnose(auth: AuthState, providerLabel: string): Diagnosis {
+interface SsoTarget {
+  readonly label: string;
+  /** GitHub's host. Null when the line names the provider instead. */
+  readonly host: string | null;
+}
+
+function diagnose(auth: AuthState, target: SsoTarget): Diagnosis {
   if (auth.ghIsHelper) return diagnoseGhHelper(auth);
   if (!auth.helperIsGcm) return diagnoseUnknownHelper(auth);
-  return diagnoseHealthy(auth, providerLabel);
+  return diagnoseHealthy(auth, target);
 }
 
 const READY = 'ready: each clone signs in as its own account through Git Credential Manager';
@@ -384,11 +390,11 @@ function unchecked(helper: string): string {
   return 'unchecked: repown can\'t tell whether ' + helper + ' honours the per-clone pin';
 }
 
-function diagnoseHealthy(auth: AuthState, providerLabel: string): Diagnosis {
+function diagnoseHealthy(auth: AuthState, target: SsoTarget): Diagnosis {
   explainGcm();
   const empty = emptyStore(auth);
   if (empty) warnEmptyStore();
-  ssoNote(providerLabel);
+  ssoNote(target);
   return { code: 0, verdict: empty ? READY_EMPTY : READY };
 }
 
@@ -412,13 +418,25 @@ function warnEmptyStore(): void {
 // not done"). A credential that is otherwise healthy still fails the moment
 // it touches an org it is not SSO-authorized for, and that failure looks
 // identical to a bad token. Printed unconditionally so it is there before it
-// is needed. The exact fix command is gh-specific, so it only names `gh` for
-// a GitHub origin -- gh does not manage auth for any other host.
-function ssoNote(providerLabel: string): void {
+// is needed. On GitHub the authorization is the org's SSO settings, named
+// with the origin's host (github.com outside a clone). Any other provider
+// is named only.
+function ssoNote(target: SsoTarget): void {
   out.line('  If a push fails although the account is stored, the org may need SSO');
-  out.line('  authorization: ' + ssoFix(providerLabel));
+  out.line('  authorization: ' + ssoFix(target));
 }
 
-function ssoFix(providerLabel: string): string {
-  return providerLabel === 'GitHub' ? 'gh auth refresh -h <host>' : 'check ' + providerLabel + "'s SSO settings";
+function ssoFix(target: SsoTarget): string {
+  if (target.host !== null) return 'authorize it in the org\'s SSO settings on ' + target.host;
+  return 'check ' + target.label + "'s SSO settings";
+}
+
+function ssoTarget(repo: RepoState): SsoTarget {
+  return { label: repo.provider.label, host: ssoHost(repo) };
+}
+
+/** The origin's host on GitHub, github.com outside a clone, null for any other provider. */
+function ssoHost(repo: RepoState): string | null {
+  if (repo.provider.id !== 'github' && repo.isRepo) return null;
+  return repo.url?.host ?? 'github.com';
 }

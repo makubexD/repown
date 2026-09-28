@@ -316,7 +316,7 @@ function field(label: string, value: string): string {
 }
 
 const SSO_HEAD = 'If a push fails although the account is stored, the org may need SSO\n  authorization: ';
-const GITHUB_SSO = SSO_HEAD + 'gh auth refresh -h <host>';
+const GITHUB_SSO = SSO_HEAD + "authorize it in the org's SSO settings on github.com";
 const READY = 'ready: each clone signs in as its own account through Git Credential Manager';
 
 function ssoFor(host: string): string {
@@ -379,14 +379,25 @@ describe('repown doctor output', () => {
     ].join('\n') + '\n');
     assert.equal(closing(run.stderr), READY);
     assert.doesNotMatch(run.stdout, /SSO-authorized for that organisation/);
+    assert.doesNotMatch(run.stdout, /<host>|gh auth refresh/);
 
     const outside = repown(['doctor'], join(box.dir, '..'), doctorEnv(bin));
     assert.equal(outside.status, 0, outside.stderr);
     assert.match(outside.stdout, /repown doctor · how this machine signs in to git hosts/);
     assert.match(outside.stdout, /octocat/);
     assert.doesNotMatch(outside.stdout, /this clone/);
-    assert.ok(outside.stdout.includes('  ' + ssoFor('this host')), outside.stdout);
+    assert.ok(outside.stdout.includes('  ' + GITHUB_SSO), outside.stdout);
+    assert.doesNotMatch(outside.stdout, /<host>|gh auth refresh/);
     assert.equal(closing(outside.stderr), READY);
+  });
+
+  test('a GitHub origin and a run outside a clone name github.com in the SSO line', () => {
+    const run = repown(['doctor'], box.dir, doctorEnv(bin));
+    assert.match(run.stdout, / {2}authorization: authorize it in the org's SSO settings on github\.com/);
+    assert.doesNotMatch(run.stdout, /<host>|gh auth refresh/);
+    const outside = repown(['doctor'], join(box.dir, '..'), doctorEnv(bin));
+    assert.match(outside.stdout, / {2}authorization: authorize it in the org's SSO settings on github\.com/);
+    assert.doesNotMatch(outside.stdout, /<host>|gh auth refresh/);
   });
 
   test('a non-GitHub origin names that host\'s SSO settings', () => {
@@ -394,7 +405,7 @@ describe('repown doctor output', () => {
     const run = repown(['doctor'], box.dir, doctorEnv(bin));
     assert.equal(run.status, 0, run.stderr);
     assert.ok(run.stdout.includes('  ' + ssoFor('Azure DevOps')), run.stdout);
-    assert.doesNotMatch(run.stdout, /gh auth refresh/);
+    assert.doesNotMatch(run.stdout, /<host>|gh auth refresh/);
     assert.equal(closing(run.stderr), READY);
   });
 

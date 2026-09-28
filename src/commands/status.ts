@@ -94,6 +94,9 @@ async function writeUpstream(repo: RepoState): Promise<void> {
   if (value !== null) out.field('upstream', value);
 }
 
+/** The upstream field when git will set it itself; setup's settled screen says the same. */
+export const UPSTREAM_ON = 'set on the first push (push.autoSetupRemote)';
+
 async function upstreamField(repo: RepoState): Promise<string | null> {
   const branch = repo.branch;
   if (branch?.kind !== 'branch') return null;
@@ -101,9 +104,7 @@ async function upstreamField(repo: RepoState): Promise<string | null> {
   if (remotes.length === 0) return null;
   const tracked = await repo.git.upstreamRef();
   if (tracked !== null) return tracked;
-  if (await repo.git.getBoolConfig('push.autoSetupRemote') === true) {
-    return 'set on the first push (push.autoSetupRemote)';
-  }
+  if (await repo.git.getBoolConfig('push.autoSetupRemote') === true) return UPSTREAM_ON;
   return 'none yet: git push -u ' + pushRemote(remotes) + ' ' + branch.name;
 }
 

@@ -92,20 +92,24 @@ export function reviewQuestion(review: Review): string {
 }
 
 export function reviewOptions(review: Review): ReviewOption[] {
-  if (review.settled) {
-    const again = review.steps.map((step) => step.command).join('; ');
-    return [
-      { value: 'done', label: 'Done', hint: 'change nothing' },
-      { value: 'run', label: 'Apply the same settings again', ...(again ? { hint: 'runs ' + again } : {}) },
-      { value: 'edit', label: 'Change an answer' },
-    ];
-  }
+  if (review.settled) return settledOptions(review);
   return [
     { value: 'run', label: review.steps.length === 1 ? 'Run it' : 'Run them' },
     { value: 'back', label: 'Back', hint: 'to the last question' },
     { value: 'edit', label: 'Change an answer' },
     { value: 'decline', label: 'Decline', hint: 'change nothing and exit' },
   ];
+}
+
+/** Done, then a way to pick another account or sign in to gh. Change an answer stays once questions were asked. */
+function settledOptions(review: Review): ReviewOption[] {
+  const options: ReviewOption[] = [
+    { value: 'done', label: 'Done', hint: 'change nothing' },
+    { value: 'account', label: 'Use another account', hint: 'choose a different account for this clone' },
+  ];
+  if (review.ghSignIn) options.push({ value: 'gh', label: review.ghSignIn });
+  if (review.edits !== false) options.push({ value: 'edit', label: 'Change an answer' });
+  return options;
 }
 
 /**

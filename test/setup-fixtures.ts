@@ -50,6 +50,7 @@ function baseline(): Omit<SetupContext, 'recorded' | 'addresses' | 'suggest'> {
     // question passes enabled: null. An otherwise settled clone where it is still
     // offered counts as settled and names `repown setup --auto-upstream`.
     upstream: { supported: true, enabled: true, branch: 'main' },
+    stored: null,
   };
 }
 

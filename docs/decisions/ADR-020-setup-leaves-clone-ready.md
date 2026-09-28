@@ -1,6 +1,6 @@
 # ADR-020: Setup leaves the clone ready to work, in one of two modes
 
-**Status:** Accepted
+**Status:** Accepted. Superseded in part by [ADR-022](ADR-022-set-up-clone-opens-on-settled-screen.md): a settled clone opens on the already-set-up screen before the mode question, and Recommended no longer switches gh when the clone is already pinned to that account.
 
 ## Context
 

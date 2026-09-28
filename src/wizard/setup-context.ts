@@ -105,6 +105,8 @@ export interface ReadOptions {
   readonly classifyOwner?: boolean;
   /** When set, classifies the owner instead of the provider. Tests pass a spy. */
   readonly accountKind?: (login: string) => Promise<'user' | 'organization' | null>;
+  /** Tests pass the auth snapshot. Production reads it. */
+  readonly auth?: AuthState;
 }
 
 export async function readContext(git: Git, cwd: string | null, options: ReadOptions = {}): Promise<Result<SetupContext>> {
@@ -130,6 +132,7 @@ interface Facts {
   readonly name: string | null;
   readonly email: string | null;
   readonly upstream: UpstreamRead;
+  readonly stored: Result<readonly string[]>;
 }
 
 async function readFacts(git: Git, repo: RepoState, recorded: Readonly<Record<string, Account>>, options: ReadOptions): Promise<Facts> {
@@ -152,7 +155,7 @@ interface Loaded {
 }
 
 async function loadClone(git: Git, repo: RepoState, options: ReadOptions): Promise<Loaded> {
-  const authPromise = inspectAuth(git, repo.originUrl ?? undefined);
+  const authPromise = options.auth ? Promise.resolve(options.auth) : inspectAuth(git, repo.originUrl ?? undefined);
   const [auth, pinned, allowed, planned, addresses, helpers, ownerIsUser, upstream, unpushed] = await Promise.all([
     authPromise,
     git.getConfig('repown.account', 'local'),
@@ -184,7 +187,7 @@ async function finishFacts(git: Git, repo: RepoState, recorded: Readonly<Record<
   const ghIsHelper = anyGhHelper(loaded.auth, loaded.planned, loaded.helpers);
   return {
     pinned: loaded.pinned, allowed: loaded.allowed, addresses: loaded.addresses, unpushed: loaded.unpushed,
-    name: loaded.name, email: loaded.email, ownerIsUser: loaded.ownerIsUser, ghIsHelper,
+    name: loaded.name, email: loaded.email, ownerIsUser: loaded.ownerIsUser, ghIsHelper, stored: loaded.auth.stored,
     gh: loaded.auth.ghPresent ? loaded.auth.gh : null,
     pinIntact: await pinIntact(git, loaded.pinned, recorded[loaded.pinned ?? ''], repo),
     detected: detectedAccounts(detectionOf(repo, loaded.auth, recorded, loaded.ownerIsUser)),
@@ -210,7 +213,7 @@ function assemble(cwd: string | null, recorded: Readonly<Record<string, Account>
     fixLines: facts.fixLines,
     addresses: facts.addresses, unpushed: facts.unpushed,
     machineIdentity: { name: facts.name, email: facts.email },
-    upstream: facts.upstream,
+    upstream: facts.upstream, stored: facts.stored,
     suggest: suggester(),
   };
 }

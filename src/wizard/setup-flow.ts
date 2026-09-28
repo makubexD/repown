@@ -7,7 +7,7 @@
 // Pure: no I/O. What the clone and the machine look like arrives as a SetupContext
 // (src/wizard/setup-context.ts), read before the first question.
 
-import { ghAdvice } from '../commands/status.ts';
+import { ghAdvice, UPSTREAM_ON } from '../commands/status.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { shellWord } from '../core/guard/check.ts';
 import { unpushedLines, type UnpushedFact } from '../core/unpushed.ts';
@@ -70,6 +70,8 @@ export interface SetupContext {
   readonly machineIdentity: { readonly name: string | null; readonly email: string | null };
   /** Git's `push.autoSetupRemote`: whether this git has it, the effective value, the branch. */
   readonly upstream: UpstreamRead;
+  /** GCM's stored GitHub accounts. Null when the store was not read; an error when it could not be. */
+  readonly stored: Result<readonly string[]> | null;
   suggest(account: string, host: string): Promise<Profile>;
 }
 
@@ -115,7 +117,26 @@ function asksForLogin(answers: Answers): boolean {
 }
 
 export function setupFlow(ctx: SetupContext): Flow<SetupContext> {
-  return { steps: steps(ctx), review: (answers) => review(answers, ctx), fill: (answers) => recommendedAnswers(answers, ctx) };
+  return {
+    steps: steps(ctx), review: (answers) => review(answers, ctx), fill: (answers) => recommendedAnswers(answers, ctx),
+    opening: () => openingReview(ctx), resume: (choice) => resumeAt(choice, ctx),
+  };
+}
+
+function openingReview(ctx: SetupContext): Review | null {
+  if (!ctx.pinned || !ctx.pinIntact) return null;
+  const shown = review(recommendedAnswers({ mode: 'recommended', account: ctx.pinned }, ctx), ctx);
+  return shown.settled ? { ...shown, edits: false } : null;
+}
+
+function resumeAt(choice: 'account' | 'gh', ctx: SetupContext): { readonly answers: Answers; readonly start: number } {
+  if (choice === 'gh') return { answers: ghAnswers(ctx), start: steps(ctx).length };
+  const start = steps(ctx).findIndex((step) => step.id === 'account');
+  return { answers: { mode: 'recommended' }, start: start < 0 ? 0 : start };
+}
+
+function ghAnswers(ctx: SetupContext): Answers {
+  return recommendedAnswers({ mode: 'recommended', account: ctx.pinned ?? '', gh: true }, ctx);
 }
 
 /** Yes for confirms Recommended skips. An answer already given, including from Change an answer, stays. */
@@ -127,7 +148,8 @@ export function recommendedAnswers(answers: Answers, ctx: SetupContext): Answers
 }
 
 function fillRecommended(step: Step<SetupContext>, filled: Answers, ctx: SetupContext): void {
-  if (filled[step.id] !== undefined || !step.auto?.(filled, ctx)) return;
+  if (filled[step.id] !== undefined || step.skip?.(filled, ctx)) return;
+  if (!step.auto?.(filled, ctx)) return;
   if (step.when && !step.when(filled, ctx)) return;
   filled[step.id] = true;
 }
@@ -275,8 +297,22 @@ function ghStep(ctx: SetupContext): Step<SetupContext> {
     hint: (answers) => ghHint(accountOf(answers), ctx),
     detail: () => ghDetail(ctx),
     when: (answers) => ghAsked(accountOf(answers), ctx),
-    auto: (answers) => isRecommended(answers) && inGh(accountOf(answers), ctx),
+    auto: (answers) => ghAuto(answers, ctx),
+    skip: (answers) => ghSkipped(answers, ctx),
   };
+}
+
+function ghAuto(answers: Answers, ctx: SetupContext): boolean {
+  return isRecommended(answers) && inGh(accountOf(answers), ctx) && !sameAccount(answers, ctx);
+}
+
+/** Recommended leaves gh at No when this clone is already pinned to the chosen account. */
+function ghSkipped(answers: Answers, ctx: SetupContext): boolean {
+  return isRecommended(answers) && sameAccount(answers, ctx);
+}
+
+function sameAccount(answers: Answers, ctx: SetupContext): boolean {
+  return ctx.pinned !== null && !isNew(answers) && accountOf(answers) === ctx.pinned;
 }
 
 function ghMessage(account: string, ctx: SetupContext): string {
@@ -451,11 +487,23 @@ export function planCommands(answers: Answers, ctx: SetupContext): PlannedComman
       '--host=' + hostOf(answers, ctx), '--', account] : null,
     answers['allowOwner'] === true && ctx.owner ? allowOwnerLine(ctx) : null,
     answers['fix'] === true ? ['fix', '--yes', ...cwd] : null,
-    ['use', ...(answers['gh'] === true ? ['--gh'] : []), ...cwd, '--', account],
+    useArgv(answers, ctx),
     answers['guard'] === true ? ['guard', 'on', ...cwd] : null,
     upstreamArgv(answers, ctx),
   ];
   return planned.filter((argv): argv is readonly string[] => argv !== null).map((argv) => ({ argv, what: whatOf(argv, answers, ctx) }));
+}
+
+/** A pin that would write nothing is left out. `use --gh` still runs: that step changes gh. */
+export function pinUnchanged(answers: Answers, ctx: SetupContext): boolean {
+  return sameAccount(answers, ctx) && ctx.pinIntact && answers['gh'] !== true;
+}
+
+function useArgv(answers: Answers, ctx: SetupContext): readonly string[] | null {
+  if (pinUnchanged(answers, ctx)) return null;
+  const cwd = ctx.cwd ? ['--cwd=' + ctx.cwd] : [];
+  const gh = answers['gh'] === true ? ['--gh'] : [];
+  return ['use', ...gh, ...cwd, '--', accountOf(answers)];
 }
 
 function upstreamArgv(answers: Answers, ctx: SetupContext): string[] | null {
@@ -537,16 +585,31 @@ export function missingFlags(given: Answers, recorded: Readonly<Record<string, u
 
 function review(answers: Answers, ctx: SetupContext): Review {
   const plan = planCommands(answers, ctx);
-  const steps = plan.map((command) => ({
+  const steps = stepsOf(plan, ctx);
+  return settled(answers, ctx, plan) ? settledReview(answers, ctx, steps, plan) : pendingReview(answers, ctx, steps, plan);
+}
+
+function stepsOf(plan: readonly PlannedCommand[], ctx: SetupContext): Review['steps'] {
+  return plan.map((command) => ({
     what: printable(command.what), command: formatCommand(command.argv),
     detail: command.argv[0] === 'fix' ? (ctx.fixLines ?? []).map(printable) : [],
   }));
-  if (settled(answers, ctx, plan)) {
-    return { title: 'This clone is already set up', headline: settledLines(answers, ctx).map(printable), steps,
-      notes: noted(settledNotes(answers, ctx), answers, ctx), settled: true };
-  }
-  return { title: 'Review: nothing has changed yet', headline: [printable(headline(answers, ctx))], steps,
-    notes: noted(notes(answers, ctx), answers, ctx), settled: false };
+}
+
+function pendingReview(answers: Answers, ctx: SetupContext, steps: Review['steps'], plan: readonly PlannedCommand[]): Review {
+  return {
+    title: 'Review: nothing has changed yet', headline: [printable(headline(answers, ctx))], steps,
+    notes: noted(notes(answers, ctx), answers, ctx, plan), settled: false,
+  };
+}
+
+function settledReview(answers: Answers, ctx: SetupContext, steps: Review['steps'], plan: readonly PlannedCommand[]): Review {
+  const offer = ghOffer(accountOf(answers), ctx);
+  const shown: Review = {
+    title: 'This clone is already set up', headline: settledLines(answers, ctx).map(printable), steps,
+    notes: noted(settledNotes(answers, ctx), answers, ctx, plan), settled: true,
+  };
+  return offer ? { ...shown, ghSignIn: offer } : shown;
 }
 
 function settledNotes(answers: Answers, ctx: SetupContext): string[] {
@@ -561,9 +624,18 @@ function upstreamOffer(ctx: SetupContext): string | null {
   return 'optional: push branches without -u: repown setup --auto-upstream';
 }
 
-function noted(lines: readonly string[], answers: Answers, ctx: SetupContext): string[] {
-  const body = [...lines, ...extraNotes(answers, ctx)];
+function noted(lines: readonly string[], answers: Answers, ctx: SetupContext, plan: readonly PlannedCommand[]): string[] {
+  const gap = credentialGap(plan, answers, ctx);
+  const body = [...lines, ...extraNotes(answers, ctx), ...(gap ? [gap] : [])];
   return body.map(printable).concat(ghNote(answers, ctx));
+}
+
+/** use's own line, said here only when this run will not run use. Mirrors use.ts credentialConcern. */
+function credentialGap(plan: readonly PlannedCommand[], answers: Answers, ctx: SetupContext): string | null {
+  if (plan.some((command) => command.argv[0] === 'use') || !ctx.credentialPinned || !ctx.stored?.ok) return null;
+  const account = accountOf(answers);
+  if (ctx.stored.value.includes(account)) return null;
+  return 'No stored credential for ' + account + ' yet: the first push signs in once (your browser opens).';
 }
 
 function extraNotes(answers: Answers, ctx: SetupContext): string[] {
@@ -591,6 +663,11 @@ function ghNote(answers: Answers, ctx: SetupContext): string[] {
   return line ? [printable(line)] : [];
 }
 
+/** True when the review already says how to point gh at this account later. */
+export function ghNoted(answers: Answers, ctx: SetupContext): boolean {
+  return ghLeft(answers, ctx) !== null;
+}
+
 /** Drop the leading "fix: " on ghAdvice's remedy, so a sentence can name it itself. */
 export function dropFixPrefix(detail: string): string {
   return detail.replace(/^fix: /, '');
@@ -605,18 +682,14 @@ function ghLeft(answers: Answers, ctx: SetupContext): string | null {
 }
 
 /**
- * Nothing to do: the only command left is pinning this clone to the account it is
- * already pinned to, as recorded and as git would use it (see pinIntact), with no
+ * Nothing to do: the plan is empty because the pin would change nothing, with no
  * organisation the guard would refuse and gh nowhere in the helper list. Saying No
  * to push.autoSetupRemote still counts; the settled screen names the flag. Recommended
  * answers Yes, so that step is in the plan and the clone is not settled.
- * `use` may still say, on a host it can't pin, that it doesn't pin the sign-in.
  */
 function settled(answers: Answers, ctx: SetupContext, plan: readonly PlannedCommand[]): boolean {
-  const account = accountOf(answers);
-  const onlyPin = plan.length === 1 && plan[0]!.argv[0] === 'use' && !plan[0]!.argv.includes('--gh');
-  const same = !isNew(answers) && account === ctx.pinned && ctx.pinIntact;
-  return onlyPin && same && !ctx.ghIsHelper && !ownerForeign(account, ctx);
+  if (plan.length > 0 || !pinUnchanged(answers, ctx)) return false;
+  return !ctx.ghIsHelper && !ownerForeign(accountOf(answers), ctx);
 }
 
 function headline(answers: Answers, ctx: SetupContext): string {
@@ -633,7 +706,22 @@ function settledLines(answers: Answers, ctx: SetupContext): string[] {
     'commits as  ' + (entry ? entry.name + ' <' + entry.email + '>' : account),
     'pushes as   ' + (ctx.credentialPinned ? account : 'your own sign-in for this host (repown pins it on GitHub only)'),
     'guard       ' + guardState(ctx),
+    ...upstreamSettled(ctx),
   ];
+}
+
+function upstreamSettled(ctx: SetupContext): string[] {
+  return ctx.upstream.enabled === true ? ['upstream    ' + UPSTREAM_ON] : [];
+}
+
+function ghOffer(account: string, ctx: SetupContext): string | null {
+  if (!otherGh(account, ctx)) return null;
+  return inGh(account, ctx) ? 'Make ' + account + " gh's active account" : 'Sign in to gh as ' + account;
+}
+
+function otherGh(account: string, ctx: SetupContext): boolean {
+  if (ctx.host !== 'github' || !ctx.gh?.ok || !ctx.gh.value.active) return false;
+  return lower(ctx.gh.value.active) !== lower(account);
 }
 
 function guardState(ctx: SetupContext): string {

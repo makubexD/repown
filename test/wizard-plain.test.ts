@@ -98,7 +98,8 @@ describe('plain prompter', () => {
     const run = harness('\n');
     assert.equal(await run.prompter.review(review({ settled: true, title: 'This clone is already set up' })), 'done');
     assert.match(run.shown(), /already set up/);
-    assert.match(run.shown(), /Apply the same settings again  -- runs repown use octocat/);
+    assert.match(run.shown(), /Use another account {2}-- choose a different account for this clone/);
+    assert.doesNotMatch(run.shown(), /Apply the same settings again/);
     assert.doesNotMatch(run.shown(), /Decline/);
   });
 

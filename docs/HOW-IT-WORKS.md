@@ -558,9 +558,12 @@ To uninstall, follow the [README's steps](../README.md#uninstall), and also:
 ### 13. Guided setup
 
 In a terminal, **`repown`** with no arguments starts this, whether or not the clone is
-already set up. A clone that needs nothing lands on the "already set up" screen.
-**`repown setup`** asks how it should work, then the questions that mode still needs, shows
-the commands it will run, and runs them.
+already set up. A clone that is pinned intact and has nothing left for Recommended to do
+opens on the "already set up" screen, before any question
+([ADR-022](decisions/ADR-022-set-up-clone-opens-on-settled-screen.md)).
+**`repown setup`** with no account and no flags does the same. Otherwise it asks how it
+should work, then the questions that mode still needs, shows the commands it will run,
+and runs them.
 Each answer maps to an ordinary command (`accounts add`, `use`, `guard on`, `fix`) or to
 a repo-local git line (`repown.allowOwner` from card 8, or `push.autoSetupRemote`), so
 you can run the same thing yourself. If the clone needs nothing, it says so.
@@ -581,16 +584,18 @@ flowchart TD
   F -->|no| X3["🔴 exit 2 (or 1): nothing written"]
   F -->|--no-input| C
   F -->|--no-input, account incomplete| X5["🔴 exit 2: names the missing flags"]
+  F -->|yes, no flags, already settled| D
   F -->|yes| M{"How should setup work?<br/>Recommended, or Step by step"}
   M --> A["account: one already seen, a recorded one, or a new login<br/>(suggests origin's owner when it is a user; then host, name, email)"]
-  A --> Q["only what applies here:<br/>Recommended fills a gh switch, the guard and upstream;<br/>both modes ask allowOwner, a gh sign-in and fix"]
+  A --> Q["only what applies here:<br/>Recommended fills the guard and upstream, and a gh switch<br/>unless the clone is already pinned to that account;<br/>both modes ask allowOwner, a gh sign-in and fix"]
   A -->|Esc or Ctrl-C| N
   Q -->|Esc or Ctrl-C| N
   Q --> K{"already pinned to it, as recorded,<br/>and nothing else to do?"}
   K -->|yes| D["🟢 already set up"]
   D -->|Done| DN["⚪ nothing written (exit 0)"]
-  D -->|Apply the same settings again| C
-  D -->|Change an answer| Q
+  D -->|Use another account| A
+  D -->|Sign in to gh, when gh acts as someone else| VG["review: repown use account --gh"]
+  D -->|Change an answer, after a question was asked| Q
   K -->|no| V["review: numbered plain steps, each with its command"]
   V -->|Run| SB{"Step by step?"}
   SB -->|no| C["accounts add → allowOwner → fix → use → guard on → push.autoSetupRemote<br/>stops at the first failure, listing what didn't run"]
@@ -603,8 +608,10 @@ flowchart TD
   C -->|Ctrl-C while running| I["🟡 stops steps not yet run (exit 130).<br/>Ctrl-C during gh sign-in only skips that sign-in;<br/>the clone stays pinned"]
 ```
 
-With `--no-input` there is no review and no "already set up" check: the commands the
-flags stand for run, `use` included.
+With `--no-input` there is no review and no "already set up" screen: the commands the
+flags stand for run. A pin that would change nothing is left out, so a settled clone's
+`git config --local --list` stays as it was. The gh advice a review would have shown is
+printed after that run instead, because nothing else says it.
 
 The account question lists the accounts already recorded and the GitHub logins repown can
 already see (origin's owner, gh's accounts, Git Credential Manager's), then **a new
@@ -620,22 +627,24 @@ never suggested.
 | Which account should this clone belong to? | an account is recorded, or a GitHub login can already be seen. Default: the one pinned here if it is recorded, else origin's owner when it is recorded and not known to be an organisation, else origin's owner when that owner is a user, else the first other recorded account, else a new account | `use <account>`, after `accounts add` when the login is not recorded |
 | The account's user name (login) | "a new account", or nothing recorded and nothing detected. Starts as origin's owner only when that owner is a user and is not recorded. Refused if already recorded | the `<account>` of `accounts add` |
 | Where it's hosted, and your name and email as commits show them (on GitHub, with where to find your noreply address; this machine's default is shown, never filled in) | the login is new: "a new account", or one picked from the logins already seen | `accounts add <account> --name --email --host` |
-| Also make this account gh's active account? (default No) | a GitHub clone (or one whose origin isn't a URL), gh knows the account, another is active | `use --gh` |
-| Sign in to gh as that account too? (default No) | the same, except gh does not know the account. Yes opens a browser; gh then acts as that account in every terminal. The line under it names gh's active account, or says gh isn't signed in | `use --gh` |
+| Also make this account gh's active account? (default No) | a GitHub clone (or one whose origin isn't a URL), gh knows the account, another is active. Recommended does not ask this when the clone is already pinned to that account: it answers No, and the review says how to do it later | `use --gh` |
+| Sign in to gh as that account too? (default No) | the same, except gh does not know the account. Yes opens a browser; gh then acts as that account in every terminal. The line under it names gh's active account, or says gh isn't signed in. Recommended skips it the same way when the clone is already pinned to that account | `use --gh` |
 | This repository belongs to "octo-org". Let this clone push to it? (default Yes) | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
 | Turn on the push guard? (default Yes) | the guard is off, no other tool owns the hook, and `core.hooksPath` doesn't redirect hooks | `guard on` |
 | Push branches without -u? (default Yes) | git is 2.37.0 or newer, and `push.autoSetupRemote` is not already true in any scope. The flag is `--auto-upstream`. On older git, or when `git --version` cannot be read, this is not asked and the review notes `git push -u origin <branch>` (the current branch, or `<branch>` when HEAD is detached) | `git config --local push.autoSetupRemote true` |
 | Stop gh answering git's sign-in requests? (whole machine, default No) | a GitHub clone, gh is the helper, and `fix` finds its entries. Still asked in Recommended | `fix --yes` |
 
 **Recommended** answers Yes, and does not ask, the questions that only change this
-clone and need nothing only the user knows: turn the guard on, push branches
-without `-u`, and switch gh when gh already lists the account. Each of those is
-still a step in the review, and Change an answer can open it. It still asks for
-the account, and for a new account the host, name and email. It always asks,
-default Yes, when origin belongs to someone other than the account. It still
-asks, default No, when signing in to gh would open a browser, and when `fix`
-would change the whole machine. **Step by step** asks every
-question. After Run, before each command, it shows what that step changes (the config
+clone and need nothing only the user knows: turn the guard on, and push branches
+without `-u`. It also switches gh, without asking, when gh already lists the account
+and this clone is not already pinned to it. Each of those is still a step in the
+review, and Change an answer can open it. When the clone is already pinned to the
+chosen account, Recommended does not ask about gh and answers No, so the review
+names the command for later. It still asks for the account, and for a new account
+the host, name and email. It always asks, default Yes, when origin belongs to
+someone other than the account. It still asks, default No, when signing in to gh
+would open a browser and the clone is not already pinned to that account, and when
+`fix` would change the whole machine. **Step by step** asks every question. After Run, before each command, it shows what that step changes (the config
 keys and values, or the gh action), why (the step's own sentence), and the command, then
 asks `Run this step?` with Yes / Skip / Stop. Enter is Yes, except for `fix`, where Enter
 is Skip: that step changes the whole machine, the same reason the review's Enter is
@@ -653,19 +662,33 @@ Without a terminal (CI, a script): see [Scripts and CI](CONFIGURATION.md#scripts
 
 **"Already set up" is shown only when all of these hold:**
 
-- the clone is pinned to the account you chose;
+- the clone is pinned to the account you chose, and that pin is not a new account;
 - every key `use` writes holds exactly the recorded value, both in `.git/config` and in
   what git actually resolves (includes, worktree config, credential entries for the same
-  URL spelt otherwise);
+  URL spelt otherwise), so pinning again is left out of the plan;
 - origin's owner is the account, or is already allowed;
 - gh is nowhere in the credential-helper list;
+- this run will not switch or sign in to gh;
 - push branches without `-u` is not something this run will change. Answering No,
   or never being offered the question (git older than 2.37, or `git --version` could
   not be read), still counts. The screen then says
   `optional: push branches without -u: repown setup --auto-upstream` when git could
   still set it. Recommended answers Yes, so that clone is not already set up until the
-  setting is on;
-- your answers add nothing beyond `repown use <that account>`.
+  setting is on. When the effective value is already true, the screen adds
+  `upstream    set on the first push (push.autoSetupRemote)`, as status says it;
+- the guard is already on, or it is not repown's to turn on (another tool owns the
+  hook, or `core.hooksPath` redirects hooks). Recommended would turn an ordinary off
+  guard on, and that clone is not already set up;
+- the plan is empty. A no-op `repown use` is not listed.
+
+With no flags, that screen is the first thing setup shows, using the pinned account
+and Recommended's answers. **Done** changes nothing (exit 0). **Use another account**
+continues at the account question, in Recommended; Back returns to this screen.
+**Sign in to gh as `<account>`** is offered only when gh acts as another account. It
+reviews one step, `repown use <account> --gh`. When gh already lists the account, the
+option is **Make `<account>` gh's active account**. **Change an answer** is not on this
+first screen. Step by step can still reach the same screen after its questions, and
+then Change an answer is there.
 
 A username written into a `pushInsteadOf` URL isn't checked.
 
@@ -783,9 +806,9 @@ OK    upstream   branches without an upstream push without -u in this clone
        optional, only if you use gh here: gh auth switch -u octocat
 ```
 
-The last line is only when gh still acts as someone else. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh`. The review says the same thing (`gh still acts as <active>… If you use gh here, later:`). The first push's sign-in is said by `use`, not again here.
+The last line is only when gh still acts as someone else and the review did not already say so. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh`. The review says the same thing (`gh still acts as <active>… If you use gh here, later:`), and that run does not print it again. With `--no-input` there is no review, so the line after the run is the one place it appears. The first push's sign-in is said by `use` when `use` runs. When the pin is left out and Git Credential Manager's store was read and does not list the account, the review says `No stored credential for <account> yet: the first push signs in once (your browser opens).`
 
-`changed in this clone:` is what this run wrote in the clone, read before the first step and again after it (also after Stop, or after a step fails). A key that was unset is `(added)`; one that is gone is `old -> (removed)`. A key that did not change is left out. `repown.allowOwner` lists the values added or removed. The guard is `push guard: off -> on`. Only these config values are shown, never what a credential helper prints. When nothing in the clone changed, including **Apply the same settings again** on a clone that was already set up, that block is the one line `nothing changed in this clone`.
+`changed in this clone:` is what this run wrote in the clone, read before the first step and again after it (also after Stop, or after a step fails). A key that was unset is `(added)`; one that is gone is `old -> (removed)`. A key that did not change is left out. `repown.allowOwner` lists the values added or removed. The guard is `push guard: off -> on`. Only these config values are shown, never what a credential helper prints. When nothing in the clone changed, that block is the one line `nothing changed in this clone`. A settled clone whose pin was left out still says `done: this clone is set up for <account>`.
 
 Recording an account is not in the clone. That run adds a separate section:
 
@@ -842,6 +865,7 @@ Stop, or Esc, prints `not run:` and the commands that did not get their turn. Ex
 │  commits as  Octo Cat <octocat@users.noreply.github.com>                    │
 │  pushes as   octocat                                                        │
 │  guard       on: every push is checked before it leaves                     │
+│  upstream    set on the first push (push.autoSetupRemote)                   │
 │                                                                             │
 │  Nothing needs to change.                                                   │
 │                                                                             │
@@ -852,11 +876,14 @@ Stop, or Esc, prints `not run:` and the commands that did not get their turn. Ex
 │
 ◆  What now?
 │  ● Done (change nothing)
-│  ○ Apply the same settings again
-│  ○ Change an answer
+│  ○ Use another account
 └
 ```
 
-**Apply the same settings again** runs the pin once more. When every watched key already holds, the run says `nothing changed in this clone`.
+**Done** writes nothing. **Use another account** asks which account, then the rest of
+Recommended. When gh acts as someone else, a third option is **Sign in to gh as
+octocat** (or **Make octocat gh's active account** when gh already lists it). Choosing
+it reviews `repown use octocat --gh` and nothing else. The `upstream` line is there
+when `push.autoSetupRemote` is already effectively true.
 
 </details>

@@ -19,7 +19,7 @@ import fixCommand from '../commands/fix.ts';
 import guardGroup from '../commands/guard.ts';
 import accountsGroup from '../commands/accounts.ts';
 import { wizard, refusedGiven, CANCEL, type Answers, type Prompter, type StepChoice } from './engine.ts';
-import { setupFlow, planCommands, formatCommand, briefOf, missingFlags, printable, dropFixPrefix, NEW_ACCOUNT, type PlannedCommand, type SetupContext } from './setup-flow.ts';
+import { setupFlow, planCommands, formatCommand, briefOf, missingFlags, printable, dropFixPrefix, NEW_ACCOUNT, accountOf, pinUnchanged, ghNoted, type PlannedCommand, type SetupContext } from './setup-flow.ts';
 import { cloneChangeLines, machineChangeLines, readCloneSnapshot, type CloneSnapshot } from './setup-changes.ts';
 import { readContext, readRegistry, type ReadOptions } from './setup-context.ts';
 import { plainPrompter } from './plain.ts';
@@ -33,6 +33,8 @@ export interface SetupDeps {
   readonly accountKind?: ReadOptions['accountKind'];
   /** Re-read after the steps. Tests pass a fake; production uses inspectAuth. */
   readonly auth?: ReadAuth;
+  /** Tests: the auth snapshot read before the first question. Production reads the machine. */
+  readonly preview?: AuthState;
 }
 
 const CANCELLED = 130;
@@ -55,6 +57,7 @@ export async function runSetup(args: Args, deps: SetupDeps): Promise<number> {
   try {
     return await continueSetup({
       args, git, given: given.value, prompter, accountKind: deps.accountKind, readAuth: deps.auth ?? inspectAuth,
+      ...(deps.preview ? { preview: deps.preview } : {}),
     });
   } finally {
     prompter?.close();
@@ -69,12 +72,13 @@ interface Setup {
   readonly prompter: Prompter | null;
   readonly accountKind?: ReadOptions['accountKind'];
   readonly readAuth: ReadAuth;
+  readonly preview?: AuthState;
 }
 
-async function continueSetup({ args, git, given, prompter, accountKind, readAuth }: Setup): Promise<number> {
+async function continueSetup({ args, git, given, prompter, accountKind, readAuth, preview }: Setup): Promise<number> {
   prompter?.intro?.('repown setup');
   prompter?.busy?.('Reading this clone and this machine');
-  const ctx = await readContext(git, flagString(args, 'cwd'), contextOptions(prompter, accountKind));
+  const ctx = await readContext(git, flagString(args, 'cwd'), contextOptions(prompter, accountKind, preview));
   if (!ctx.ok) { out.fail('setup', ctx.error); return 1; }
   const answers = checkAgainst(given, ctx.value, flagString(args, 'allow-owner'));
   if (!answers.ok) return answers.error;
@@ -82,9 +86,10 @@ async function continueSetup({ args, git, given, prompter, accountKind, readAuth
   return runGuided(answers.value, ctx.value, { git, prompter, readAuth });
 }
 
-function contextOptions(prompter: Prompter | null, accountKind: ReadOptions['accountKind']): ReadOptions {
+function contextOptions(prompter: Prompter | null, accountKind: ReadOptions['accountKind'], preview?: AuthState): ReadOptions {
   const classifyOwner = prompter !== null;
-  return accountKind ? { classifyOwner, accountKind } : { classifyOwner };
+  const auth = preview ? { auth: preview } : {};
+  return accountKind ? { classifyOwner, accountKind, ...auth } : { classifyOwner, ...auth };
 }
 
 // ------------------------------------------------------------ flags -> answers
@@ -175,7 +180,7 @@ function checkAgainst(given: Answers, ctx: SetupContext, allowOwner: string | nu
 async function runUnattended(answers: Answers, ctx: SetupContext, git: Git, readAuth: ReadAuth): Promise<number> {
   const missing = missingFlags(answers, ctx.recorded);
   if (missing.length > 0) return usage('--no-input, but still needed: ' + missing.join(', '));
-  return execute(planCommands(answers, ctx), runState(git, readAuth, ctx));
+  return execute(planCommands(answers, ctx), { ...runState(git, readAuth, ctx), ...reported(answers, ctx, true) });
 }
 
 type ReadAuth = (git: Git, probeUrl?: string) => Promise<AuthState>;
@@ -198,7 +203,7 @@ async function runAccepted(answers: Answers, ctx: SetupContext, { git, prompter,
   const confirm = gateFor(prompter, answers, ctx);
   // Recommended hands the terminal over now. Step by step keeps it for each question.
   if (!confirm) prompter.close();
-  const state = runState(git, readAuth, ctx);
+  const state = { ...runState(git, readAuth, ctx), ...reported(answers, ctx, !ghNoted(answers, ctx)) };
   const code = await execute(planCommands(answers, ctx), confirm ? { ...state, confirm } : state);
   if (confirm) prompter.close();
   return code;
@@ -242,15 +247,27 @@ async function choosePrompter(): Promise<Prompter> {
   }
 }
 
-interface RunState {
+interface Report {
+  readonly account: string;
+  /** The pin was left out because it would change nothing. The done line still names `account`. */
+  readonly pinnedAlready: boolean;
+  /** Print the gh line after the run. False when the review already showed it. */
+  readonly repeatGh: boolean;
+}
+
+interface RunState extends Report {
   readonly git: Git;
   readonly readAuth: ReadAuth;
   readonly confirm?: Confirm;
   readonly credentialKeys: readonly string[];
 }
 
-function runState(git: Git, readAuth: ReadAuth, ctx: SetupContext): RunState {
+function runState(git: Git, readAuth: ReadAuth, ctx: SetupContext): Omit<RunState, keyof Report> {
   return { git, readAuth, credentialKeys: ctx.credentialKeys };
+}
+
+function reported(answers: Answers, ctx: SetupContext, repeatGh: boolean): Report {
+  return { account: accountOf(answers), pinnedAlready: pinUnchanged(answers, ctx), repeatGh };
 }
 
 /**
@@ -335,7 +352,8 @@ async function actOn(choice: StepChoice | typeof CANCEL, at: Act): Promise<numbe
 }
 
 function hideGuard(at: Act): boolean {
-  return !at.confirming && at.plan[at.index + 1]?.argv[0] === 'guard';
+  const current = at.plan[at.index]?.argv[0];
+  return !at.confirming && current === 'use' && at.plan[at.index + 1]?.argv[0] === 'guard';
 }
 
 function runPlanned(planned: PlannedCommand, git: Git, hideNext: boolean): Promise<number> {
@@ -352,17 +370,18 @@ function halt(remaining: readonly PlannedCommand[], code: number, why?: string):
 
 /** On stderr, like the step lines: stdout carries only what the commands themselves print. */
 async function reportRun(before: CloneSnapshot, ran: WalkResult, state: RunState): Promise<void> {
-  if (ran.code === null) announce(ran.done, ran.skipped);
+  if (ran.code === null) announce(ran.done, ran.skipped, state);
   await printClone(before, state);
-  const auth = wantsAuth(ran) ? await state.readAuth(state.git) : null;
+  const auth = wantsAuth(ran, state) ? await state.readAuth(state.git) : null;
   printMachine(ran.done, auth);
-  if (ran.code === null) closeRun(ran.done, auth);
+  if (ran.code === null) closeRun(auth, state);
 }
 
-function announce(done: readonly PlannedCommand[], skipped: readonly PlannedCommand[]): void {
+function announce(done: readonly PlannedCommand[], skipped: readonly PlannedCommand[], report: Report): void {
   process.stderr.write('\n');
   const pinned = done.find((planned) => planned.argv[0] === 'use')?.argv.at(-1);
-  if (pinned) out.detail('done: this clone is set up for ' + printable(pinned));
+  const account = pinned ?? (report.pinnedAlready ? report.account : null);
+  if (account) out.detail('done: this clone is set up for ' + printable(account));
   for (const planned of skipped) out.detail('skipped: ' + printable(planned.what));
 }
 
@@ -374,7 +393,8 @@ async function printClone(before: CloneSnapshot, state: RunState): Promise<void>
 }
 
 /** Success re-reads gh for the optional line. A later failure still does, once, when `--gh` already ran. */
-function wantsAuth(ran: WalkResult): boolean {
+function wantsAuth(ran: WalkResult, report: Report): boolean {
+  if (ran.code === null && report.repeatGh) return true;
   const use = ran.done.find((item) => item.argv[0] === 'use');
   if (!use) return false;
   return ran.code === null || use.argv.includes('--gh');
@@ -398,14 +418,14 @@ function activeGh(done: readonly PlannedCommand[], auth: AuthState | null): stri
   return active.toLowerCase() === account.toLowerCase() ? account : null;
 }
 
-function closeRun(done: readonly PlannedCommand[], auth: AuthState | null): void {
+function closeRun(auth: AuthState | null, report: Report): void {
   out.detail('check it any time: repown status (this clone), repown doctor (this machine)');
-  const left = ghLeftover(done, auth);
+  if (!report.repeatGh) return;
+  const left = ghLeftover(report.account, auth);
   if (left) out.detail(left);
 }
 
-function ghLeftover(plan: readonly PlannedCommand[], auth: AuthState | null): string | null {
-  const account = plan.find((item) => item.argv[0] === 'use')?.argv.at(-1);
+function ghLeftover(account: string, auth: AuthState | null): string | null {
   if (!account || !auth) return null;
   const advice = ghAdvice(account, auth);
   return advice ? 'optional, only if you use gh here: ' + dropFixPrefix(advice.detail) : null;

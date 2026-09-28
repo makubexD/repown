@@ -365,6 +365,68 @@ describe('setup flow', () => {
       'old git is not offered the question');
     assert.match(reviewOf({}).title, /already set up/);
     assert.match(reviewOf({}).notes.join('\n'), /See it any time: repown status \(this clone\), repown doctor \(this machine\)/);
+    assert.match(reviewOf({}).headline.join('\n'), /upstream {4}set on the first push \(push\.autoSetupRemote\)/);
+    assert.equal(reviewOf({}).steps.length, 0, 'a settled plan does not re-pin');
+    assert.equal(planCommands({ account: 'octocat' }, context(settled)).some((command) => command.argv[0] === 'use'), false);
+  });
+
+  test('a no-op pin is left out, and a drifted pin or a gh switch is kept', () => {
+    const intact = context({ pinned: 'octocat', pinIntact: true, guard: 'on' });
+    assert.equal(planCommands({ account: 'octocat' }, intact).length, 0);
+    assert.equal(planCommands({ account: 'octocat', gh: true }, intact)[0]?.argv.includes('--gh'), true);
+    const drifted = context({ pinned: 'octocat', pinIntact: false, guard: 'on' });
+    assert.equal(planCommands({ account: 'octocat' }, drifted)[0]?.argv[0], 'use');
+    assert.match(setupFlow(drifted).review({ account: 'octocat' }, drifted).notes.join('\n'), /pinning again restores them/);
+  });
+
+  test('a review with no use step notes a missing stored credential, and stays quiet when use runs or the store lists it', () => {
+    const upstream = { supported: true, enabled: null as boolean | null, branch: 'main' };
+    const base = { pinned: 'octocat', pinIntact: true, guard: 'on' as const, upstream };
+    const missing = context({ ...base, stored: ok([]) });
+    const review = setupFlow(missing).review({ account: 'octocat', mode: 'recommended', upstream: true }, missing);
+    assert.equal(review.settled, false);
+    assert.deepEqual(review.steps.map((step) => step.command), ['git config --local push.autoSetupRemote true']);
+    assert.match(review.notes.join('\n'), /No stored credential for octocat yet: the first push signs in once \(your browser opens\)/);
+    const listed = context({ ...base, stored: ok(['octocat']) });
+    const quiet = setupFlow(listed).review({ account: 'octocat', mode: 'recommended', upstream: true }, listed);
+    assert.doesNotMatch(quiet.notes.join('\n'), /No stored credential/);
+    const pinning = context({ pinned: 'octocat', pinIntact: false, guard: 'on', stored: ok([]) });
+    assert.doesNotMatch(setupFlow(pinning).review({ account: 'octocat' }, pinning).notes.join('\n'), /No stored credential/);
+  });
+
+  test('a settled clone opens on that screen before any question', async () => {
+    const ctx = context({ pinned: 'octocat', pinIntact: true, guard: 'on' });
+    const done = scripted([['review', 'done']]);
+    assert.deepEqual(await wizard(setupFlow(ctx), ctx, {}, done), { status: 'done' });
+    assert.deepEqual(done.asked, []);
+    assert.equal(done.reviews[0]?.settled, true);
+    assert.match(done.reviews[0]?.headline.join('\n') ?? '', /upstream {4}set on the first push \(push\.autoSetupRemote\)/);
+    const gh = ok({ accounts: [{ login: 'octo-work', active: true }], active: 'octo-work' });
+    const other = context({ gh, pinned: 'octocat', pinIntact: true, guard: 'on' });
+    const signing = scripted([['review', 'gh'], ['review', 'decline']]);
+    assert.deepEqual(await wizard(setupFlow(other), other, {}, signing), { status: 'declined' });
+    assert.equal(signing.reviews[1]?.settled, false);
+    assert.deepEqual(signing.reviews[1]?.steps.map((step) => step.command), ['repown use octocat --gh']);
+    const back = scripted([['review', 'account'], ['account', BACK], ['review', 'done']]);
+    assert.deepEqual(await wizard(setupFlow(ctx), ctx, {}, back), { status: 'done' });
+    assert.deepEqual(back.asked, ['account']);
+    assert.equal(back.reviews.length, 2);
+  });
+
+  test('Recommended answers No to gh when the clone is already pinned to that account; Step by step still asks', async () => {
+    const gh = ok({ accounts: [{ login: 'octo-work', active: true }], active: 'octo-work' });
+    const ctx = context({ gh, pinned: 'octocat', pinIntact: false, guard: 'on' });
+    const recommended = scripted([['account', 'octocat'], ['review', 'run']]);
+    const outcome = await wizard(setupFlow(ctx), ctx, { mode: 'recommended' }, recommended);
+    assert.deepEqual(recommended.asked, ['account']);
+    assert.match(recommended.reviews[0]?.notes.join('\n') ?? '', /If you use gh here, later: repown use octocat --gh/);
+    assert.equal(outcome.status, 'run');
+    if (outcome.status !== 'run') return;
+    assert.equal(outcome.answers['gh'], undefined);
+    assert.equal(argvOf(outcome.answers, ctx).some((argv) => argv.includes('--gh')), false);
+    const stepped = scripted([['account', 'octocat'], ['gh', false], ['review', 'run']]);
+    await wizard(setupFlow(ctx), ctx, { mode: 'step' }, stepped);
+    assert.deepEqual(stepped.asked, ['account', 'gh']);
   });
 
   test('S8 asks to push branches without -u and plans the local git config after the guard', async () => {
@@ -1421,6 +1483,33 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.ok(existsSync(hook(at)));
   });
 
+  test('Done on the opening settled screen leaves git config byte-identical', async () => {
+    assert.equal(repown(['use', 'octocat'], at.box.dir).status, 0);
+    assert.equal(repown(['guard', 'on'], at.box.dir).status, 0);
+    const before = at.box.git('config', '--local', '--list');
+    const prompter = scripted([['review', 'done']]);
+    const endings: string[] = [];
+    const closing: Prompter = { ...prompter, outro: (message) => { endings.push(message); } };
+    assert.equal(await runWith(closing), 0);
+    assert.deepEqual(prompter.asked, []);
+    assert.equal(prompter.reviews[0]?.settled, true);
+    assert.match(prompter.reviews[0]?.headline.join('\n') ?? '', /upstream {4}set on the first push \(push\.autoSetupRemote\)/);
+    assert.equal(at.box.git('config', '--local', '--list'), before);
+    assert.deepEqual(endings, ['Nothing changed: this clone was already set up']);
+  });
+
+  test('--no-input on a settled clone leaves git config byte-identical and can still name gh', () => {
+    assert.equal(repown(['use', 'octocat'], at.box.dir).status, 0);
+    assert.equal(repown(['guard', 'on'], at.box.dir).status, 0);
+    const before = at.box.git('config', '--local', '--list');
+    const run = repown(['setup', 'octocat', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(at.box.git('config', '--local', '--list'), before);
+    assert.match(run.stderr, /done: this clone is set up for octocat/);
+    assert.match(run.stderr, /nothing changed in this clone/);
+    assert.doesNotMatch(run.stderr, /repown use /);
+  });
+
   test('already set up: Done exits 0 and writes nothing; Apply again pins as before', async () => {
     const first = scripted([['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'run'], ['step', 'yes']]);
     assert.equal(await runWith(first), 0);
@@ -1544,6 +1633,29 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.equal(await run([['mode', CANCEL]]), 130);
     assert.equal(await run([['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', CANCEL]]), 130);
     assert.equal(localConfig(at), before);
+  });
+
+  test('a review that already named gh does not repeat it after the run', async () => {
+    assert.equal(repown(['use', 'octocat'], at.box.dir).status, 0);
+    assert.equal(repown(['guard', 'on'], at.box.dir).status, 0);
+    assert.equal(repown(['guard', 'off'], at.box.dir).status, 0);
+    const preview = ghAuth('octo-work', ['octo-work']);
+    const prompter = scripted([['mode', 'recommended'], ['account', 'octocat'], ['review', 'run']]);
+    let stderr = '';
+    const write = process.stderr.write;
+    process.stderr.write = ((chunk: string | Uint8Array) => { stderr += String(chunk); return true; }) as typeof process.stderr.write;
+    try {
+      const code = await runSetup(
+        { positional: [], flags: new Map([['cwd', at.box.dir]]) },
+        { prompter, interactive: true, auth: async () => preview, preview },
+      );
+      assert.equal(code, 0, stderr);
+    } finally {
+      process.stderr.write = write;
+    }
+    assert.deepEqual(prompter.asked, ['mode', 'account']);
+    assert.match(prompter.reviews[0]?.notes.join('\n') ?? '', /If you use gh here, later: repown use octocat --gh/);
+    assert.doesNotMatch(stderr, /optional, only if you use gh/);
   });
 
   test('after the steps, gh advice is one more done line and the first push is not repeated', async () => {

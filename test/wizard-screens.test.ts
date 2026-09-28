@@ -19,36 +19,78 @@ const twoAccounts = {
 };
 
 describe('repown setup, played with key presses', () => {
-  test('S1 a clone already set up says so, and Done changes nothing', async () => {
+  test('S1 a settled clone opens on that screen, and Done changes nothing', async () => {
     const ctx = setupContext({ pinned: 'octocat', guard: 'on', pinIntact: true });
-    const { outcome, screen } = await play(ctx, [[down, enter], [enter], [enter]]);
+    const { outcome, screen } = await play(ctx, [[enter]]);
     assert.equal(outcome.status, 'done', screen);
-    assert.match(screen, /right now this clone is pinned to octocat/);
-    assert.doesNotMatch(screen, /pinned to octocat now/);
+    assert.doesNotMatch(screen, /How should setup work/);
+    assert.doesNotMatch(screen, /Which account should this clone belong to/);
+    assert.doesNotMatch(screen, /Sign in to gh/);
     assert.match(screen, /This clone is already set up/);
     assert.match(screen, /Nothing needs to change/);
-    assert.match(screen, /Apply the same settings again/);
+    assert.match(screen, /upstream {4}set on the first push \(push\.autoSetupRemote\)/);
+    assert.match(screen, /Done \(change nothing\)/);
+    assert.match(screen, /Use another account/);
+    assert.doesNotMatch(screen, /Apply the same settings again/);
+    assert.doesNotMatch(screen, /Change an answer/);
     assert.match(screen.replace(/│/g, ' ').replace(/\s+/g, ' '), /See it any time: repown status \(this clone\), repown doctor \(this machine\)/);
   });
 
-  test('Recommended on a fully set-up clone still shows the settled screen', async () => {
+  test('Use another account opens the account question, and Back returns', async () => {
     const ctx = setupContext({ pinned: 'octocat', guard: 'on', pinIntact: true });
-    const { outcome, screen } = await play(ctx, [[enter], [enter], [enter]]);
-    assert.equal(outcome.status, 'done', screen);
-    assert.match(screen, /This clone is already set up/);
-    assert.match(screen, /Nothing needs to change/);
+    const { outcome, screen } = await play(ctx, [[down, enter], [down, down, enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    assert.equal(screen.split('This clone is already set up').length - 1, 2, screen);
+    assert.match(screen, /Use another account \(choose a different account for this clone\)/);
+    assert.match(screen, /Which account should this clone belong to/);
+    assert.doesNotMatch(screen, /How should setup work/);
+    assert.match(screen, /← Back/);
   });
 
-  test('Recommended on a pinned clone with auto-upstream unset lists that step', async () => {
+  test('Sign in to gh, when gh acts as someone else, reviews that one step', async () => {
+    const gh = ok({ accounts: [{ login: 'octo-work', active: true }], active: 'octo-work' });
+    const ctx = setupContext({ gh, pinned: 'octocat', guard: 'on', pinIntact: true });
+    const { outcome, screen } = await play(ctx, [[down, down, enter], [esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    const plain = screen.replace(/│/g, ' ').replace(/\s+/g, ' ');
+    assert.match(plain, /Sign in to gh as octocat/);
+    assert.doesNotMatch(screen, /Sign in to gh as octocat too\?/);
+    assert.doesNotMatch(screen.split('Run this step?')[0] ?? '', /How should setup work|Which account/);
+    assert.match(plain, /1\. Pin this clone to octocat, and sign octocat in to gh \(opens your browser\)/);
+    assert.match(plain, /repown use octocat --gh/);
+    assert.doesNotMatch(plain, /2\./);
+    assert.match(plain, /Run this step\?/);
+  });
+
+  test('Recommended on a pinned intact clone with auto-upstream unset lists only that step', async () => {
     const ctx = setupContext({
       pinned: 'octocat', guard: 'on', pinIntact: true,
       upstream: { supported: true, enabled: null, branch: 'main' },
+      stored: ok([]),
     });
     const { outcome, screen } = await play(ctx, [[enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
+    const plain = screen.replace(/│/g, ' ').replace(/\s+/g, ' ');
     assert.doesNotMatch(screen, /This clone is already set up/);
-    assert.match(screen.replace(/│/g, ' ').replace(/\s+/g, ' '), /Push branches without -u: the first push sets the upstream \(this clone only\)/);
-    assert.match(screen, /git config --local push\.autoSetupRemote true/);
+    assert.match(plain, /1\. Push branches without -u: the first push sets the upstream \(this clone only\)/);
+    assert.match(plain, /git config --local push\.autoSetupRemote true/);
+    assert.doesNotMatch(screen, /Pin this clone/);
+    assert.doesNotMatch(plain, /2\./);
+    assert.match(plain, /No stored credential for octocat yet: the first push signs in once \(your browser opens\)/);
+  });
+
+  test('Recommended does not ask gh when the clone is already pinned to that account', async () => {
+    const gh = ok({ accounts: [{ login: 'octo-work', active: true }], active: 'octo-work' });
+    const ctx = setupContext({ gh, pinned: 'octocat', pinIntact: true, guard: 'off' });
+    const recommended = await play(ctx, [[enter], [enter], [esc]]);
+    assert.equal(recommended.outcome.status, 'cancelled', recommended.screen);
+    assert.doesNotMatch(recommended.screen, /Sign in to gh as octocat too\?/);
+    assert.doesNotMatch(recommended.screen, /Also make this account gh's active account\?/);
+    const plain = recommended.screen.replace(/│/g, ' ').replace(/\s+/g, ' ');
+    assert.equal(plain.split('If you use gh here, later:').length - 1, 1, recommended.screen);
+    assert.match(plain, /later: repown use octocat --gh/);
+    const stepped = await play(ctx, [[down, enter], [enter], [esc]]);
+    assert.match(stepped.screen, /Sign in to gh as octocat too\?/);
   });
 
   test('S2 a new user on an organisation repository reads every hint and a numbered review', async () => {
@@ -327,16 +369,18 @@ describe('repown setup, played with key presses', () => {
     assert.match(plain, /git config --local push\.autoSetupRemote true/);
   });
 
-  test('old git skips that question and the review names git push -u', async () => {
+  test('old git skips that question and the settled screen names git push -u', async () => {
     const ctx = setupContext({
       pinned: 'octocat', guard: 'on', pinIntact: true,
       upstream: { supported: false, enabled: null, branch: 'main' },
     });
-    const { outcome, screen } = await play(ctx, [[down, enter], [enter], [esc]]);
+    const { outcome, screen } = await play(ctx, [[esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
-    assert.doesNotMatch(screen, /Push branches without -u/);
+    assert.match(screen, /This clone is already set up/);
+    assert.doesNotMatch(screen, /How should setup work|Push branches without -u/);
     const plain = screen.replace(/│/g, ' ').replace(/\s+/g, ' ');
     assert.match(plain, /the first push of a branch without an upstream needs: git push -u origin main/);
+    assert.doesNotMatch(plain, /upstream {4}set on the first push \(push\.autoSetupRemote\)/);
   });
 
   test('D11 a recorded owner is preselected over the account recorded first', async () => {

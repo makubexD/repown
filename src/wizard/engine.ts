@@ -14,7 +14,7 @@ export const CANCEL = Symbol('cancel');
 export type Answer = string | boolean;
 export type Answers = Record<string, Answer>;
 export type Reply = Answer | typeof BACK | typeof CANCEL;
-export type ReviewChoice = 'run' | 'back' | 'edit' | 'decline' | 'done' | typeof CANCEL;
+export type ReviewChoice = 'run' | 'back' | 'edit' | 'decline' | 'done' | 'account' | 'gh' | typeof CANCEL;
 export type StepChoice = 'yes' | 'skip' | 'stop';
 
 /** What one planned step would change, shown before it runs in step-by-step mode. */
@@ -54,6 +54,8 @@ export interface Step<C> {
   when?(answers: Answers, context: C): boolean;
   /** Skipped on the way through. Change an answer can still open it, and that ask is once. */
   auto?(answers: Answers, context: C): boolean;
+  /** Not asked on the way through, and not filled in. An answer already given still stands. */
+  skip?(answers: Answers, context: C): boolean;
 }
 
 /** A step whose question has already been chosen for the answers so far. */
@@ -81,8 +83,12 @@ export interface Review {
   readonly steps: readonly ReviewStep[];
   /** Warnings and side notes, after the steps. */
   readonly notes: readonly string[];
-  /** Nothing needs to change: offer Done first, and running the steps again second. */
+  /** Nothing needs to change. Done exits; an empty plan is not offered as a re-run. */
   readonly settled: boolean;
+  /** Settled screen only: sign this account in to gh, when gh acts as someone else. */
+  readonly ghSignIn?: string;
+  /** False when nothing has been asked, so Change an answer is not offered. */
+  readonly edits?: boolean;
 }
 
 /** What a prompter needs to ask one step. */
@@ -100,6 +106,10 @@ export interface Flow<C> {
   review(answers: Answers, context: C): Review;
   /** Answers for steps the walk did not ask. Applied before prune, so the review can list them. */
   fill?(answers: Answers, context: C): Answers;
+  /** Shown before the first question when nothing was given as a flag. Null starts the questions. */
+  opening?(context: C): Review | null;
+  /** Where an opening choice continues: its answers, and the step index to ask from. */
+  resume?(choice: 'account' | 'gh', context: C): { readonly answers: Answers; readonly start: number };
 }
 
 export interface Prompter {
@@ -132,9 +142,15 @@ interface Pass {
   readonly given: ReadonlySet<string>;
   /** Steps already asked before `start`, so Back can keep going past it. */
   readonly history: readonly number[];
+  /** Back from the first question of this pass returns to the opening review. */
+  readonly toOpening: boolean;
+  /** Show the flow's opening review before asking. */
+  readonly showOpening: boolean;
 }
 
-type Walk = { readonly status: 'answered'; readonly answers: Answers; readonly asked: number[] } | { readonly status: 'cancelled' };
+type Walk = { readonly status: 'answered'; readonly answers: Answers; readonly asked: number[] }
+  | { readonly status: 'cancelled' }
+  | { readonly status: 'opening' };
 
 /** Asks every reachable step from `pass.start` on, with a history for going back. */
 export async function runFlow<C>(flow: Flow<C>, context: C, pass: Pass, prompter: Prompter): Promise<Walk> {
@@ -143,23 +159,34 @@ export async function runFlow<C>(flow: Flow<C>, context: C, pass: Pass, prompter
   let index = pass.start;
   while (index < flow.steps.length) {
     const step = flow.steps[index]!;
-    const resume = index === pass.start;
-    if (!shouldAsk(step, { answers, context, given: pass.given, resume })) { index++; continue; }
-    const reply = await ask(step, { answers, canGoBack: asked.length > 0 }, context, prompter);
+    if (!shouldAsk(step, { answers, context, given: pass.given, resume: index === pass.start })) { index++; continue; }
+    const reply = await ask(step, { answers, canGoBack: asked.length > 0 || pass.toOpening }, context, prompter);
     if (reply === CANCEL) return { status: 'cancelled' };
-    if (reply === BACK) { index = asked.pop() ?? index; continue; }
-    const problem = step.validate?.(reply) ?? null;
-    if (problem) { prompter.note(problem); continue; }
-    answers[step.id] = reply;
-    asked.push(index++);
+    if (reply === BACK) { const back = retreat(asked, pass.toOpening, index); if (back.walk) return back.walk; index = back.index; continue; }
+    if (keep(step, reply, prompter, { answers, asked, index })) index++;
   }
   return { status: 'answered', answers: filled(flow, answers, context, pass.given), asked };
+}
+
+function retreat(asked: number[], toOpening: boolean, index: number): { readonly walk?: Walk; readonly index: number } {
+  if (asked.length > 0) return { index: asked.pop()! };
+  return toOpening ? { walk: { status: 'opening' }, index } : { index };
+}
+
+function keep<C>(step: Step<C>, reply: Answer, prompter: Prompter, bag: { answers: Answers; asked: number[]; index: number }): boolean {
+  const problem = step.validate?.(reply) ?? null;
+  if (problem) { prompter.note(problem); return false; }
+  bag.answers[step.id] = reply;
+  bag.asked.push(bag.index);
+  return true;
 }
 
 /** The step this walk resumed on is asked even when `auto` would skip it. */
 function shouldAsk<C>(step: Step<C>, at: { answers: Answers; context: C; given: ReadonlySet<string>; resume: boolean }): boolean {
   if (!applicable(step, at.answers, at.context, at.given)) return false;
-  return at.resume || !step.auto?.(at.answers, at.context);
+  if (at.resume) return true;
+  if (step.skip?.(at.answers, at.context)) return false;
+  return !step.auto?.(at.answers, at.context);
 }
 
 function applicable<C>(step: Step<C>, answers: Answers, context: C, given: ReadonlySet<string>): boolean {
@@ -215,38 +242,135 @@ export function reachable<C>(flow: Flow<C>, answers: Answers, context: C, given:
   return flow.steps.filter((step) => answers[step.id] !== undefined && applicable(step, answers, context, given));
 }
 
-/** The whole wizard: ask, review, and loop back on Back or Change an answer. */
+interface Next {
+  readonly outcome: Outcome | null;
+  readonly pass: Pass;
+}
+
+function fresh(given: Answers, fixed: ReadonlySet<string>): Pass {
+  return { answers: { ...given }, start: 0, given: fixed, history: [], toOpening: false, showOpening: fixed.size === 0 };
+}
+
+/** The whole wizard: an opening review when the flow has one, then ask, review, and loop. */
 export async function wizard<C>(flow: Flow<C>, context: C, given: Answers, prompter: Prompter): Promise<Outcome> {
   const fixed = new Set(Object.keys(given));
-  let pass: Pass = { answers: { ...given }, start: 0, given: fixed, history: [] };
+  let pass = fresh(given, fixed);
   for (;;) {
-    const walk = await runFlow(flow, context, pass, prompter);
-    if (walk.status === 'cancelled') return walk;
-    const review = flow.review(walk.answers, context);
-    const choice = await prompter.review(review);
-    if (choice === 'run') return { status: 'run', answers: walk.answers };
-    // Done promises "nothing needed changing": on a review with work left, it changes nothing either way.
-    if (choice === 'done') return { status: review.settled ? 'done' : 'declined' };
-    if (choice === 'decline' || choice === CANCEL) return { status: choice === CANCEL ? 'cancelled' : 'declined' };
-    const start = await restartAt(flow, context, { walk, given: fixed, choice }, prompter);
-    if (start === CANCEL) return { status: 'cancelled' };
-    pass = { answers: walk.answers, start, given: fixed, history: walk.asked.filter((index) => index < start) };
+    const opened = await takeOpening(flow, context, pass, prompter);
+    if (opened.outcome) return opened.outcome;
+    pass = opened.pass;
+    const walked = await takePass(flow, context, pass, prompter);
+    if (walked.outcome) return walked.outcome;
+    pass = walked.pass;
   }
 }
 
+async function takeOpening<C>(flow: Flow<C>, context: C, pass: Pass, prompter: Prompter): Promise<Next> {
+  if (!pass.showOpening) return { outcome: null, pass };
+  const opening = flow.opening?.(context) ?? null;
+  if (!opening) return { outcome: null, pass: { ...pass, showOpening: false } };
+  return openingChoice({ flow, context, pass, prompter }, await prompter.review(opening));
+}
+
+interface Scene<C> {
+  readonly flow: Flow<C>;
+  readonly context: C;
+  readonly pass: Pass;
+  readonly prompter: Prompter;
+}
+
+function openingChoice<C>(scene: Scene<C>, choice: ReviewChoice): Next {
+  const stopped = stoppedChoice(choice);
+  if (stopped) return { outcome: stopped, pass: scene.pass };
+  if (choice === 'account' || choice === 'gh') return { outcome: null, pass: resumed(scene, choice, null) };
+  if (choice === 'edit') scene.prompter.note('nothing has been asked yet');
+  return { outcome: null, pass: scene.pass };
+}
+
+function stoppedChoice(choice: ReviewChoice): Outcome | null {
+  if (choice === 'done') return { status: 'done' };
+  if (choice === 'decline') return { status: 'declined' };
+  if (choice === CANCEL) return { status: 'cancelled' };
+  return null;
+}
+
+interface Walked {
+  readonly answers: Answers;
+  readonly asked: readonly number[];
+}
+
+function resumed<C>(scene: Scene<C>, choice: 'account' | 'gh', walk: Walked | null): Pass {
+  const spot = scene.flow.resume?.(choice, scene.context);
+  const start = spot?.start ?? 0;
+  return {
+    answers: branchAnswers(choice, spot?.answers ?? {}, walk), start, given: scene.pass.given,
+    history: walk ? walk.asked.filter((index) => index < start) : [],
+    toOpening: walk === null, showOpening: false,
+  };
+}
+
+function branchAnswers(choice: 'account' | 'gh', freshAnswers: Answers, walk: Walked | null): Answers {
+  if (!walk) return freshAnswers;
+  return choice === 'gh' ? { ...walk.answers, gh: true } : walk.answers;
+}
+
+async function takePass<C>(flow: Flow<C>, context: C, pass: Pass, prompter: Prompter): Promise<Next> {
+  const walk = await runFlow(flow, context, pass, prompter);
+  if (walk.status === 'cancelled') return { outcome: { status: 'cancelled' }, pass };
+  if (walk.status === 'opening') return { outcome: null, pass: fresh({}, pass.given) };
+  return afterReview({ flow, context, pass, prompter }, walk);
+}
+
+async function afterReview<C>(scene: Scene<C>, walk: Walked): Promise<Next> {
+  const shown = scene.flow.review(walk.answers, scene.context);
+  const choice = await scene.prompter.review(shown);
+  const direct = directChoice(choice, shown, walk.answers);
+  if (direct) return { outcome: direct, pass: scene.pass };
+  if (choice === 'account' || choice === 'gh') return { outcome: null, pass: resumed(scene, choice, walk) };
+  return restart(scene, walk, choice);
+}
+
+/** Done promises "nothing needed changing": on a review with work left, it changes nothing either way. */
+function directChoice(choice: ReviewChoice, shown: Review, answers: Answers): Outcome | null {
+  if (choice === 'run') return { status: 'run', answers };
+  if (choice === 'done') return { status: shown.settled ? 'done' : 'declined' };
+  if (choice === 'decline') return { status: 'declined' };
+  if (choice === CANCEL) return { status: 'cancelled' };
+  return null;
+}
+
+async function restart<C>(scene: Scene<C>, walk: Walked, choice: ReviewChoice): Promise<Next> {
+  if (choice !== 'back' && choice !== 'edit') return { outcome: null, pass: scene.pass };
+  const how = { walk, given: scene.pass.given, choice, toOpening: scene.pass.toOpening };
+  const start = await restartAt(scene.flow, scene.context, how, scene.prompter);
+  if (start === CANCEL) return { outcome: { status: 'cancelled' }, pass: scene.pass };
+  if (start === 'opening') return { outcome: null, pass: fresh({}, scene.pass.given) };
+  return { outcome: null, pass: continued(scene.pass, walk, start) };
+}
+
+function continued(pass: Pass, walk: Walked, start: number): Pass {
+  return {
+    answers: walk.answers, start, given: pass.given,
+    history: walk.asked.filter((index) => index < start),
+    toOpening: false, showOpening: false,
+  };
+}
+
 interface Return {
-  readonly walk: { readonly answers: Answers; readonly asked: readonly number[] };
+  readonly walk: Walked;
   readonly given: ReadonlySet<string>;
   readonly choice: 'back' | 'edit';
+  readonly toOpening: boolean;
 }
 
 /**
  * Where to resume: the last step asked (Back), or the one the user picks (Change an
  * answer). With nothing asked -- every value given as a flag -- Back has nowhere to go
- * and simply shows the review again.
+ * and simply shows the review again. Back from a pass that came from the opening
+ * review returns there.
  */
-async function restartAt<C>(flow: Flow<C>, context: C, how: Return, prompter: Prompter): Promise<number | typeof CANCEL> {
-  if (how.choice === 'back') return how.walk.asked.at(-1) ?? flow.steps.length;
+async function restartAt<C>(flow: Flow<C>, context: C, how: Return, prompter: Prompter): Promise<number | typeof CANCEL | 'opening'> {
+  if (how.choice === 'back') return backIndex(how, flow);
   const steps = reachable(flow, how.walk.answers, context, how.given).map((step) => drawn(step, how.walk.answers, context));
   if (steps.length === 0) { prompter.note('every answer came from a flag: there is nothing here to change'); return flow.steps.length; }
   const id = await prompter.pickStep(steps);
@@ -254,4 +378,10 @@ async function restartAt<C>(flow: Flow<C>, context: C, how: Return, prompter: Pr
   if (id === BACK) return flow.steps.length;
   const index = flow.steps.findIndex((step) => step.id === id);
   return index < 0 ? flow.steps.length : index;
+}
+
+function backIndex<C>(how: Return, flow: Flow<C>): number | 'opening' {
+  const last = how.walk.asked.at(-1);
+  if (last !== undefined) return last;
+  return how.toOpening ? 'opening' : flow.steps.length;
 }

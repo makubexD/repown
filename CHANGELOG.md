@@ -7,6 +7,25 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+- A clone that is already set up opens `repown setup` on **This clone is already set
+  up**, before any question. **Done** changes nothing. **Use another account**
+  continues at the account question. **Sign in to gh as `<account>`** appears only
+  when gh acts as someone else, and reviews `repown use <account> --gh` (or **Make
+  `<account>` gh's active account** when gh already lists it). When
+  `push.autoSetupRemote` is already on, the screen adds `upstream    the first push
+  of a branch sets it`. Step by step can still reach this screen after its questions,
+  and then **Change an answer** is offered.
+- `repown setup` no longer plans a pin that would change nothing: the account is the
+  one already pinned, the pin is intact, and gh is not being switched. The review
+  lists only the steps that write something. When that plan has no `use` and Git
+  Credential Manager's store was read and does not list the account, the review says
+  `No stored credential for <account> yet: the first push signs in once (your browser
+  opens).` The run still says `done: this clone is set up for <account>`.
+  `--no-input` on a settled clone leaves `git config --local --list` unchanged.
+- In Recommended, `repown setup` does not ask **Sign in to gh as `<account>` too?**
+  when the clone is already pinned to that account. It answers No, and the review
+  says how to do it later. Step by step still asks. That advice is printed once: in
+  the review, or after the run when there was no review (`--no-input`).
 - `repown use` warns when the current branch has commits no remote has by another
   address: `N commits on <branch> not on any remote are by <addresses>; the guard
   will refuse them`, then `re-author it` (one commit) or `re-author them` (more):

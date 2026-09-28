@@ -6,7 +6,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
@@ -619,7 +619,8 @@ describe('repown status failure pointers', () => {
 
 describe('repown status outside a repository', () => {
   test('S10: the failure is unchanged and no title is printed', () => {
-    const empty = mkdtempSync(join(tmpdir(), 'repown-not-a-repo-'));
+    // realpath: macOS's tmpdir is /var, a link to /private/var, and the child's cwd is the real path.
+    const empty = realpathSync(mkdtempSync(join(tmpdir(), 'repown-not-a-repo-')));
     const saved = process.env['GIT_CEILING_DIRECTORIES'];
     process.env['GIT_CEILING_DIRECTORIES'] = join(empty, '..');
     try {

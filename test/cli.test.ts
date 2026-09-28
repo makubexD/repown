@@ -999,8 +999,26 @@ function installFakeGh(bin: string): void {
 function compileFakeGh(bin: string): void {
   const source = join(bin, 'fake-gh.cs');
   writeFileSync(source, FAKE_GH_CS);
-  const run = spawnSync(cscPath(), ['/nologo', '/out:' + join(bin, 'gh.exe'), source], { encoding: 'utf8' });
+  const exe = join(bin, 'gh.exe');
+  const run = spawnSync(cscPath(), ['/nologo', '/out:' + exe, source], { encoding: 'utf8' });
   assert.equal(run.status, 0, run.stdout + run.stderr);
+  waitUntilRuns(exe);
+}
+
+/**
+ * A freshly compiled exe can fail its first launch on Windows (CI saw it as
+ * `gh auth switch exited 97`): repown's parallel first gh calls must not be that launch.
+ */
+function waitUntilRuns(exe: string): void {
+  const env = { ...process.env };
+  delete env.GH_FAKE_LOG;
+  let last: ReturnType<typeof spawnSync> | undefined;
+  for (let i = 0; i < 20; i++) {
+    last = spawnSync(exe, ['--version'], { encoding: 'utf8', env });
+    if (last.status === 0 && String(last.stdout).includes('repown-fake-gh')) return;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+  }
+  assert.fail(`gh.exe never answered: status=${last?.status} error=${last?.error} stderr=${last?.stderr}`);
 }
 
 function cscPath(): string {

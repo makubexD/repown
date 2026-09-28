@@ -117,6 +117,8 @@ export interface Prompter {
   review(review: Review): Promise<ReviewChoice>;
   /** "Change an answer": one of the steps that were asked, or BACK to the review. */
   pickStep(steps: readonly Drawn[]): Promise<string | typeof BACK | typeof CANCEL>;
+  /** One of `options`, or CANCEL on Esc or Ctrl-C. */
+  choose(message: string, options: readonly Choice[]): Promise<string | typeof CANCEL>;
   note(message: string): void;
   /** Step by step, before one command. Cancel means Stop. */
   confirmStep(confirm: StepConfirm): Promise<StepChoice | typeof CANCEL>;

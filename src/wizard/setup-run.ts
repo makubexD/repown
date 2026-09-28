@@ -235,8 +235,9 @@ function stoppedBefore(status: 'cancelled' | 'declined', prompter: Prompter): nu
  * @clack/prompts when colour is on for stderr and the terminal can draw it; the plain
  * prompter otherwise, and whenever the optional dependency is absent or fails to load
  * (an older Node skips installing it, ADR-016) -- said once, then carried on.
+ * Setup and the start screen both ask through this, so clack loads in only one place.
  */
-async function choosePrompter(): Promise<Prompter> {
+export async function choosePrompter(): Promise<Prompter> {
   const streams = { input: process.stdin, output: process.stderr };
   if (!useColour(process.stderr) || process.env['TERM'] === 'dumb') return plainPrompter(streams);
   try {

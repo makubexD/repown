@@ -132,6 +132,15 @@ describe('plain prompter', () => {
     assert.match(shown, /\n {2}anyone who can see the repository\n {2}can read it once you push\n/);
   });
 
+  test('choose returns the picked value, hint and all, and end of input cancels', async () => {
+    const options = [{ value: 'help', label: 'Show help' }, { value: 'quit', label: 'Quit', hint: 'change nothing' }];
+    const run = harness('2\n');
+    assert.equal(await run.prompter.choose('What next?', options), 'quit');
+    assert.match(run.shown(), /What next\?/);
+    assert.match(run.shown(), /Quit {2}-- change nothing/);
+    assert.equal(await harness('').prompter.choose('What next?', options), CANCEL);
+  });
+
   test('change an answer picks one of the steps by number, or goes back to the review', async () => {
     assert.equal(await harness('2\n').prompter.pickStep([text, pick]), 'account');
     assert.equal(await harness('3\n').prompter.pickStep([text, pick]), BACK);

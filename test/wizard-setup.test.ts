@@ -53,6 +53,7 @@ function scripted(script: Entry[]): Prompter & { readonly asked: string[]; reado
     ask: async (step) => { asked.push(step.id); return next(step.id) as Reply; },
     review: async (review) => { reviews.push(review); return next('review') as ReviewChoice; },
     pickStep: async () => next('pick') as string,
+    choose: async () => { throw new Error('setup does not choose'); },
     note: () => {},
     close: () => {},
     confirmStep: async (brief) => {

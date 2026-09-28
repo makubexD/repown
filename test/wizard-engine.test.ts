@@ -40,6 +40,7 @@ function scripted(script: Entry[]): Scripted {
     },
     review: async (review) => { prompter.reviews.push(review.steps.map((step) => step.command)); return next('review')[1] as ReviewChoice; },
     pickStep: async () => next('pick')[1] as string | typeof BACK | typeof CANCEL,
+    choose: async () => { throw new Error('the engine does not choose'); },
     note: (message) => { prompter.notes.push(message); },
     confirmStep: async () => { throw new Error('the engine does not confirm a step'); },
     close: () => {},

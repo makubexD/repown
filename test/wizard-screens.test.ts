@@ -4,9 +4,15 @@
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { ok, err } from '../src/core/result.ts';
+import { registryPath } from '../src/core/registry.ts';
+import { runHome } from '../src/wizard/home-run.ts';
 import { KEY, typed, play, linesWith, setupContext } from './setup-fixtures.ts';
+import { sandbox, type Sandbox } from './helpers.ts';
 import { wizard } from '../src/wizard/engine.ts';
 import { plainPrompter } from '../src/wizard/plain.ts';
 import { setupFlow, type SetupContext } from '../src/wizard/setup-flow.ts';
@@ -429,6 +435,83 @@ describe('D7 on the plain prompter, at the default width', () => {
     }
   });
 });
+
+describe('start screen, played with key presses', () => {
+  test('H11: picking a clone prints the setup command and reaches setup\'s first screen', async () => {
+    await withProjects(async (root) => {
+      cloneAt(root, 'need');
+      const run = await play((prompter) => runHome({ prompter, cwd: root }), [[enter], [enter], [esc]], { patience: 30_000 });
+      assert.equal(run.result, 130, run.screen + run.stderr);
+      assert.match(run.stderr, /> repown setup --cwd /);
+      assert.match(run.stderr, /need/);
+      assert.match(run.screen, /How should setup work\?/);
+    });
+  });
+
+  test('H12: Back from the clone list returns to the menu', async () => {
+    await withProjects(async (root) => {
+      cloneAt(root, 'need');
+      const run = await play((prompter) => runHome({ prompter, cwd: root }), [[enter], [down, enter], [esc]], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen);
+      assert.match(run.screen, /Which clone\?/);
+      assert.match(run.screen, /← Back/);
+      const afterList = run.screen.split('Which clone?').pop() ?? '';
+      assert.match(afterList, /What next\?/, run.screen);
+      assert.doesNotMatch(run.screen, /How should setup work/);
+    });
+  });
+
+  test('H13: Show help prints the top help and exits 0', async () => {
+    await withProjects(async (root) => {
+      const run = await play((prompter) => runHome({ prompter, cwd: root }), [[down, down, enter]], { patience: 20_000 });
+      assert.equal(run.result, 0, run.screen + run.stdout);
+      assert.match(run.stdout, /repown <command>/);
+      assert.match(run.stdout, /setup\s+guided setup/);
+    });
+  });
+
+  test('H14: Quit and Esc leave global config, local config and the registry byte-identical', async () => {
+    await withProjects(async (root, box) => {
+      const registry = registryPath();
+      mkdirSync(dirname(registry), { recursive: true });
+      writeFileSync(registry, '{"accounts":{"octocat":{"name":"Octo Cat","email":"octocat@example.invalid"}}}\n');
+      const paths = [box.globalConfig, join(box.dir, '.git', 'config'), registry];
+      const before = paths.map(bytes);
+      const quit = await play((prompter) => runHome({ prompter, cwd: root }), [[down, down, down, enter]], { patience: 20_000 });
+      assert.equal(quit.result, 0, quit.screen);
+      assert.deepEqual(paths.map(bytes), before);
+      const cancelled = await play((prompter) => runHome({ prompter, cwd: root }), [[esc]], { patience: 20_000 });
+      assert.equal(cancelled.result, 130, cancelled.screen);
+      assert.deepEqual(paths.map(bytes), before);
+    });
+  });
+});
+
+async function withProjects(run: (root: string, box: Sandbox) => Promise<void>): Promise<void> {
+  const box = sandbox();
+  const root = join(box.dir, '..', 'projects');
+  mkdirSync(root);
+  const saved = process.env['GIT_CEILING_DIRECTORIES'];
+  process.env['GIT_CEILING_DIRECTORIES'] = join(box.dir, '..');
+  try {
+    await run(root, box);
+  } finally {
+    if (saved === undefined) delete process.env['GIT_CEILING_DIRECTORIES'];
+    else process.env['GIT_CEILING_DIRECTORIES'] = saved;
+    box.dispose();
+  }
+}
+
+function cloneAt(parent: string, name: string): string {
+  const dir = join(parent, name);
+  mkdirSync(dir, { recursive: true });
+  execFileSync('git', ['init', '-q', '-b', 'main', dir]);
+  return dir;
+}
+
+function bytes(path: string): Buffer | null {
+  return existsSync(path) ? readFileSync(path) : null;
+}
 
 /** Columns unset: the plain prompter wraps as it does in an 80-column window. */
 async function playPlain(ctx: SetupContext, lines: string): Promise<string> {

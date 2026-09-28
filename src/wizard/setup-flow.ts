@@ -7,7 +7,7 @@
 // Pure: no I/O. What the clone and the machine look like arrives as a SetupContext
 // (src/wizard/setup-context.ts), read before the first question.
 
-import { ghAdvice, UPSTREAM_ON } from '../commands/status.ts';
+import { ghAdvice, upstreamText } from '../commands/status.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { shellWord } from '../core/guard/check.ts';
 import { unpushedLines, type UnpushedFact } from '../core/unpushed.ts';
@@ -82,6 +82,8 @@ export interface UpstreamRead {
   readonly enabled: boolean | null;
   /** The current branch, when HEAD names one. */
   readonly branch: string | null;
+  /** The branch's tracked ref (`origin/main`), or null when none is set or HEAD is not a branch. */
+  readonly tracked: string | null;
 }
 
 export interface PlannedCommand {
@@ -599,7 +601,7 @@ function stepsOf(plan: readonly PlannedCommand[], ctx: SetupContext): Review['st
 function pendingReview(answers: Answers, ctx: SetupContext, steps: Review['steps'], plan: readonly PlannedCommand[]): Review {
   return {
     title: 'Review: nothing has changed yet', headline: [printable(headline(answers, ctx))], steps,
-    notes: noted(notes(answers, ctx), answers, ctx, plan), settled: false,
+    notes: [...noted(notes(answers, ctx), answers, ctx, plan), ...ghNote(answers, ctx, false)], settled: false,
   };
 }
 
@@ -607,7 +609,7 @@ function settledReview(answers: Answers, ctx: SetupContext, steps: Review['steps
   const offer = ghOffer(accountOf(answers), ctx);
   const shown: Review = {
     title: 'This clone is already set up', headline: settledLines(answers, ctx).map(printable), steps,
-    notes: noted(settledNotes(answers, ctx), answers, ctx, plan), settled: true,
+    notes: [...noted(settledNotes(answers, ctx), answers, ctx, plan), ...ghNote(answers, ctx, true)], settled: true,
   };
   return offer ? { ...shown, ghSignIn: offer } : shown;
 }
@@ -627,7 +629,7 @@ function upstreamOffer(ctx: SetupContext): string | null {
 function noted(lines: readonly string[], answers: Answers, ctx: SetupContext, plan: readonly PlannedCommand[]): string[] {
   const gap = credentialGap(plan, answers, ctx);
   const body = [...lines, ...extraNotes(answers, ctx), ...(gap ? [gap] : [])];
-  return body.map(printable).concat(ghNote(answers, ctx));
+  return body.map(printable);
 }
 
 /** use's own line, said here only when this run will not run use. Mirrors use.ts credentialConcern. */
@@ -658,14 +660,14 @@ function upstreamNote(ctx: SetupContext): string | null {
 }
 
 /** gh still acts as someone else, and this run will not change that. */
-function ghNote(answers: Answers, ctx: SetupContext): string[] {
-  const line = ghLeft(answers, ctx);
+function ghNote(answers: Answers, ctx: SetupContext, onSettled: boolean): string[] {
+  const line = ghLeft(answers, ctx, onSettled);
   return line ? [printable(line)] : [];
 }
 
-/** True when the review already says how to point gh at this account later. */
+/** True when the review already says how to point gh at this account, so the run does not say it again. */
 export function ghNoted(answers: Answers, ctx: SetupContext): boolean {
-  return ghLeft(answers, ctx) !== null;
+  return ghLeft(answers, ctx, false) !== null;
 }
 
 /** Drop the leading "fix: " on ghAdvice's remedy, so a sentence can name it itself. */
@@ -673,12 +675,27 @@ export function dropFixPrefix(detail: string): string {
   return detail.replace(/^fix: /, '');
 }
 
-function ghLeft(answers: Answers, ctx: SetupContext): string | null {
+function ghLeft(answers: Answers, ctx: SetupContext, onSettled: boolean): string | null {
   const gh = ctx.gh;
   if (answers['gh'] === true || !gh?.ok || !gh.value.active) return null;
   const advice = ghAdvice(accountOf(answers), { ghPresent: true, gh });
   if (!advice) return null;
-  return 'gh still acts as ' + gh.value.active + ', so gh pr create here would act as that account (git pushes are unaffected). If you use gh here, later: ' + dropFixPrefix(advice.detail);
+  return ghSentence(gh.value.active, ghEnding(accountOf(answers), ctx, advice.detail, onSettled));
+}
+
+function ghSentence(active: string, ending: string): string {
+  return 'gh still acts as ' + active + ', so gh pr create here would act as that account (git pushes are unaffected). ' + ending;
+}
+
+/** The settled screen points at its menu. Every other review names the command. */
+function ghEnding(account: string, ctx: SetupContext, detail: string, onSettled: boolean): string {
+  const offer = onSettled ? ghOffer(account, ctx) : null;
+  if (offer !== null) return 'If you use gh here, choose "' + offer + '" below.';
+  return 'If you use gh here: ' + ghRemedy(detail) + '.';
+}
+
+function ghRemedy(detail: string): string {
+  return dropFixPrefix(detail).replace(/ {2,}/g, ' ');
 }
 
 /**
@@ -711,7 +728,8 @@ function settledLines(answers: Answers, ctx: SetupContext): string[] {
 }
 
 function upstreamSettled(ctx: SetupContext): string[] {
-  return ctx.upstream.enabled === true ? ['upstream    ' + UPSTREAM_ON] : [];
+  const text = upstreamText(ctx.upstream.tracked, ctx.upstream.enabled);
+  return text === null ? [] : ['upstream    ' + text];
 }
 
 function ghOffer(account: string, ctx: SetupContext): string | null {

@@ -49,7 +49,7 @@ function baseline(): Omit<SetupContext, 'recorded' | 'addresses' | 'suggest'> {
     // Already on, so these screens are not the upstream question. A test for that
     // question passes enabled: null. An otherwise settled clone where it is still
     // offered counts as settled and names `repown setup --auto-upstream`.
-    upstream: { supported: true, enabled: true, branch: 'main' },
+    upstream: { supported: true, enabled: true, branch: 'main', tracked: null },
     stored: null,
   };
 }

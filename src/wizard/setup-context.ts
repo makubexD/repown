@@ -171,16 +171,23 @@ async function loadClone(git: Git, repo: RepoState, options: ReadOptions): Promi
   return { auth, pinned, allowed, planned, addresses, unpushed, helpers, name, email, ownerIsUser, upstream };
 }
 
-/** Version, effective push.autoSetupRemote, and the branch. One read; nothing is written. */
+/** Version, effective push.autoSetupRemote, the branch and its tracked ref. One read; nothing is written. */
 async function readUpstream(git: Git): Promise<UpstreamRead> {
-  const [version, enabled, head] = await Promise.all([
-    git.version(), git.getBoolConfig('push.autoSetupRemote'), git.currentBranch(),
+  const [version, enabled, head, tracked] = await Promise.all([
+    git.version(), git.getBoolConfig('push.autoSetupRemote'), git.currentBranch(), git.upstreamRef(),
   ]);
-  return { supported: gitSupportsAutoUpstream(version ?? ''), enabled, branch: branchOf(head) };
+  return {
+    supported: gitSupportsAutoUpstream(version ?? ''), enabled,
+    branch: branchOf(head), tracked: trackedOf(head, tracked),
+  };
 }
 
 function branchOf(head: CurrentBranch | null): string | null {
   return head?.kind === 'branch' ? head.name : null;
+}
+
+function trackedOf(head: CurrentBranch | null, tracked: string | null): string | null {
+  return head?.kind === 'branch' ? tracked : null;
 }
 
 async function finishFacts(git: Git, repo: RepoState, recorded: Readonly<Record<string, Account>>, loaded: Loaded): Promise<Facts> {

@@ -217,14 +217,14 @@ describe('setup flow', () => {
   test('when gh stays someone else, the review says so and names ghAdvice\'s fix', () => {
     const other = ok({ accounts: [{ login: 'octo-work', active: true }], active: 'octo-work' });
     const declined = setupFlow(context({ gh: other })).review({ account: 'octocat', gh: false, guard: false }, context({ gh: other }));
-    assert.match(declined.notes.join('\n'), /gh still acts as octo-work, so gh pr create here would act as that account \(git pushes are unaffected\)\. If you use gh here, later: repown use octocat --gh {3}\(signs octocat in to gh\)/);
-    assert.doesNotMatch(declined.notes.join('\n'), /later: fix:/);
+    assert.match(declined.notes.join('\n'), /gh still acts as octo-work, so gh pr create here would act as that account \(git pushes are unaffected\)\. If you use gh here: repown use octocat --gh \(signs octocat in to gh\)\./);
+    assert.doesNotMatch(declined.notes.join('\n'), /later: repown use|--gh {3}\(/);
     const accepted = setupFlow(context({ gh: other })).review({ account: 'octocat', gh: true, guard: false }, context({ gh: other }));
     assert.equal(accepted.notes.some((line) => /gh still acts/.test(line)), false);
     const known = ok({ accounts: [{ login: 'octocat', active: false }, { login: 'octo-work', active: true }], active: 'octo-work' });
     const switched = setupFlow(context({ gh: known })).review({ account: 'octocat', guard: true }, context({ gh: known }));
-    assert.match(switched.notes.join('\n'), /later: gh auth switch -u octocat/);
-    assert.doesNotMatch(switched.notes.join('\n'), /later: fix:/);
+    assert.match(switched.notes.join('\n'), /If you use gh here: gh auth switch -u octocat\./);
+    assert.doesNotMatch(switched.notes.join('\n'), /later: repown use|--gh {3}\(/);
     const elsewhere = context({ gh: other, host: 'azdo', credentialPinned: false });
     const hidden = setupFlow(elsewhere).review({ account: 'octocat', guard: false }, elsewhere);
     assert.match(hidden.notes.join('\n'), /gh still acts as octo-work/);
@@ -233,7 +233,26 @@ describe('setup flow', () => {
     const settled = context({ gh: other, pinned: 'octocat', pinIntact: true, guard: 'on' });
     const quiet = setupFlow(settled).review({ account: 'octocat' }, settled);
     assert.equal(quiet.settled, true);
-    assert.match(quiet.notes.join('\n'), /gh still acts as octo-work/);
+    assert.match(quiet.notes.join('\n'), /If you use gh here, choose "Sign in to gh as octocat" below\./);
+    assert.doesNotMatch(quiet.notes.join('\n'), /later: repown use|--gh {3}\(/);
+  });
+
+  test('review names the gh command, and the settled screen points at its menu', () => {
+    const other = ok({ accounts: [{ login: 'octo-work', active: true }], active: 'octo-work' });
+    const signing = setupFlow(context({ gh: other, guard: 'on' })).review({ account: 'octocat' }, context({ gh: other, guard: 'on' }));
+    assert.equal(signing.settled, false);
+    assert.match(signing.notes.join('\n'), /If you use gh here: repown use octocat --gh \(signs octocat in to gh\)\./);
+    assert.doesNotMatch(signing.notes.join('\n'), /later: repown use|--gh {3}\(/);
+    const known = ok({ accounts: [{ login: 'octocat', active: false }, { login: 'octo-work', active: true }], active: 'octo-work' });
+    const switching = setupFlow(context({ gh: known, guard: 'on' })).review({ account: 'octocat' }, context({ gh: known, guard: 'on' }));
+    assert.match(switching.notes.join('\n'), /If you use gh here: gh auth switch -u octocat\./);
+    assert.doesNotMatch(switching.notes.join('\n'), /choose "|later: repown use/);
+    const settled = context({ gh: other, pinned: 'octocat', pinIntact: true, guard: 'on' });
+    const opened = setupFlow(settled).opening?.(settled) ?? null;
+    assert.ok(opened);
+    assert.equal(opened.ghSignIn, 'Sign in to gh as octocat');
+    assert.match(opened.notes.join('\n'), /If you use gh here, choose "Sign in to gh as octocat" below\./);
+    assert.doesNotMatch(opened.notes.join('\n'), /later: repown use|repown use octocat --gh/);
   });
 
   test('fix is offered only when gh is the helper, defaults to No, and runs before use', async () => {
@@ -355,19 +374,36 @@ describe('setup flow', () => {
     assert.equal(reviewOf({ owner: 'octo-org', allowed: ['octo-org'] }).settled, true);
     assert.equal(reviewOf({ guard: 'off' }, { account: 'octocat', guard: true }).settled, false);
     assert.equal(reviewOf({}, { account: 'octocat', gh: true }).settled, false);
-    assert.equal(reviewOf({ upstream: { supported: true, enabled: null, branch: 'main' } }).settled, true,
+    assert.equal(reviewOf({ upstream: { supported: true, enabled: null, branch: 'main', tracked: null } }).settled, true,
       'leaving the upstream question unanswered is still nothing this run must do');
-    assert.match(reviewOf({ upstream: { supported: true, enabled: null, branch: 'main' } }).notes.join('\n'),
+    assert.match(reviewOf({ upstream: { supported: true, enabled: null, branch: 'main', tracked: null } }).notes.join('\n'),
       /optional: push branches without -u: repown setup --auto-upstream/);
-    assert.equal(reviewOf({ upstream: { supported: true, enabled: false, branch: 'main' } }).settled, true);
+    assert.equal(reviewOf({ upstream: { supported: true, enabled: false, branch: 'main', tracked: null } }).settled, true);
     assert.doesNotMatch(reviewOf({}).notes.join('\n'), /optional: push branches without -u/);
-    assert.equal(reviewOf({ upstream: { supported: false, enabled: null, branch: 'main' } }).settled, true,
+    assert.equal(reviewOf({ upstream: { supported: false, enabled: null, branch: 'main', tracked: null } }).settled, true,
       'old git is not offered the question');
     assert.match(reviewOf({}).title, /already set up/);
     assert.match(reviewOf({}).notes.join('\n'), /See it any time: repown status \(this clone\), repown doctor \(this machine\)/);
     assert.match(reviewOf({}).headline.join('\n'), /upstream {4}set on the first push \(push\.autoSetupRemote\)/);
+    assert.doesNotMatch(reviewOf({ upstream: { supported: true, enabled: false, branch: 'main', tracked: null } }).headline.join('\n'), /upstream {4}/);
+    assert.doesNotMatch(reviewOf({ upstream: { supported: true, enabled: null, branch: 'main', tracked: null } }).headline.join('\n'), /upstream {4}/);
     assert.equal(reviewOf({}).steps.length, 0, 'a settled plan does not re-pin');
     assert.equal(planCommands({ account: 'octocat' }, context(settled)).some((command) => command.argv[0] === 'use'), false);
+  });
+
+  test('the settled screen names the tracked ref, else the auto-setup wording, else nothing', () => {
+    const settled = { pinned: 'octocat', pinIntact: true, guard: 'on' as const };
+    const line = (upstream: SetupContext['upstream']): string => {
+      const ctx = context({ ...settled, upstream });
+      const review = setupFlow(ctx).review({ account: 'octocat' }, ctx);
+      assert.equal(review.settled, true);
+      return review.headline.join('\n');
+    };
+    const base = { supported: true, branch: 'main', enabled: true as boolean | null, tracked: null as string | null };
+    assert.match(line({ ...base, tracked: 'origin/main' }), /^upstream {4}origin\/main$/m);
+    assert.match(line({ ...base, tracked: null, enabled: true }), /^upstream {4}set on the first push \(push\.autoSetupRemote\)$/m);
+    assert.doesNotMatch(line({ ...base, tracked: null, enabled: null }), /upstream {4}/);
+    assert.doesNotMatch(line({ ...base, tracked: null, enabled: false }), /upstream {4}/);
   });
 
   test('a no-op pin is left out, and a drifted pin or a gh switch is kept', () => {
@@ -380,7 +416,7 @@ describe('setup flow', () => {
   });
 
   test('a review with no use step notes a missing stored credential, and stays quiet when use runs or the store lists it', () => {
-    const upstream = { supported: true, enabled: null as boolean | null, branch: 'main' };
+    const upstream = { supported: true, enabled: null as boolean | null, branch: 'main', tracked: null };
     const base = { pinned: 'octocat', pinIntact: true, guard: 'on' as const, upstream };
     const missing = context({ ...base, stored: ok([]) });
     const review = setupFlow(missing).review({ account: 'octocat', mode: 'recommended', upstream: true }, missing);
@@ -419,7 +455,8 @@ describe('setup flow', () => {
     const recommended = scripted([['account', 'octocat'], ['review', 'run']]);
     const outcome = await wizard(setupFlow(ctx), ctx, { mode: 'recommended' }, recommended);
     assert.deepEqual(recommended.asked, ['account']);
-    assert.match(recommended.reviews[0]?.notes.join('\n') ?? '', /If you use gh here, later: repown use octocat --gh/);
+    assert.match(recommended.reviews[0]?.notes.join('\n') ?? '', /If you use gh here: repown use octocat --gh \(signs octocat in to gh\)\./);
+    assert.doesNotMatch(recommended.reviews[0]?.notes.join('\n') ?? '', /later: repown use|--gh {3}\(/);
     assert.equal(outcome.status, 'run');
     if (outcome.status !== 'run') return;
     assert.equal(outcome.answers['gh'], undefined);
@@ -430,7 +467,7 @@ describe('setup flow', () => {
   });
 
   test('S8 asks to push branches without -u and plans the local git config after the guard', async () => {
-    const upstream = { supported: true, enabled: null, branch: 'main' };
+    const upstream = { supported: true, enabled: null, branch: 'main', tracked: null };
     const ctx = context({ upstream });
     const step = stepOf(ctx, 'upstream');
     assert.equal(step.kind, 'confirm');
@@ -470,7 +507,7 @@ describe('setup flow', () => {
     for (const text of ['git version 2.37.0', 'git version 2.50.1.windows.1', 'git version 2.55.0.windows.5']) {
       assert.equal(gitSupportsAutoUpstream(text), true, text);
     }
-    const feature = context({ upstream: { supported: false, enabled: null, branch: 'feature' } });
+    const feature = context({ upstream: { supported: false, enabled: null, branch: 'feature', tracked: null } });
     assert.equal(stepOf(feature, 'upstream').when?.({}, feature), false);
     const prompter = scripted([['account', 'octocat'], ['guard', true], ['review', 'decline']]);
     await wizard(setupFlow(feature), feature, { mode: 'step' }, prompter);
@@ -479,7 +516,7 @@ describe('setup flow', () => {
     assert.match(review.notes.join('\n'), /the first push of a branch without an upstream needs: git push -u origin feature/);
     const detached = context({
       pinned: 'octocat', pinIntact: true, guard: 'on',
-      upstream: { supported: false, enabled: null, branch: null },
+      upstream: { supported: false, enabled: null, branch: null, tracked: null },
     });
     const quiet = setupFlow(detached).review({ account: 'octocat' }, detached);
     assert.equal(quiet.settled, true);
@@ -515,7 +552,7 @@ describe('setup flow', () => {
       accounts: [{ login: 'octocat', active: false }, { login: 'octo-work', active: true }],
       active: 'octo-work',
     });
-    const ctx = context({ gh, owner: 'octo-org', upstream: { supported: true, enabled: null, branch: 'main' } });
+    const ctx = context({ gh, owner: 'octo-org', upstream: { supported: true, enabled: null, branch: 'main', tracked: null } });
     const prompter = scripted([
       ['mode', 'recommended'], ['account', 'octocat'], ['allowOwner', true], ['review', 'edit'],
       ['pick', 'guard'], ['guard', false], ['review', 'run'],
@@ -541,7 +578,7 @@ describe('setup flow', () => {
   });
 
   test('Recommended with a foreign owner asks to allow it, and No leaves it out of the plan', async () => {
-    const ctx = context({ owner: 'octo-org', upstream: { supported: true, enabled: null, branch: 'main' } });
+    const ctx = context({ owner: 'octo-org', upstream: { supported: true, enabled: null, branch: 'main', tracked: null } });
     const picked = { account: 'octocat', mode: 'recommended' };
     const step = stepOf(ctx, 'allowOwner');
     assert.equal(step.auto, undefined);
@@ -562,7 +599,7 @@ describe('setup flow', () => {
 
   test('S13 Recommended still asks to sign in to gh, and the default is No', async () => {
     const gh = ok({ accounts: [{ login: 'octo-work', active: true }], active: 'octo-work' });
-    const ctx = context({ gh, upstream: { supported: true, enabled: null, branch: 'main' } });
+    const ctx = context({ gh, upstream: { supported: true, enabled: null, branch: 'main', tracked: null } });
     const picked = { account: 'octocat', mode: 'recommended' };
     assert.equal(stepOf(ctx, 'gh').auto?.(picked, ctx), false);
     assert.equal(await stepOf(ctx, 'gh').initial?.(picked, ctx), false);
@@ -610,7 +647,7 @@ describe('setup flow', () => {
     });
     const ctx = context({
       gh, owner: 'octo-org', guard: 'off',
-      upstream: { supported: true, enabled: null, branch: 'main' },
+      upstream: { supported: true, enabled: null, branch: 'main', tracked: null },
     });
     const prompter = scripted([['allowOwner', true], ['review', 'decline']]);
     await wizard(setupFlow(ctx), ctx, { account: 'octocat', mode: 'recommended' }, prompter);
@@ -626,7 +663,7 @@ describe('setup flow', () => {
   test('an otherwise settled clone names --auto-upstream, unless Recommended will set it', async () => {
     const ctx = context({
       pinned: 'octocat', pinIntact: true, guard: 'on',
-      upstream: { supported: true, enabled: null, branch: 'main' },
+      upstream: { supported: true, enabled: null, branch: 'main', tracked: null },
     });
     const quiet = setupFlow(ctx).review({ account: 'octocat', upstream: false }, ctx);
     assert.equal(quiet.settled, true, 'No to upstream is still nothing this run must do');
@@ -642,12 +679,12 @@ describe('setup flow', () => {
   });
 
   test('S10 an effective push.autoSetupRemote is not asked and not planned', async () => {
-    const ctx = context({ upstream: { supported: true, enabled: true, branch: 'main' } });
+    const ctx = context({ upstream: { supported: true, enabled: true, branch: 'main', tracked: null } });
     assert.equal(stepOf(ctx, 'upstream').when?.({}, ctx), false);
     await answer(ctx, [['account', 'octocat'], ['guard', true], ['review', 'run']]);
     const planned = planCommands({ account: 'octocat', guard: true, upstream: true }, ctx);
     assert.ok(!planned.some((command) => command.argv.includes('push.autoSetupRemote')));
-    const off = context({ upstream: { supported: true, enabled: false, branch: 'main' } });
+    const off = context({ upstream: { supported: true, enabled: false, branch: 'main', tracked: null } });
     assert.equal(stepOf(off, 'upstream').when?.({}, off), true, 'an explicit false is not already on');
   });
 
@@ -1149,12 +1186,17 @@ describe('setup context: would `use` change anything here?', () => {
     assert.equal(ctx.upstream.supported, gitSupportsAutoUpstream(at.box.git('--version')));
     assert.equal(ctx.upstream.enabled, null);
     assert.equal(ctx.upstream.branch, 'main');
+    assert.equal(ctx.upstream.tracked, null);
+    at.box.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    at.box.git('branch', '--set-upstream-to=origin/main');
+    assert.equal((await read()).upstream.tracked, 'origin/main');
     at.box.git('config', '--global', 'push.autoSetupRemote', 'true');
     assert.equal((await read()).upstream.enabled, true, 'effective value, from any scope');
     at.box.git('config', '--local', 'push.autoSetupRemote', 'false');
     assert.equal((await read()).upstream.enabled, false, 'local false wins over global true');
     at.box.git('checkout', '--detach');
     assert.equal((await read()).upstream.branch, null);
+    assert.equal((await read()).upstream.tracked, null);
   });
 
   test('an origin that is not GitHub detects no accounts and does not classify the owner', async () => {
@@ -1654,7 +1696,8 @@ describe('repown setup, on a terminal (scripted)', () => {
       process.stderr.write = write;
     }
     assert.deepEqual(prompter.asked, ['mode', 'account']);
-    assert.match(prompter.reviews[0]?.notes.join('\n') ?? '', /If you use gh here, later: repown use octocat --gh/);
+    assert.match(prompter.reviews[0]?.notes.join('\n') ?? '', /If you use gh here: repown use octocat --gh \(signs octocat in to gh\)\./);
+    assert.doesNotMatch(prompter.reviews[0]?.notes.join('\n') ?? '', /later: repown use|--gh {3}\(/);
     assert.doesNotMatch(stderr, /optional, only if you use gh/);
   });
 

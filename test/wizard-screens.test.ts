@@ -36,6 +36,17 @@ describe('repown setup, played with key presses', () => {
     assert.match(screen.replace(/│/g, ' ').replace(/\s+/g, ' '), /See it any time: repown status \(this clone\), repown doctor \(this machine\)/);
   });
 
+  test('a settled clone whose branch tracks origin shows that ref', async () => {
+    const ctx = setupContext({
+      pinned: 'octocat', guard: 'on', pinIntact: true,
+      upstream: { supported: true, enabled: true, branch: 'main', tracked: 'origin/main' },
+    });
+    const { outcome, screen } = await play(ctx, [[esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    assert.match(screen, /upstream {4}origin\/main/);
+    assert.doesNotMatch(screen, /set on the first push/);
+  });
+
   test('Use another account opens the account question, and Back returns', async () => {
     const ctx = setupContext({ pinned: 'octocat', guard: 'on', pinIntact: true });
     const { outcome, screen } = await play(ctx, [[down, enter], [down, down, enter], [esc]]);
@@ -54,6 +65,8 @@ describe('repown setup, played with key presses', () => {
     assert.equal(outcome.status, 'cancelled', screen);
     const plain = screen.replace(/│/g, ' ').replace(/\s+/g, ' ');
     assert.match(plain, /Sign in to gh as octocat/);
+    assert.match(plain, /If you use gh here, choose "Sign in to gh as octocat" below\./);
+    assert.doesNotMatch(screen, /later: repown use|--gh {3}\(/);
     assert.doesNotMatch(screen, /Sign in to gh as octocat too\?/);
     assert.doesNotMatch(screen.split('Run this step?')[0] ?? '', /How should setup work|Which account/);
     assert.match(plain, /1\. Pin this clone to octocat, and sign octocat in to gh \(opens your browser\)/);
@@ -65,7 +78,7 @@ describe('repown setup, played with key presses', () => {
   test('Recommended on a pinned intact clone with auto-upstream unset lists only that step', async () => {
     const ctx = setupContext({
       pinned: 'octocat', guard: 'on', pinIntact: true,
-      upstream: { supported: true, enabled: null, branch: 'main' },
+      upstream: { supported: true, enabled: null, branch: 'main', tracked: null },
       stored: ok([]),
     });
     const { outcome, screen } = await play(ctx, [[enter], [enter], [esc]]);
@@ -87,8 +100,9 @@ describe('repown setup, played with key presses', () => {
     assert.doesNotMatch(recommended.screen, /Sign in to gh as octocat too\?/);
     assert.doesNotMatch(recommended.screen, /Also make this account gh's active account\?/);
     const plain = recommended.screen.replace(/│/g, ' ').replace(/\s+/g, ' ');
-    assert.equal(plain.split('If you use gh here, later:').length - 1, 1, recommended.screen);
-    assert.match(plain, /later: repown use octocat --gh/);
+    assert.equal(plain.split('If you use gh here:').length - 1, 1, recommended.screen);
+    assert.match(plain, /If you use gh here: repown use octocat --gh \(signs octocat in to gh\)\./);
+    assert.doesNotMatch(recommended.screen, /later: repown use|--gh {3}\(/);
     const stepped = await play(ctx, [[down, enter], [enter], [esc]]);
     assert.match(stepped.screen, /Sign in to gh as octocat too\?/);
   });
@@ -175,7 +189,7 @@ describe('repown setup, played with key presses', () => {
     });
     const ctx = setupContext({
       gh, owner: 'octo-org', guard: 'off',
-      upstream: { supported: true, enabled: null, branch: 'main' },
+      upstream: { supported: true, enabled: null, branch: 'main', tracked: null },
     });
     const { outcome, screen } = await play(ctx, [[down], [up, enter], [enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
@@ -332,7 +346,7 @@ describe('repown setup, played with key presses', () => {
     const ctx = setupContext({
       owner: 'octo-org',
       hookPath: '/work/project/.git/hooks/pre-push',
-      upstream: { supported: true, enabled: null, branch: 'main' },
+      upstream: { supported: true, enabled: null, branch: 'main', tracked: null },
     });
     // Step by step, accept the account and the three clone questions, Run, Yes, Yes, then Stop.
     const keys = [[down, enter], [enter], [enter], [enter], [enter], [enter], [enter], [enter], [down, down, enter]];
@@ -358,7 +372,7 @@ describe('repown setup, played with key presses', () => {
   });
 
   test('pushing a branch without an upstream is one question, default Yes, and a review step', async () => {
-    const ctx = setupContext({ upstream: { supported: true, enabled: null, branch: 'main' } });
+    const ctx = setupContext({ upstream: { supported: true, enabled: null, branch: 'main', tracked: null } });
     const { outcome, screen } = await play(ctx, [[down, enter], [enter], [enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     const plain = screen.replace(/│/g, ' ').replace(/\s+/g, ' ');
@@ -372,7 +386,7 @@ describe('repown setup, played with key presses', () => {
   test('old git skips that question and the settled screen names git push -u', async () => {
     const ctx = setupContext({
       pinned: 'octocat', guard: 'on', pinIntact: true,
-      upstream: { supported: false, enabled: null, branch: 'main' },
+      upstream: { supported: false, enabled: null, branch: 'main', tracked: null },
     });
     const { outcome, screen } = await play(ctx, [[esc]]);
     assert.equal(outcome.status, 'cancelled', screen);

@@ -1,4 +1,4 @@
-// Bare `repown` chooses setup, status or the top help. S1-S4.
+// Bare `repown` chooses setup, status, the start screen or the top help. S1-S4, H1-H4.
 // "Set up" is what identityProblems accepts: a name and email, and on GitHub
 // https the credential username too.
 
@@ -52,8 +52,12 @@ describe('chooseStart', () => {
     assert.equal(await chooseStart(deps(box, true, false)), 'status');
   });
 
-  test('S11: a bare repository in a terminal shows help', async () => {
-    assert.equal(await chooseStart({ interactive: true, stdoutIsTerminal: true, git: new Git(bareRepo(box)) }), 'help');
+  test('H2: a bare repository in a terminal opens the start screen', async () => {
+    assert.equal(await chooseStart({ interactive: true, stdoutIsTerminal: true, git: new Git(bareRepo(box)) }), 'home');
+  });
+
+  test('a bare repository with stdout redirected still shows help', async () => {
+    assert.equal(await chooseStart({ interactive: true, stdoutIsTerminal: false, git: new Git(bareRepo(box)) }), 'help');
   });
 
   test('S11: a bare repository without a terminal shows status', async () => {
@@ -72,19 +76,19 @@ describe('chooseStart outside a repository', () => {
   beforeEach(() => { box = sandbox(); });
   afterEach(() => box.dispose());
 
-  test('S4: a terminal that is not a clone shows help', async () => {
+  test('H1: a terminal that is not a clone opens the start screen', async () => {
     await outside((git) => chooseStart({ interactive: true, stdoutIsTerminal: true, git }).then((choice) => {
-      assert.equal(choice, 'help');
+      assert.equal(choice, 'home');
     }));
   });
 
-  test('S4: help still prints when stdout is redirected', async () => {
+  test('H3: help still prints when stdout is redirected', async () => {
     await outside((git) => chooseStart({ interactive: true, stdoutIsTerminal: false, git }).then((choice) => {
       assert.equal(choice, 'help');
     }));
   });
 
-  test('without a terminal, not being a clone still shows status', async () => {
+  test('H4: without a terminal, not being a clone still shows status', async () => {
     await outside((git) => chooseStart({ interactive: false, stdoutIsTerminal: false, git }).then((choice) => {
       assert.equal(choice, 'status');
     }));
@@ -115,15 +119,24 @@ describe('startDefault', () => {
     assert.equal(run.stderr, PINNED_SENTENCE);
   });
 
-  test('status and help print nothing', async () => {
+  test('status and help print nothing; the start screen prints nothing until it runs', async () => {
     const status = await captured(() => startDefault(deps(box, true, false)));
     assert.equal(status.choice, 'status');
     assert.equal(status.stderr, '');
     await outside(async (git) => {
-      const help = await captured(() => startDefault({ interactive: true, stdoutIsTerminal: true, git }));
+      const help = await captured(() => startDefault({ interactive: true, stdoutIsTerminal: false, git }));
       assert.equal(help.choice, 'help');
       assert.equal(help.stderr, '');
+      const home = await captured(() => startDefault({ interactive: true, stdoutIsTerminal: true, git }));
+      assert.equal(typeof home.choice, 'function');
+      assert.equal(home.stderr, '');
     });
+  });
+
+  test('H2: a bare repository in a terminal returns the home runner and prints nothing', async () => {
+    const home = await captured(() => startDefault({ interactive: true, stdoutIsTerminal: true, git: new Git(bareRepo(box)) }));
+    assert.equal(typeof home.choice, 'function');
+    assert.equal(home.stderr, '');
   });
 });
 
@@ -143,7 +156,7 @@ function breakRegistry(): void {
   writeFileSync(path, '{');
 }
 
-async function captured(run: () => Promise<string>): Promise<{ choice: string; stderr: string }> {
+async function captured(run: () => Promise<string | (() => Promise<number>)>): Promise<{ choice: string | (() => Promise<number>); stderr: string }> {
   const chunks: string[] = [];
   const write = process.stderr.write.bind(process.stderr);
   process.stderr.write = ((chunk: string | Uint8Array) => {

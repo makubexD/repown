@@ -16,7 +16,7 @@ import { ghStateFrom } from '../src/core/credential/gh.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 import { loadRegistry, registryPath } from '../src/core/registry.ts';
 import { err, ok } from '../src/core/result.ts';
-import { sandbox, type Sandbox } from './helpers.ts';
+import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 const TITLE = 'repown status · current settings of this clone';
@@ -701,8 +701,7 @@ function unpin(box: Sandbox): void {
 
 /** gh on PATH would add a machine-dependent warning; a clean count needs it absent. */
 function quietEnv(): NodeJS.ProcessEnv {
-  const dirs = (process.env['PATH'] ?? '').split(delimiter).filter((dir) => !namesGh(dir));
-  return { ...process.env, PATH: dirs.join(delimiter) };
+  return { ...process.env, PATH: pathWithoutGh() };
 }
 
 function fakeGhEnv(box: Sandbox, extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
@@ -761,10 +760,6 @@ if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
 fi
 exit 97
 `;
-
-function namesGh(dir: string): boolean {
-  return ['gh', 'gh.exe', 'gh.cmd', 'gh.bat'].some((name) => dir !== '' && existsSync(join(dir, name)));
-}
 
 function guardOn(box: Sandbox): void {
   const run = repown(['guard', 'on'], box.dir);

@@ -6,9 +6,9 @@
 // REPOWN_CONFIG_DIR is the same idea for the account registry: an empty directory
 // inside the sandbox, so a test never reads or writes this machine's accounts.
 
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 export interface Sandbox {
@@ -76,5 +76,44 @@ function restore(saved: Record<string, string | undefined>): void {
   for (const [name, value] of Object.entries(saved)) {
     if (value === undefined) delete process.env[name];
     else process.env[name] = value;
+  }
+}
+
+const GH_NAMES = ['gh', 'gh.exe', 'gh.cmd', 'gh.bat'];
+const ghMirrors = new Map<string, string>();
+
+/**
+ * gh shares /usr/bin with git on Linux CI. Dropping that directory makes git
+ * unreachable and every sandbox reads as "not a repository", so elsewhere the
+ * directory is mirrored once per process with every entry except gh.
+ */
+export function pathWithoutGh(path = process.env['PATH'] ?? ''): string {
+  return path.split(delimiter).flatMap(hideGhDir).join(delimiter);
+}
+
+function hideGhDir(dir: string): readonly string[] {
+  if (dir === '' || !containsGh(dir)) return [dir];
+  return process.platform === 'win32' ? [] : [mirrorWithoutGh(dir)];
+}
+
+function containsGh(dir: string): boolean {
+  return GH_NAMES.some((name) => existsSync(join(dir, name)));
+}
+
+function mirrorWithoutGh(dir: string): string {
+  const cached = ghMirrors.get(dir);
+  if (cached !== undefined) return cached;
+  const mirror = mkdtempSync(join(tmpdir(), 'repown-nogh-'));
+  for (const name of readdirSync(dir)) linkExceptGh(dir, mirror, name);
+  ghMirrors.set(dir, mirror);
+  return mirror;
+}
+
+function linkExceptGh(dir: string, mirror: string, name: string): void {
+  if (name === 'gh') return;
+  try {
+    symlinkSync(join(dir, name), join(mirror, name));
+  } catch {
+    // One entry that cannot be linked must not hide git.
   }
 }

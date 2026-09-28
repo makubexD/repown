@@ -11,7 +11,7 @@ import { readFileSync, existsSync, mkdtempSync, rmSync, mkdirSync, writeFileSync
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
-import { sandbox, type Sandbox } from './helpers.ts';
+import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 import { runProgram, type Loader, type Program } from '../src/ui/dispatch.ts';
 
@@ -980,12 +980,7 @@ exit 97
 `;
 
 function ghEnv(bin: string, log: string): NodeJS.ProcessEnv {
-  const path = (process.env['PATH'] ?? '').split(delimiter).filter((dir) => !dirHasGh(dir));
-  return { ...process.env, GH_FAKE_LOG: log, PATH: bin + delimiter + path.join(delimiter) };
-}
-
-function dirHasGh(dir: string): boolean {
-  return ['gh', 'gh.exe', 'gh.cmd', 'gh.bat'].some((name) => dir !== '' && existsSync(join(dir, name)));
+  return { ...process.env, GH_FAKE_LOG: log, PATH: bin + delimiter + pathWithoutGh() };
 }
 
 function recordOctocat(box: Sandbox): void {

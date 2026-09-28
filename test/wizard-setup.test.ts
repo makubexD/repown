@@ -10,8 +10,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
-import { sandbox, type Sandbox } from './helpers.ts';
+import { join } from 'node:path';
+import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
 import { setupContext as context } from './setup-fixtures.ts';
 import { ok, err } from '../src/core/result.ts';
 import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Review, type ReviewChoice, type StepConfirm } from '../src/wizard/engine.ts';
@@ -1467,7 +1467,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     // way a finished setup would. Recommended would fill that answer itself.
     at.box.git('config', '--local', 'push.autoSetupRemote', 'true');
     savedPath = process.env['PATH'];
-    process.env['PATH'] = (savedPath ?? '').split(delimiter).filter((dir) => !ghOn(dir)).join(delimiter);
+    process.env['PATH'] = pathWithoutGh(savedPath ?? '');
   });
   afterEach(() => {
     if (savedPath === undefined) delete process.env['PATH'];
@@ -1821,7 +1821,7 @@ describe('S18 after a setup run', () => {
     record(at, 'octocat', 'octocat@example.invalid');
     at.box.git('config', '--local', 'push.autoSetupRemote', 'true');
     savedPath = process.env['PATH'];
-    process.env['PATH'] = (savedPath ?? '').split(delimiter).filter((dir) => !ghOn(dir)).join(delimiter);
+    process.env['PATH'] = pathWithoutGh(savedPath ?? '');
   });
   afterEach(() => {
     if (savedPath === undefined) delete process.env['PATH'];
@@ -2102,10 +2102,6 @@ describe('Ctrl-C during gh sign-in', () => {
     }
   });
 });
-
-function ghOn(dir: string): boolean {
-  return ['gh', 'gh.exe', 'gh.cmd', 'gh.bat'].some((name) => dir !== '' && existsSync(join(dir, name)));
-}
 
 function guarded(at: Home): { positional: readonly string[]; flags: Map<string, string | boolean> } {
   const flags = new Map<string, string | boolean>([['cwd', at.box.dir], ['guard', true], ['no-input', true]]);

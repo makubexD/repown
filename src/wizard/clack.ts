@@ -9,9 +9,9 @@
 
 import { styleText } from 'node:util';
 import * as p from '@clack/prompts';
-import { BACK, CANCEL, type Asked, type Prompter, type Reply, type Review, type ReviewChoice, type Step } from './engine.ts';
+import { BACK, CANCEL, type Asked, type Drawn, type Prompter, type Reply, type Review, type ReviewChoice, type StepChoice, type StepConfirm } from './engine.ts';
 import { BACK_WORD, type Streams } from './plain.ts';
-import { BACK_TO_REVIEW, PICK_QUESTION, reviewDefault, reviewLines, reviewOptions, reviewQuestion, textWidth, wrap } from './review-text.ts';
+import { BACK_TO_REVIEW, PICK_QUESTION, RUN_THIS_STEP, reviewDefault, reviewLines, reviewOptions, reviewQuestion, stepConfirmLines, stepOptions, textWidth, wrap } from './review-text.ts';
 
 /** A value no real choice can have. */
 const GO_BACK = '\u0000back';
@@ -31,6 +31,7 @@ export function clackPrompter(streams: Streams): Prompter {
       return id === GO_BACK ? BACK : id;
     },
     note: (message) => p.log.warn(wrap(message, widthOf(io, GUTTER)).join('\n'), io),
+    confirmStep: (confirm) => showStep(confirm, io),
     close: () => {},
     intro: (title) => p.intro(title, io),
     // After a cancel, clack has already drawn the gutter's last line.
@@ -55,7 +56,7 @@ function widthOf(io: Io, margin: number): number {
   return textWidth((io.output as { columns?: number }).columns, margin);
 }
 
-function askStep(step: Step<never>, asked: Asked, io: Io): Promise<Reply> {
+function askStep(step: Drawn, asked: Asked, io: Io): Promise<Reply> {
   if (step.kind === 'select') return askSelect(step, asked, io);
   if (step.kind === 'confirm') return askConfirm(step, asked, io);
   return askText(step, asked, io);
@@ -66,7 +67,7 @@ function backOption(asked: Asked): { value: string; label: string; hint: string 
   return asked.canGoBack ? [{ value: GO_BACK, label: '← Back', hint: 'to the previous question' }] : [];
 }
 
-async function askSelect(step: Step<never>, asked: Asked, io: Io): Promise<Reply> {
+async function askSelect(step: Drawn, asked: Asked, io: Io): Promise<Reply> {
   const options = [...asked.choices.map((choice) => ({ ...choice })), ...backOption(asked)];
   const preset = typeof asked.initial === 'string' ? { initialValue: asked.initial } : {};
   const value = await p.select<string>({ ...io, ...preset, message: messageOf(step, io), options });
@@ -74,14 +75,14 @@ async function askSelect(step: Step<never>, asked: Asked, io: Io): Promise<Reply
   return value === GO_BACK ? BACK : value;
 }
 
-async function askConfirm(step: Step<never>, asked: Asked, io: Io): Promise<Reply> {
+async function askConfirm(step: Drawn, asked: Asked, io: Io): Promise<Reply> {
   const value = await p.select({ ...io, message: messageOf(step, io), initialValue: asked.initial === true ? 'yes' : 'no',
     options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }, ...backOption(asked)] });
   if (p.isCancel(value)) return CANCEL;
   return value === GO_BACK ? BACK : value === 'yes';
 }
 
-async function askText(step: Step<never>, asked: Asked, io: Io): Promise<Reply> {
+async function askText(step: Drawn, asked: Asked, io: Io): Promise<Reply> {
   const preset = typeof asked.initial === 'string' ? { initialValue: asked.initial } : {};
   const extra = asked.canGoBack ? 'type ' + BACK_WORD + ' to go back' : undefined;
   const value = await p.text({ ...io, ...preset, message: messageOf(step, io, extra),
@@ -102,10 +103,21 @@ function isBack(typed: string | undefined, asked: Asked): boolean {
 const TEXT_GUTTER = styleText('gray', '│') + '  ';
 
 /** The question, and under it the hint, wrapped in the gutter -- visible whatever the answer shows. */
-function messageOf(step: Step<never>, io: Io, extra?: string): string {
+function messageOf(step: Drawn, io: Io, extra?: string): string {
   const hint = [step.hint, extra].filter((part) => part).join(' · ');
   const gutter = step.kind === 'text' ? TEXT_GUTTER : '';
   return [step.message, ...(hint ? wrap(hint, widthOf(io, GUTTER)) : [])].join('\n' + gutter);
+}
+
+async function showStep(confirm: StepConfirm, io: Io): Promise<StepChoice | typeof CANCEL> {
+  const lines = stepConfirmLines(confirm).flatMap((text) => wrap(text, widthOf(io, GUTTER)));
+  p.log.message(lines.join('\n'), io);
+  return chosen(confirm, io);
+}
+
+async function chosen(confirm: StepConfirm, io: Io): Promise<StepChoice | typeof CANCEL> {
+  const choice = await p.select({ ...io, message: RUN_THIS_STEP, options: stepOptions(), initialValue: confirm.initial });
+  return p.isCancel(choice) ? CANCEL : choice;
 }
 
 async function showReview(review: Review, io: Io): Promise<ReviewChoice> {

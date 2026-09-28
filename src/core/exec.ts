@@ -2,23 +2,30 @@
 //
 // TWO INVARIANTS, BOTH LOAD-BEARING.
 //
-// 1. NOTHING HERE WRITES TO A CONSOLE, EVER. Credential helpers and git can
-//    print live secrets on stdout. Whatever a child prints is RETURNED to the
-//    caller, never shown, so this layer is never the thing that leaks it.
-//    There is no debug flag and no logging hook by design -- the absence is
+// 1. THIS FILE WRITES NOTHING. `run` returns whatever the child prints and
+//    never shows it. Credential helpers and git can print live secrets, and
+//    there is no debug flag and no logging hook by design -- the absence is
 //    the control. test/exec.test.ts asserts it.
+//
+//    `inherit` hands the terminal to the child (`stdio: 'inherit'`). repown
+//    never sees that output -- the result's stdout and stderr stay empty --
+//    so a credential cannot pass through repown. It is used only for
+//    `gh auth login`, and only from a terminal. The child prints to the
+//    terminal itself; this function still writes nothing.
+//    The parent ignores SIGINT while the child runs, so Ctrl-C reaches the child.
 //
 // 2. A NON-ZERO EXIT IS NOT AN ERROR. git answers questions with exit codes:
 //    `git config --get missing.key` exits 1, and that is the answer "not set",
-//    not a failure. So this resolves rather than rejects, and callers read
-//    `code` themselves. (PowerShell 7.4 turning native exit codes into
+//    not a failure. So both runners resolve rather than reject, and callers
+//    read `code` themselves. A spawn error such as ENOENT resolves too, as
+//    `notInstalled`. (PowerShell 7.4 turning native exit codes into
 //    terminating errors is what forced `Use-NativeExitCodes` in the version
 //    this replaces; Node has no such behaviour, but the discipline is the same.)
 //
 // `shell: false` throughout: no argument ever reaches a shell parser, so a
 // branch name or URL containing shell metacharacters cannot be interpreted.
 
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 export interface ExecResult {
   readonly code: number;
@@ -37,7 +44,26 @@ export interface ExecOptions {
   readonly timeoutMs?: number;
 }
 
+/** `inherit` takes an environment and nothing else: the child has the terminal. */
+export interface InheritOptions {
+  readonly env?: NodeJS.ProcessEnv;
+}
+
+export type InheritFn = (
+  file: string,
+  args: readonly string[],
+  options?: InheritOptions,
+) => Promise<ExecResult>;
+
 const DEFAULT_TIMEOUT_MS = 30_000;
+
+/** How many `inherit` children are running. `handingOver` is the read-only view. */
+let inherited = 0;
+
+/** True while an inherited child is running. Ctrl-C then belongs to that child. */
+export function handingOver(): boolean {
+  return inherited > 0;
+}
 
 /**
  * The timeout is our own timer, NOT spawn's `timeout` option. Node clears that
@@ -70,6 +96,48 @@ export function run(
     child.stdin.on('error', () => { /* the child may exit before stdin drains */ });
     child.stdin.end(options.input ?? '');
   });
+}
+
+/**
+ * The terminal belongs to the child. Only `gh auth login` uses this, and only
+ * from a terminal: repown cannot see what the child prints.
+ */
+export function inherit(
+  file: string,
+  args: readonly string[],
+  options: InheritOptions = {},
+): Promise<ExecResult> {
+  return new Promise((resolve) => {
+    inherited += 1;
+    const ignore = (): void => {};
+    process.on('SIGINT', ignore);
+    const child = spawn(file, [...args], {
+      env: options.env ?? process.env,
+      shell: false,
+      stdio: 'inherit',
+      // gh must stay attached to the console so it receives Ctrl-C.
+      windowsHide: false,
+    });
+    settleInherit(child, ignore, resolve);
+  });
+}
+
+/** Drops the parent's SIGINT listener when the child closes or fails to spawn. */
+function settleInherit(child: ChildProcess, ignore: () => void, resolve: (result: ExecResult) => void): void {
+  let settled = false;
+  const done = (result: ExecResult): void => {
+    if (settled) return;
+    settled = true;
+    inherited -= 1;
+    process.off('SIGINT', ignore);
+    resolve(result);
+  };
+  child.on('error', (error: NodeJS.ErrnoException) => done(spawnFailure(error)));
+  child.on('close', (code) => done({ code: code ?? -1, stdout: '', stderr: '' }));
+}
+
+function spawnFailure(error: NodeJS.ErrnoException): ExecResult {
+  return { code: -1, stdout: '', stderr: '', spawnError: error };
 }
 
 /** Accumulates the child's stdout and stderr; call the result for what has arrived so far. */

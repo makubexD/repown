@@ -5,6 +5,10 @@
 // reporting -- a pull request opened from the wrong account on a public repo is
 // as permanent as a commit.
 //
+// `ghLogin` does not ask. It hands the terminal to `gh auth login` and never
+// reads what gh prints. Below gh 2.40.0 that login is refused: it would
+// replace the host's account.
+//
 // NOT `gh api user`. That spent an API round trip to learn one login and, the
 // reason it had to go, returned nothing on failure. Callers guarded their
 // warnings on the value being truthy, so an offline machine or an expired token
@@ -17,8 +21,9 @@
 // installed" and from "gh is active as nobody". Collapsing it into either is the
 // bug this shape exists to prevent.
 
-import { run, succeeded, notInstalled, output } from '../exec.ts';
+import { run, inherit, succeeded, notInstalled, output, type ExecResult, type InheritFn } from '../exec.ts';
 import { ok, err, type Result } from '../result.ts';
+import { versionAtLeast } from '../version.ts';
 
 export interface GhAccount {
   readonly login: string;
@@ -45,25 +50,57 @@ export async function ghInstalled(): Promise<boolean> {
 }
 
 export async function ghState(host = 'github.com'): Promise<Result<GhState>> {
-  const result = await run('gh', ['auth', 'status', '--json', 'hosts']);
+  return ghStateFrom(await run('gh', ['auth', 'status', '--json', 'hosts']), host);
+}
+
+/** A finished `gh auth status --json hosts`. Exit 0 with no host entry is nobody signed in. */
+export function ghStateFrom(result: ExecResult, host = 'github.com'): Result<GhState> {
   if (notInstalled(result)) return err('gh is not installed');
   if (!succeeded(result)) return err('gh auth status failed');
-
   const parsed = parseHosts(result.stdout, host);
   if (!parsed) return err('gh auth status returned nothing usable');
   return ok(parsed);
 }
 
+/**
+ * gh 2.88.1 exits 0 and prints `{"hosts":{}}` when it is signed in to nobody.
+ * A missing host key, or an empty list, is that same answer.
+ */
 function parseHosts(raw: string, host: string): GhState | null {
-  let hosts: Record<string, unknown>;
+  const hosts = hostsObject(raw);
+  if (hosts === null) return null;
+  if (!Object.hasOwn(hosts, host)) return { accounts: [], active: null };
+  const entries = hosts[host];
+  if (!Array.isArray(entries)) return null;
+  return accountsFrom(entries);
+}
+
+function hostsObject(raw: string): Record<string, unknown> | null {
+  const parsed = jsonObject(raw);
+  if (parsed === null) return null;
+  const hosts = parsed['hosts'];
+  return isRecord(hosts) ? hosts : null;
+}
+
+function jsonObject(raw: string): Record<string, unknown> | null {
   try {
-    hosts = (JSON.parse(raw) as { hosts?: Record<string, unknown> }).hosts ?? {};
+    const parsed = JSON.parse(plainJson(raw)) as unknown;
+    return isRecord(parsed) ? parsed : null;
   } catch {
     return null;
   }
-  const entries = hosts[host];
-  if (!Array.isArray(entries)) return null;
+}
 
+/** gh paints `--json` when colour is forced, even on a pipe. The object is unchanged. */
+function plainJson(raw: string): string {
+  return raw.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function accountsFrom(entries: readonly unknown[]): GhState {
   const accounts = entries.flatMap(toAccount);
   const active = accounts.find((account) => account.active)?.login ?? null;
   return { accounts, active };
@@ -75,9 +112,14 @@ function toAccount(raw: unknown): GhAccount[] {
   return [{ login: entry.login, active: entry.active === true }];
 }
 
-/** A profile field from the public API, or null. Absence here is unremarkable. */
+/** Arguments for a github.com profile field. `--hostname` so GH_HOST cannot redirect the call. */
+export function ghProfileArgs(login: string, field: string): readonly string[] {
+  return ['api', '--hostname', 'github.com', `users/${login}`, '--jq', `.${field}`];
+}
+
+/** A profile field from github.com, or null. Absence here is unremarkable. */
 export async function ghProfileField(login: string, field: string): Promise<string | null> {
-  const result = await run('gh', ['api', `users/${login}`, '--jq', `.${field}`]);
+  const result = await run('gh', ghProfileArgs(login, field));
   const value = output(result);
   return value && value !== 'null' ? value : null;
 }
@@ -87,4 +129,63 @@ export async function ghSwitch(login: string): Promise<Result<void>> {
   if (notInstalled(result)) return err('gh is not installed');
   if (!succeeded(result)) return err(result.stderr.trim() || `gh auth switch exited ${result.code}`);
   return ok(undefined);
+}
+
+/**
+ * gh before 2.40.0 replaces the host's one account on `auth login`. `unknown`
+ * means the text was not a version, and login must not run in that case either.
+ */
+export type GhLoginVersion = 'ready' | 'old' | 'unknown';
+
+const LOGIN_MIN: readonly [number, number, number] = [2, 40, 0];
+
+export function ghLoginVersion(text: string): GhLoginVersion {
+  const found = /gh version (\d+)\.(\d+)\.(\d+)/.exec(text);
+  if (!found) return 'unknown';
+  return versionAtLeast(found, LOGIN_MIN) ? 'ready' : 'old';
+}
+
+export async function readGhLoginVersion(): Promise<GhLoginVersion> {
+  const result = await run('gh', ['--version']);
+  return succeeded(result) ? ghLoginVersion(result.stdout) : 'unknown';
+}
+
+export type GhLoginError =
+  | { readonly kind: 'cancelled' }
+  | { readonly kind: 'failed'; readonly reason: string };
+
+/**
+ * Browser login for one host. The child inherits the terminal (`inherit`), with
+ * `GH_TOKEN` and `GITHUB_TOKEN` removed so gh will store the new sign-in.
+ */
+export async function ghLogin(host: string, runner: InheritFn = inherit): Promise<Result<void, GhLoginError>> {
+  const result = await runner('gh', loginArgs(host), { env: withoutGhTokens(process.env) });
+  return loginResult(result);
+}
+
+function loginArgs(host: string): string[] {
+  return ['auth', 'login', '--hostname', host, '--web', '--git-protocol', 'https'];
+}
+
+function loginResult(result: ExecResult): Result<void, GhLoginError> {
+  if (notInstalled(result)) return err({ kind: 'failed', reason: 'gh is not installed' });
+  if (result.spawnError) return err({ kind: 'failed', reason: result.spawnError.message });
+  if (result.code === 0) return ok(undefined);
+  if (result.code === 2) return err({ kind: 'cancelled' });
+  return err({ kind: 'failed', reason: 'gh auth login exited ' + result.code });
+}
+
+/** Windows matches env names case-insensitively; either spelling blocks login. */
+function withoutGhTokens(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const child: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined || isGhToken(key)) continue;
+    child[key] = value;
+  }
+  return child;
+}
+
+function isGhToken(key: string): boolean {
+  const name = key.toUpperCase();
+  return name === 'GH_TOKEN' || name === 'GITHUB_TOKEN';
 }

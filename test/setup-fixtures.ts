@@ -5,8 +5,8 @@
 
 import { PassThrough } from 'node:stream';
 import { ok } from '../src/core/result.ts';
-import { wizard, type Answers, type Outcome } from '../src/wizard/engine.ts';
-import { setupFlow, type SetupContext } from '../src/wizard/setup-flow.ts';
+import { wizard, type Answers, type Outcome, type Prompter } from '../src/wizard/engine.ts';
+import { briefOf, planCommands, setupFlow, type SetupContext } from '../src/wizard/setup-flow.ts';
 import { clackPrompter } from '../src/wizard/clack.ts';
 
 export const KEY = { enter: '\r', up: '\x1b[A', down: '\x1b[B', esc: '\x1b', backspace: '\x7f' } as const;
@@ -16,22 +16,41 @@ export const typed = (text: string): string[] => [...text];
 
 export function setupContext(overrides: Partial<SetupContext> = {}): SetupContext {
   return {
-    cwd: null,
+    ...baseline(),
     recorded: { octocat: { name: 'Octo Cat', email: 'octocat@example.invalid', host: 'github' } },
+    addresses: ok(new Map()),
+    suggest: async () => ({}),
+    ...overrides,
+  };
+}
+
+function baseline(): Omit<SetupContext, 'recorded' | 'addresses' | 'suggest'> {
+  return {
+    cwd: null,
     pinned: null,
     pinIntact: false,
     host: 'github',
     owner: 'octocat',
+    detected: [],
+    ownerIsUser: null,
     allowed: [],
     credentialPinned: true,
+    credentialKeys: ['credential.https://github.com.username'],
+    hookPath: null,
     gh: null,
     ghIsHelper: false,
     guard: 'off',
     redirected: false,
     fixLines: null,
-    addresses: ok(new Map()),
-    suggest: async () => ({}),
-    ...overrides,
+    machineIdentity: { name: null, email: null },
+    // No branch: these screens are not the unpushed-commit note. A test that
+    // wants the note passes the commits readUnpushed would have read.
+    unpushed: { branch: null, commits: ok([]), rebaseBase: null },
+    // Already on, so these screens are not the upstream question. A test for that
+    // question passes enabled: null. An otherwise settled clone where it is still
+    // offered counts as settled and names `repown setup --auto-upstream`.
+    upstream: { supported: true, enabled: true, branch: 'main', tracked: null },
+    stored: null,
   };
 }
 
@@ -63,9 +82,25 @@ export async function play(ctx: SetupContext, keys: readonly (readonly string[])
   const pressNext = (): void => { for (const key of queue.shift() ?? []) input.write(key); };
   output.on('data', (chunk: Buffer) => { screen += chunk.toString(); clearTimeout(idle); idle = setTimeout(pressNext, 40); });
   const stuck = new Promise<{ status: 'stuck' }>((resolve) => { setTimeout(() => resolve({ status: 'stuck' }), patience).unref(); });
-  const outcome = await Promise.race([wizard(setupFlow(ctx), ctx, given, clackPrompter({ input, output })), stuck]);
+  const prompter = clackPrompter({ input, output });
+  const outcome = await Promise.race([played(ctx, given, prompter), stuck]);
   clearTimeout(idle);
   return { outcome, screen: screen.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '') };
+}
+
+async function played(ctx: SetupContext, given: Answers, prompter: Prompter): Promise<Outcome> {
+  const outcome = await wizard(setupFlow(ctx), ctx, given, prompter);
+  if (outcome.status === 'run') await replaySteps(outcome.answers, ctx, prompter);
+  return outcome;
+}
+
+/** The same confirmation the run shows. Skip continues; Stop or Esc ends the screens. */
+async function replaySteps(answers: Answers, ctx: SetupContext, prompter: Prompter): Promise<void> {
+  if (answers['mode'] !== 'step') return;
+  for (const planned of planCommands(answers, ctx)) {
+    const choice = await prompter.confirmStep(briefOf(planned, answers, ctx));
+    if (choice !== 'yes' && choice !== 'skip') return;
+  }
 }
 
 /** The lines of the screen that contain `text`. */

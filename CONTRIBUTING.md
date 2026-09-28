@@ -114,16 +114,16 @@ and help text in its own file under `src/commands/`, so help can't drift from th
 
 | Command | Code | Explained in |
 | --- | --- | --- |
-| `repown status` (bare `repown`) | `src/commands/status.ts`, `src/core/inspect.ts` | [card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are) |
+| `repown status` (bare `repown` when output isn't a terminal) | `src/commands/status.ts`, `src/commands/start.ts`, `src/ui/dispatch.ts`, `src/core/inspect.ts` | [card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are) |
 | `repown doctor` | `src/commands/doctor.ts`, `src/core/inspect.ts`, `src/core/credential/gcm.ts`, `src/core/credential/gh.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
 | `repown fix` | `src/commands/fix.ts`, `src/core/credential/repair.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
 | `repown accounts list`, `repown accounts add`, `repown accounts remove` | `src/commands/accounts.ts`, `src/core/registry.ts` | [card 2](docs/HOW-IT-WORKS.md#2-remember-an-account), [the registry](docs/CONFIGURATION.md#the-account-registry) |
-| `repown use` | `src/commands/use.ts`, `src/core/identity.ts`, `src/core/registry.ts`, `src/core/credential/gh.ts` | [card 3](docs/HOW-IT-WORKS.md#3-pin-a-clone), [per-clone keys](docs/CONFIGURATION.md#per-clone-keys) |
+| `repown use` | `src/commands/use.ts`, `src/core/identity.ts`, `src/core/registry.ts`, `src/core/credential/gh.ts`, `src/core/unpushed.ts` | [card 3](docs/HOW-IT-WORKS.md#3-pin-a-clone), [per-clone keys](docs/CONFIGURATION.md#per-clone-keys) |
 | `repown off` | `src/commands/off.ts`, `src/core/identity.ts` | [card 12](docs/HOW-IT-WORKS.md#12-uninstall-or-repown-missing) |
 | `repown guard on`, `repown guard off`, `repown guard status` | `src/commands/guard.ts`, `src/core/guard/hook.ts` | [card 7](docs/HOW-IT-WORKS.md#7-push-what-the-guard-checks), [card 10](docs/HOW-IT-WORKS.md#10-other-hook-tools) |
 | `repown guard check` (the hook calls it) | `src/commands/guard.ts`, `src/core/guard/check.ts` | [card 7](docs/HOW-IT-WORKS.md#7-push-what-the-guard-checks), [card 8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
 | `repown scan` | `src/commands/scan.ts`, `src/core/inspect.ts`, `src/core/git.ts` | [card 11](docs/HOW-IT-WORKS.md#11-audit-re-point-move-machines), [JSON](docs/CONFIGURATION.md#scripts-and-ci) |
-| `repown setup` | `src/commands/setup.ts`, `src/wizard/setup-run.ts`, `src/wizard/setup-context.ts`, `src/wizard/setup-flow.ts`, `src/wizard/engine.ts`, `src/wizard/review-text.ts`, `src/wizard/clack.ts`, `src/wizard/plain.ts` | [card 13](docs/HOW-IT-WORKS.md#13-guided-setup), [scripts and CI](docs/CONFIGURATION.md#scripts-and-ci) |
+| `repown setup` | `src/commands/setup.ts`, `src/wizard/setup-run.ts`, `src/wizard/setup-context.ts`, `src/wizard/setup-flow.ts`, `src/wizard/setup-changes.ts`, `src/wizard/engine.ts`, `src/wizard/review-text.ts`, `src/wizard/clack.ts`, `src/wizard/plain.ts`, `src/core/unpushed.ts` | [card 13](docs/HOW-IT-WORKS.md#13-guided-setup), [scripts and CI](docs/CONFIGURATION.md#scripts-and-ci) |
 
 Shared by all of them:
 - **Parsing, help and dispatch:** `src/cli.ts`, `src/ui/dispatch.ts`, `src/ui/command.ts`
@@ -131,7 +131,7 @@ Shared by all of them:
   `src/ui/suggest.ts` (did-you-mean).
 - **Output, colour and prompts:** `src/ui/format.ts`, `src/ui/prompt.ts`.
 - **Reading a clone and the machine:** `src/core/inspect.ts`, `src/core/git.ts` (every git
-  call), `src/core/url.ts` (remote URLs and owners), `src/core/result.ts` (answers that can fail).
+  call), `src/core/version.ts` (whether git or gh is new enough), `src/core/url.ts` (remote URLs and owners), `src/core/result.ts` (answers that can fail).
 - **Hosts** (what each one can pin): `src/core/hosts/`. Adding one is one file there plus
   one line in `providers()` (`src/core/hosts/index.ts`), with `generic` last, plus its
   label and hint in setup's `HOSTS` (`src/wizard/setup-flow.ts`).
@@ -141,7 +141,7 @@ Shared by all of them:
 ## Pull requests and issues
 
 Open an issue first for anything larger than a fix, so the approach can be agreed before
-the work. The issue forms ask for `repown --version`, your OS and the output of `repown`
+the work. The issue forms ask for `repown --version`, your OS and the output of `repown status`
 and `repown doctor`, with placeholders for names and addresses. Pull requests run CI on
 all three operating systems, and the template's checklist is the list above. Dependabot
 proposes updates to the pinned actions and the npm dependencies weekly; they go through CI

@@ -75,7 +75,7 @@ export async function check(input: CheckInput): Promise<Refusal[]> {
   if (!identity.email) {
     return [{
       reason: 'This clone sets no identity of its own, so the guard cannot tell ' +
-              'your commits from anyone else’s.',
+              'your commits from anyone else\'s.',
       detail: ['fix: repown use <account>'],
     }];
   }

@@ -58,6 +58,12 @@ a refusal); `mirrorBranch` you set yourself.
 | `repown.allowTagger` | an email address; one line each | pushing another tagger's annotated tags (a fork pushing upstream's tags) | [8](HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
 | `repown.mirrorBranch` | one branch name | a fork's branch that only fast-forwards to upstream: there, and on tag pushes, commits already on any remote (upstream included) stop counting | [8](HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
 
+`push.autoSetupRemote` is git's own key, from git 2.37. `repown setup` may set it to
+`true` in this clone only (`git config --local push.autoSetupRemote true`), so the first
+`git push` of a branch without an upstream sets that upstream and creates the branch on
+origin. It does not change what the guard checks. When the effective value is already
+true, from any scope, setup leaves it alone. The flag is `--auto-upstream`.
+
 ## Scripts and CI
 
 **Nothing prompts without a terminal** (stdin and stderr must both be one, so
@@ -69,7 +75,7 @@ origin's). There's no review. Re-running is safe once the account is recorded: d
 `--name`, `--email` and `--host` then, or it exits `2`.
 
 ```
-repown setup octocat --guard --no-input
+repown setup octocat --guard --auto-upstream --no-input
 repown setup octo-work --allow-owner octo-org --guard --no-input
 repown setup octo-work --name "Octo Work" --email octo-work@users.noreply.github.com --no-input
 ```
@@ -78,7 +84,9 @@ Nothing is written when `repown setup` refuses:
 
 - **exit `2`:** no terminal and no `--no-input` (it names the flags it needs); no
   `<account>`, or a new one without `--name`/`--email`; `--name`/`--email`/`--host` for an
-  account already recorded; `--allow-owner` that isn't origin's owner.
+  account already recorded; `--allow-owner` that isn't origin's owner;
+  `--step-by-step` together with `--no-input` (step by step needs a terminal).
+  `--no-input` does not use Recommended's Yes answers.
 - **exit `1`:** not in a clone; an unreadable registry; `--guard` where another tool owns the hook or
   `core.hooksPath` points elsewhere. `--fix` when gh isn't the helper is dropped with a note.
 
@@ -115,6 +123,7 @@ Everything, in one place. Nothing here is committed or pushed.
 | --- | --- | --- |
 | the clone's `.git/config` | `user.name`, `user.email`, `user.useConfigOnly`, `repown.account`, and `credential.https://github.com.username` on GitHub over https | `repown use` (and `setup`); removed by `repown off` |
 | the clone's `.git/config` | `repown.allowOwner`, `repown.allowTagger`, `repown.mirrorBranch` | you (`setup` writes `allowOwner` when you say Yes) |
+| the clone's `.git/config` | `push.autoSetupRemote` | `repown setup`, when you say Yes, in this clone only (git 2.37+) |
 | the clone's own hooks folder: `pre-push` | the guard (`guard on` refuses if `core.hooksPath` points elsewhere: [card 10](HOW-IT-WORKS.md#10-other-hook-tools)) | `repown guard on`; removed by `repown guard off` |
 | your user config folder | `accounts.json`: each account's name, email and host | `repown accounts add` and `remove`; `use` or `setup` when they ask for a new account |
 | git config, whichever scope holds them | removes the credential-helper entries `gh auth setup-git` added | `repown fix`, after showing them; undo: `gh auth setup-git` |

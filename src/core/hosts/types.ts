@@ -35,4 +35,10 @@ export interface HostProvider {
 
   /** Best-effort name/email lookup, to save the user retyping. Optional. */
   resolveProfile?(account: string): Promise<Profile | null>;
+
+  /**
+   * 'user' or 'organization' -- GitHub's own word for the kind -- or null when
+   * this host can't say. Optional. Null means unknown, never "a user".
+   */
+  accountKind?(login: string): Promise<'user' | 'organization' | null>;
 }

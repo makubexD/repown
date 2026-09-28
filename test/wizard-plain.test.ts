@@ -5,7 +5,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import { plainPrompter } from '../src/wizard/plain.ts';
-import { BACK, CANCEL, type Answer, type Asked, type Choice, type Prompter, type Review, type Step } from '../src/wizard/engine.ts';
+import { BACK, CANCEL, type Answer, type Asked, type Choice, type Drawn, type Prompter, type Review } from '../src/wizard/engine.ts';
 
 interface Harness {
   readonly prompter: Prompter;
@@ -24,9 +24,9 @@ function harness(typed: string, end = true): Harness {
 
 const asked = (initial?: Answer, choices: readonly Choice[] = [], canGoBack = true): Asked => ({ initial, choices, detail: undefined, canGoBack });
 
-const text: Step<never> = { id: 'name', kind: 'text', message: 'Commit name', hint: 'shown on every commit', flag: '--name' };
-const pick: Step<never> = { id: 'account', kind: 'select', message: 'Which account?', hint: '', flag: '<account>' };
-const yesNo: Step<never> = { id: 'guard', kind: 'confirm', message: 'Check every push?', hint: '', flag: '--guard' };
+const text: Drawn = { id: 'name', kind: 'text', message: 'Commit name', hint: 'shown on every commit', flag: '--name' };
+const pick: Drawn = { id: 'account', kind: 'select', message: 'Which account?', hint: '', flag: '<account>' };
+const yesNo: Drawn = { id: 'guard', kind: 'confirm', message: 'Check every push?', hint: '', flag: '--guard' };
 const CHOICES = [{ value: 'octocat', label: 'octocat', hint: 'recorded' }, { value: '', label: 'a new account' }];
 
 const review = (overrides: Partial<Review> = {}): Review => ({
@@ -98,7 +98,8 @@ describe('plain prompter', () => {
     const run = harness('\n');
     assert.equal(await run.prompter.review(review({ settled: true, title: 'This clone is already set up' })), 'done');
     assert.match(run.shown(), /already set up/);
-    assert.match(run.shown(), /Apply the same settings again  -- runs repown use octocat/);
+    assert.match(run.shown(), /Use another account {2}-- choose a different account for this clone/);
+    assert.doesNotMatch(run.shown(), /Apply the same settings again/);
     assert.doesNotMatch(run.shown(), /Decline/);
   });
 

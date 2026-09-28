@@ -11,7 +11,9 @@ import { readFileSync, existsSync, mkdtempSync, rmSync, mkdirSync, writeFileSync
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
-import { sandbox, type Sandbox } from './helpers.ts';
+import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
+import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
+import { runProgram, type Loader, type Program } from '../src/ui/dispatch.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 
@@ -25,11 +27,11 @@ interface Run {
   readonly stderr: string;
 }
 
-function repown(args: readonly string[], options: { cwd?: string; input?: string } = {}): Run {
+function repown(args: readonly string[], options: { cwd?: string; input?: string; env?: NodeJS.ProcessEnv } = {}): Run {
   const result = spawnSync(process.execPath, [CLI, ...args], {
     cwd: options.cwd,
     input: options.input ?? '',
-    env: process.env,
+    env: options.env ?? process.env,
     encoding: 'utf8',
   });
   return { status: result.status ?? -1, stdout: result.stdout, stderr: result.stderr };
@@ -373,6 +375,7 @@ describe('guard check (the hook contract every installed hook already calls)', (
     const stdin = `refs/heads/main ${sha} refs/heads/main ${'0'.repeat(40)}\n`;
     const run = repown(['guard', 'check', '--remote', 'origin', '--url', ORIGIN], { cwd: box.dir, input: stdin });
     assert.equal(run.status, 0);
+    assert.match(run.stdout, /every commit in this push carries this clone's identity/);
   });
 
   test('a foreign-authored commit in the same range is refused', () => {
@@ -424,13 +427,15 @@ describe('repown status, doctor and fix: exit codes and what they change', () =>
   const GH_HELPER = '[credential "https://github.com"]\n\thelper =\n\thelper = !gh auth git-credential\n' +
                     '[credential "https://gist.github.com"]\n\thelper =\n\thelper = !gh auth git-credential\n';
 
-  test('status exits 1 on an unpinned clone and names the address it would inherit', () => {
+  test('S3: bare repown without a terminal prints status and never the setup wizard', () => {
     box.git('config', '--local', '--unset', 'user.name');
     box.git('config', '--local', '--unset', 'user.email');
     box.writeGlobalConfig('[user]\n\tname = Machine\n\temail = machine@example.invalid\n');
     const run = repown([], { cwd: box.dir });
     assert.equal(run.status, 1);
+    assert.match(run.stdout, /^repown status · current settings of this clone$/m);
     assert.match(run.stderr, /machine@example\.invalid/);
+    assert.doesNotMatch(run.stdout + run.stderr, /needs a terminal to ask|Which account should this clone/);
   });
 
   test('status exits 0 on a pinned clone', () => {
@@ -515,6 +520,58 @@ describe('repown use', () => {
     assert.equal(run.status, 1);
     assert.match(run.stderr, /repown accounts add octocat/);
     assert.equal(local('user.email'), '');
+  });
+});
+
+// No TTY (spawnSync pipes stdin and stderr). The fake is the only `gh` on PATH:
+// a directory that already contains gh is dropped, so this cannot fall through
+// to the machine's gh. The fake records argv and never runs login, logout,
+// switch or setup-git.
+describe('repown use --gh with no terminal', () => {
+  let box: Sandbox;
+  let bin: string;
+  let log: string;
+
+  beforeEach(() => {
+    box = sandbox();
+    bin = join(box.dir, '..', 'fake-bin');
+    log = join(box.dir, '..', 'gh.log');
+    mkdirSync(bin);
+    installFakeGh(bin);
+    recordOctocat(box);
+  });
+  afterEach(() => box.dispose());
+
+  test('G3: octocat is not in gh, so it warns and still pins', () => {
+    const env = ghEnv(bin, log);
+    const version = spawnSync('gh', ['--version'], { env, encoding: 'utf8' });
+    assert.match(version.stdout, /repown-fake-gh/, version.stderr + (version.error?.message ?? ''));
+    const run = repown(['use', 'octocat', '--gh'], { cwd: box.dir, env });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout, /OK\s+identity\s+Octo Cat <octocat@example\.invalid>\s+push-as:octocat/);
+    assert.match(run.stderr, /WARN\s+gh\s+octocat isn't signed in to gh/);
+    assert.match(run.stderr, /fix: gh auth login, then repown use octocat --gh/);
+    assert.equal(box.git('config', '--local', '--get', 'repown.account'), 'octocat');
+    const calls = readFileSync(log, 'utf8');
+    assert.match(calls, /auth status/);
+    assert.doesNotMatch(calls, /login|logout|switch|setup-git/);
+  });
+
+  test('G3: a gh signed in to nobody warns and never calls auth switch', () => {
+    const file = join(box.dir, '..', 'gh-empty-hosts.txt');
+    writeFileSync(file, GH_EMPTY_HOSTS);
+    const env = { ...ghEnv(bin, log), GH_FAKE_STATUS_FILE: file };
+    const run = repown(['use', 'octocat', '--gh'], { cwd: box.dir, env });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /WARN\s+gh\s+octocat isn't signed in to gh/);
+    assert.match(run.stderr, /fix: gh auth login, then repown use octocat --gh/);
+    const calls = readFileSync(log, 'utf8');
+    assert.match(calls, /auth status/);
+    assert.doesNotMatch(calls, /auth switch/);
+    assert.doesNotMatch(calls, /auth login|logout|setup-git/);
+    const status = repown(['status'], { cwd: box.dir, env });
+    assert.doesNotMatch(status.stderr, /UNVERIFIED/);
+    assert.match(status.stdout, /gh active\s+none/);
   });
 });
 
@@ -825,3 +882,146 @@ describe('guard on from npx\'s cache', () => {
     assert.doesNotMatch(run.stderr, /npx/);
   });
 });
+
+// chooseDefault is consulted only for an empty argv. With none set, empty argv
+// still runs defaultCommand; the release tool sets neither (release-tool.test.ts).
+describe('chooseDefault', () => {
+  test('an empty argv asks the chooser and runs the command it names', async () => {
+    const ran: string[] = [];
+    let calls = 0;
+    const program = fakeProgram(async () => { calls += 1; return 'setup'; }, ran);
+    const captured = await capture(() => runProgram(program, []));
+    assert.equal(captured.code, 0);
+    assert.equal(calls, 1);
+    assert.deepEqual(ran, ['setup']);
+  });
+
+  test('help from the chooser prints the top help and runs no command', async () => {
+    const ran: string[] = [];
+    const captured = await capture(() => runProgram(fakeProgram(async () => 'help', ran), []));
+    assert.equal(captured.code, 0);
+    assert.match(captured.out, /TOP HELP/);
+    assert.deepEqual(ran, []);
+  });
+
+  test('any argument skips the chooser', async () => {
+    const ran: string[] = [];
+    let calls = 0;
+    const program = fakeProgram(async () => { calls += 1; return 'setup'; }, ran);
+    await capture(() => runProgram(program, ['status']));
+    await capture(() => runProgram(program, ['--cwd', 'x']));
+    await capture(() => runProgram(program, ['-x']));
+    assert.equal(calls, 0);
+    assert.deepEqual(ran, ['status', 'status']);
+  });
+
+  test('with no chooser, empty argv still runs defaultCommand', async () => {
+    const ran: string[] = [];
+    const captured = await capture(() => runProgram(fakeProgram(undefined, ran), []));
+    assert.equal(captured.code, 0);
+    assert.deepEqual(ran, ['status']);
+    assert.equal(captured.out, '');
+  });
+});
+
+function fakeProgram(choose: (() => Promise<string>) | undefined, ran: string[]): Program {
+  const load = (name: string): Loader => async () => ({
+    summary: name,
+    run: async () => { ran.push(name); return 0; },
+  });
+  return {
+    name: 'tool',
+    commands: { status: load('status'), setup: load('setup') },
+    defaultCommand: 'status',
+    ...(choose ? { chooseDefault: choose } : {}),
+    topHelp: () => ['TOP HELP'],
+  };
+}
+
+const FAKE_GH_CS = `
+using System;
+using System.IO;
+class FakeGh {
+  static int Main(string[] args) {
+    var log = Environment.GetEnvironmentVariable("GH_FAKE_LOG");
+    if (!string.IsNullOrEmpty(log)) File.AppendAllText(log, string.Join(" ", args) + "\\n");
+    if (args.Length == 1 && args[0] == "--version") {
+      Console.WriteLine("gh version 2.88.1 (2026-03-12)");
+      Console.WriteLine("repown-fake-gh");
+      return 0;
+    }
+    if (args.Length >= 2 && args[0] == "auth" && args[1] == "status") {
+      var file = Environment.GetEnvironmentVariable("GH_FAKE_STATUS_FILE");
+      if (!string.IsNullOrEmpty(file)) {
+        Console.Write(File.ReadAllText(file));
+        return 0;
+      }
+      Console.WriteLine("{\\"hosts\\":{\\"github.com\\":[{\\"login\\":\\"octo-work\\",\\"active\\":true}]}}");
+      return 0;
+    }
+    return 97;
+  }
+}
+`;
+
+const FAKE_GH_SH = `#!/bin/sh
+if [ -n "$GH_FAKE_LOG" ]; then printf '%s\\n' "$*" >> "$GH_FAKE_LOG"; fi
+if [ "$1" = "--version" ]; then
+  echo "gh version 2.88.1 (2026-03-12)"
+  echo "repown-fake-gh"
+  exit 0
+fi
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  if [ -n "$GH_FAKE_STATUS_FILE" ]; then cat "$GH_FAKE_STATUS_FILE"; exit 0; fi
+  echo '{"hosts":{"github.com":[{"login":"octo-work","active":true}]}}'
+  exit 0
+fi
+exit 97
+`;
+
+function ghEnv(bin: string, log: string): NodeJS.ProcessEnv {
+  return { ...process.env, GH_FAKE_LOG: log, PATH: bin + delimiter + pathWithoutGh() };
+}
+
+function recordOctocat(box: Sandbox): void {
+  const dir = join(box.dir, '..', 'repown-config');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'accounts.json'), JSON.stringify({
+    accounts: { octocat: { name: 'Octo Cat', email: 'octocat@example.invalid' } },
+  }));
+}
+
+function installFakeGh(bin: string): void {
+  if (process.platform === 'win32') compileFakeGh(bin);
+  else writeFileSync(join(bin, 'gh'), FAKE_GH_SH, { mode: 0o755 });
+}
+
+function compileFakeGh(bin: string): void {
+  const source = join(bin, 'fake-gh.cs');
+  writeFileSync(source, FAKE_GH_CS);
+  const run = spawnSync(cscPath(), ['/nologo', '/out:' + join(bin, 'gh.exe'), source], { encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+}
+
+function cscPath(): string {
+  const root = join(process.env['WINDIR'] ?? 'C:\\Windows', 'Microsoft.NET');
+  const found = ['Framework64', 'Framework']
+    .map((name) => join(root, name, 'v4.0.30319', 'csc.exe'))
+    .find((path) => existsSync(path));
+  if (!found) throw new Error('csc.exe is not installed');
+  return found;
+}
+
+async function capture(run: () => Promise<number>): Promise<{ code: number; out: string }> {
+  const chunks: string[] = [];
+  const stdout = process.stdout.write.bind(process.stdout);
+  const stderr = process.stderr.write.bind(process.stderr);
+  try {
+    process.stdout.write = ((chunk: string | Uint8Array) => { chunks.push(String(chunk)); return true; }) as typeof process.stdout.write;
+    process.stderr.write = (() => true) as typeof process.stderr.write;
+    return { code: await run(), out: chunks.join('') };
+  } finally {
+    process.stdout.write = stdout;
+    process.stderr.write = stderr;
+  }
+}

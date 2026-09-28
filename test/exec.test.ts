@@ -6,6 +6,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const EXEC = pathToFileURL(fileURLToPath(new URL('../src/core/exec.ts', import.meta.url))).href;
@@ -37,6 +40,83 @@ test('a child\'s output is returned, never written to the console', () => {
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', timeout: 20_000 });
   assert.equal(result.status, 0, 'run() must return what the child printed');
   assert.equal(result.stdout + result.stderr, '', 'nothing may reach the console');
+});
+
+// `inherit` is the terminal hand-off. The child prints on the inherited streams;
+// the result carries none of it, and this layer adds none of its own.
+test('inherit returns the exit code and none of what the child printed', () => {
+  const script =
+    `const { inherit } = await import(${JSON.stringify(EXEC)});` +
+    `const r = await inherit(process.execPath, ['-e', 'console.log("SECRET"); console.error("E-SECRET"); process.exit(4)']);` +
+    `if (r.code !== 4 || r.stdout !== '' || r.stderr !== '' || r.spawnError) process.exit(3);`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', timeout: 20_000 });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /SECRET/);
+  assert.match(result.stderr, /E-SECRET/);
+});
+
+test('inherit resolves a missing binary as not installed, and passes env through', () => {
+  const marker = join(tmpdir(), 'repown-inherit-' + process.pid);
+  const script = inheritEnvScript(marker);
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', timeout: 20_000 });
+  try {
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(marker, 'utf8'), 'kept|false');
+  } finally {
+    rmSync(marker, { force: true });
+  }
+});
+
+function inheritEnvScript(marker: string): string {
+  const child = 'require("fs").writeFileSync(process.argv[1], (process.env.SENTINEL || "") + "|" + ("GH_TOKEN" in process.env))';
+  return `const { inherit, notInstalled } = await import(${JSON.stringify(EXEC)});` +
+    `const missing = await inherit('repown-definitely-missing-binary', []);` +
+    `if (!notInstalled(missing)) process.exit(3);` +
+    `const env = { SENTINEL: 'kept', PATH: process.env.PATH };` +
+    `if (process.env.SYSTEMROOT) env.SYSTEMROOT = process.env.SYSTEMROOT;` +
+    `const r = await inherit(process.execPath, ['-e', ${JSON.stringify(child)}, ${JSON.stringify(marker)}], { env });` +
+    `if (r.code !== 0) process.exit(4);`;
+}
+
+test('inherit keeps gh on the console; run still hides its window', () => {
+  const source = readFileSync(new URL('../src/core/exec.ts', import.meta.url), 'utf8');
+  const run = source.slice(source.indexOf('export function run'), source.indexOf('export function inherit'));
+  const inherit = source.slice(source.indexOf('export function inherit'));
+  assert.match(run, /windowsHide: true/);
+  assert.match(inherit, /windowsHide: false/);
+  assert.match(inherit, /gh must stay attached to the console so it receives Ctrl-C/);
+});
+
+test('inherit ignores SIGINT only while its child runs', async () => {
+  const { inherit, handingOver } = await import('../src/core/exec.ts');
+  const marker = join(tmpdir(), 'repown-sigint-' + process.pid);
+  const stop = marker + '.stop';
+  rmSync(marker, { force: true });
+  rmSync(stop, { force: true });
+  const child = 'const fs=require("fs");fs.writeFileSync(process.argv[1],"up");' +
+    'const stop=process.argv[1]+".stop";' +
+    'const wait=()=>{if(fs.existsSync(stop))process.exit(0);else setTimeout(wait,15)};wait()';
+  const before = process.listenerCount('SIGINT');
+  const pending = inherit(process.execPath, ['-e', child, marker]);
+  try {
+    const started = Date.now();
+    while (!existsSync(marker)) {
+      if (Date.now() - started > 5_000) throw new Error('child did not start');
+      await new Promise((resolve) => setTimeout(resolve, 15));
+    }
+    assert.equal(process.listenerCount('SIGINT'), before + 1);
+    assert.equal(handingOver(), true);
+    writeFileSync(stop, 'x');
+    assert.equal((await pending).code, 0);
+    assert.equal(process.listenerCount('SIGINT'), before);
+    await inherit('repown-definitely-missing-binary', []);
+    assert.equal(process.listenerCount('SIGINT'), before);
+  } finally {
+    writeFileSync(stop, 'x');
+    await pending;
+    rmSync(marker, { force: true });
+    rmSync(stop, { force: true });
+  }
 });
 
 test('a killed child is marked as timed out, not left to read as an ordinary failure', () => {

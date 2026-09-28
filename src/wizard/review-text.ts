@@ -3,7 +3,7 @@
 // choices and which one Enter takes, and "Change an answer". What goes IN the review
 // comes from the flow (setup-flow.ts).
 
-import type { Review, ReviewChoice } from './engine.ts';
+import type { Review, ReviewChoice, StepChoice } from './engine.ts';
 
 export interface ReviewOption {
   readonly value: Exclude<ReviewChoice, symbol>;
@@ -14,6 +14,29 @@ export interface ReviewOption {
 /** "Change an answer": the question, and the choice that returns to the review. */
 export const PICK_QUESTION = 'Which answer do you want to change?';
 export const BACK_TO_REVIEW = 'Back to the review';
+export const RUN_THIS_STEP = 'Run this step?';
+
+/** Yes, unless the command changes the whole machine: that needs a deliberate yes, as in the review. */
+export function stepDefault(command: string): 'yes' | 'skip' {
+  return changesMachine(command) ? 'skip' : 'yes';
+}
+
+export function stepOptions(): Array<{ value: StepChoice; label: string }> {
+  return [
+    { value: 'yes', label: 'Yes' },
+    { value: 'skip', label: 'Skip' },
+    { value: 'stop', label: 'Stop' },
+  ];
+}
+
+/** What a step changes, why, and the command, in that order. */
+export function stepConfirmLines(brief: { readonly changes: readonly string[]; readonly why: string; readonly command: string }): string[] {
+  return [...brief.changes, '', brief.why, '> ' + brief.command];
+}
+
+function changesMachine(command: string): boolean {
+  return command.startsWith('repown fix');
+}
 
 /**
  * The body of the review, line by line, wrapped to `width`. `command` styles each
@@ -65,18 +88,11 @@ function notesOf(review: Review): string[] {
 
 export function reviewQuestion(review: Review): string {
   if (review.settled) return 'What now?';
-  return review.steps.length === 1 ? 'Run this step?' : 'Run these ' + review.steps.length + ' steps?';
+  return review.steps.length === 1 ? RUN_THIS_STEP : 'Run these ' + review.steps.length + ' steps?';
 }
 
 export function reviewOptions(review: Review): ReviewOption[] {
-  if (review.settled) {
-    const again = review.steps.map((step) => step.command).join('; ');
-    return [
-      { value: 'done', label: 'Done', hint: 'change nothing' },
-      { value: 'run', label: 'Apply the same settings again', ...(again ? { hint: 'runs ' + again } : {}) },
-      { value: 'edit', label: 'Change an answer' },
-    ];
-  }
+  if (review.settled) return settledOptions(review);
   return [
     { value: 'run', label: review.steps.length === 1 ? 'Run it' : 'Run them' },
     { value: 'back', label: 'Back', hint: 'to the last question' },
@@ -85,11 +101,22 @@ export function reviewOptions(review: Review): ReviewOption[] {
   ];
 }
 
+/** Done, then a way to pick another account or sign in to gh. Change an answer stays once questions were asked. */
+function settledOptions(review: Review): ReviewOption[] {
+  const options: ReviewOption[] = [
+    { value: 'done', label: 'Done', hint: 'change nothing' },
+    { value: 'account', label: 'Use another account', hint: 'choose a different account for this clone' },
+  ];
+  if (review.ghSignIn) options.push({ value: 'gh', label: review.ghSignIn });
+  if (review.edits !== false) options.push({ value: 'edit', label: 'Change an answer' });
+  return options;
+}
+
 /**
  * The choice Enter takes: the first, unless a step changes the whole machine
  * (`fix`), which, like its own question, needs a deliberate yes.
  */
 export function reviewDefault(review: Review): ReviewOption['value'] {
-  const machineWide = review.steps.some((step) => step.command.startsWith('repown fix'));
+  const machineWide = review.steps.some((step) => changesMachine(step.command));
   return !review.settled && machineWide ? 'decline' : reviewOptions(review)[0]!.value;
 }

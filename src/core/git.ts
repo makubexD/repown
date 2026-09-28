@@ -34,6 +34,11 @@ export interface ConfigEntry {
   readonly value: string;
 }
 
+/** What HEAD points at. An unborn branch still has a name; a detached HEAD has only a commit. */
+export type CurrentBranch =
+  | { readonly kind: 'branch'; readonly name: string }
+  | { readonly kind: 'detached'; readonly hash: string };
+
 export class Git {
   readonly cwd: string;
 
@@ -59,9 +64,40 @@ export class Git {
     return succeeded(await this.exec(['rev-parse', '--git-dir']));
   }
 
+  /** No work tree to pin a commit identity in. A failed rev-parse is not bare. */
+  async isBare(): Promise<boolean> {
+    return output(await this.exec(['rev-parse', '--is-bare-repository'])) === 'true';
+  }
+
   /** The working tree root. Asked of git so a linked worktree resolves to itself. */
   async root(): Promise<string | null> {
     return output(await this.exec(['rev-parse', '--show-toplevel']));
+  }
+
+  /**
+   * `symbolic-ref` answers with the branch name even when that branch has no
+   * commits yet. Detached HEAD is not a symbolic ref, so the short hash names it.
+   */
+  async currentBranch(): Promise<CurrentBranch | null> {
+    const name = output(await this.exec(['symbolic-ref', '--short', '-q', 'HEAD']));
+    if (name) return { kind: 'branch', name };
+    const hash = output(await this.exec(['rev-parse', '--short', 'HEAD']));
+    return hash ? { kind: 'detached', hash } : null;
+  }
+
+  /** `git --version`, or null when git cannot be run. Unreadable is not a version. */
+  async version(): Promise<string | null> {
+    return output(await this.exec(['--version']));
+  }
+
+  /** The tracked ref as git reports it (`origin/main`), or null when none is set. */
+  async upstreamRef(): Promise<string | null> {
+    return output(await this.exec(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']));
+  }
+
+  /** Remote names, in the order git lists them. */
+  async remotes(): Promise<string[]> {
+    return lines(await this.exec(['remote']));
   }
 
   /**
@@ -93,6 +129,12 @@ export class Git {
   /** The value, or null when unset. Omit `scope` to read what git would EFFECTIVELY use. */
   async getConfig(key: string, scope?: ConfigScope): Promise<string | null> {
     return output(await this.exec(this.scoped(scope, ['--get', key])));
+  }
+
+  /** Effective boolean, or null when unset or not a bool. Omit `scope` for any-scope. */
+  async getBoolConfig(key: string, scope?: ConfigScope): Promise<boolean | null> {
+    const value = output(await this.exec(this.scoped(scope, ['--type=bool', '--get', key])));
+    return value === 'true' ? true : value === 'false' ? false : null;
   }
 
   async getAllConfig(key: string, scope?: ConfigScope): Promise<string[]> {
@@ -197,6 +239,17 @@ export class Git {
       object = next;
     }
     return err('tag chain longer than ' + MAX_TAG_CHAIN + ' starting at ' + sha);
+  }
+
+  /** Full hash of the oldest commit in `range`, or null when none or git cannot list them. */
+  async oldestIn(range: readonly string[]): Promise<string | null> {
+    const listed = lines(await this.exec(['rev-list', '--reverse', ...range]));
+    return listed[0] ?? null;
+  }
+
+  /** Short hash of the parent. Null when the commit is a root or cannot be read. */
+  async parentShort(sha: string): Promise<string | null> {
+    return output(await this.exec(['rev-parse', '--verify', '--short', sha + '^']));
   }
 
   /** Whether this clone has the commit at all -- a remote tip it never fetched is absent. */

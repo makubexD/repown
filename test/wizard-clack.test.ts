@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import { clackPrompter } from '../src/wizard/clack.ts';
-import { BACK, CANCEL, type Prompter, type Step } from '../src/wizard/engine.ts';
+import { BACK, CANCEL, type Drawn, type Prompter } from '../src/wizard/engine.ts';
 
 const ENTER = '\r';
 const DOWN = '\x1b[B';
@@ -17,8 +17,8 @@ function press(input: PassThrough, ...keys: string[]): void {
   setTimeout(() => { for (const key of keys) input.write(key); }, 50);
 }
 
-const guard = { id: 'guard', kind: 'confirm', message: 'Check every push?', hint: 'undo: repown guard off', flag: '--guard' } as Step<never>;
-const name = { id: 'name', kind: 'text', message: 'Commit name', hint: 'shown on every commit', flag: '--name' } as Step<never>;
+const guard = { id: 'guard', kind: 'confirm', message: 'Check every push?', hint: 'undo: repown guard off', flag: '--guard' } as Drawn;
+const name = { id: 'name', kind: 'text', message: 'Commit name', hint: 'shown on every commit', flag: '--name' } as Drawn;
 
 test('after a cancel the closing line follows clack\'s own last gutter line, not a second one', () => {
   const output = new PassThrough();

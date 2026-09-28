@@ -1,7 +1,8 @@
-// A guided first setup of this clone, for someone new to repown: which account it
-// belongs to (recorded once if new), pushes to an organisation, the guard, and gh
-// as the credential helper. It asks, shows the commands its answers stand for, and
-// runs exactly those -- `accounts add`, `use`, `guard on`, `fix` -- so anything it
+// A guided first setup of this clone, for someone new to repown. The first question is
+// how it should work: Recommended fills in the guard, upstream and a gh switch, and
+// still asks when origin belongs to someone else. Step by step asks each one.
+// It shows the commands its answers stand for, and runs exactly those --
+// `accounts add`, `use`, `guard on`, `fix` -- so anything it
 // does can be done, or scripted, without it (src/wizard/setup-run.ts).
 
 import { providers } from '../core/hosts/index.ts';
@@ -19,7 +20,9 @@ export default {
     { name: 'gh', kind: 'boolean', help: "also switch the GitHub CLI's active account (use --gh)" },
     { name: 'allow-owner', kind: 'string', help: "allow pushes to origin's owner: an organisation, or an account you collaborate with (repown.allowOwner)" },
     { name: 'guard', kind: 'boolean', help: 'turn the push guard on (guard on)' },
+    { name: 'auto-upstream', kind: 'boolean', help: 'push branches without -u: the first push sets the upstream, in this clone only (push.autoSetupRemote)' },
     { name: 'fix', kind: 'boolean', help: 'stop gh being the credential helper, where it is (fix --yes)' },
+    { name: 'step-by-step', kind: 'boolean', help: 'ask every question instead of the recommended answers (not with --no-input)' },
     { name: 'no-input', kind: 'boolean', help: 'ask nothing: a question not given as a flag is No; exit 2 if the account is incomplete' },
   ],
   examples: ['repown setup', 'repown setup octocat --guard --no-input'],

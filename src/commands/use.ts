@@ -13,16 +13,19 @@
 // never tracks -- which is what keeps a name or address out of a public repo, and
 // also why this is per clone: a second machine, or a re-clone, runs it again.
 //
-// You do not switch this afterwards, and you do not need to. Changing which
-// account the GitHub CLI acts as is `gh auth switch`, which after `repown fix` has
-// no effect on git at all -- `--gh` does both at once for when you want them to
-// agree.
+// You do not switch this afterwards, and you do not need to. `--gh` keeps the
+// GitHub CLI on the same account: `gh auth switch` when gh already lists it,
+// and, in a terminal, `gh auth login` when it does not. After `repown fix`
+// neither changes which account git pushes as.
 
-import { inspectRepo, inspectAuth, type RepoState } from '../core/inspect.ts';
+import { inspectRepo, inspectAuth, type AuthState, type RepoState } from '../core/inspect.ts';
 import { pinIdentity, type PinOutcome } from '../core/identity.ts';
 import { lookupAccount, saveAccount, type Account } from '../core/registry.ts';
-import { ghSwitch } from '../core/credential/gh.ts';
+import {
+  ghSwitch, ghLogin, readGhLoginVersion, type GhLoginError, type GhLoginVersion,
+} from '../core/credential/gh.ts';
 import { allowedOwners, shellWord } from '../core/guard/check.ts';
+import { readUnpushed, unpushedLines } from '../core/unpushed.ts';
 import { ask, interactive } from '../ui/prompt.ts';
 import { flagString, flagBool, gitFor, type Args } from '../ui/args.ts';
 import type { Command } from '../ui/command.ts';
@@ -35,7 +38,7 @@ export default {
   summary: 'pin this clone to an account (repown use <account>)',
   positionals: { min: 1, max: 1, label: '<account>' },
   options: [
-    { name: 'gh', kind: 'boolean', help: "also switch the GitHub CLI's active account to match" },
+    { name: 'gh', kind: 'boolean', help: "also switch gh's active account, or sign the account in to gh when needed (in a terminal)" },
     { name: 'name', kind: 'string', help: 'the commit author name (given with --email, skips the registry and the prompt)' },
     { name: 'email', kind: 'string', help: 'the commit author email (given with --name, skips the registry and the prompt)' },
   ],
@@ -53,8 +56,8 @@ export default {
     if (!reportPinned(await pinIdentity(git, { ...values, account }, repo.credentialKeys))) return 1;
     out.pass('identity', values.name + ' <' + values.email + '>  push-as:' + account);
 
-    if (flagBool(args, 'gh')) await switchCli(account);
-    await reportConcerns(account, repo);
+    if (flagBool(args, 'gh')) await applyGh(account, repo);
+    await reportConcerns(account, repo, values.email);
     return 0;
   },
 } satisfies Command;
@@ -125,6 +128,127 @@ async function askProfile(defaults: { name: string; email: string | undefined },
   return { name: name.value, email: email.value, host };
 }
 
+export type GhAction = 'switch' | 'login' | 'advise' | 'none';
+
+/**
+ * What `--gh` should do. An account gh already lists is a switch even when it
+ * is already active: `switchCli` always runs `gh auth switch`. `none` means gh
+ * could not be queried, and the caller keeps that same switch attempt.
+ */
+export function ghAction(account: string, auth: AuthState, interactive: boolean): GhAction {
+  if (!auth.gh.ok) return 'none';
+  if (knownToGh(account, auth)) return 'switch';
+  return interactive ? 'login' : 'advise';
+}
+
+function knownToGh(account: string, auth: AuthState): boolean {
+  if (!auth.gh.ok) return false;
+  const wanted = account.toLowerCase();
+  return auth.gh.value.accounts.some((item) => item.login.toLowerCase() === wanted);
+}
+
+const ASK = 'When gh asks "Authenticate Git with your GitHub credentials?", ';
+
+const ANSWER_NO = ASK + 'type n and press Enter. Enter alone means Yes, and Yes makes gh ' +
+  'answer git\'s sign-in requests for every repository.';
+
+const PIN_KEPT = 'This clone is already pinned. Cancelling the browser (Ctrl-C) only skips the gh sign-in.';
+
+/** What to say about "Authenticate Git with your GitHub credentials?". Null when gh will not ask. */
+export function ghCredentialAnswer(auth: AuthState): string | null {
+  if (auth.ghIsHelper) return null;
+  if (auth.helper === null) return ANSWER_NO;
+  return storesIn(auth.helperIsGcm, auth.helper);
+}
+
+function storesIn(gcm: boolean, helper: string): string {
+  const where = gcm ? 'Git Credential Manager' : helper;
+  return ASK + 'press Enter (Yes): it also stores this sign-in in ' + where + ', so the first push won\'t ask again.';
+}
+
+async function applyGh(account: string, repo: RepoState): Promise<void> {
+  const auth = await inspectAuth(repo.git, repo.originUrl ?? undefined);
+  const action = ghAction(account, auth, interactive());
+  if (action === 'advise') return notSignedIn(account);
+  if (action === 'login') return signInToGh(account, repo, auth);
+  await switchCli(account);
+}
+
+function notSignedIn(account: string): void {
+  out.warn('gh', account + ' isn\'t signed in to gh');
+  out.detail('fix: gh auth login, then repown use ' + account + ' --gh');
+}
+
+async function signInToGh(account: string, repo: RepoState, before: AuthState): Promise<void> {
+  const verdict = await readGhLoginVersion();
+  if (verdict !== 'ready') return oldGh(account, verdict);
+  announceLogin(account, before);
+  const logged = await ghLogin('github.com');
+  if (!logged.ok) return loginFailed(logged.error);
+  await reportLogin(account, repo, before);
+}
+
+function oldGh(account: string, verdict: Exclude<GhLoginVersion, 'ready'>): void {
+  out.warn('gh', versionReason(verdict));
+  out.detail('fix: upgrade gh to 2.40.0 or newer, then repown use ' + account + ' --gh');
+}
+
+function versionReason(verdict: Exclude<GhLoginVersion, 'ready'>): string {
+  if (verdict === 'old') return 'this gh replaces an account on login instead of adding one';
+  return 'gh\'s version could not be read, so sign-in was skipped';
+}
+
+export function announceLogin(account: string, auth: AuthState): void {
+  out.note('Your browser will open. Sign in to GitHub as ' + account + ' there.');
+  out.detail('a private window helps if the browser is signed in as someone else.');
+  out.note(PIN_KEPT);
+  const answer = ghCredentialAnswer(auth);
+  if (answer !== null) out.note(answer);
+}
+
+function loginFailed(failure: GhLoginError): void {
+  if (failure.kind === 'cancelled') { out.warn('gh', 'gh sign-in cancelled'); return; }
+  out.warn('gh', failure.reason);
+  out.detail('fix: gh auth login');
+}
+
+async function reportLogin(account: string, repo: RepoState, before: AuthState): Promise<void> {
+  const after = await inspectAuth(repo.git, repo.originUrl ?? undefined);
+  reportActive(account, after);
+  if (!before.ghIsHelper && after.ghIsHelper) helperTakenOver();
+}
+
+export function reportActive(account: string, auth: AuthState): void {
+  if (!auth.gh.ok) return unreadActive(auth.gh.error);
+  const who = auth.gh.value.active;
+  if (who !== null && who.toLowerCase() === account.toLowerCase()) {
+    out.pass('gh', 'signed in as ' + account + ', now gh\'s active account');
+    return;
+  }
+  if (who === null) return noActive();
+  otherActive(account, who);
+}
+
+function unreadActive(error: string): void {
+  out.warn('gh', 'gh signed in, but who is active could not be read (' + error + ')');
+  out.detail('check it yourself: gh auth status');
+}
+
+function noActive(): void {
+  out.warn('gh', 'gh signed in, but no account is active');
+  out.detail('check it yourself: gh auth status');
+}
+
+function otherActive(account: string, who: string): void {
+  out.warn('gh', 'gh signed in as "' + who + '", not ' + account);
+  out.detail('sign out of github.com in the browser (or use a private window), then: repown use ' + account + ' --gh');
+}
+
+function helperTakenOver(): void {
+  out.warn('gh', 'gh now answers git\'s sign-in requests, so clones of your other accounts get password prompts');
+  out.detail('fix: repown fix');
+}
+
 async function switchCli(account: string): Promise<void> {
   const switched = await ghSwitch(account);
   if (switched.ok) out.pass('gh', 'active account switched to ' + account);
@@ -132,7 +256,8 @@ async function switchCli(account: string): Promise<void> {
 }
 
 /** Everything that is now true but not yet right. Warnings, never refusals. */
-async function reportConcerns(account: string, repo: RepoState): Promise<void> {
+async function reportConcerns(account: string, repo: RepoState, email: string): Promise<void> {
+  await reportUnpushed(repo, email);
   if (repo.credentialKeys.length === 0 && repo.url) {
     out.warn('host', repo.provider.label + ' credentials are not pinned by repown.');
     out.detail('commits are pinned and the guard still runs; only credential');
@@ -144,6 +269,14 @@ async function reportConcerns(account: string, repo: RepoState): Promise<void> {
     out.line();
     out.line(NEXT_GUARD);
   }
+}
+
+/** A warning only. Rewriting the commits stays the owner's call (ADR-013). */
+async function reportUnpushed(repo: RepoState, email: string): Promise<void> {
+  const [first, ...rest] = unpushedLines(await readUnpushed(repo.git), email);
+  if (!first) return;
+  out.warn('commits', first);
+  for (const line of rest) out.detail(line);
 }
 
 async function ownerConcern(account: string, repo: RepoState): Promise<void> {

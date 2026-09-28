@@ -7,7 +7,7 @@
 // so the commands that need it ask for it separately -- and `repown scan`, which
 // walks many repositories, never asks for it at all.
 
-import { Git, type ConfigEntry } from './git.ts';
+import { Git, type ConfigEntry, type CurrentBranch } from './git.ts';
 import { parseGitUrl, type GitUrl } from './url.ts';
 import { providerFor, type HostProvider } from './hosts/index.ts';
 import { readIdentity, type RepoIdentity } from './identity.ts';
@@ -22,6 +22,8 @@ export interface RepoState {
   readonly git: Git;
   readonly isRepo: boolean;
   readonly root: string | null;
+  /** Branch HEAD names, or the short hash when detached. Null outside a repository. */
+  readonly branch: CurrentBranch | null;
   readonly originUrl: string | null;
   readonly url: GitUrl | null;
   readonly provider: HostProvider;
@@ -57,8 +59,9 @@ export async function inspectRepo(git: Git): Promise<RepoState> {
   const provider = providerFor(url);
   const credentialKeys = url ? provider.credentialKeys(url) : [];
 
-  const [root, hook, identity, guard, helper] = await Promise.all([
+  const [root, branch, hook, identity, guard, helper] = await Promise.all([
     isRepo ? git.root() : Promise.resolve(null),
+    isRepo ? git.currentBranch() : Promise.resolve(null),
     isRepo ? hookLocation(git) : Promise.resolve(null),
     readIdentity(git, credentialKeys[0] ?? null),
     isRepo ? guardState(git) : Promise.resolve<GuardState>('off'),
@@ -66,7 +69,7 @@ export async function inspectRepo(git: Git): Promise<RepoState> {
   ]);
 
   return {
-    git, isRepo, root, originUrl, url, provider,
+    git, isRepo, root, branch, originUrl, url, provider,
     owner: url ? provider.ownerOf(url) : null,
     identity, credentialKeys, guard, hook, helper,
   };

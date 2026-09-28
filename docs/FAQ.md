@@ -41,9 +41,24 @@ committed ([card 9](HOW-IT-WORKS.md#9-a-teammate-without-repown)).
 is a safety net, not a lock
 ([SECURITY.md](../SECURITY.md#what-repown-protects-and-what-it-doesnt)).
 
-**I ran `repown setup` again and it said "already set up". Is that right?** Yes: the clone
-already uses that account exactly as recorded. Choose **Done**, or **Apply the same
-settings again** to re-run `repown use` ([card 13](HOW-IT-WORKS.md#13-guided-setup)).
+**The guard refuses commits I made before pinning.** They still carry the address they
+were made with. `repown use` warns, and `repown setup`'s review notes it, when the
+current branch has commits no remote has by another address. Re-author it, or them:
+`git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"`
+(`git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when that
+commit has no parent), or pin that address. `<base>` is the short hash of the parent
+of the oldest of those commits. Nothing here rewrites history
+([card 3](HOW-IT-WORKS.md#3-pin-a-clone), [card 8](HOW-IT-WORKS.md#8-push-refused-and-the-fix)).
+
+**I ran `repown setup` again and it said "already set up". Is that right?** Yes, when the
+clone already uses that account exactly as recorded and this run has nothing left to
+write. It opens on that screen before any question. **Done** changes nothing. **Use
+another account** continues at the account question. When gh acts as someone else, a
+third option signs that account in to gh (`repown use <account> --gh`), or makes it gh's
+active account when gh already lists it. A pin that would change nothing is left out, so
+there is nothing to apply again. Bare `repown` in a terminal opens setup too, even when
+the clone is already pinned. `repown status` shows the settings without asking
+([card 13](HOW-IT-WORKS.md#13-guided-setup)).
 
 **Can I run it in CI or a script?** Yes, with flags instead of questions:
 [Scripts and CI](CONFIGURATION.md#scripts-and-ci).
@@ -56,6 +71,9 @@ from that tool's hook instead ([card 10](HOW-IT-WORKS.md#10-other-hook-tools)).
 
 **What does it send over the network?** Nothing of its own, and no telemetry. It runs
 `git` and `gh`: gh may contact GitHub when `repown`, `repown doctor`, `repown setup`,
-`repown use` or `repown fix` asks for its accounts, and `use --gh` switches its account. For an account that isn't recorded yet, on a terminal, `repown setup`,
+`repown use` or `repown fix` asks for its accounts, and `use --gh` switches its account.
+`repown use --gh` may run `gh auth login`, in a terminal only. For an account that isn't
+recorded yet, on a terminal, `repown setup`,
 `repown use` or `repown accounts add` (without both `--name` and `--email`) asks gh for
-its public profile to suggest a name and noreply address.
+its public profile to suggest a name and noreply address. `repown setup` may also ask
+GitHub whether origin's owner is a user or an organisation.

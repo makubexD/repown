@@ -60,6 +60,14 @@ export interface RepoIdentity {
   readonly inheritedName: string | null;
   readonly inheritedEmail: string | null;
   readonly inheritedAccount: string | null;
+  /**
+   * What an unpinned clone inherits. When this clone sets neither local
+   * user.name nor local user.email, these are the effective values
+   * (inheritedName and inheritedEmail, including system config and includeIf):
+   * exactly what the identity FAIL quotes. Otherwise global, falling back to system.
+   */
+  readonly machineName: string | null;
+  readonly machineEmail: string | null;
 }
 
 export function isPinned(identity: RepoIdentity): boolean {
@@ -77,13 +85,27 @@ export async function readIdentity(git: Git, credentialKey: string | null): Prom
     git.getConfig(NAME_KEY),
     git.getConfig(EMAIL_KEY),
   ]);
+  const machine = name || email
+    ? await machineIdentity(git)
+    : { name: inheritedName, email: inheritedEmail };
   const account = credentialKey ? await git.getConfig(credentialKey, 'local') : null;
   const inheritedAccount = credentialKey ? await git.getConfig(credentialKey) : null;
-
   return {
     name, email, account, owner, useConfigOnly,
     inheritedName, inheritedEmail, inheritedAccount,
+    machineName: machine.name, machineEmail: machine.email,
   };
+}
+
+/** The identity outside this clone, for a clone that sets its own: global, then system. */
+async function machineIdentity(git: Git): Promise<{ readonly name: string | null; readonly email: string | null }> {
+  const [name, email] = await Promise.all([configOrSystem(git, NAME_KEY), configOrSystem(git, EMAIL_KEY)]);
+  return { name, email };
+}
+
+async function configOrSystem(git: Git, key: string): Promise<string | null> {
+  const global = await git.getConfig(key, 'global');
+  return global ?? await git.getConfig(key, 'system');
 }
 
 export interface PinOutcome {

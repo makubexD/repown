@@ -28,6 +28,7 @@ describe('repown setup, played with key presses', () => {
     assert.match(screen, /This clone is already set up/);
     assert.match(screen, /Nothing needs to change/);
     assert.match(screen, /Apply the same settings again/);
+    assert.match(screen.replace(/│/g, ' ').replace(/\s+/g, ' '), /See it any time: repown status \(this clone\), repown doctor \(this machine\)/);
   });
 
   test('Recommended on a fully set-up clone still shows the settled screen', async () => {
@@ -46,7 +47,7 @@ describe('repown setup, played with key presses', () => {
     const { outcome, screen } = await play(ctx, [[enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     assert.doesNotMatch(screen, /This clone is already set up/);
-    assert.match(screen, /Push new branches without -u \(this clone only\)/);
+    assert.match(screen.replace(/│/g, ' ').replace(/\s+/g, ' '), /Push branches without -u: the first push sets the upstream \(this clone only\)/);
     assert.match(screen, /git config --local push\.autoSetupRemote true/);
   });
 
@@ -145,12 +146,12 @@ describe('repown setup, played with key presses', () => {
     assert.match(plain, /asks every question, and explains each change before making it/);
     assert.match(plain, /This repository belongs to "octo-org"\. Let this clone push to it\?/);
     assert.doesNotMatch(screen, /Turn on the push guard\?/);
-    assert.doesNotMatch(screen, /Push new branches without -u\?/);
+    assert.doesNotMatch(screen, /Push branches without -u\?/);
     assert.doesNotMatch(screen, /Also make this account gh's active account\?/);
     assert.match(screen, /Let this clone push to octo-org's repositories/);
     assert.match(screen, /make it gh's active account/);
     assert.match(screen, /Turn on the push guard: each push is checked first/);
-    assert.match(screen, /Push new branches without -u \(this clone only\)/);
+    assert.match(screen.replace(/│/g, ' ').replace(/\s+/g, ' '), /Push branches without -u: the first push sets the upstream \(this clone only\)/);
     assert.match(screen, /git config --local push\.autoSetupRemote true/);
   });
 
@@ -314,15 +315,15 @@ describe('repown setup, played with key presses', () => {
     assert.doesNotMatch(plain, /push\.autoSetupRemote = true/);
   });
 
-  test('pushing a new branch without -u is one question, default Yes, and a review step', async () => {
+  test('pushing a branch without an upstream is one question, default Yes, and a review step', async () => {
     const ctx = setupContext({ upstream: { supported: true, enabled: null, branch: 'main' } });
     const { outcome, screen } = await play(ctx, [[down, enter], [enter], [enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
-    const plain = screen.replace(/\n│\s*/g, ' ');
-    assert.ok(screen.indexOf('Turn on the push guard?') < screen.indexOf('Push new branches without -u?'), screen);
-    assert.match(plain, /Push new branches without -u\?/);
-    assert.match(plain, /sets push\.autoSetupRemote in this clone only, so the first git push of a new branch creates it on origin; the guard still checks it/);
-    assert.match(plain, /Push new branches without -u \(this clone only\)/);
+    const plain = screen.replace(/│/g, ' ').replace(/\s+/g, ' ');
+    assert.ok(screen.indexOf('Turn on the push guard?') < screen.indexOf('Push branches without -u?'), screen);
+    assert.match(plain, /Push branches without -u\?/);
+    assert.match(plain, /sets push\.autoSetupRemote in this clone only, so the first push of a branch without an upstream creates it on origin; the guard still checks it/);
+    assert.match(plain, /Push branches without -u: the first push sets the upstream \(this clone only\)/);
     assert.match(plain, /git config --local push\.autoSetupRemote true/);
   });
 
@@ -333,9 +334,9 @@ describe('repown setup, played with key presses', () => {
     });
     const { outcome, screen } = await play(ctx, [[down, enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
-    assert.doesNotMatch(screen, /Push new branches without -u/);
-    const plain = screen.replace(/\n│\s*/g, ' ');
-    assert.match(plain, /the first push of a new branch needs: git push -u origin main/);
+    assert.doesNotMatch(screen, /Push branches without -u/);
+    const plain = screen.replace(/│/g, ' ').replace(/\s+/g, ' ');
+    assert.match(plain, /the first push of a branch without an upstream needs: git push -u origin main/);
   });
 
   test('D11 a recorded owner is preselected over the account recorded first', async () => {

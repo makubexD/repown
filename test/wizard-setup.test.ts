@@ -217,12 +217,14 @@ describe('setup flow', () => {
   test('when gh stays someone else, the review says so and names ghAdvice\'s fix', () => {
     const other = ok({ accounts: [{ login: 'octo-work', active: true }], active: 'octo-work' });
     const declined = setupFlow(context({ gh: other })).review({ account: 'octocat', gh: false, guard: false }, context({ gh: other }));
-    assert.match(declined.notes.join('\n'), /gh still acts as octo-work, so gh pr create here would act as that account \(git pushes are unaffected\)\. If you use gh here, later: fix: repown use octocat --gh {3}\(signs octocat in to gh\)/);
+    assert.match(declined.notes.join('\n'), /gh still acts as octo-work, so gh pr create here would act as that account \(git pushes are unaffected\)\. If you use gh here, later: repown use octocat --gh {3}\(signs octocat in to gh\)/);
+    assert.doesNotMatch(declined.notes.join('\n'), /later: fix:/);
     const accepted = setupFlow(context({ gh: other })).review({ account: 'octocat', gh: true, guard: false }, context({ gh: other }));
     assert.equal(accepted.notes.some((line) => /gh still acts/.test(line)), false);
     const known = ok({ accounts: [{ login: 'octocat', active: false }, { login: 'octo-work', active: true }], active: 'octo-work' });
     const switched = setupFlow(context({ gh: known })).review({ account: 'octocat', guard: true }, context({ gh: known }));
-    assert.match(switched.notes.join('\n'), /later: fix: gh auth switch -u octocat/);
+    assert.match(switched.notes.join('\n'), /later: gh auth switch -u octocat/);
+    assert.doesNotMatch(switched.notes.join('\n'), /later: fix:/);
     const elsewhere = context({ gh: other, host: 'azdo', credentialPinned: false });
     const hidden = setupFlow(elsewhere).review({ account: 'octocat', guard: false }, elsewhere);
     assert.match(hidden.notes.join('\n'), /gh still acts as octo-work/);
@@ -356,23 +358,24 @@ describe('setup flow', () => {
     assert.equal(reviewOf({ upstream: { supported: true, enabled: null, branch: 'main' } }).settled, true,
       'leaving the upstream question unanswered is still nothing this run must do');
     assert.match(reviewOf({ upstream: { supported: true, enabled: null, branch: 'main' } }).notes.join('\n'),
-      /optional: push new branches without -u: repown setup --auto-upstream/);
+      /optional: push branches without -u: repown setup --auto-upstream/);
     assert.equal(reviewOf({ upstream: { supported: true, enabled: false, branch: 'main' } }).settled, true);
-    assert.doesNotMatch(reviewOf({}).notes.join('\n'), /optional: push new branches/);
+    assert.doesNotMatch(reviewOf({}).notes.join('\n'), /optional: push branches without -u/);
     assert.equal(reviewOf({ upstream: { supported: false, enabled: null, branch: 'main' } }).settled, true,
       'old git is not offered the question');
     assert.match(reviewOf({}).title, /already set up/);
+    assert.match(reviewOf({}).notes.join('\n'), /See it any time: repown status \(this clone\), repown doctor \(this machine\)/);
   });
 
-  test('S8 asks to push new branches without -u and plans the local git config after the guard', async () => {
+  test('S8 asks to push branches without -u and plans the local git config after the guard', async () => {
     const upstream = { supported: true, enabled: null, branch: 'main' };
     const ctx = context({ upstream });
     const step = stepOf(ctx, 'upstream');
     assert.equal(step.kind, 'confirm');
     assert.equal(step.flag, '--auto-upstream');
-    assert.equal(wording(step.message, {}, ctx), 'Push new branches without -u?');
+    assert.equal(wording(step.message, {}, ctx), 'Push branches without -u?');
     assert.match(wording(step.hint, {}, ctx), /sets push\.autoSetupRemote in this clone only/);
-    assert.match(wording(step.hint, {}, ctx), /first git push of a new branch creates it on origin/);
+    assert.match(wording(step.hint, {}, ctx), /first push of a branch without an upstream creates it on origin/);
     assert.match(wording(step.hint, {}, ctx), /the guard still checks it/);
     assert.equal(await step.initial?.({}, ctx), true);
     assert.equal(step.when?.({}, ctx), true);
@@ -384,7 +387,7 @@ describe('setup flow', () => {
       ['use', '--', 'octocat'], ['guard', 'on'],
       ['git', 'config', '--local', 'push.autoSetupRemote', 'true'],
     ]);
-    assert.equal(planned.at(-1)!.what, 'Push new branches without -u (this clone only)');
+    assert.equal(planned.at(-1)!.what, 'Push branches without -u: the first push sets the upstream (this clone only)');
     assert.equal(formatCommand(planned.at(-1)!.argv), 'git config --local push.autoSetupRemote true');
     const elsewhere = context({ upstream, cwd: '/work/project', owner: 'octo-org' });
     const org = await answer(elsewhere, [
@@ -411,14 +414,14 @@ describe('setup flow', () => {
     await wizard(setupFlow(feature), feature, { mode: 'step' }, prompter);
     assert.deepEqual(prompter.asked, ['account', 'guard']);
     const review = setupFlow(feature).review({ account: 'octocat', guard: true }, feature);
-    assert.match(review.notes.join('\n'), /the first push of a new branch needs: git push -u origin feature/);
+    assert.match(review.notes.join('\n'), /the first push of a branch without an upstream needs: git push -u origin feature/);
     const detached = context({
       pinned: 'octocat', pinIntact: true, guard: 'on',
       upstream: { supported: false, enabled: null, branch: null },
     });
     const quiet = setupFlow(detached).review({ account: 'octocat' }, detached);
     assert.equal(quiet.settled, true);
-    assert.match(quiet.notes.join('\n'), /the first push of a new branch needs: git push -u origin <branch>/);
+    assert.match(quiet.notes.join('\n'), /the first push of a branch without an upstream needs: git push -u origin <branch>/);
     const forced = planCommands({ account: 'octocat', upstream: true, guard: false }, feature);
     assert.ok(!forced.some((command) => command.argv.includes('push.autoSetupRemote')));
   });
@@ -565,10 +568,10 @@ describe('setup flow', () => {
     });
     const quiet = setupFlow(ctx).review({ account: 'octocat', upstream: false }, ctx);
     assert.equal(quiet.settled, true, 'No to upstream is still nothing this run must do');
-    assert.match(quiet.notes.join('\n'), /optional: push new branches without -u: repown setup --auto-upstream/);
+    assert.match(quiet.notes.join('\n'), /optional: push branches without -u: repown setup --auto-upstream/);
     const already = context({ pinned: 'octocat', pinIntact: true, guard: 'on' });
     const done = setupFlow(already).review({ account: 'octocat' }, already);
-    assert.doesNotMatch(done.notes.join('\n'), /optional: push new branches/);
+    assert.doesNotMatch(done.notes.join('\n'), /optional: push branches without -u/);
     const prompter = scripted([['review', 'decline']]);
     await wizard(setupFlow(ctx), ctx, { account: 'octocat', mode: 'recommended' }, prompter);
     assert.deepEqual(prompter.asked, []);
@@ -1199,7 +1202,7 @@ describe('repown setup, without a terminal', () => {
     assert.match(run.stderr, /step 1 of 2: Pin this clone to octocat/);
     assert.match(run.stderr, /step 2 of 2: Turn on the push guard/);
     assert.match(run.stderr, /done: this clone is set up for octocat/);
-    assert.match(run.stderr, /check it any time: repown/);
+    assert.match(run.stderr, /check it any time: repown status \(this clone\), repown doctor \(this machine\)/);
     assert.doesNotMatch(run.stdout, /done:|check it any time/, 'setup\'s own lines stay off stdout');
     assert.match(run.stderr, /\n\n {7}step 2 of 2/, 'a blank line between steps');
     assert.doesNotMatch(run.stdout, /Next: repown guard on/, 'use\'s hint is left out when the next step turns the guard on');
@@ -1300,6 +1303,7 @@ describe('repown setup, without a terminal', () => {
     assert.equal(run.status, 0);
     assert.match(run.stdout, /--no-input/);
     assert.match(run.stdout, /--auto-upstream/);
+    assert.match(run.stdout, /push branches without -u: the first push sets the upstream, in this clone only \(push\.autoSetupRemote\)/);
     assert.match(run.stdout, /--step-by-step/);
     assert.doesNotMatch(localConfig(at), /repown/);
   });
@@ -1328,7 +1332,8 @@ describe('repown setup, without a terminal', () => {
     assert.equal(at.box.git('config', '--local', '--get', 'push.autoSetupRemote'), 'true');
     assert.doesNotMatch(readFileSync(at.box.globalConfig, 'utf8'), /autoSetupRemote/);
     const guardAt = run.stderr.indexOf('Turn on the push guard');
-    const upAt = run.stderr.indexOf('Push new branches without -u (this clone only)');
+    const upAt = run.stderr.indexOf('Push branches without -u: the first push sets the upstream (this clone only)');
+    assert.match(run.stdout, /upstream +branches without an upstream push without -u in this clone/);
     assert.ok(guardAt >= 0 && upAt > guardAt, run.stderr);
     assert.match(run.stderr, /git config --local push\.autoSetupRemote true/);
     assert.equal(repown(['setup', 'octocat', '--auto-upstream', '--no-input'], at.box.dir).status, 0);

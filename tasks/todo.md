@@ -1,10 +1,10 @@
 # Setup audit fixes
 
-Status: Task 0 done (plan committed); next: Tasks 1, 2, 6.
+Status: Tasks 0, 1, 2, 6 done; next: Task 3.
 
 - [x] 0. Plan: SPEC.md + tasks/todo.md
-- [ ] 1. The stale "check it any time" hint and the doubled "later: fix:" (A1, B4). Tests: wizard-setup, wizard-screens. Files: src/wizard/setup-run.ts, setup-flow.ts. Docs: HOW-IT-WORKS card 13
-- [ ] 2. Auto-upstream wording: branches, not "new branches" (B3). Tests: wizard-setup, wizard-screens. Files: setup-flow.ts, setup-run.ts, setup option help. Docs: README, HOW-IT-WORKS, CONFIGURATION, ADR-020 untouched
+- [x] 1. The stale "check it any time" hint and the doubled "later: fix:" (A1, B4). Tests: wizard-setup, wizard-screens. Files: src/wizard/setup-run.ts, setup-flow.ts. Docs: HOW-IT-WORKS card 13
+- [x] 2. Auto-upstream wording: branches, not "new branches" (B3). Tests: wizard-setup, wizard-screens. Files: setup-flow.ts, setup-run.ts, setup option help. Docs: README, HOW-IT-WORKS, CONFIGURATION, ADR-020 untouched
 - [ ] 3. No no-op re-pin; a "no stored credential yet" note (A2). Tests: wizard-screens (pinned intact + upstream unset = 1 step). Files: setup-flow.ts, setup-run.ts. Docs: ADR-022 (new), card 13, CHANGELOG
 - [ ] 4. Settled screen first, with the What now? options and the upstream line (C6, B5). Tests: wizard-screens, wizard-setup. Files: setup-flow.ts, engine.ts, review-text.ts. Docs: ADR-022, card 13, README transcript, CHANGELOG
 - [ ] 5. gh asked once and noted once (C7). Tests: wizard-setup, wizard-screens. Files: setup-flow.ts, setup-run.ts. Docs: ADR-022, card 13

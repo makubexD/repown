@@ -249,7 +249,7 @@ function addressDetail(answers: Answers, ctx: SetupContext): string | undefined 
   return 'not this machine\'s default address (' + printable(email) + '), unless this account uses it';
 }
 
-const UPSTREAM_HINT = 'sets push.autoSetupRemote in this clone only, so the first git push of a new branch ' +
+const UPSTREAM_HINT = 'sets push.autoSetupRemote in this clone only, so the first push of a branch without an upstream ' +
   'creates it on origin; the guard still checks it';
 
 /** Asked only when git has the key and the effective value is not already true. */
@@ -260,7 +260,7 @@ function offersUpstream(ctx: SetupContext): boolean {
 function upstreamStep(ctx: SetupContext): Step<SetupContext> {
   return {
     id: 'upstream', kind: 'confirm', flag: '--auto-upstream', initial: () => true,
-    message: 'Push new branches without -u?', hint: UPSTREAM_HINT,
+    message: 'Push branches without -u?', hint: UPSTREAM_HINT,
     when: () => offersUpstream(ctx), auto: isRecommended,
   };
 }
@@ -479,7 +479,7 @@ function whatOf(argv: readonly string[], answers: Answers, ctx: SetupContext): s
 }
 
 function gitWhat(argv: readonly string[], ctx: SetupContext): string {
-  if (argv.includes('push.autoSetupRemote')) return 'Push new branches without -u (this clone only)';
+  if (argv.includes('push.autoSetupRemote')) return 'Push branches without -u: the first push sets the upstream (this clone only)';
   return 'Let this clone push to ' + ctx.owner + '\'s repositories';
 }
 
@@ -551,14 +551,14 @@ function review(answers: Answers, ctx: SetupContext): Review {
 
 function settledNotes(answers: Answers, ctx: SetupContext): string[] {
   const lines = ['Checked: the settings git uses here are ' + printable(accountOf(answers)) + '\'s, as recorded.',
-    'See it any time: repown (this clone), repown doctor (this machine)'];
+    'See it any time: repown status (this clone), repown doctor (this machine)'];
   const offer = upstreamOffer(ctx);
   return offer ? [...lines, offer] : lines;
 }
 
 function upstreamOffer(ctx: SetupContext): string | null {
   if (!offersUpstream(ctx)) return null;
-  return 'optional: push new branches without -u: repown setup --auto-upstream';
+  return 'optional: push branches without -u: repown setup --auto-upstream';
 }
 
 function noted(lines: readonly string[], answers: Answers, ctx: SetupContext): string[] {
@@ -582,7 +582,7 @@ function unpushedNote(answers: Answers, ctx: SetupContext): string[] {
 function upstreamNote(ctx: SetupContext): string | null {
   if (ctx.upstream.supported) return null;
   const branch = ctx.upstream.branch ?? '<branch>';
-  return 'the first push of a new branch needs: git push -u origin ' + branch;
+  return 'the first push of a branch without an upstream needs: git push -u origin ' + branch;
 }
 
 /** gh still acts as someone else, and this run will not change that. */
@@ -591,12 +591,17 @@ function ghNote(answers: Answers, ctx: SetupContext): string[] {
   return line ? [printable(line)] : [];
 }
 
+/** Drop the leading "fix: " on ghAdvice's remedy, so a sentence can name it itself. */
+export function dropFixPrefix(detail: string): string {
+  return detail.replace(/^fix: /, '');
+}
+
 function ghLeft(answers: Answers, ctx: SetupContext): string | null {
   const gh = ctx.gh;
   if (answers['gh'] === true || !gh?.ok || !gh.value.active) return null;
   const advice = ghAdvice(accountOf(answers), { ghPresent: true, gh });
   if (!advice) return null;
-  return 'gh still acts as ' + gh.value.active + ', so gh pr create here would act as that account (git pushes are unaffected). If you use gh here, later: ' + advice.detail;
+  return 'gh still acts as ' + gh.value.active + ', so gh pr create here would act as that account (git pushes are unaffected). If you use gh here, later: ' + dropFixPrefix(advice.detail);
 }
 
 /**

@@ -624,11 +624,11 @@ never suggested.
 | Sign in to gh as that account too? (default No) | the same, except gh does not know the account. Yes opens a browser; gh then acts as that account in every terminal. The line under it names gh's active account, or says gh isn't signed in | `use --gh` |
 | This repository belongs to "octo-org". Let this clone push to it? (default Yes) | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
 | Turn on the push guard? (default Yes) | the guard is off, no other tool owns the hook, and `core.hooksPath` doesn't redirect hooks | `guard on` |
-| Push new branches without -u? (default Yes) | git is 2.37.0 or newer, and `push.autoSetupRemote` is not already true in any scope. The flag is `--auto-upstream`. On older git, or when `git --version` cannot be read, this is not asked and the review notes `git push -u origin <branch>` (the current branch, or `<branch>` when HEAD is detached) | `git config --local push.autoSetupRemote true` |
+| Push branches without -u? (default Yes) | git is 2.37.0 or newer, and `push.autoSetupRemote` is not already true in any scope. The flag is `--auto-upstream`. On older git, or when `git --version` cannot be read, this is not asked and the review notes `git push -u origin <branch>` (the current branch, or `<branch>` when HEAD is detached) | `git config --local push.autoSetupRemote true` |
 | Stop gh answering git's sign-in requests? (whole machine, default No) | a GitHub clone, gh is the helper, and `fix` finds its entries. Still asked in Recommended | `fix --yes` |
 
 **Recommended** answers Yes, and does not ask, the questions that only change this
-clone and need nothing only the user knows: turn the guard on, push new branches
+clone and need nothing only the user knows: turn the guard on, push branches
 without `-u`, and switch gh when gh already lists the account. Each of those is
 still a step in the review, and Change an answer can open it. It still asks for
 the account, and for a new account the host, name and email. It always asks,
@@ -659,10 +659,10 @@ Without a terminal (CI, a script): see [Scripts and CI](CONFIGURATION.md#scripts
   URL spelt otherwise);
 - origin's owner is the account, or is already allowed;
 - gh is nowhere in the credential-helper list;
-- push new branches without `-u` is not something this run will change. Answering No,
+- push branches without `-u` is not something this run will change. Answering No,
   or never being offered the question (git older than 2.37, or `git --version` could
   not be read), still counts. The screen then says
-  `optional: push new branches without -u: repown setup --auto-upstream` when git could
+  `optional: push branches without -u: repown setup --auto-upstream` when git could
   still set it. Recommended answers Yes, so that clone is not already set up until the
   setting is on;
 - your answers add nothing beyond `repown use <that account>`.
@@ -706,7 +706,7 @@ The questions it did not ask are still steps.
 │       repown use octocat --gh
 │  3. Turn on the push guard: each push is checked first
 │       repown guard on
-│  4. Push new branches without -u (this clone only)
+│  4. Push branches without -u: the first push sets the upstream (this clone only)
 │       git config --local push.autoSetupRemote true
 ```
 
@@ -742,10 +742,10 @@ The questions it did not ask are still steps.
 │  repown guard off
 │  Yes
 │
-◇  Push new branches without -u?
-│  sets push.autoSetupRemote in this clone only, so the first git
-│  push of a new branch creates it on origin; the guard still checks
-│  it
+◇  Push branches without -u?
+│  sets push.autoSetupRemote in this clone only, so the first
+│  push of a branch without an upstream creates it on origin;
+│  the guard still checks it
 │  Yes
 ```
 
@@ -765,9 +765,9 @@ OK    origin     pushes to octo-org allowed in this clone
 OK    guard      on -- every push is checked before it leaves
   /home/you/code/project/.git/hooks/pre-push
 
-       step 4 of 4: Push new branches without -u (this clone only)
+       step 4 of 4: Push branches without -u: the first push sets the upstream (this clone only)
        > git config --local push.autoSetupRemote true
-OK    upstream   new branches push without -u in this clone
+OK    upstream   branches without an upstream push without -u in this clone
 
        done: this clone is set up for octocat
        changed in this clone:
@@ -779,7 +779,7 @@ OK    upstream   new branches push without -u in this clone
          repown.allowOwner: (added) octo-org
          push.autoSetupRemote: (added) true
          push guard: off -> on
-       check it any time: repown (this clone), repown doctor (this machine)
+       check it any time: repown status (this clone), repown doctor (this machine)
        optional, only if you use gh here: gh auth switch -u octocat
 ```
 
@@ -816,7 +816,7 @@ When a `use --gh` step ran and gh's active account afterwards is that account, t
 │  ○ Stop
 ```
 
-`use --gh` adds one line: `gh: switch the active account to octocat`, or `gh: sign in as octocat (opens a browser)`. The guard's line is `pre-push hook: <path> runs repown guard check` (or `this clone's pre-push hook` when the path isn't known). Allowing an owner is `repown.allowOwner += octo-org`. Pushing new branches without `-u` is `push.autoSetupRemote = true`. Recording an account is `this machine's account registry: octocat = Octo Cat octocat@example.invalid`. `fix` lists the lines it removes, and Enter there is Skip.
+`use --gh` adds one line: `gh: switch the active account to octocat`, or `gh: sign in as octocat (opens a browser)`. The guard's line is `pre-push hook: <path> runs repown guard check` (or `this clone's pre-push hook` when the path isn't known). Allowing an owner is `repown.allowOwner += octo-org`. Pushing branches without `-u` is `push.autoSetupRemote = true`. Recording an account is `this machine's account registry: octocat = Octo Cat octocat@example.invalid`. `fix` lists the lines it removes, and Enter there is Skip.
 
 Skip does not run that step. The closing lines name every skipped step, and say the clone is set up only when the pin ran:
 
@@ -829,7 +829,7 @@ Skip does not run that step. The closing lines name every skipped step, and say 
          user.useConfigOnly: (added) true
          repown.account: (added) octocat
          credential.https://github.com.username: (added) octocat
-       check it any time: repown (this clone), repown doctor (this machine)
+       check it any time: repown status (this clone), repown doctor (this machine)
 ```
 
 Stop, or Esc, prints `not run:` and the commands that did not get their turn. Exit 130.
@@ -837,18 +837,18 @@ Stop, or Esc, prints `not run:` and the commands that did not get their turn. Ex
 **Already set up:** run it again in a clone that needs nothing.
 
 ```
-◇  This clone is already set up ───────────────────────────────────────╮
-│                                                                      │
-│  commits as  Octo Cat <octocat@users.noreply.github.com>             │
-│  pushes as   octocat                                                 │
-│  guard       on: every push is checked before it leaves              │
-│                                                                      │
-│  Nothing needs to change.                                            │
-│                                                                      │
-│  Checked: the settings git uses here are octocat's, as recorded.     │
-│  See it any time: repown (this clone), repown doctor (this machine)  │
-│                                                                      │
-├──────────────────────────────────────────────────────────────────────╯
+◇  This clone is already set up ──────────────────────────────────────────────╮
+│                                                                             │
+│  commits as  Octo Cat <octocat@users.noreply.github.com>                    │
+│  pushes as   octocat                                                        │
+│  guard       on: every push is checked before it leaves                     │
+│                                                                             │
+│  Nothing needs to change.                                                   │
+│                                                                             │
+│  Checked: the settings git uses here are octocat's, as recorded.            │
+│  See it any time: repown status (this clone), repown doctor (this machine)  │
+│                                                                             │
+├─────────────────────────────────────────────────────────────────────────────╯
 │
 ◆  What now?
 │  ● Done (change nothing)

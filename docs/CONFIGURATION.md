@@ -60,9 +60,9 @@ a refusal); `mirrorBranch` you set yourself.
 
 `push.autoSetupRemote` is git's own key, from git 2.37. `repown setup` may set it to
 `true` in this clone only (`git config --local push.autoSetupRemote true`), so the first
-`git push` of a new branch creates the branch on origin. It does not change what the
-guard checks. When the effective value is already true, from any scope, setup leaves it
-alone. The flag is `--auto-upstream`.
+`git push` of a branch without an upstream sets that upstream and creates the branch on
+origin. It does not change what the guard checks. When the effective value is already
+true, from any scope, setup leaves it alone. The flag is `--auto-upstream`.
 
 ## Scripts and CI
 

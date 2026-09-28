@@ -19,7 +19,7 @@ import fixCommand from '../commands/fix.ts';
 import guardGroup from '../commands/guard.ts';
 import accountsGroup from '../commands/accounts.ts';
 import { wizard, refusedGiven, CANCEL, type Answers, type Prompter, type StepChoice } from './engine.ts';
-import { setupFlow, planCommands, formatCommand, briefOf, missingFlags, printable, NEW_ACCOUNT, type PlannedCommand, type SetupContext } from './setup-flow.ts';
+import { setupFlow, planCommands, formatCommand, briefOf, missingFlags, printable, dropFixPrefix, NEW_ACCOUNT, type PlannedCommand, type SetupContext } from './setup-flow.ts';
 import { cloneChangeLines, machineChangeLines, readCloneSnapshot, type CloneSnapshot } from './setup-changes.ts';
 import { readContext, readRegistry, type ReadOptions } from './setup-context.ts';
 import { plainPrompter } from './plain.ts';
@@ -399,7 +399,7 @@ function activeGh(done: readonly PlannedCommand[], auth: AuthState | null): stri
 }
 
 function closeRun(done: readonly PlannedCommand[], auth: AuthState | null): void {
-  out.detail('check it any time: repown (this clone), repown doctor (this machine)');
+  out.detail('check it any time: repown status (this clone), repown doctor (this machine)');
   const left = ghLeftover(done, auth);
   if (left) out.detail(left);
 }
@@ -408,7 +408,7 @@ function ghLeftover(plan: readonly PlannedCommand[], auth: AuthState | null): st
   const account = plan.find((item) => item.argv[0] === 'use')?.argv.at(-1);
   if (!account || !auth) return null;
   const advice = ghAdvice(account, auth);
-  return advice ? 'optional, only if you use gh here: ' + advice.detail.replace(/^fix: /, '') : null;
+  return advice ? 'optional, only if you use gh here: ' + dropFixPrefix(advice.detail) : null;
 }
 
 /**
@@ -469,7 +469,7 @@ async function setAutoUpstream(git: Git): Promise<number> {
     out.fail('upstream', 'could not write push.autoSetupRemote');
     return 1;
   }
-  out.pass('upstream', 'new branches push without -u in this clone');
+  out.pass('upstream', 'branches without an upstream push without -u in this clone');
   return 0;
 }
 

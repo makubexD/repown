@@ -16,6 +16,7 @@ import {
   accountRows, formatAccountLines, type AccountReport, type DoctorAuth,
 } from '../src/commands/doctor.ts';
 import { activeAccountLabel, type AuthState } from '../src/core/inspect.ts';
+import { displayPath } from '../src/ui/format.ts';
 import { ghStateFrom } from '../src/core/credential/gh.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 
@@ -314,6 +315,22 @@ function field(label: string, value: string): string {
   return '  ' + label.padEnd(14) + ' ' + value;
 }
 
+const SSO_HEAD = 'If a push fails although the account is stored, the org may need SSO\n  authorization: ';
+const GITHUB_SSO = SSO_HEAD + 'gh auth refresh -h <host>';
+const READY = 'ready: each clone signs in as its own account through Git Credential Manager';
+
+function ssoFor(host: string): string {
+  return SSO_HEAD + 'check ' + host + '\'s SSO settings';
+}
+
+/** The last stderr line, which must stand after a blank line. */
+function closing(stderr: string): string {
+  const lines = stderr.split('\n');
+  assert.equal(lines.at(-1), '', stderr);
+  assert.equal(lines.at(-3), '', stderr);
+  return lines.at(-2) ?? '';
+}
+
 function fullAuth(gh: AuthState['gh']): AuthState {
   return {
     gcmPath: null, gcmPresent: true, stored: ok([]), ghPresent: true, gh,
@@ -338,17 +355,16 @@ describe('repown doctor output', () => {
   });
   afterEach(() => box.dispose());
 
-  test('machine, accounts, then the unchanged diagnosis', () => {
+  test('machine, accounts, the short SSO reminder, then a ready verdict', () => {
     const run = repown(['doctor'], box.dir, doctorEnv(bin));
     assert.equal(run.status, 0, run.stderr);
-    assert.equal(run.stderr, '');
     assert.equal(run.stdout, [
       '',
       'repown doctor · how this machine signs in to git hosts',
       '',
       'This machine',
       field('helper', 'manager'),
-      field('GCM', 'git-credential-manager'),
+      field('GCM', displayPath('git-credential-manager')),
       field('gh active', 'octo-work'),
       '',
       'Accounts',
@@ -359,17 +375,61 @@ describe('repown doctor output', () => {
       '  account and picks per repository from credential.<url>.username. No',
       '  switching is needed for git, and `gh auth switch` affects the CLI only.',
       '',
-      '  If a push or fetch still fails right after this, the credential may',
-      '  be valid but not yet SSO-authorized for that organisation. Re-authorize it:',
-      '  gh auth refresh -h <host>, or via the org\'s SSO settings.',
-      '',
+      '  ' + GITHUB_SSO,
     ].join('\n') + '\n');
+    assert.equal(closing(run.stderr), READY);
+    assert.doesNotMatch(run.stdout, /SSO-authorized for that organisation/);
 
     const outside = repown(['doctor'], join(box.dir, '..'), doctorEnv(bin));
     assert.equal(outside.status, 0, outside.stderr);
     assert.match(outside.stdout, /repown doctor · how this machine signs in to git hosts/);
     assert.match(outside.stdout, /octocat/);
     assert.doesNotMatch(outside.stdout, /this clone/);
+    assert.ok(outside.stdout.includes('  ' + ssoFor('this host')), outside.stdout);
+    assert.equal(closing(outside.stderr), READY);
+  });
+
+  test('a non-GitHub origin names that host\'s SSO settings', () => {
+    box.git('remote', 'set-url', 'origin', 'https://dev.azure.com/octocat/project/_git/repo');
+    const run = repown(['doctor'], box.dir, doctorEnv(bin));
+    assert.equal(run.status, 0, run.stderr);
+    assert.ok(run.stdout.includes('  ' + ssoFor('Azure DevOps')), run.stdout);
+    assert.doesNotMatch(run.stdout, /gh auth refresh/);
+    assert.equal(closing(run.stderr), READY);
+  });
+
+  test('an empty store stays a warning and says so in the verdict', () => {
+    const run = repown(['doctor'], box.dir, { ...doctorEnv(bin), GCM_FAKE_EMPTY: '1' });
+    assert.equal(run.status, 0, run.stderr);
+    assert.ok(run.stderr.includes('WARN  store      no accounts stored yet -- the first push will sign in once.'), run.stderr);
+    assert.ok(run.stdout.includes('  ' + GITHUB_SSO), run.stdout);
+    assert.equal(closing(run.stderr), 'ready · no accounts stored yet: the first push signs in once');
+  });
+
+  test('gh as the helper exits 1 and the verdict names repown fix', () => {
+    box.writeGlobalConfig('[credential]\n\thelper = !gh auth git-credential\n');
+    const run = repown(['doctor'], box.dir, doctorEnv(bin));
+    assert.equal(run.status, 1, run.stderr);
+    assert.match(run.stderr, /FAIL {2}helper/);
+    assert.match(run.stdout, /fix: repown fix/);
+    assert.doesNotMatch(run.stdout, /SSO authorization/);
+    assert.equal(closing(run.stderr), '1 problem: gh answers git\'s sign-in requests: run repown fix');
+  });
+
+  test('an unknown helper exits 0 and the verdict says the pin is unchecked', () => {
+    box.writeGlobalConfig('[credential]\n\thelper = store\n');
+    const run = repown(['doctor'], box.dir, doctorEnv(bin));
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /WARN {2}helper/);
+    assert.doesNotMatch(run.stdout, /SSO authorization/);
+    assert.equal(closing(run.stderr), 'unchecked: repown can\'t tell whether store honours the per-clone pin');
+  });
+
+  test('no helper is unchecked the same way, naming nothing', () => {
+    box.writeGlobalConfig('');
+    const run = repown(['doctor'], box.dir, doctorEnv(bin));
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(closing(run.stderr), 'unchecked: repown can\'t tell whether nothing honours the per-clone pin');
   });
 
   test('a gh signed in to nobody is none and not signed in, with no gh warning', () => {
@@ -377,7 +437,8 @@ describe('repown doctor output', () => {
     writeFileSync(file, GH_EMPTY_HOSTS);
     const run = repown(['doctor'], box.dir, { ...doctorEnv(bin), GH_FAKE_STATUS_FILE: file });
     assert.equal(run.status, 0, run.stderr);
-    assert.equal(run.stderr, '');
+    assert.equal(closing(run.stderr), READY);
+    assert.doesNotMatch(run.stderr, /WARN/);
     assert.match(run.stdout, /gh active\s+none/);
     assert.match(run.stdout, /octocat.*gh: not signed in/);
     assert.doesNotMatch(run.stdout, /unknown -- gh could not be queried/);
@@ -459,6 +520,7 @@ class FakeGcm {
       return 0;
     }
     if (args.Length == 2 && args[0] == "github" && args[1] == "list") {
+      if (Environment.GetEnvironmentVariable("GCM_FAKE_EMPTY") == "1") return 0;
       Console.WriteLine("octo-work");
       return 0;
     }
@@ -479,6 +541,9 @@ exit 97
 
 const FAKE_GCM_SH = `#!/bin/sh
 if [ "$1" = "--version" ]; then echo fake-gcm; exit 0; fi
-if [ "$1" = "github" ] && [ "$2" = "list" ]; then echo octo-work; exit 0; fi
+if [ "$1" = "github" ] && [ "$2" = "list" ]; then
+  if [ "$GCM_FAKE_EMPTY" = "1" ]; then exit 0; fi
+  echo octo-work; exit 0
+fi
 exit 97
 `;

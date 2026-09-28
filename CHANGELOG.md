@@ -7,6 +7,26 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+- `repown status` prints the identity line before optional gh advice. gh acting as
+  another account is a `NOTE`, not a warning, and it is not in the tally. When that
+  note is the only finding, the line is
+  `ready: commits and pushes use <account> · gh: optional (see the note above)`,
+  or the same suffix on
+  `ready: commits use <account>; pushes use this host's own sign-in`.
+  A gh that could not be queried stays a warning. Real warnings still tally as
+  before. On Windows the clone path uses backslashes; elsewhere it is shown as git
+  printed it.
+- `repown doctor` shows the Git Credential Manager path with that same rule. The
+  SSO reminder stays on every healthy run, as one short sentence:
+  `If a push fails although the account is stored, the org may need SSO authorization: gh auth refresh -h <host>`
+  (other hosts: `check <host>'s SSO settings`). It closes with
+  `ready: each clone signs in as its own account through Git Credential Manager`,
+  or `ready · no accounts stored yet: the first push signs in once` when the store
+  was read and is empty, or
+  `1 problem: gh answers git's sign-in requests: run repown fix` when gh is the
+  helper (still exit 1), or
+  `unchecked: repown can't tell whether <helper> honours the per-clone pin`
+  for any other helper (`nothing` when none is set).
 - A clone that is already set up opens `repown setup` on **This clone is already set
   up**, before any question. **Done** changes nothing. **Use another account**
   continues at the account question. **Sign in to gh as `<account>`** appears only
@@ -77,11 +97,7 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 - `repown status` shows the branch's `upstream`: the tracked remote branch,
   `none yet: git push -u origin <branch>`, or `set on the first push
   (push.autoSetupRemote)`. Missing on a detached HEAD or with no remote, and
-  never counted as a warning. With no problems it closes with
-  `ready: commits and pushes use <account>` where credentials are pinned, or
-  `ready: commits use <account>; pushes use this host's own sign-in` where they
-  are not. Either way, ` · N warning(s)` follows when there are warnings, tagged
-  `(optional: gh)` when every warning is about gh.
+  never counted as a warning.
 - `repown setup` offers to sign the account in to gh when gh doesn't already
   know it (default No). Yes runs `repown use <account> --gh` and opens a
   browser. If gh is left acting as another account, the review and the line

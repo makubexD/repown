@@ -1,6 +1,6 @@
 # ADR-021: Bare repown always opens setup in a terminal
 
-**Status:** Accepted
+**Status:** Accepted; its note that status and doctor stay unchanged is superseded in part by [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md)
 
 ## Context
 

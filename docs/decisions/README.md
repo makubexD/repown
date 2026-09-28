@@ -33,6 +33,7 @@ name was free on npm, and is now this package.
 | [020](ADR-020-setup-leaves-clone-ready.md) | Setup leaves the clone ready to work, in one of two modes |
 | [021](ADR-021-bare-repown-always-opens-setup.md) | Bare repown always opens setup in a terminal; scripts still get status |
 | [022](ADR-022-set-up-clone-opens-on-settled-screen.md) | A settled clone opens on the already-set-up screen; a no-op pin is left out |
+| [023](ADR-023-status-and-doctor-say-what-matters-first.md) | Status and doctor say what matters first |
 
 **Adding one:** create the next number, using the same sections: Status, Context,
 Decision, Alternatives considered, Consequences. Cite it as `ADR-0NN`. Never delete or
@@ -51,7 +52,9 @@ rewrite an accepted ADR. To reverse one, write a new ADR and mark the old one
   doctor` don't recheck a hook already installed that way
   ([ADR-003](ADR-003-hook-calls-installed-cli.md)).
 - **`gh pr create` and `gh api` act as gh's active account,** and no git config affects
-  them. `repown` warns when that account is different; nothing can enforce it.
+  them. `repown status` notes when that account is different; a query it could not
+  run stays a warning. Nothing can enforce it
+  ([ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md)).
 - **Commits already made with the wrong author** must be rewritten by hand.
 - **Hosts with no provider don't get credential pinning,** and `repown` says so.
 - **SSO authorization can't be seen in advance.** A credential that's valid but not

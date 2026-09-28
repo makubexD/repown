@@ -215,15 +215,16 @@ This machine
   helper         manager
   gh active      octo-work
 
-WARN  gh         active as "octo-work", so `gh pr create` here would act as that account. git pushes are unaffected; this only matters if you use gh here.
-       fix: gh auth switch -u octocat
 OK    identity   this clone is pinned, and its credential mechanism honours it
+NOTE  gh         active as "octo-work", so `gh pr create` here would act as that account. git pushes are unaffected; this only matters if you use gh here.
+       fix: gh auth switch -u octocat
 
-ready: commits and pushes use octocat · 1 warning (optional: gh)
+ready: commits and pushes use octocat · gh: optional (see the note above)
 ```
 
-Here git is right, and only `gh` commands would act as another account. Every warning it
-can print: [card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are).
+Here git is right, and only `gh` commands would act as another account. That line is a
+note, not a warning. Every warning it can print:
+[card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are).
 
 - **Help:** `repown --help`, `repown help <command>` (or `repown <command> --help`), and
   `repown help guard on` one level deeper. Help never changes anything.

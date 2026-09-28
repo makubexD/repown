@@ -78,6 +78,15 @@ This machine
 Accounts
   octocat        (this clone)  git: not signed in yet (the first push signs in) · gh: not signed in
   octo-work      not recorded by repown · git: stored · gh: active
+
+  Credentials come from Git Credential Manager, which stores one per
+  account and picks per repository from credential.<url>.username. No
+  switching is needed for git, and `gh auth switch` affects the CLI only.
+
+  If a push fails although the account is stored, the org may need SSO
+  authorization: gh auth refresh -h <host>
+
+ready: each clone signs in as its own account through Git Credential Manager
 ```
 
 | Cell | Means |
@@ -100,7 +109,15 @@ Recorded accounts stay in registry order; the others follow, alphabetically.
 A failed registry, store or gh read is `unknown` in the cells that depend on
 it, and one WARN per source. GCM not installed is the `GCM` line (`not found`),
 not a second warning. When that also leaves the list with no rows, the line
-above says why and points at `repown setup`. The diagnosis under the list is unchanged.
+above says why and points at `repown setup`. Under the list, when Git Credential
+Manager is the helper, the report explains per-clone sign-in and then one sentence,
+on every such run, because repown cannot see SSO authorization
+([ADR-013](decisions/ADR-013-deliberately-not-done.md)):
+`If a push fails although the account is stored, the org may need SSO authorization: gh auth refresh -h <host>`.
+Another host says `check <host>'s SSO settings`. The gh-helper and unknown-helper
+screens do not repeat it; they name their own problem. On Windows the clone path
+in status and the GCM path here use backslashes. Elsewhere a path is shown as it
+was read ([ADR-023](decisions/ADR-023-status-and-doctor-say-what-matters-first.md)).
 
 ```mermaid
 flowchart TD
@@ -122,7 +139,12 @@ flowchart TD
 | `helper` shows `none configured` | `git credential-manager configure` makes GCM git's helper, then run `repown doctor` again |
 | `store  no accounts stored yet` | nothing: expected before the first push |
 
-`doctor` exits 1 only when gh is the helper.
+`doctor` exits 1 only when gh is the helper. The closing line is on stderr, after a blank line:
+
+- Git Credential Manager, and the store holds an account: `ready: each clone signs in as its own account through Git Credential Manager`
+- Git Credential Manager, and the store was read and is empty: `ready · no accounts stored yet: the first push signs in once`
+- gh is the helper: `1 problem: gh answers git's sign-in requests: run repown fix`
+- any other helper, or none: `unchecked: repown can't tell whether <helper> honours the per-clone pin` (`nothing` when none is set)
 
 **Why:** switching gh's account moves the password prompt to your other account's
 clones rather than fixing it ([ADR-001](decisions/ADR-001-credential-manager-not-gh.md)).
@@ -244,11 +266,11 @@ This machine
   helper         manager
   gh active      octo-work
 
-WARN  gh         active as "octo-work", so `gh pr create` here would act as that account. git pushes are unaffected; this only matters if you use gh here.
-       fix: gh auth switch -u octocat
 OK    identity   this clone is pinned, and its credential mechanism honours it
+NOTE  gh         active as "octo-work", so `gh pr create` here would act as that account. git pushes are unaffected; this only matters if you use gh here.
+       fix: gh auth switch -u octocat
 
-ready: commits and pushes use octocat · 1 warning (optional: gh)
+ready: commits and pushes use octocat · gh: optional (see the note above)
 ```
 
 | You see | Meaning | Fix |
@@ -257,7 +279,7 @@ ready: commits and pushes use octocat · 1 warning (optional: gh)
 | 🔴 `No account is pinned` | a GitHub https clone with no push account; pushes use the machine default | `repown setup` (or `repown use <account>`) |
 | 🔴 `gh is the git credential helper` | only gh's active account can push | `repown fix` |
 | 🟡 `no credential helper is set` / `cannot tell whether it honours` | a GitHub https clone, and the helper isn't Git Credential Manager | `repown doctor` ([card 1](#1-set-up-the-machine)) |
-| 🟡 `gh active as "…"` | the gh CLI would act as another account | `gh auth switch -u <account>` when that account is signed in to gh; `repown use <account> --gh` when it is not |
+| NOTE `gh active as "…"` | the gh CLI would act as another account; git pushes are unaffected. Printed after the identity line, and not counted as a warning | `gh auth switch -u <account>` when that account is signed in to gh; `repown use <account> --gh` when it is not |
 | 🟡 `gh could not be queried` | who `gh pr create` acts as is unknown | `gh auth status` |
 | 🟡 `origin belongs to "octo-org"` | an organisation repository | `git config --local --add repown.allowOwner octo-org` |
 | 🟡 `guard off` | pushes are not checked | `repown guard on` |
@@ -274,14 +296,18 @@ ready: commits and pushes use octocat · 1 warning (optional: gh)
 | `upstream set on the first push (push.autoSetupRemote)` | git will set the upstream on the first push | nothing |
 | (no `upstream` field) | detached HEAD, or no remote | nothing |
 
-🔴 rows exit 1; 🟡 rows alone exit 0. With no problems, stderr ends with
-`ready: commits and pushes use <account>` where this host's credentials are
-pinned, or `ready: commits use <account>; pushes use this host's own sign-in`
-where they are not (Azure DevOps, a local path, or any other remote repown does
-not pin). Either way, ` · N warning(s)` follows when there are warnings, tagged
-`(optional: gh)` when every warning is about gh. With a
-problem it ends with a count (`1 problem, 2 warnings`), adding
-`: run repown setup` when an identity problem is among them. Outside a clone,
+🔴 rows exit 1; 🟡 rows alone exit 0. The NOTE row is not a warning. With no
+problems, stderr ends with `ready: commits and pushes use <account>` where this
+host's credentials are pinned, or `ready: commits use <account>; pushes use this
+host's own sign-in` where they are not (Azure DevOps, a local path, or any other
+remote repown does not pin). ` · N warning(s)` follows when there are warnings;
+the NOTE is not in that count. When the NOTE is the only finding, the line is
+` · gh: optional (see the note above)`. With a problem it ends with a count
+(`1 problem, 2 warnings`), adding `: run repown setup` when an identity problem
+is among them. A gh query that could not be run stays a warning. On Windows the
+clone path uses backslashes; elsewhere it is shown as git printed it
+([ADR-023](decisions/ADR-023-status-and-doctor-say-what-matters-first.md)).
+Outside a clone,
 `repown status` prints `Not a git repository` and exits 1. Bare `repown` does that only
 without a terminal or with its output redirected; in a terminal it shows the help and
 exits 0. A bare repository takes that same path.
@@ -314,8 +340,9 @@ sequenceDiagram
 
 **Push failed just after signing in?** Your organisation may use SSO, and the new
 credential isn't authorized for it yet. Authorize it in the organisation's SSO settings on
-GitHub, then push again. repown can't detect this in advance; `repown doctor` prints a
-reminder when Git Credential Manager is the helper.
+GitHub, then push again. repown can't detect this in advance; when Git Credential
+Manager is the helper, `repown doctor` prints
+`If a push fails although the account is stored, the org may need SSO authorization: gh auth refresh -h <host>`.
 </details>
 
 ### 7. Push: what the guard checks

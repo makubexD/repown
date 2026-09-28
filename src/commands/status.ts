@@ -9,7 +9,9 @@
 //   the CLI's active account          who `gh pr create` acts as
 //
 // All three are printed, because the one that is invisible is the one that
-// catches people out. This reports; it changes nothing.
+// catches people out. gh's active account is a note: it never affects the push.
+// A gh that could not be queried stays a warning, because that answer is unknown.
+// This reports; it changes nothing.
 
 import { inspectRepo, inspectAuth, activeAccountLabel, type RepoState, type AuthState } from '../core/inspect.ts';
 import { isPinned } from '../core/identity.ts';
@@ -40,7 +42,8 @@ export default {
     const problems = collectProblems(repo, auth);
     const warnings = await reportWarnings(repo, auth, registry);
     const code = verdict(repo, auth, problems);
-    closeStatus(repo, problems, warnings, accountShown(repo, registry));
+    const ghNote = printGhNote(pinnedAccount(repo), auth);
+    closeStatus({ repo, problems, warnings, account: accountShown(repo, registry), ghNote });
     return code;
   },
 } satisfies Command;
@@ -69,7 +72,7 @@ async function summary(repo: RepoState, auth: AuthState, registry: LoadedRegistr
 }
 
 function place(repo: RepoState): string {
-  const where = repo.root ?? repo.git.cwd;
+  const where = out.displayPath(repo.root ?? repo.git.cwd);
   return repo.branch ? '  ' + where + '  ' + headLabel(repo.branch) : '  ' + where;
 }
 
@@ -184,24 +187,30 @@ function matchesRecord(repo: RepoState, entry: Account): boolean {
 
 interface Problem { readonly what: string; readonly fix: string; }
 
-function closeStatus(repo: RepoState, problems: readonly Problem[], warnings: readonly string[], account: string): void {
-  const line = problems.length === 0
-    ? readyLine(repo, account, warnings)
-    : tally(problems.length, warnings.length) + setupHint(repo);
+interface StatusEnd {
+  readonly repo: RepoState;
+  readonly problems: readonly Problem[];
+  readonly warnings: readonly string[];
+  readonly account: string;
+  readonly ghNote: boolean;
+}
+
+function closeStatus(end: StatusEnd): void {
+  const line = end.problems.length === 0
+    ? readyLine(end.repo, end.account, end.warnings, end.ghNote)
+    : tally(end.problems.length, end.warnings.length) + setupHint(end.repo);
   out.note('');
   out.note(line);
 }
 
-function readyLine(repo: RepoState, account: string, warnings: readonly string[]): string {
+const GH_OPTIONAL = ' · gh: optional (see the note above)';
+
+function readyLine(repo: RepoState, account: string, warnings: readonly string[], ghNote: boolean): string {
   const head = repo.credentialKeys.length === 0
     ? 'ready: commits use ' + account + '; pushes use this host\'s own sign-in'
     : 'ready: commits and pushes use ' + account;
-  if (warnings.length === 0) return head;
-  return head + ' · ' + howMany(warnings.length, 'warning') + ghTag(warnings);
-}
-
-function ghTag(warnings: readonly string[]): string {
-  return warnings.every((tag) => tag === 'gh') ? ' (optional: gh)' : '';
+  if (warnings.length > 0) return head + ' · ' + howMany(warnings.length, 'warning');
+  return ghNote ? head + GH_OPTIONAL : head;
 }
 
 function setupHint(repo: RepoState): string {
@@ -329,14 +338,26 @@ function registryUnread(): boolean {
  */
 type GhAuth = Pick<AuthState, 'ghPresent' | 'gh'>;
 
-export function ghAdvice(account: string | null, auth: GhAuth): { readonly warn: string; readonly detail: string } | null {
-  if (auth.ghPresent && !auth.gh.ok) return { warn: GH_UNVERIFIED, detail: 'check it yourself: gh auth status' };
+export interface GhAdvice {
+  readonly level: 'warn' | 'note';
+  readonly text: string;
+  readonly detail: string;
+}
+
+export function ghAdvice(account: string | null, auth: GhAuth): GhAdvice | null {
+  if (auth.ghPresent && !auth.gh.ok) return unverifiedGh();
   const active = ghActiveOther(account, auth);
   if (!active || account === null) return null;
-  return {
-    warn: 'active as "' + active + '", so `gh pr create` here would act as that account. git pushes are unaffected; this only matters if you use gh here.',
-    detail: ghFix(account, auth),
-  };
+  return { level: 'note', text: ghActiveText(active), detail: ghFix(account, auth) };
+}
+
+function unverifiedGh(): GhAdvice {
+  return { level: 'warn', text: GH_UNVERIFIED, detail: 'check it yourself: gh auth status' };
+}
+
+function ghActiveText(active: string): string {
+  return 'active as "' + active + '", so `gh pr create` here would act as that account. ' +
+    'git pushes are unaffected; this only matters if you use gh here.';
 }
 
 const GH_UNVERIFIED = 'could not be queried, so who `gh pr create` would act as is UNVERIFIED.';
@@ -363,8 +384,17 @@ function ghActiveOther(account: string | null, auth: GhAuth): string | null {
 
 function ghWarning(account: string | null, auth: AuthState): boolean {
   const advice = ghAdvice(account, auth);
-  if (!advice) return false;
-  out.warn('gh', advice.warn);
+  if (advice?.level !== 'warn') return false;
+  out.warn('gh', advice.text);
+  out.detail(advice.detail);
+  return true;
+}
+
+/** After the identity line, so a terminal shows the pass before this note. */
+function printGhNote(account: string | null, auth: AuthState): boolean {
+  const advice = ghAdvice(account, auth);
+  if (advice?.level !== 'note') return false;
+  out.noted('gh', advice.text);
   out.detail(advice.detail);
   return true;
 }

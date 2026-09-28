@@ -3,7 +3,7 @@
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { useColour } from '../src/ui/format.ts';
+import { displayPath, useColour } from '../src/ui/format.ts';
 
 const TERMINAL = { isTTY: true } as NodeJS.WriteStream;
 const PIPE = { isTTY: false } as NodeJS.WriteStream;
@@ -34,5 +34,23 @@ describe('useColour: FORCE_COLOR, then NO_COLOR, then TERM=dumb, then the stream
     process.env['TERM'] = 'dumb';
     process.env['FORCE_COLOR'] = '1';
     assert.equal(useColour(TERMINAL), true);
+  });
+});
+
+describe('displayPath: Windows native separators, elsewhere unchanged', () => {
+  const gitStyle = 'C:/Program Files/Git/mingw64/bin/git-credential-manager.exe';
+
+  test('a git-style path is shown with the platform\'s separators', () => {
+    const shown = displayPath(gitStyle);
+    if (process.platform === 'win32') {
+      assert.equal(shown, 'C:\\Program Files\\Git\\mingw64\\bin\\git-credential-manager.exe');
+    } else {
+      assert.equal(shown, gitStyle);
+    }
+  });
+
+  test('a path that is already native is left as it was read', () => {
+    const native = process.platform === 'win32' ? 'C:\\Tools\\git-credential-manager.exe' : '/usr/bin/git-credential-manager';
+    assert.equal(displayPath(native), native);
   });
 });

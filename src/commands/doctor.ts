@@ -292,7 +292,7 @@ function printReport(repo: RepoState, auth: AuthState, registry: Result<Registry
 function printMachine(auth: AuthState): void {
   out.heading('This machine');
   out.field('helper', auth.helper ?? 'none configured');
-  out.field('GCM', auth.gcmPath ?? 'not found');
+  out.field('GCM', auth.gcmPath === null ? 'not found' : out.displayPath(auth.gcmPath));
   out.field('gh active', activeAccountLabel(auth));
 }
 
@@ -319,49 +319,79 @@ function diagnose(auth: AuthState, providerLabel: string): number {
   return diagnoseHealthy(auth, providerLabel);
 }
 
+const READY = 'ready: each clone signs in as its own account through Git Credential Manager';
+const READY_EMPTY = 'ready · no accounts stored yet: the first push signs in once';
+const GH_PROBLEM = '1 problem: gh answers git\'s sign-in requests: run repown fix';
+
+/** Like status: a blank line and the verdict, on stderr. The report above adds no blank of its own. */
+function closeDoctor(line: string): void {
+  out.note('');
+  out.note(line);
+}
+
 function diagnoseGhHelper(auth: AuthState): number {
   out.fail('helper', 'gh is the credential helper for github.com.');
   out.detail('It serves ONLY its active account and returns nothing for any');
   out.detail('other, so every repository pinned to a different account is');
   out.detail('prompted for a password -- and `gh auth switch` moves the problem');
   out.detail('rather than fixing it.');
-
-  // On its own line, and only when known: interpolating it inline printed an
-  // empty "()" whenever gh could not be queried, which reads as a bug.
-  if (auth.gh.ok && auth.gh.value.active) out.detail('Active right now: ' + auth.gh.value.active);
-
-  const files = [...new Set(auth.ghHelperOrigins.map((entry) => entry.file))];
-  if (files.length > 0) {
-    out.detail('');
-    out.detail('Installed by `gh auth setup-git`, in:');
-    for (const file of files) out.detail('  ' + file);
-  }
+  ghHelperActive(auth);
+  ghHelperFiles(auth);
   out.line();
   out.line('  fix: repown fix');
-  out.line();
+  closeDoctor(GH_PROBLEM);
   return 1;
 }
 
+/** On its own line, and only when known: an empty "()" used to read as a bug. */
+function ghHelperActive(auth: AuthState): void {
+  if (auth.gh.ok && auth.gh.value.active) out.detail('Active right now: ' + auth.gh.value.active);
+}
+
+function ghHelperFiles(auth: AuthState): void {
+  const files = [...new Set(auth.ghHelperOrigins.map((entry) => entry.file))];
+  if (files.length === 0) return;
+  out.detail('');
+  out.detail('Installed by `gh auth setup-git`, in:');
+  for (const file of files) out.detail('  ' + file);
+}
+
 function diagnoseUnknownHelper(auth: AuthState): number {
-  out.warn('helper', 'github.com is served by "' + (auth.helper ?? 'nothing') +
-                     '", which repown has no opinion about.');
+  const helper = auth.helper ?? 'nothing';
+  out.warn('helper', 'github.com is served by "' + helper + '", which repown has no opinion about.');
   out.detail('The per-repository pin (credential.<url>.username) only works if');
   out.detail('that helper honours it.');
-  out.line();
+  closeDoctor(unchecked(helper));
   return 0;
 }
 
+function unchecked(helper: string): string {
+  return 'unchecked: repown can\'t tell whether ' + helper + ' honours the per-clone pin';
+}
+
 function diagnoseHealthy(auth: AuthState, providerLabel: string): number {
+  explainGcm();
+  const empty = emptyStore(auth);
+  if (empty) warnEmptyStore();
+  ssoNote(providerLabel);
+  closeDoctor(empty ? READY_EMPTY : READY);
+  return 0;
+}
+
+function explainGcm(): void {
   out.line('  Credentials come from Git Credential Manager, which stores one per');
   out.line('  account and picks per repository from credential.<url>.username. No');
   out.line('  switching is needed for git, and `gh auth switch` affects the CLI only.');
   out.line();
-  if (auth.stored.ok && auth.stored.value.length === 0) {
-    out.warn('store', 'no accounts stored yet -- the first push will sign in once.');
-    out.line();
-  }
-  ssoNote(providerLabel);
-  return 0;
+}
+
+function emptyStore(auth: AuthState): boolean {
+  return auth.stored.ok && auth.stored.value.length === 0;
+}
+
+function warnEmptyStore(): void {
+  out.warn('store', 'no accounts stored yet -- the first push will sign in once.');
+  out.line();
 }
 
 // Not a check -- repown cannot see this coming (ADR-013, "Deliberately
@@ -371,10 +401,10 @@ function diagnoseHealthy(auth: AuthState, providerLabel: string): number {
 // is needed. The exact fix command is gh-specific, so it only names `gh` for
 // a GitHub origin -- gh does not manage auth for any other host.
 function ssoNote(providerLabel: string): void {
-  out.line('  If a push or fetch still fails right after this, the credential may');
-  out.line('  be valid but not yet SSO-authorized for that organisation. Re-authorize it:');
-  out.line(providerLabel === 'GitHub'
-    ? '  gh auth refresh -h <host>, or via the org\'s SSO settings.'
-    : "  check your git host's SSO / conditional-access settings.");
-  out.line();
+  out.line('  If a push fails although the account is stored, the org may need SSO');
+  out.line('  authorization: ' + ssoFix(providerLabel));
+}
+
+function ssoFix(providerLabel: string): string {
+  return providerLabel === 'GitHub' ? 'gh auth refresh -h <host>' : 'check ' + providerLabel + "'s SSO settings";
 }

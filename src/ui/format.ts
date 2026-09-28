@@ -2,7 +2,7 @@
 // saying which check spoke, then the message.
 //
 //   OK    identity   octocat <...>  push-as:octocat
-//   WARN  gh         active as someone else, so `gh pr create` would act as them
+//   NOTE  gh         active as someone else, so `gh pr create` would act as them
 //         fix: gh auth switch -u octocat
 
 const COLOURS = {
@@ -54,6 +54,11 @@ export function warn(tag: string, message: string): void {
   status({ stream: process.stderr, word: 'WARN', colour: 'yellow' }, tag, message);
 }
 
+/** Optional advice. Same columns as warn, on stderr. Dim when that stream has colour. */
+export function noted(tag: string, message: string): void {
+  status({ stream: process.stderr, word: 'NOTE', colour: 'dim' }, tag, message);
+}
+
 export function fail(tag: string, message: string): void {
   status({ stream: process.stderr, word: 'FAIL', colour: 'red' }, tag, message);
 }
@@ -88,6 +93,12 @@ export function heading(text: string): void {
 
 export function dim(text: string): string {
   return paint(process.stdout, 'dim', text);
+}
+
+/** Shown to a person. Windows uses native separators; any other platform is unchanged. */
+export function displayPath(path: string): string {
+  if (process.platform !== 'win32') return path;
+  return path.replaceAll('/', '\\');
 }
 
 /**

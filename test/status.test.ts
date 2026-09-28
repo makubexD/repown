@@ -45,13 +45,16 @@ describe('repown status layout', () => {
   });
 
   // sandbox() is `git init -b main` with no commit: the branch exists, HEAD does not.
+  // Git prints the work tree with forward slashes. Status shows native separators on Windows.
   test('S6: path and branch, including an unborn branch', () => {
     const root = box.git('rev-parse', '--show-toplevel');
+    const shown = shownPath(root);
     const run = repown(['status'], box.dir);
     const title = run.stdout.indexOf(TITLE);
-    const where = run.stdout.indexOf('  ' + root + '  (branch main)');
+    const where = run.stdout.indexOf('  ' + shown + '  (branch main)');
     const clone = run.stdout.indexOf('This clone');
     assert.ok(title >= 0 && where > title && clone > where, run.stdout);
+    if (process.platform === 'win32') assert.equal(shown.includes('\\'), true);
   });
 
   test('S6: a detached HEAD shows its short hash', () => {
@@ -223,15 +226,30 @@ describe('repown status ready line', () => {
   beforeEach(() => { box = sandbox(); });
   afterEach(() => box.dispose());
 
-  test('S5: no problems, only a gh active-as-other warning', () => {
+  test('S5: no problems, gh active as another account is a note after the identity line', () => {
     pinGithub(box);
     guardOn(box);
     const run = repown(['status'], box.dir, fakeGhEnv(box));
     assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stderr, /WARN {2}gh/);
-    assert.equal(counted(run.stderr, 'WARN'), 1, run.stderr);
+    assert.match(run.stdout, /OK {4}identity {3}this clone is pinned, and its credential mechanism honours it/);
+    assert.ok(run.stderr.includes(GH_ACTIVE_NOTE), run.stderr);
+    assert.ok(run.stderr.includes('       fix: repown use octocat --gh   (signs octocat in to gh)'), run.stderr);
+    assert.doesNotMatch(run.stderr, /WARN {2}gh/);
+    assert.doesNotMatch(run.stdout, /NOTE {2}gh/);
+    assert.equal(counted(run.stderr, 'WARN'), 0, run.stderr);
     assert.equal(counted(run.stderr, 'FAIL'), 0, run.stderr);
-    assert.equal(closing(run.stderr), 'ready: commits and pushes use octocat · 1 warning (optional: gh)');
+    assert.ok(run.stderr.indexOf('NOTE  gh') < run.stderr.indexOf('ready:'), run.stderr);
+    assert.equal(closing(run.stderr), 'ready: commits and pushes use octocat · gh: optional (see the note above)');
+  });
+
+  test('S5: the gh note is dim when stderr has colour, and plain when it does not', () => {
+    pinGithub(box);
+    guardOn(box);
+    const plain = repown(['status'], box.dir, fakeGhEnv(box));
+    assert.match(plain.stderr, /^NOTE  gh/m);
+    assert.doesNotMatch(plain.stderr, /\x1b/);
+    const coloured = repown(['status'], box.dir, fakeGhEnv(box, { FORCE_COLOR: '1' }));
+    assert.match(coloured.stderr, /\x1b\[2mNOTE \x1b\[0m gh         active as "octo-work"/);
   });
 
   test('S5: no problems, only a gh could-not-be-queried warning', () => {
@@ -239,9 +257,10 @@ describe('repown status ready line', () => {
     guardOn(box);
     const run = repown(['status'], box.dir, fakeGhEnv(box, { GH_FAKE_FAIL: '1' }));
     assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stderr, /could not be queried/);
+    assert.match(run.stderr, /WARN {2}gh {9}could not be queried/);
+    assert.doesNotMatch(run.stderr, /NOTE {2}gh/);
     assert.equal(counted(run.stderr, 'WARN'), 1, run.stderr);
-    assert.equal(closing(run.stderr), 'ready: commits and pushes use octocat · 1 warning (optional: gh)');
+    assert.equal(closing(run.stderr), 'ready: commits and pushes use octocat · 1 warning');
   });
 
   test('S6: a non-gh warning is ready with the count, not tagged optional', () => {
@@ -254,14 +273,31 @@ describe('repown status ready line', () => {
     assert.doesNotMatch(run.stderr, /optional: gh/);
   });
 
-  test('S6: a gh warning mixed with another is not tagged optional', () => {
+  test('S6: a gh note mixed with a real warning is not part of the tally', () => {
     pinGithub(box);
     const run = repown(['status'], box.dir, fakeGhEnv(box));
     assert.equal(run.status, 0, run.stderr);
-    assert.ok(counted(run.stderr, 'WARN') >= 2, run.stderr);
-    assert.equal(closing(run.stderr), 'ready: commits and pushes use octocat · ' +
-      counted(run.stderr, 'WARN') + ' warnings');
-    assert.doesNotMatch(run.stderr, /optional: gh/);
+    assert.match(run.stderr, /WARN {2}guard/);
+    assert.match(run.stderr, /NOTE {2}gh/);
+    assert.ok(run.stderr.indexOf('WARN  guard') < run.stderr.indexOf('NOTE  gh'), run.stderr);
+    assert.equal(counted(run.stderr, 'WARN'), 1, run.stderr);
+    assert.equal(closing(run.stderr), 'ready: commits and pushes use octocat · 1 warning');
+    assert.doesNotMatch(run.stderr, /gh: optional/);
+  });
+
+  test('S7: a problem does not count the gh note, and the note follows the failure', () => {
+    pinGithub(box);
+    guardOn(box);
+    box.git('config', '--local', 'credential.helper', '!gh auth git-credential');
+    const run = repown(['status'], box.dir, fakeGhEnv(box));
+    assert.equal(run.status, 1, run.stderr);
+    assert.match(run.stderr, /FAIL {2}identity/);
+    assert.match(run.stderr, /NOTE {2}gh/);
+    assert.doesNotMatch(run.stdout, /OK {4}identity/);
+    assert.ok(run.stderr.indexOf('FAIL  identity') < run.stderr.indexOf('NOTE  gh'), run.stderr);
+    assert.equal(counted(run.stderr, 'WARN'), 0, run.stderr);
+    assert.equal(counted(run.stderr, 'FAIL'), 1, run.stderr);
+    assert.equal(closing(run.stderr), '1 problem');
   });
 
   test('S7: a problem keeps today\'s tally and prints no ready line', () => {
@@ -303,9 +339,10 @@ describe('repown status ready line', () => {
     assert.doesNotMatch(clean.stderr, /commits and pushes use/);
     const warned = repown(['status'], box.dir, fakeGhEnv(box));
     assert.equal(warned.status, 0, warned.stderr);
-    assert.equal(counted(warned.stderr, 'WARN'), 1, warned.stderr);
+    assert.equal(counted(warned.stderr, 'WARN'), 0, warned.stderr);
+    assert.match(warned.stderr, /NOTE {2}gh/);
     assert.equal(closing(warned.stderr),
-      'ready: commits use octocat; pushes use this host\'s own sign-in · 1 warning (optional: gh)');
+      'ready: commits use octocat; pushes use this host\'s own sign-in · gh: optional (see the note above)');
     box.git('remote', 'set-url', 'origin', join(box.dir, 'elsewhere.git'));
     const local = repown(['status'], box.dir, quietEnv());
     assert.equal(local.status, 0, local.stderr);
@@ -418,21 +455,24 @@ describe('gh warning account', () => {
   test('signed in to gh: the fix switches, in the spelling gh reports', () => {
     const advice = ghAdvice('octo-work', ghAccounts('octocat', ['octocat', 'octo-work']));
     assert.ok(advice);
-    assert.match(advice.warn, /active as "octocat"/);
+    assert.equal(advice.level, 'note');
+    assert.match(advice.text, /active as "octocat"/);
     assert.equal(advice.detail, 'fix: gh auth switch -u octo-work');
   });
 
   test('signed in under a different case: the fix uses the login gh reports', () => {
     const advice = ghAdvice('Octo-Work', ghAccounts('octocat', ['octocat', 'octo-work']));
     assert.ok(advice);
-    assert.match(advice.warn, /active as "octocat"/);
+    assert.equal(advice.level, 'note');
+    assert.match(advice.text, /active as "octocat"/);
     assert.equal(advice.detail, 'fix: gh auth switch -u octo-work');
   });
 
   test('not signed in to gh: the fix is repown use --gh', () => {
     const advice = ghAdvice('octo-work', ghActive('octocat'));
     assert.ok(advice);
-    assert.match(advice.warn, /active as "octocat"/);
+    assert.equal(advice.level, 'note');
+    assert.match(advice.text, /active as "octocat"/);
     assert.equal(advice.detail, 'fix: repown use octo-work --gh   (signs octo-work in to gh)');
   });
 
@@ -446,7 +486,8 @@ describe('gh warning account', () => {
   test('unverified gh stays a check of gh auth status', () => {
     const advice = ghAdvice('octocat', ghUnverified());
     assert.deepEqual(advice, {
-      warn: 'could not be queried, so who `gh pr create` would act as is UNVERIFIED.',
+      level: 'warn',
+      text: 'could not be queried, so who `gh pr create` would act as is UNVERIFIED.',
       detail: 'check it yourself: gh auth status',
     });
   });
@@ -607,6 +648,14 @@ function fieldLine(label: string, value: string): string {
   return '  ' + label.padEnd(14) + ' ' + value;
 }
 
+/** Git's work-tree path uses forward slashes. Shown paths use the platform's own. */
+function shownPath(path: string): string {
+  return process.platform === 'win32' ? path.replaceAll('/', '\\') : path;
+}
+
+const GH_ACTIVE_NOTE = 'NOTE  gh         active as "octo-work", so `gh pr create` here would act as ' +
+  'that account. git pushes are unaffected; this only matters if you use gh here.';
+
 function track(box: Sandbox, ref: string): void {
   box.git('commit', '--allow-empty', '-m', 'base');
   box.git('update-ref', 'refs/remotes/' + ref, 'HEAD');
@@ -732,7 +781,7 @@ function counted(stderr: string, word?: 'FAIL' | 'WARN'): number {
 function tallyCount(stderr: string): number {
   const line = closing(stderr)
     .replace(/^ready: commits and pushes use \S+ · /, '')
-    .replace(/ \(optional: gh\)$/, '')
+    .replace(/^ready: commits use \S+; pushes use this host's own sign-in · /, '')
     .replace(/: run repown setup$/, '');
   return [...line.matchAll(/(\d+) /g)].reduce((sum, match) => sum + Number(match[1]), 0);
 }

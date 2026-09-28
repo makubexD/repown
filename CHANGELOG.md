@@ -26,7 +26,8 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   `1 problem: gh answers git's sign-in requests: run repown fix` when gh is the
   helper (still exit 1), or
   `unchecked: repown can't tell whether <helper> honours the per-clone pin`
-  for any other helper (`nothing` when none is set).
+  for any other helper (`nothing` when none is set). A source that could not be
+  read adds ` · N warning(s)` to that line.
 - A clone that is already set up opens `repown setup` on **This clone is already set
   up**, before any question. **Done** changes nothing. **Use another account**
   continues at the account question. **Sign in to gh as `<account>`** appears only

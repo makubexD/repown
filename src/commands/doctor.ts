@@ -38,8 +38,10 @@ export default {
     const git = gitFor(args);
     const repo = await inspectRepo(git);
     const auth = await inspectAuth(git, repo.originUrl ?? undefined);
-    printReport(repo, auth, await loadRegistry());
-    return diagnose(auth, repo.provider.label);
+    const warned = printReport(repo, auth, await loadRegistry());
+    const found = diagnose(auth, repo.provider.label);
+    closeDoctor(found.verdict + warningTally(warned));
+    return found.code;
   },
 } satisfies Command;
 
@@ -282,11 +284,14 @@ function recordedPhrase(row: AccountRow): string {
   return '';
 }
 
-function printReport(repo: RepoState, auth: AuthState, registry: Result<Registry>): void {
+/** Prints the machine and its accounts; returns how many sources could not be read. */
+function printReport(repo: RepoState, auth: AuthState, registry: Result<Registry>): number {
   out.heading(DOCTOR_TITLE);
   printMachine(auth);
-  printAccounts(accountRows(registry, auth, pinnedOf(repo)));
+  const report = accountRows(registry, auth, pinnedOf(repo));
+  printAccounts(report);
   out.line();
+  return report.warnings.length;
 }
 
 function printMachine(auth: AuthState): void {
@@ -313,7 +318,13 @@ function warnSource(warning: SourceWarning): void {
   if (warning.detail) out.detail(warning.detail);
 }
 
-function diagnose(auth: AuthState, providerLabel: string): number {
+/** What the helper check found: the exit code, and the closing line that says it. */
+interface Diagnosis {
+  readonly code: number;
+  readonly verdict: string;
+}
+
+function diagnose(auth: AuthState, providerLabel: string): Diagnosis {
   if (auth.ghIsHelper) return diagnoseGhHelper(auth);
   if (!auth.helperIsGcm) return diagnoseUnknownHelper(auth);
   return diagnoseHealthy(auth, providerLabel);
@@ -329,7 +340,13 @@ function closeDoctor(line: string): void {
   out.note(line);
 }
 
-function diagnoseGhHelper(auth: AuthState): number {
+/** A source that could not be read is a warning above; the verdict counts it, as status does. */
+function warningTally(count: number): string {
+  if (count === 0) return '';
+  return ' · ' + count + (count === 1 ? ' warning' : ' warnings');
+}
+
+function diagnoseGhHelper(auth: AuthState): Diagnosis {
   out.fail('helper', 'gh is the credential helper for github.com.');
   out.detail('It serves ONLY its active account and returns nothing for any');
   out.detail('other, so every repository pinned to a different account is');
@@ -339,8 +356,7 @@ function diagnoseGhHelper(auth: AuthState): number {
   ghHelperFiles(auth);
   out.line();
   out.line('  fix: repown fix');
-  closeDoctor(GH_PROBLEM);
-  return 1;
+  return { code: 1, verdict: GH_PROBLEM };
 }
 
 /** On its own line, and only when known: an empty "()" used to read as a bug. */
@@ -356,26 +372,24 @@ function ghHelperFiles(auth: AuthState): void {
   for (const file of files) out.detail('  ' + file);
 }
 
-function diagnoseUnknownHelper(auth: AuthState): number {
+function diagnoseUnknownHelper(auth: AuthState): Diagnosis {
   const helper = auth.helper ?? 'nothing';
   out.warn('helper', 'github.com is served by "' + helper + '", which repown has no opinion about.');
   out.detail('The per-repository pin (credential.<url>.username) only works if');
   out.detail('that helper honours it.');
-  closeDoctor(unchecked(helper));
-  return 0;
+  return { code: 0, verdict: unchecked(helper) };
 }
 
 function unchecked(helper: string): string {
   return 'unchecked: repown can\'t tell whether ' + helper + ' honours the per-clone pin';
 }
 
-function diagnoseHealthy(auth: AuthState, providerLabel: string): number {
+function diagnoseHealthy(auth: AuthState, providerLabel: string): Diagnosis {
   explainGcm();
   const empty = emptyStore(auth);
   if (empty) warnEmptyStore();
   ssoNote(providerLabel);
-  closeDoctor(empty ? READY_EMPTY : READY);
-  return 0;
+  return { code: 0, verdict: empty ? READY_EMPTY : READY };
 }
 
 function explainGcm(): void {

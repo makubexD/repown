@@ -63,6 +63,9 @@ It stays.
   - any other helper, including none:
     `unchecked: repown can't tell whether <helper> honours the per-clone pin`
     (`nothing` when no helper is set)
+
+  A source that could not be read (the registry, the store, gh) keeps its WARN,
+  and the verdict adds ` · N warning(s)`, so a ready line never hides an unknown.
 - **Exit codes are unchanged.** Neither command has `--format json`
   ([ADR-014](ADR-014-json-for-scripts.md)).
 

@@ -7,10 +7,10 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { sandbox, type Sandbox } from './helpers.ts';
 import { ok, err } from '../src/core/result.ts';
-import type { Account, Registry } from '../src/core/registry.ts';
+import { registryPath, type Account, type Registry } from '../src/core/registry.ts';
 import type { Result } from '../src/core/result.ts';
 import {
   accountRows, formatAccountLines, type AccountReport, type DoctorAuth,
@@ -423,6 +423,16 @@ describe('repown doctor output', () => {
     assert.match(run.stderr, /WARN {2}helper/);
     assert.doesNotMatch(run.stdout, /SSO authorization/);
     assert.equal(closing(run.stderr), 'unchecked: repown can\'t tell whether store honours the per-clone pin');
+  });
+
+  test('a source that could not be read is counted in the verdict, as status counts it', () => {
+    const path = registryPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, '{');
+    const run = repown(['doctor'], box.dir, doctorEnv(bin));
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /WARN {2}account {4}the account registry could not be read/);
+    assert.equal(closing(run.stderr), READY + ' · 1 warning');
   });
 
   test('no helper is unchecked the same way, naming nothing', () => {

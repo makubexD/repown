@@ -146,6 +146,9 @@ flowchart TD
 - gh is the helper: `1 problem: gh answers git's sign-in requests: run repown fix`
 - any other helper, or none: `unchecked: repown can't tell whether <helper> honours the per-clone pin` (`nothing` when none is set)
 
+When the registry, the store or gh could not be read, its WARN is above and the verdict
+adds ` · 1 warning` (or `N warnings`), as status counts its warnings.
+
 **Why:** switching gh's account moves the password prompt to your other account's
 clones rather than fixing it ([ADR-001](decisions/ADR-001-credential-manager-not-gh.md)).
 </details>

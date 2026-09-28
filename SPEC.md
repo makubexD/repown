@@ -66,8 +66,8 @@ The start screen is a summary, then one menu:
   which asks its own confirmation.
 - **Record an account**: runs `accounts add`, asking for the login first.
 - **Check this machine**: runs `doctor`'s `run()`.
-- **Show help**: prints the top help, exit 0. **Quit**, Esc or Ctrl-C: exit 0 (Esc keeps
-  the wizard's cancel convention if it has one: check `engine.ts`), and nothing has changed.
+- **Show help**: prints the top help, exit 0. **Quit** exits 0. Esc or Ctrl-C exits 130,
+  the same cancel setup uses. Neither changes anything.
 - **No clones found**: the clones line says `none below this folder (2 levels)`, and the menu
   shows a note: `cd into a clone (or git clone one), then run repown`.
 - **Routing.** `Program.chooseDefault` may return a runner (`() => Promise<number>`) as
@@ -98,7 +98,7 @@ The start screen is a summary, then one menu:
 | H11 | Pick "Set up a clone", pick one | `> repown setup --cwd <path>` printed, then setup's first screen in that clone |
 | H12 | "Set up a clone", then ← Back | Back at the menu |
 | H13 | Show help | Top help printed, exit 0 |
-| H14 | Quit / Esc | Exit 0, config and registry unchanged |
+| H14 | Quit / Esc | Quit exits 0; Esc or Ctrl-C exits 130. Config and registry unchanged |
 
 ## Open questions
 - Should "Record an account" start setup's account questions instead of `accounts add`?

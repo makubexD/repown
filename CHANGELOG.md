@@ -7,6 +7,16 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+### Changed
+
+- In a terminal, bare `repown` outside a clone, or in a bare repository, opens a
+  start screen. It shows the accounts on this machine, whether gh serves git's
+  credentials, and the clones found up to 2 levels below, then offers the next
+  command. Nothing changes until you pick one. Quit exits 0; Esc or Ctrl-C exits
+  130. With stdout redirected, a clone still prints status, and outside a clone it
+  still prints help (exit 0). Without a terminal on stdin or stderr, it is still
+  status.
+
 ## [0.2.0] - 2026-09-28
 
 ### Added

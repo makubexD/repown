@@ -41,6 +41,7 @@ only when you run them: `repown fix` removes gh's helper entries from your git c
 | I want to… / What happened? | Card |
 | --- | --- |
 | Be guided through it, one question at a time | [13](#13-guided-setup) |
+| Run `repown` outside a clone | [14](#14-outside-a-clone) |
 | Set up a new machine | [1](#1-set-up-the-machine) |
 | Save an account once, use it everywhere | [2](#2-remember-an-account) |
 | Make a clone belong to an account | [3](#3-pin-a-clone) |
@@ -243,10 +244,12 @@ it goes straight to the review. When origin belongs to someone else, it still as
 
 ### 5. Check where you are
 
-In a terminal, bare **`repown`** starts `repown setup` in a clone, pinned or not, and shows
-the help outside a clone (exit 0). Without a terminal, or with its output redirected, it is
-always status (exit 1 outside a clone). **`repown status`** prints all three identities and
-changes nothing.
+In a terminal (stdin, stdout and stderr), bare **`repown`** starts `repown setup` in a
+clone, pinned or not. Outside a clone, or in a bare repository, it opens the start screen
+([card 14](#14-outside-a-clone)). With stdout redirected, and stdin and stderr still
+terminals, it prints status inside a clone and the top help outside one (exit 0). Without
+a terminal on stdin or stderr, it is status (exit 1 outside a clone). **`repown status`**
+prints all three identities and changes nothing.
 
 <details><summary>Show how</summary>
 
@@ -312,8 +315,9 @@ clone path uses backslashes; elsewhere it is shown as git printed it
 ([ADR-023](decisions/ADR-023-status-and-doctor-say-what-matters-first.md)).
 Outside a clone,
 `repown status` prints `Not a git repository` and exits 1. Bare `repown` does that only
-without a terminal or with its output redirected; in a terminal it shows the help and
-exits 0. A bare repository takes that same path.
+when stdin or stderr is not a terminal. With stdout redirected, and the other two still
+terminals, it prints the top help and exits 0. In a terminal it opens the start screen
+([card 14](#14-outside-a-clone)). A bare repository takes that same path.
 
 </details>
 
@@ -586,8 +590,9 @@ To uninstall, follow the [README's steps](../README.md#uninstall), and also:
 
 ### 13. Guided setup
 
-In a terminal, **`repown`** with no arguments starts this, whether or not the clone is
-already set up. A clone that is pinned intact and has nothing left for Recommended to do
+In a terminal, inside a clone, **`repown`** with no arguments starts this, whether or not
+the clone is already set up. Outside a clone it opens the start screen
+([card 14](#14-outside-a-clone)). A clone that is pinned intact and has nothing left for Recommended to do
 opens on the "already set up" screen, before any question
 ([ADR-022](decisions/ADR-022-set-up-clone-opens-on-settled-screen.md)).
 **`repown setup`** with no account and no flags does the same. Otherwise it asks how it
@@ -929,3 +934,146 @@ is on, otherwise nothing. `repown status` shows the same value, and adds
 `none yet` when neither applies.
 
 </details>
+
+### 14. Outside a clone
+
+In a terminal, outside a clone or in a bare repository, bare `repown` opens a start
+screen. It reads this folder, says what it found, and offers the next command. Nothing
+changes until you pick one
+([ADR-024](decisions/ADR-024-bare-repown-outside-a-clone-opens-a-start-screen.md)).
+
+<details><summary>Show how</summary>
+
+```mermaid
+flowchart TD
+  B["bare repown"] --> I{"stdin and stderr<br/>both terminals?"}
+  I -->|no| S["status<br/>exit 1 outside a clone"]
+  I -->|yes| C{"inside a clone?"}
+  C -->|yes| O1{"stdout a terminal?"}
+  O1 -->|yes| SU["repown setup"]
+  O1 -->|no| S2["status"]
+  C -->|"no, or a bare repository"| O2{"stdout a terminal?"}
+  O2 -->|yes| HOME["start screen"]
+  O2 -->|no| HELP["top help, exit 0"]
+  HOME --> SUM["summary, then one menu"]
+  SUM --> MENU{"What next?"}
+  MENU -->|clones were found| SET["Set up a clone found here"]
+  SET --> LIST["not set up first, at most 20<br/>then: and N more: repown scan"]
+  LIST -->|pick one| RUN["print the command, then setup in that clone"]
+  LIST -->|"← Back"| MENU
+  MENU -->|gh is the helper| FIX["Stop gh serving credentials"]
+  MENU --> ADD["Record an account"]
+  MENU --> DOC["Check this machine"]
+  MENU --> SH["Show help, exit 0"]
+  MENU --> QUIT["Quit, exit 0"]
+  MENU -->|Esc or Ctrl-C| ESC["exit 130, nothing changed"]
+```
+
+With colour on, the screen looks like this. The summary lines are the folder's; the
+menu is the prompt. The highlighted row shows its hint in parentheses.
+
+```
+┌  repown · not a clone: /home/octocat/code
+│
+◇  Reading this folder
+  Accounts   2 recorded: octocat, octo-work
+  Helper     gh serves git's credentials: run repown fix
+  Clones     3 below this folder: 2 not set up, 1 set up
+
+│
+◆  What next?
+│  ● Set up a clone found here (2 not set up)
+│  ○ Stop gh serving credentials
+│  ○ Record an account
+│  ○ Check this machine
+│  ○ Show help
+│  ○ Quit
+│  ↑/↓ to navigate • Enter: confirm
+└
+```
+
+A plain terminal (colour off on stderr, `TERM=dumb`, or the prompt library can't load)
+lists the same choices numbered, hints included
+([when](CONFIGURATION.md#environment-variables)):
+
+```
+What next?
+  1) Set up a clone found here  -- 2 not set up
+  2) Stop gh serving credentials  -- repown fix
+  3) Record an account  -- repown accounts add
+  4) Check this machine  -- repown doctor
+  5) Show help
+  6) Quit
+  choice [1]: 
+```
+
+**Summary.** Each line is two spaces, then a label padded to 10, then the value.
+
+| Line | When | Value |
+| --- | --- | --- |
+| `Accounts` | the registry was read | `none recorded`, or `2 recorded: octocat, octo-work` (the logins, sorted) |
+| `Accounts` | the registry could not be read | `could not read` and that path. Never `none` |
+| `Helper` | gh's per-host helper entries, the ones `repown fix` removes, are present | `gh serves git's credentials: run repown fix` |
+| `Clones` | clones were found, up to 2 levels below | `3 below this folder: 2 not set up, 1 set up` |
+| `Clones` | none were found | `none below this folder (2 levels)` |
+
+Set up means the clone already has its own identity, and a pinned account where pushes
+need one. The Helper line, and **Stop gh serving credentials**, appear only when those
+entries are present.
+
+**Discovery** looks 2 levels down. It skips dot-directories, `node_modules`, and on
+Windows `AppData`. A folder it cannot list is skipped with no message. `repown scan`
+still warns `could not read <path> -- not scanned`, and its own walk is unchanged.
+
+**No clones found.** The menu has no **Set up a clone found here**. The summary and the
+note are:
+
+```
+  Accounts   none recorded
+  Clones     none below this folder (2 levels)
+
+  cd into a clone (or git clone one), then run repown
+```
+
+With arrow keys the note is `▲  cd into a clone (or git clone one), then run repown`.
+A plain terminal prints it indented two spaces, as above.
+
+**Set up a clone found here.** Only when at least one clone was found. The list is the
+clones, not set up first, each as its path relative to this folder, with `not set up`
+or `set up`. At most 20 are listed. When more were found, a line above the list names
+the rest, for example `and 5 more: repown scan`. **← Back** returns to the menu.
+
+```
+Which clone?
+  1) extra  -- not set up
+  2) need  -- not set up
+  3) ready  -- set up
+  4) ← Back
+  choice [1]: 
+```
+
+Picking one prints the command and runs setup in that clone; its exit code is repown's:
+
+```
+       > repown setup --cwd '/home/octocat/code/need'
+```
+
+**Stop gh serving credentials** runs `repown fix`, which asks its own confirmation.
+**Check this machine** runs `repown doctor`. **Show help** prints the top help and
+exits 0.
+
+**Record an account** asks `The account's user name (login)`, with the hint
+`the name you sign in with, e.g. octocat; not your email address`. An empty answer is
+`a value is required`. Anything outside letters, digits and `. _ @ -` is
+`use letters, digits and . _ @ - only`. It then runs `repown accounts add`:
+
+```
+       > repown accounts add octocat
+```
+
+Each of those runs that command's own `run()`, after printing the command. **Quit**
+exits 0 and prints `Quit`. Esc or Ctrl-C exits 130, the same cancel `repown setup`
+uses, and prints `Cancelled: nothing was changed.` Neither writes anything.
+
+</details>
+

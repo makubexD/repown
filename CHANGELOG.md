@@ -18,8 +18,8 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   printed it.
 - `repown doctor` shows the Git Credential Manager path with that same rule. The
   SSO reminder stays on every healthy run, as one short sentence:
-  `If a push fails although the account is stored, the org may need SSO authorization: gh auth refresh -h <host>`
-  (other hosts: `check <host>'s SSO settings`). It closes with
+  `If a push fails although the account is stored, the org may need SSO authorization: authorize it in the org's SSO settings on <host>`
+  (`<host>` is the origin's host, or github.com outside a clone; other hosts: `check <label>'s SSO settings`). It closes with
   `ready: each clone signs in as its own account through Git Credential Manager`,
   or `ready · no accounts stored yet: the first push signs in once` when the store
   was read and is empty, or
@@ -32,9 +32,11 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   up**, before any question. **Done** changes nothing. **Use another account**
   continues at the account question. **Sign in to gh as `<account>`** appears only
   when gh acts as someone else, and reviews `repown use <account> --gh` (or **Make
-  `<account>` gh's active account** when gh already lists it). When
-  `push.autoSetupRemote` is already on, the screen adds
-  `upstream    set on the first push (push.autoSetupRemote)`. Step by step can still
+  `<account>` gh's active account** when gh already lists it). The box says
+  `If you use gh here, choose "Sign in to gh as <account>" below.` The `upstream`
+  line is the tracked ref (for example `origin/main`) when there is one, otherwise
+  `set on the first push (push.autoSetupRemote)` when that setting is on, otherwise
+  nothing (the same value `repown status` shows, without status's `none yet`). Step by step can still
   reach this screen after its questions, and then **Change an answer** is offered.
 - `repown setup` no longer plans a pin that would change nothing: the account is the
   one already pinned, the pin is intact, and gh is not being switched. The review
@@ -45,7 +47,9 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   `--no-input` on a settled clone leaves `git config --local --list` unchanged.
 - In Recommended, `repown setup` does not ask **Sign in to gh as `<account>` too?**
   when the clone is already pinned to that account. It answers No, and the review
-  says how to do it later. Step by step still asks. That advice is printed once: in
+  says `If you use gh here: gh auth switch -u <account>.` when gh already lists it,
+  otherwise `If you use gh here: repown use <account> --gh (signs <account> in to gh).`
+  Step by step still asks. That advice is printed once: in
   the review, or after the run when there was no review (`--no-input`).
 - `repown use` warns when the current branch has commits no remote has by another
   address: `N commits on <branch> not on any remote are by <addresses>; the guard

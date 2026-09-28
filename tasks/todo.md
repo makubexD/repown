@@ -16,7 +16,7 @@
   - Tests: none.
   - Files: README.md.
   - Docs: none.
-- [ ] **5. README rewrite**
+- [x] **5. README rewrite**
   - Tests: test/docs.test.ts.
   - Files: README.md.
   - Docs: this task is itself docs work. It covers R1–R11 and E1–E4 of the plan, and must:
@@ -26,7 +26,7 @@
     - add the bare-`repown` routing table, an exit-codes table, the "Day to day" block,
       the "Where it works" table and three new Troubleshooting rows;
     - keep emoji out of headings.
-- [ ] **6. Docs sweep**
+- [x] **6. Docs sweep**
   - Tests: test/docs.test.ts.
   - Files and Docs:
     - HOW-IT-WORKS: card 1 (the SSO line), card 6, and the settled-screen prose;

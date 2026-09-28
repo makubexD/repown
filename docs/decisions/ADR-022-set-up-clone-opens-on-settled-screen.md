@@ -45,9 +45,11 @@ the screen that says nothing needs to change.
   screen has no **Change an answer**, because nothing has been asked. Step by step
   can still reach the same screen after its questions, and then **Change an answer**
   is offered. There is no **Apply the same settings again**: the plan is empty, so
-  a re-run would have nothing to run. When `push.autoSetupRemote` is effectively
-  true, the headline adds `upstream    set on the first push (push.autoSetupRemote)`,
-  the words `repown status` uses, in line with commits as, pushes as and guard.
+  a re-run would have nothing to run. The headline's `upstream` line is the tracked
+  ref (for example `origin/main`) when there is one, otherwise
+  `set on the first push (push.autoSetupRemote)` when that setting is on, otherwise
+  the line is absent. Those are the words `repown status` uses, apart from status's
+  `none yet` when neither applies, in line with commits as, pushes as and guard.
 - **Recommended does not ask the gh question when the chosen account is the pin.**
   The answer stays No, so the review still says how to point gh at that account
   later. Step by step still asks. A gh switch for a different account is unchanged.

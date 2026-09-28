@@ -49,8 +49,9 @@ It stays.
 - **The SSO reminder stays on the healthy diagnosis**, including when the store
   was read and is empty. It is not withheld until a push fails. It is one sentence,
   wrapped at the report's width, and it is the report's last line:
-  `If a push fails although the account is stored, the org may need SSO authorization: gh auth refresh -h <host>`.
-  Any other host says `check <host>'s SSO settings`. The gh-helper and
+  `If a push fails although the account is stored, the org may need SSO authorization: authorize it in the org's SSO settings on <host>`.
+  `<host>` is the origin's host, or github.com outside a clone.
+  Any other host says `check <label>'s SSO settings`. The gh-helper and
   unknown-helper diagnoses do not add it; they already name their own problem.
 - **Doctor closes the way status does**, a blank line then one line, on stderr:
   - Git Credential Manager, and the store holds an account:

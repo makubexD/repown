@@ -84,7 +84,7 @@ Accounts
   switching is needed for git, and `gh auth switch` affects the CLI only.
 
   If a push fails although the account is stored, the org may need SSO
-  authorization: gh auth refresh -h <host>
+  authorization: authorize it in the org's SSO settings on github.com
 
 ready: each clone signs in as its own account through Git Credential Manager
 ```
@@ -113,8 +113,8 @@ above says why and points at `repown setup`. Under the list, when Git Credential
 Manager is the helper, the report explains per-clone sign-in and then one sentence,
 on every such run, because repown cannot see SSO authorization
 ([ADR-013](decisions/ADR-013-deliberately-not-done.md)):
-`If a push fails although the account is stored, the org may need SSO authorization: gh auth refresh -h <host>`.
-Another host says `check <host>'s SSO settings`. The gh-helper and unknown-helper
+`If a push fails although the account is stored, the org may need SSO authorization: authorize it in the org's SSO settings on <host>`.
+`<host>` is the origin's host, or github.com outside a clone. Another host says `check <label>'s SSO settings`. The gh-helper and unknown-helper
 screens do not repeat it; they name their own problem. On Windows the clone path
 in status and the GCM path here use backslashes. Elsewhere a path is shown as it
 was read ([ADR-023](decisions/ADR-023-status-and-doctor-say-what-matters-first.md)).
@@ -344,8 +344,7 @@ sequenceDiagram
 **Push failed just after signing in?** Your organisation may use SSO, and the new
 credential isn't authorized for it yet. Authorize it in the organisation's SSO settings on
 GitHub, then push again. repown can't detect this in advance; when Git Credential
-Manager is the helper, `repown doctor` prints
-`If a push fails although the account is stored, the org may need SSO authorization: gh auth refresh -h <host>`.
+Manager is the helper, `repown doctor` reminds you of this on every run.
 </details>
 
 ### 7. Push: what the guard checks
@@ -657,7 +656,7 @@ never suggested.
 | Which account should this clone belong to? | an account is recorded, or a GitHub login can already be seen. Default: the one pinned here if it is recorded, else origin's owner when it is recorded and not known to be an organisation, else origin's owner when that owner is a user, else the first other recorded account, else a new account | `use <account>`, after `accounts add` when the login is not recorded |
 | The account's user name (login) | "a new account", or nothing recorded and nothing detected. Starts as origin's owner only when that owner is a user and is not recorded. Refused if already recorded | the `<account>` of `accounts add` |
 | Where it's hosted, and your name and email as commits show them (on GitHub, with where to find your noreply address; this machine's default is shown, never filled in) | the login is new: "a new account", or one picked from the logins already seen | `accounts add <account> --name --email --host` |
-| Also make this account gh's active account? (default No) | a GitHub clone (or one whose origin isn't a URL), gh knows the account, another is active. Recommended does not ask this when the clone is already pinned to that account: it answers No, and the review says how to do it later | `use --gh` |
+| Also make this account gh's active account? (default No) | a GitHub clone (or one whose origin isn't a URL), gh knows the account, another is active. Recommended does not ask this when the clone is already pinned to that account: it answers No, and the review names the command (`gh auth switch -u <account>`, or `repown use <account> --gh` when gh does not list it) | `use --gh` |
 | Sign in to gh as that account too? (default No) | the same, except gh does not know the account. Yes opens a browser; gh then acts as that account in every terminal. The line under it names gh's active account, or says gh isn't signed in. Recommended skips it the same way when the clone is already pinned to that account | `use --gh` |
 | This repository belongs to "octo-org". Let this clone push to it? (default Yes) | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
 | Turn on the push guard? (default Yes) | the guard is off, no other tool owns the hook, and `core.hooksPath` doesn't redirect hooks | `guard on` |
@@ -670,7 +669,7 @@ without `-u`. It also switches gh, without asking, when gh already lists the acc
 and this clone is not already pinned to it. Each of those is still a step in the
 review, and Change an answer can open it. When the clone is already pinned to the
 chosen account, Recommended does not ask about gh and answers No, so the review
-names the command for later. It still asks for the account, and for a new account
+names the command (`If you use gh here: …`). It still asks for the account, and for a new account
 the host, name and email. It always asks, default Yes, when origin belongs to
 someone other than the account. It still asks, default No, when signing in to gh
 would open a browser and the clone is not already pinned to that account, and when
@@ -704,8 +703,11 @@ Without a terminal (CI, a script): see [Scripts and CI](CONFIGURATION.md#scripts
   not be read), still counts. The screen then says
   `optional: push branches without -u: repown setup --auto-upstream` when git could
   still set it. Recommended answers Yes, so that clone is not already set up until the
-  setting is on. When the effective value is already true, the screen adds
-  `upstream    set on the first push (push.autoSetupRemote)`, as status says it;
+  setting is on. The screen's `upstream` line is the tracked ref (for example
+  `origin/main`) when there is one, otherwise
+  `set on the first push (push.autoSetupRemote)` when that setting is on,
+  otherwise the line is absent. That is what `repown status` shows, except status
+  says `none yet` when neither applies;
 - the guard is already on, or it is not repown's to turn on (another tool owns the
   hook, or `core.hooksPath` redirects hooks). Recommended would turn an ordinary off
   guard on, and that clone is not already set up;
@@ -837,7 +839,7 @@ OK    upstream   branches without an upstream push without -u in this clone
        optional, only if you use gh here: gh auth switch -u octocat
 ```
 
-The last line is only when gh still acts as someone else and the review did not already say so. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh   (signs <account> in to gh)`. The review says the same thing (`gh still acts as <active>… If you use gh here, later:`), and that run does not print it again. With `--no-input` there is no review, so the line after the run is the one place it appears. The first push's sign-in is said by `use` when `use` runs. When the pin is left out and Git Credential Manager's store was read and does not list the account, the review says `No stored credential for <account> yet: the first push signs in once (your browser opens).`
+The last line is only when gh still acts as someone else and the review did not already say so. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh   (signs <account> in to gh)`. The review says the same thing (`gh still acts as <active>, so gh pr create here would act as that account (git pushes are unaffected). If you use gh here: gh auth switch -u <account>.` when gh already lists it, otherwise `If you use gh here: repown use <account> --gh (signs <account> in to gh).`), and that run does not print it again. With `--no-input` there is no review, so the line after the run is the one place it appears. The first push's sign-in is said by `use` when `use` runs. When the pin is left out and Git Credential Manager's store was read and does not list the account, the review says `No stored credential for <account> yet: the first push signs in once (your browser opens).`
 
 `changed in this clone:` is what this run wrote in the clone, read before the first step and again after it (also after Stop, or after a step fails). A key that was unset is `(added)`; one that is gone is `old -> (removed)`. A key that did not change is left out. `repown.allowOwner` lists the values added or removed. The guard is `push guard: off -> on`. Only these config values are shown, never what a credential helper prints. When nothing in the clone changed, that block is the one line `nothing changed in this clone`. A settled clone whose pin was left out still says `done: this clone is set up for <account>`.
 
@@ -898,7 +900,7 @@ Stop, or Esc, prints `not run:` and the commands that did not get their turn. Ex
 │  commits as  Octo Cat <octocat@users.noreply.github.com>           │
 │  pushes as   octocat                                               │
 │  guard       on: every push is checked before it leaves            │
-│  upstream    set on the first push (push.autoSetupRemote)          │
+│  upstream    origin/main                                           │
 │                                                                    │
 │  Nothing needs to change.                                          │
 │                                                                    │
@@ -918,7 +920,12 @@ Stop, or Esc, prints `not run:` and the commands that did not get their turn. Ex
 **Done** writes nothing. **Use another account** asks which account, then the rest of
 Recommended. When gh acts as someone else, a third option is **Sign in to gh as
 octocat** (or **Make octocat gh's active account** when gh already lists it). Choosing
-it reviews `repown use octocat --gh` and nothing else. The `upstream` line is there
-when `push.autoSetupRemote` is already effectively true.
+it reviews `repown use octocat --gh` and nothing else. The box then says
+`If you use gh here, choose "Sign in to gh as octocat" below.`
+(or `Make octocat gh's active account` when gh already lists it).
+The `upstream` line is the tracked ref (for example `origin/main`) when there is
+one, otherwise `set on the first push (push.autoSetupRemote)` when that setting
+is on, otherwise nothing. `repown status` shows the same value, and adds
+`none yet` when neither applies.
 
 </details>

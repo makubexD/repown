@@ -54,7 +54,7 @@ async function runCheck(args: Args): Promise<number> {
   });
 
   if (refusals.length === 0) {
-    out.pass('guard', 'every commit in this push carries this clone’s identity');
+    out.pass('guard', 'every commit in this push carries this clone\'s identity');
     return 0;
   }
   report(refusals);

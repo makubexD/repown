@@ -298,7 +298,7 @@ describe('guard check', () => {
         stdin: `refs/heads/work ${bare.git('rev-parse', 'HEAD')} refs/heads/work ${ZERO}\n`,
       });
       assert.equal(refusals.length, 1);
-      assert.match(refusals[0]!.reason, /sets no identity of its own/);
+      assert.match(refusals[0]!.reason, /sets no identity of its own, so the guard cannot tell your commits from anyone else's/);
     } finally {
       bare.dispose();
     }

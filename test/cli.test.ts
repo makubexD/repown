@@ -375,6 +375,7 @@ describe('guard check (the hook contract every installed hook already calls)', (
     const stdin = `refs/heads/main ${sha} refs/heads/main ${'0'.repeat(40)}\n`;
     const run = repown(['guard', 'check', '--remote', 'origin', '--url', ORIGIN], { cwd: box.dir, input: stdin });
     assert.equal(run.status, 0);
+    assert.match(run.stdout, /every commit in this push carries this clone's identity/);
   });
 
   test('a foreign-authored commit in the same range is refused', () => {

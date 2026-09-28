@@ -1,0 +1,37 @@
+# Final review fixes: tasks
+
+- [ ] **1. Settled upstream matches status (scenarios 1a–1d)**
+  - Tests: the status upstream tests in test/wizard-screens.test.ts and test/status.test.ts.
+  - Files: src/commands/status.ts, src/wizard/setup-context.ts, src/wizard/setup-flow.ts.
+  - Docs: in the sweep (task 6).
+- [ ] **2. Doctor's SSO line names the real fix and host (2a–2c)**
+  - Tests: test/doctor.test.ts.
+  - Files: src/commands/doctor.ts.
+  - Docs: in the sweep.
+- [ ] **3. The gh sentence in review and on the settled screen (3a–3c)**
+  - Tests: test/wizard-setup.test.ts and test/wizard-screens.test.ts.
+  - Files: src/wizard/setup-flow.ts.
+  - Docs: in the sweep.
+- [ ] **4. Revert the stray `demo` line (commit bef09e6)**
+  - Tests: none.
+  - Files: README.md.
+  - Docs: none.
+- [ ] **5. README rewrite**
+  - Tests: test/docs.test.ts.
+  - Files: README.md.
+  - Docs: this task is itself docs work. It covers R1–R11 and E1–E4 of the plan, and must:
+    - fix the stale `npx`/bare-`repown`/doctor wording;
+    - add one questions table in place of the duplicated prose;
+    - show the full settled screen and a guard refusal sample;
+    - add the bare-`repown` routing table, an exit-codes table, the "Day to day" block,
+      the "Where it works" table and three new Troubleshooting rows;
+    - keep emoji out of headings.
+- [ ] **6. Docs sweep**
+  - Tests: test/docs.test.ts.
+  - Files and Docs:
+    - HOW-IT-WORKS: card 1 (the SSO line), card 6, and the settled-screen prose;
+    - CHANGELOG Unreleased;
+    - ADR-022, for the upstream rule;
+    - ADR-023, for the quoted SSO sentence;
+    - FAQ, CONFIGURATION and CONTRIBUTING, if any of them quote a changed string.
+- [ ] **7. Close-out: remove SPEC.md and tasks/todo.md**

@@ -149,6 +149,7 @@ repown                 # in a terminal: starts the guided setup of this clone
    │  ○ Back
    │  ○ Change an answer
    │  ○ Decline
+   │  ↑/↓ to navigate • Enter: confirm
    └
    ```
 
@@ -169,13 +170,16 @@ opens on that screen, before any question:
 ◆  What now?
 │  ● Done (change nothing)
 │  ○ Use another account
+│  ↑/↓ to navigate • Enter: confirm
+└
 ```
 
 **Done** changes nothing. **Use another account** asks which account this clone should
 use. When gh acts as someone else, a third option signs that account in to gh
-(`repown use <account> --gh`). The screen also lists `upstream    the first push of a
-branch sets it` when `push.autoSetupRemote` is already on. `repown status` shows the
-settings without asking. Every screen: [card 13](docs/HOW-IT-WORKS.md#13-guided-setup).
+(`repown use <account> --gh`). The screen also lists
+`upstream    set on the first push (push.autoSetupRemote)` when `push.autoSetupRemote`
+is already on. `repown status` shows the settings without asking. Every screen:
+[card 13](docs/HOW-IT-WORKS.md#13-guided-setup).
 
 ## Commands
 
@@ -320,4 +324,3 @@ submodules: [card 12](docs/HOW-IT-WORKS.md#12-uninstall-or-repown-missing).
 ## License
 
 [MIT](LICENSE)
-demo to delete

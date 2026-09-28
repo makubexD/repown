@@ -1,6 +1,6 @@
 # Setup audit fixes
 
-Status: Tasks 0, 1, 2, 3, 4, 5, 6, 7, 8 done; next: Task 9.
+Status: Tasks 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 done; next: Review.
 
 - [x] 0. Plan: SPEC.md + tasks/todo.md
 - [x] 1. The stale "check it any time" hint and the doubled "later: fix:" (A1, B4). Tests: wizard-setup, wizard-screens. Files: src/wizard/setup-run.ts, setup-flow.ts. Docs: HOW-IT-WORKS card 13
@@ -11,6 +11,6 @@ Status: Tasks 0, 1, 2, 3, 4, 5, 6, 7, 8 done; next: Task 9.
 - [x] 6. Typography: plain apostrophe in guard, one punctuation style in use (D8). Tests: guard, use, cli. Docs: README sample, HOW-IT-WORKS samples
 - [x] 7. status: identity first, gh as a note, the auto-upstream line (E7). Tests: status. Files: src/commands/status.ts, src/ui/format.ts if a note level is needed. Docs: ADR-023 (new), card 5, README, CHANGELOG
 - [x] 8. doctor: path style, SSO reminder kept and shortened, a verdict line (E8). Tests: doctor. Files: src/commands/doctor.ts. Docs: ADR-023, the doctor card, README, CHANGELOG
-- [ ] 9. Documentation sweep: README, HOW-IT-WORKS, CONFIGURATION, FAQ, CONTRIBUTING, SECURITY, decisions/README, CHANGELOG, CLAUDE.md match the code, sample output included
+- [x] 9. Documentation sweep: README, HOW-IT-WORKS, CONFIGURATION, FAQ, CONTRIBUTING, SECURITY, decisions/README, CHANGELOG, CLAUDE.md match the code, sample output included
 - [ ] Review: /grok-build:critique on the branch; fix what survives
 - [ ] Close-out: remove SPEC.md and tasks/todo.md, naming where each fact lives

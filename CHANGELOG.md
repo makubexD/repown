@@ -32,9 +32,9 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   continues at the account question. **Sign in to gh as `<account>`** appears only
   when gh acts as someone else, and reviews `repown use <account> --gh` (or **Make
   `<account>` gh's active account** when gh already lists it). When
-  `push.autoSetupRemote` is already on, the screen adds `upstream    the first push
-  of a branch sets it`. Step by step can still reach this screen after its questions,
-  and then **Change an answer** is offered.
+  `push.autoSetupRemote` is already on, the screen adds
+  `upstream    set on the first push (push.autoSetupRemote)`. Step by step can still
+  reach this screen after its questions, and then **Change an answer** is offered.
 - `repown setup` no longer plans a pin that would change nothing: the account is the
   one already pinned, the pin is intact, and gh is not being switched. The review
   lists only the steps that write something. When that plan has no `use` and Git
@@ -58,7 +58,7 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   If the commits can't be read, the warning says so and gives no rebase command.
   The exit code is unchanged.
 - After `repown setup` runs (Recommended or Step by step, including skips, Stop,
-  a failed step, and **Apply the same settings again**), it prints what changed
+  and a failed step), it prints what changed
   in this clone: `changed in this clone:` and one line per local key,
   `key: old -> new`, `(added)`, or `old -> (removed)`. `repown.allowOwner`
   lists the values added or removed. The guard is `push guard: off -> on`.
@@ -76,19 +76,21 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   a skipped step is named with `skipped:`. Recommended mode is unchanged.
 - `repown setup` starts by asking `How should setup work?`. Recommended (the default)
   asks for the account — and the host, name and email when the account is new — and
-  fills in the push guard, push new branches without `-u`, and a gh switch when gh
-  already lists the account. Those steps still appear in the review, and Change an
-  answer can open them. When origin belongs to someone else, Recommended still asks
+  fills in the push guard, push branches without `-u`, and a gh switch when gh
+  already lists the account and this clone is not already pinned to it. Those steps
+  still appear in the review, and Change an answer can open them. When origin belongs to someone else, Recommended still asks
   whether this clone may push there (default Yes). A gh sign-in, which opens a
   browser, and `fix`, which changes the whole machine, are still asked, default No.
   Step by step asks every question. The flag is `--step-by-step`.
   `repown setup <account>` skips the mode question and uses Recommended, so a recorded
   account goes straight to the review when nothing else must be asked.
   `--step-by-step --no-input` exits 2.
-  `--no-input` still answers an ungiven question No. A clone that is otherwise ready,
-  where push new branches without `-u` was left off, counts as already set up and notes
-  `repown setup --auto-upstream`.
-- `repown setup` asks `Push new branches without -u?` (default Yes) when git is
+  `--no-input` still answers an ungiven question No. Answering No to push branches
+  without `-u`, or never being offered that question, still counts as already set up
+  and notes `optional: push branches without -u: repown setup --auto-upstream` when
+  git could still set it. Recommended answers Yes, so that step stays in the plan
+  until the setting is on.
+- `repown setup` asks `Push branches without -u?` (default Yes) when git is
   2.37.0 or newer and `push.autoSetupRemote` is not already true. Yes runs
   `git config --local push.autoSetupRemote true` in this clone only. The flag is
   `--auto-upstream`. With `--no-input`, leaving the flag off keeps the answer No.

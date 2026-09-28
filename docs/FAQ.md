@@ -50,11 +50,14 @@ commit has no parent), or pin that address. `<base>` is the short hash of the pa
 of the oldest of those commits. Nothing here rewrites history
 ([card 3](HOW-IT-WORKS.md#3-pin-a-clone), [card 8](HOW-IT-WORKS.md#8-push-refused-and-the-fix)).
 
-**I ran `repown setup` again and it said "already set up". Is that right?** Yes: the clone
-already uses that account exactly as recorded. Choose **Done**, or **Apply the same
-settings again** to re-run `repown use`. Bare `repown` in a terminal opens setup too, even
-when the clone is already pinned, so it can check what is left (for example pushing new
-branches without `-u`). `repown status` shows the settings without asking
+**I ran `repown setup` again and it said "already set up". Is that right?** Yes, when the
+clone already uses that account exactly as recorded and this run has nothing left to
+write. It opens on that screen before any question. **Done** changes nothing. **Use
+another account** continues at the account question. When gh acts as someone else, a
+third option signs that account in to gh (`repown use <account> --gh`), or makes it gh's
+active account when gh already lists it. A pin that would change nothing is left out, so
+there is nothing to apply again. Bare `repown` in a terminal opens setup too, even when
+the clone is already pinned. `repown status` shows the settings without asking
 ([card 13](HOW-IT-WORKS.md#13-guided-setup)).
 
 **Can I run it in CI or a script?** Yes, with flags instead of questions:

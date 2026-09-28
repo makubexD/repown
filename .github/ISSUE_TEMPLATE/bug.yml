@@ -48,5 +48,5 @@ body:
   - type: textarea
     id: output
     attributes:
-      label: Output of `repown` and `repown doctor` in that clone (placeholders only)
+      label: Output of `repown status` and `repown doctor` in that clone (placeholders only)
       render: text

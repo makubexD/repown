@@ -756,7 +756,8 @@ The questions it did not ask are still steps.
 │       repown use octocat --gh
 │  3. Turn on the push guard: each push is checked first
 │       repown guard on
-│  4. Push branches without -u: the first push sets the upstream (this clone only)
+│  4. Push branches without -u: the first push sets the upstream (this
+│     clone only)
 │       git config --local push.autoSetupRemote true
 ```
 
@@ -793,9 +794,9 @@ The questions it did not ask are still steps.
 │  Yes
 │
 ◇  Push branches without -u?
-│  sets push.autoSetupRemote in this clone only, so the first
-│  push of a branch without an upstream creates it on origin;
-│  the guard still checks it
+│  sets push.autoSetupRemote in this clone only, so the first push of
+│  a branch without an upstream creates it on origin; the guard still
+│  checks it
 │  Yes
 ```
 
@@ -833,7 +834,7 @@ OK    upstream   branches without an upstream push without -u in this clone
        optional, only if you use gh here: gh auth switch -u octocat
 ```
 
-The last line is only when gh still acts as someone else and the review did not already say so. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh`. The review says the same thing (`gh still acts as <active>… If you use gh here, later:`), and that run does not print it again. With `--no-input` there is no review, so the line after the run is the one place it appears. The first push's sign-in is said by `use` when `use` runs. When the pin is left out and Git Credential Manager's store was read and does not list the account, the review says `No stored credential for <account> yet: the first push signs in once (your browser opens).`
+The last line is only when gh still acts as someone else and the review did not already say so. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh   (signs <account> in to gh)`. The review says the same thing (`gh still acts as <active>… If you use gh here, later:`), and that run does not print it again. With `--no-input` there is no review, so the line after the run is the one place it appears. The first push's sign-in is said by `use` when `use` runs. When the pin is left out and Git Credential Manager's store was read and does not list the account, the review says `No stored credential for <account> yet: the first push signs in once (your browser opens).`
 
 `changed in this clone:` is what this run wrote in the clone, read before the first step and again after it (also after Stop, or after a step fails). A key that was unset is `(added)`; one that is gone is `old -> (removed)`. A key that did not change is left out. `repown.allowOwner` lists the values added or removed. The guard is `push guard: off -> on`. Only these config values are shown, never what a credential helper prints. When nothing in the clone changed, that block is the one line `nothing changed in this clone`. A settled clone whose pin was left out still says `done: this clone is set up for <account>`.
 
@@ -864,6 +865,8 @@ When a `use --gh` step ran and gh's active account afterwards is that account, t
 │  ● Yes
 │  ○ Skip
 │  ○ Stop
+│  ↑/↓ to navigate • Enter: confirm
+└
 ```
 
 `use --gh` adds one line: `gh: switch the active account to octocat`, or `gh: sign in as octocat (opens a browser)`. The guard's line is `pre-push hook: <path> runs repown guard check` (or `this clone's pre-push hook` when the path isn't known). Allowing an owner is `repown.allowOwner += octo-org`. Pushing branches without `-u` is `push.autoSetupRemote = true`. Recording an account is `this machine's account registry: octocat = Octo Cat octocat@example.invalid`. `fix` lists the lines it removes, and Enter there is Skip.
@@ -887,23 +890,25 @@ Stop, or Esc, prints `not run:` and the commands that did not get their turn. Ex
 **Already set up:** run it again in a clone that needs nothing.
 
 ```
-◇  This clone is already set up ──────────────────────────────────────────────╮
-│                                                                             │
-│  commits as  Octo Cat <octocat@users.noreply.github.com>                    │
-│  pushes as   octocat                                                        │
-│  guard       on: every push is checked before it leaves                     │
-│  upstream    set on the first push (push.autoSetupRemote)                   │
-│                                                                             │
-│  Nothing needs to change.                                                   │
-│                                                                             │
-│  Checked: the settings git uses here are octocat's, as recorded.            │
-│  See it any time: repown status (this clone), repown doctor (this machine)  │
-│                                                                             │
-├─────────────────────────────────────────────────────────────────────────────╯
+◇  This clone is already set up ─────────────────────────────────────╮
+│                                                                    │
+│  commits as  Octo Cat <octocat@users.noreply.github.com>           │
+│  pushes as   octocat                                               │
+│  guard       on: every push is checked before it leaves            │
+│  upstream    set on the first push (push.autoSetupRemote)          │
+│                                                                    │
+│  Nothing needs to change.                                          │
+│                                                                    │
+│  Checked: the settings git uses here are octocat's, as recorded.   │
+│  See it any time: repown status (this clone), repown doctor (this  │
+│  machine)                                                          │
+│                                                                    │
+├────────────────────────────────────────────────────────────────────╯
 │
 ◆  What now?
 │  ● Done (change nothing)
 │  ○ Use another account
+│  ↑/↓ to navigate • Enter: confirm
 └
 ```
 

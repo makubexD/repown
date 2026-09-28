@@ -81,11 +81,16 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - `check.ts` inspects the author and committer of every commit in the pushed range read from
   stdin (excluding what the remote already has), and every tagger, not the current config.
 - `src/ui/format.ts`: payload (`pass`/`line`/`field`) goes to stdout; `warn`/`fail`/`detail`
-  and prompts go to stderr. Colour is decided per stream.
+  and prompts go to stderr. `noted` is optional advice on stderr, in the same columns as
+  `warn`, dim when that stream has colour. `displayPath` shows Windows separators on Windows
+  and leaves any other path unchanged; status uses it for the clone path and doctor for the
+  Git Credential Manager path. Colour is decided per stream.
 - `--format json` (`scan`, `accounts list`) is a stable contract for scripts; the text
   layout isn't. Renaming a JSON field is breaking (ADR-014).
-- `src/wizard/` is `repown setup`: `engine.ts` owns Back and the review loop and draws
-  nothing; `setup-flow.ts` is pure and turns answers into existing commands' argv;
+- `src/wizard/` is `repown setup`: `engine.ts` owns Back, the review loop, the opening
+  review (a settled clone's first screen, before any question) and resume (Use another
+  account, or the gh option, continues from there), and draws nothing;
+  `setup-flow.ts` is pure and turns answers into existing commands' argv;
   `setup-context.ts` reads the clone once, read-only; `setup-run.ts` runs each command's
   own `run()`, never a copy; `review-text.ts` holds the words both prompters (`plain.ts`,
   `clack.ts`) share, and wraps them to the window (within the widths clack wraps at itself).
@@ -97,7 +102,10 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   and friends, so neither the machine's config nor the shell running `npm test` leaks in.
 - Guard tests build foreign-authored commits with `git commit-tree`, which doesn't move HEAD.
 - `test/wizard-screens.test.ts` plays `repown setup`'s real screens with key presses
-  (`play()` in `test/setup-fixtures.ts`); add a scenario when a screen changes.
+  (`play()` in `test/setup-fixtures.ts`), including the opening review and resume from it;
+  add a scenario when a screen changes.
+- `test/format.test.ts` checks `displayPath` and which streams are coloured. `noted` is
+  what prints the gh NOTE on `repown status`.
 - `test/cli.test.ts` spawns the real entry point. Keep `guard check --remote "$1" --url "$2"`
   (hooks already on disk) and `--remote="$1" --url="$2"` (new hooks) working.
 - `test/docs.test.ts` checks the README against `repown --help` and `repown help <group>`.

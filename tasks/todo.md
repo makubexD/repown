@@ -1,6 +1,6 @@
 # Tasks: unpushed-commit advice on a never-fetched remote
 
-Status: Phase 4 build, Task 1 done; spec revised after the doubt review (FETCH_HEAD dropped, ADR-025)
+Status: Phase 5 review; Tasks 1-2 done; spec revised after the doubt review (FETCH_HEAD dropped, ADR-025)
 
 - [x] Phase 1 clarify (quality bar: CLAUDE.md + .claude/rules/code-quality.md)
 - [x] Phase 2 spec (SPEC.md approved)
@@ -21,7 +21,7 @@ Reads git config (`remote`, refs, git dir). Size S-M.
 - Docs: `docs/HOW-IT-WORKS.md` (unpushed rows ~216, ~456), `docs/FAQ.md` (~46),
   CHANGELOG `[Unreleased]` → Fixed
 
-## Task 2 — setup's review shows the same fetch line
+## Task 2 — setup's review shows the same fetch line [x]
 
 Depends on Task 1. Size XS.
 

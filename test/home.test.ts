@@ -29,8 +29,8 @@ describe('start screen', () => {
     const unset = cloneAt(root, 'zeta', false);
     const ready = cloneAt(root, 'alpha', true);
     const home = await readHome(root);
-    assert.equal(shown(home, 'Clones'), '  Clones     2 below this folder: 1 not set up, 1 set up');
-    assert.equal(shown(home, 'Accounts'), '  Accounts   none recorded');
+    assert.equal(shown(home, 'Clones'), 'Clones     2 below this folder: 1 not set up, 1 set up');
+    assert.equal(shown(home, 'Accounts'), 'Accounts   none recorded');
     const listed = listedClones(home).clones;
     assert.equal(listed[0]!.value, resolve(unset));
     assert.equal(listed[1]!.value, resolve(ready));
@@ -41,7 +41,7 @@ describe('start screen', () => {
 
   test('H6: no clones below says none, shows the cd note, and offers no setup', async () => {
     const home = await readHome(root);
-    assert.equal(shown(home, 'Clones'), '  Clones     none below this folder (2 levels)');
+    assert.equal(shown(home, 'Clones'), 'Clones     none below this folder (2 levels)');
     assert.equal(homeNote(home), 'cd into a clone (or git clone one), then run repown');
     assert.equal(menuItems(home).some((item) => item.label === 'Set up a clone found here'), false);
   });
@@ -53,7 +53,7 @@ describe('start screen', () => {
     box.git('config', '--global', '--add', 'credential.https://github.com.helper', '');
     box.git('config', '--global', '--add', 'credential.https://github.com.helper', '!gh auth git-credential');
     const present = await readHome(root);
-    assert.equal(shown(present, 'Helper'), '  Helper     gh serves git\'s credentials: run repown fix');
+    assert.equal(shown(present, 'Helper'), 'Helper     gh serves git\'s credentials: run repown fix');
     assert.equal(menuItems(present).some((item) => item.label === 'Stop gh serving credentials'), true);
   });
 
@@ -63,7 +63,7 @@ describe('start screen', () => {
     writeFileSync(path, '{');
     const home = await readHome(root);
     const accounts = shown(home, 'Accounts');
-    assert.equal(accounts, '  Accounts   could not read ' + path);
+    assert.equal(accounts, 'Accounts   could not read ' + path);
     assert.equal(accounts.includes('none'), false);
     assert.deepEqual(menuItems(home).map((item) => item.label), [
       'Record an account', 'Check this machine', 'Show help', 'Quit',
@@ -100,7 +100,7 @@ describe('start screen', () => {
     cloneAt(root, 'need', false);
     const home = await readHome(root);
     assert.equal(shown(home, 'Accounts'),
-      '  Accounts   1 recorded, 1 unreadable in ' + path + ': run repown accounts list');
+      'Accounts   1 recorded, 1 unreadable in ' + path + ': run repown accounts list');
     const labels = menuItems(home).map((item) => item.label);
     assert.ok(labels.includes('Set up a clone found here'));
     assert.ok(labels.includes('Record an account'));
@@ -110,7 +110,7 @@ describe('start screen', () => {
     const path = writeRegistry(JSON.stringify({ accounts: { broken: {} } }));
     const home = await readHome(root);
     const accounts = shown(home, 'Accounts');
-    assert.equal(accounts, '  Accounts   1 unreadable in ' + path + ': run repown accounts list');
+    assert.equal(accounts, 'Accounts   1 unreadable in ' + path + ': run repown accounts list');
     assert.equal(accounts.includes('none'), false);
     assert.deepEqual(menuItems(home).map((item) => item.label), [
       'Record an account', 'Check this machine', 'Show help', 'Quit',

@@ -437,13 +437,39 @@ describe('D7 on the plain prompter, at the default width', () => {
 });
 
 describe('start screen, played with key presses', () => {
+  test('F1: every Accounts and Clones line starts with the gutter', async () => {
+    await withProjects(async (root) => {
+      cloneAt(root, 'need');
+      const run = await play((prompter) => runHome({ prompter, cwd: root }), [[esc]], { patience: 20_000 });
+      const lines = run.screen.split('\n').filter((line) => /Accounts|Clones/.test(line));
+      assert.ok(lines.length > 0, run.screen);
+      for (const line of lines) assert.match(line, /^│/, line);
+    });
+  });
+
+  test('F2: no empty line between the summary and What next?', async () => {
+    await withProjects(async (root) => {
+      cloneAt(root, 'need');
+      const run = await play((prompter) => runHome({ prompter, cwd: root }), [[esc]], { patience: 20_000 });
+      const start = run.screen.indexOf('Clones');
+      const end = run.screen.indexOf('What next?');
+      assert.ok(start >= 0 && end > start, run.screen);
+      const empty = run.screen.slice(start, end).split('\n')
+        .filter((line) => line.replace(/\s+$/, '') === '');
+      assert.deepEqual(empty, [], run.screen);
+    });
+  });
+
   test('H11: picking a clone prints the setup command and reaches setup\'s first screen', async () => {
     await withProjects(async (root) => {
       cloneAt(root, 'need');
       const run = await play((prompter) => runHome({ prompter, cwd: root }), [[enter], [enter], [esc]], { patience: 30_000 });
       assert.equal(run.result, 130, run.screen + run.stderr);
-      assert.match(run.stderr, /> repown setup --cwd /);
-      assert.match(run.stderr, /need/);
+      assert.match(run.screen, /└ {2}> repown setup --cwd /);
+      assert.match(run.screen, /need/);
+      const commandAt = run.screen.search(/└ {2}> repown setup --cwd /);
+      const setupAt = run.screen.search(/┌ {2}repown setup\b/);
+      assert.ok(commandAt >= 0 && setupAt > commandAt, run.screen);
       assert.match(run.screen, /How should setup work\?/);
     });
   });
@@ -465,6 +491,7 @@ describe('start screen, played with key presses', () => {
     await withProjects(async (root) => {
       const run = await play((prompter) => runHome({ prompter, cwd: root }), [[down, down, enter]], { patience: 20_000 });
       assert.equal(run.result, 0, run.screen + run.stdout);
+      assert.match(run.screen, /└ {2}> repown --help/);
       assert.match(run.stdout, /repown <command>/);
       assert.match(run.stdout, /setup\s+guided setup/);
     });
@@ -477,7 +504,7 @@ describe('start screen, played with key presses', () => {
         const run = await play((prompter) => runHome({ prompter, cwd: root }), [
           [enter], [...typed('-h'), enter],
         ], { patience: 20_000 });
-        assert.match(run.stderr, /> repown accounts add -- -h/, run.screen + run.stderr);
+        assert.match(run.screen, /> repown accounts add -- -h/, run.screen + run.stderr);
         assert.equal(run.result, 1, run.stderr);
         assert.match(run.stderr, /interactive terminal to ask for the Commit name/);
         assert.doesNotMatch(run.stderr, /unknown option/);
@@ -485,6 +512,21 @@ describe('start screen, played with key presses', () => {
     } finally {
       restore();
     }
+  });
+
+  test('F7: the plain prompter indents the summary two spaces', async () => {
+    await withProjects(async (root) => {
+      cloneAt(root, 'need');
+      const input = new PassThrough();
+      const output = new PassThrough();
+      let screen = '';
+      output.on('data', (chunk: Buffer) => { screen += chunk.toString(); });
+      input.end();
+      const prompter = plainPrompter({ input, output });
+      await runHome({ prompter, cwd: root });
+      assert.match(screen, /^ {2}Accounts {3}/m);
+      assert.match(screen, /^ {2}Clones {5}/m);
+    });
   });
 
   test('H14: Quit and Esc leave global config, local config and the registry byte-identical', async () => {

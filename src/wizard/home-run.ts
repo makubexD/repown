@@ -51,8 +51,7 @@ async function openHome(prompter: Prompter, deps: HomeRunDeps): Promise<number> 
   prompter.intro?.(homeTitle(cwd));
   prompter.busy?.(BUSY);
   const home = await (deps.read ?? readHome)(cwd);
-  for (const line of summaryLines(home)) out.line(line);
-  out.line();
+  showLines(prompter, summaryLines(home));
   const note = homeNote(home);
   if (note) prompter.note(note);
   return chooseNext(prompter, home);
@@ -69,7 +68,7 @@ async function chooseNext(prompter: Prompter, home: HomeState): Promise<number> 
 
 async function dispatchChoice(picked: string, prompter: Prompter, home: HomeState): Promise<number | null> {
   if (picked === MENU.quit) return finish(prompter, QUIT, 0);
-  if (picked === MENU.help) return showTopHelp();
+  if (picked === MENU.help) return showTopHelp(prompter);
   if (picked === MENU.setup) return pickClone(prompter, home);
   if (picked === MENU.fix) return runOwn(prompter, fixCommand, [], commandFor({ kind: 'fix' }));
   if (picked === MENU.doctor) return runOwn(prompter, doctorCommand, [], commandFor({ kind: 'doctor' }));
@@ -79,7 +78,7 @@ async function dispatchChoice(picked: string, prompter: Prompter, home: HomeStat
 
 async function pickClone(prompter: Prompter, home: HomeState): Promise<number | null> {
   const list = listedClones(home);
-  if (list.more) out.line(list.more);
+  if (list.more) showLines(prompter, [list.more]);
   const options = [...list.clones, { value: HOME_BACK, label: BACK_LABEL }];
   const picked = await prompter.choose(WHICH_CLONE, options);
   if (picked === CANCEL) return finish(prompter, CANCELLED, CANCELLED_CODE);
@@ -89,7 +88,7 @@ async function pickClone(prompter: Prompter, home: HomeState): Promise<number | 
 
 async function runInClone(prompter: Prompter, cwd: string): Promise<number> {
   const argv = commandFor({ kind: 'setup', path: cwd });
-  out.detail('> ' + formatCommand(argv));
+  handOver(prompter, argv);
   return runSetup(setupArgs(cwd), { interactive: true, prompter });
 }
 
@@ -111,7 +110,7 @@ async function askLogin(prompter: Prompter): Promise<string | typeof CANCEL> {
 }
 
 async function runOwn(prompter: Prompter, command: Command, tokens: readonly string[], argv: readonly string[]): Promise<number> {
-  out.detail('> ' + formatCommand(argv));
+  handOver(prompter, argv);
   prompter.suspend?.();
   const parsed = parseArgs(tokens, specFor(command));
   if (!parsed.ok) { out.fail('repown', parsed.error); return 2; }
@@ -127,7 +126,23 @@ function finish(prompter: Prompter, message: string, code: number): number {
   return code;
 }
 
-async function showTopHelp(): Promise<number> {
+function showLines(prompter: Prompter, lines: readonly string[]): void {
+  if (prompter.show) {
+    prompter.show(lines);
+    return;
+  }
+  for (const line of lines) out.line('  ' + line);
+}
+
+/** Closes the start screen's frame on the command it hands over to. */
+function handOver(prompter: Prompter, argv: readonly string[]): void {
+  const line = '> ' + formatCommand(argv);
+  if (prompter.outro) prompter.outro(line);
+  else out.detail(line);
+}
+
+async function showTopHelp(prompter: Prompter): Promise<number> {
+  handOver(prompter, ['--help']);
   const entries = await loadEntries(COMMANDS);
   for (const line of renderTopHelp(entries)) out.line(line);
   return 0;

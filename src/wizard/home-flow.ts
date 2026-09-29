@@ -112,5 +112,5 @@ function cloneChoice(cwd: string, clone: HomeClone): Choice {
 }
 
 function row(label: string, value: string): string {
-  return '  ' + label.padEnd(10) + ' ' + value;
+  return label.padEnd(10) + ' ' + value;
 }

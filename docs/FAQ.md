@@ -57,7 +57,9 @@ another account** continues at the account question. When gh acts as someone els
 third option signs that account in to gh (`repown use <account> --gh`), or makes it gh's
 active account when gh already lists it. A pin that would change nothing is left out, so
 there is nothing to apply again. Bare `repown` in a terminal, inside a clone, opens
-setup too, even when the clone is already pinned. `repown status` shows the settings
+setup too, even when the clone is already pinned. A line inside setup's frame says the
+clone isn't set up yet, or, when it is pinned, that setup is checking it
+([card 5](HOW-IT-WORKS.md#5-check-where-you-are)). `repown status` shows the settings
 without asking ([card 13](HOW-IT-WORKS.md#13-guided-setup)).
 
 **I ran `repown` outside a clone. What happens?** In a terminal (stdin, stdout and
@@ -65,8 +67,9 @@ stderr), a start screen. It shows the accounts on this machine (or `could not re
 and the registry's path, or `N unreadable in <path>: run repown accounts list` when
 the file has entries it cannot read), a line when gh serves git's credentials, and
 the clones found up to 2 levels below. You can set one of those up, stop gh serving credentials, record an
-account, check this machine, or show help. Nothing changes until you pick one. Quit
-exits 0. Esc or Ctrl-C exits 130. With no clones below, it says to `cd` into a clone
+account, check this machine, or show help. The summary is in the frame. The frame
+closes with the command you pick, and then that command runs. Nothing changes until
+you pick one. Quit exits 0. Esc or Ctrl-C exits 130. With no clones below, it says to `cd` into a clone
 (or `git clone` one), then run `repown`. With stdout redirected it prints the top help
 and exits 0. Without a terminal on stdin or stderr it prints status and exits 1
 ([card 14](HOW-IT-WORKS.md#14-outside-a-clone),

@@ -223,13 +223,14 @@ then commit and push.
 
 | Where | What it does |
 | --- | --- |
-| A terminal, inside a clone (pinned or not) | Starts `repown setup` |
+| A terminal, inside a clone (pinned or not) | Starts `repown setup`. A line inside that screen says the clone isn't set up yet, or that a pinned clone is being checked ([card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are)) |
 | A terminal, outside a clone or in a bare repository | Opens the start screen ([card 14](docs/HOW-IT-WORKS.md#14-outside-a-clone)) |
 | stdout redirected (stdin and stderr still terminals) | Status inside a clone. The top help outside a clone, exit 0 |
 | No terminal (stdin or stderr is not one) | Status. Exit 1 outside a clone |
 
 The start screen lists the accounts on this machine and the clones it found, then offers
-the next command. Nothing changes until you pick one.
+the next command. The summary is in the frame. Picking a command closes the frame with
+that command. Nothing changes until you pick one.
 
 **Who is this clone?** `repown status` prints:
 

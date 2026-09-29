@@ -16,6 +16,13 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   130. With stdout redirected, a clone still prints status, and outside a clone it
   still prints help (exit 0). Without a terminal on stdin or stderr, it is still
   status.
+- The start screen draws its summary inside its frame, and closes that frame with
+  the command it is about to run. Show help closes with `> repown --help`, then
+  prints the help. Inside a clone, bare `repown` draws its opening sentence inside
+  setup's frame. Typing `<` at Record an account's login question returns to the menu.
+- The start screen looks inside a directory whose `.git` git refuses, with the levels
+  it has left, and does not search a bare repository for clones. Account names, and
+  the folder in the title, show control characters as escapes.
 
 ## [0.2.0] - 2026-09-28
 

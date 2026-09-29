@@ -94,6 +94,19 @@ describe('plain prompter', () => {
     assert.match(run.shown(), /Nothing changed: this clone was already set up/);
   });
 
+  test('show indents two spaces, and wraps like note', () => {
+    const run = harness('');
+    run.prompter.show?.(['Accounts   none recorded']);
+    assert.match(run.shown(), /^ {2}Accounts {3}none recorded\n/);
+    const input = new PassThrough();
+    const output = Object.assign(new PassThrough(), { columns: 40 });
+    let shown = '';
+    output.on('data', (chunk: Buffer) => { shown += chunk.toString(); });
+    const prompter = plainPrompter({ input, output });
+    prompter.show?.(['anyone who can see the repository can read it once you push']);
+    assert.match(shown, / {2}anyone who can see the repository\n {2}can read it once you push\n/);
+  });
+
   test('a settled review offers Done first', async () => {
     const run = harness('\n');
     assert.equal(await run.prompter.review(review({ settled: true, title: 'This clone is already set up' })), 'done');

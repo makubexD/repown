@@ -30,7 +30,8 @@ export function plainPrompter(streams: Streams): Prompter {
     review: (review) => showReview(session.io(), review, width),
     pickStep: (steps) => pickPlain(session.io(), steps),
     choose: (message, options) => choosePlain(session.io(), message, options),
-    note: (message) => { for (const line of wrap(message, width)) session.io().say('  ' + line); },
+    note: (message) => sayIndented(session.io(), wrap(message, width)),
+    show: (lines) => sayIndented(session.io(), lines.flatMap((text) => wrap(text, width))),
     close: () => session.close(),
     outro: (message) => session.io().say(message),
     confirmStep: (confirm) => askStepConfirm(wide(), confirm),
@@ -73,6 +74,10 @@ interface Io {
   /** Shows the text the answer is typed after; readline redraws it while the line is edited. */
   readonly write: (text: string) => void;
   readonly say: (text: string) => void;
+}
+
+function sayIndented(io: Io, lines: readonly string[]): void {
+  for (const line of lines) io.say('  ' + line);
 }
 
 /** On a terminal, readline shows the prompt, so it can redraw it while the line is edited. */

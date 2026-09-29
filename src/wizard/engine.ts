@@ -120,6 +120,8 @@ export interface Prompter {
   /** One of `options`, or CANCEL on Esc or Ctrl-C. */
   choose(message: string, options: readonly Choice[]): Promise<string | typeof CANCEL>;
   note(message: string): void;
+  /** Lines of information drawn in the prompter's frame. */
+  show?(lines: readonly string[]): void;
   /** Step by step, before one command. Cancel means Stop. */
   confirmStep(confirm: StepConfirm): Promise<StepChoice | typeof CANCEL>;
   /** Hand the terminal to the command that follows a confirmation. */

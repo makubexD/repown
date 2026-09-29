@@ -24,6 +24,7 @@ export function clackPrompter(streams: Streams): Prompter {
     pickStep: (steps) => pickClack(steps, io),
     choose: (message, options) => chooseClack(message, options, io),
     note: (message) => p.log.warn(wrap(message, widthOf(io, GUTTER)).join('\n'), io),
+    show: (lines) => logLines(io, lines),
     confirmStep: (confirm) => showStep(confirm, io),
     close: () => {},
     intro: (title) => p.intro(title, io),
@@ -127,9 +128,12 @@ function messageOf(step: Drawn, io: Io, extra?: string): string {
 }
 
 async function showStep(confirm: StepConfirm, io: Io): Promise<StepChoice | typeof CANCEL> {
-  const lines = stepConfirmLines(confirm).flatMap((text) => wrap(text, widthOf(io, GUTTER)));
-  p.log.message(lines.join('\n'), io);
+  logLines(io, stepConfirmLines(confirm));
   return chosen(confirm, io);
+}
+
+function logLines(io: Io, lines: readonly string[]): void {
+  p.log.message(lines.flatMap((text) => wrap(text, widthOf(io, GUTTER))).join('\n'), io);
 }
 
 async function chosen(confirm: StepConfirm, io: Io): Promise<StepChoice | typeof CANCEL> {

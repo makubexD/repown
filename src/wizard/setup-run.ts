@@ -19,7 +19,7 @@ import fixCommand from '../commands/fix.ts';
 import guardGroup from '../commands/guard.ts';
 import accountsGroup from '../commands/accounts.ts';
 import { wizard, refusedGiven, CANCEL, type Answers, type Prompter, type StepChoice } from './engine.ts';
-import { setupFlow, planCommands, formatCommand, briefOf, missingFlags, printable, dropFixPrefix, NEW_ACCOUNT, accountOf, pinUnchanged, ghNoted, type PlannedCommand, type SetupContext } from './setup-flow.ts';
+import { setupFlow, planCommands, formatCommand, fetchTarget, gitStepOf, briefOf, missingFlags, printable, dropFixPrefix, NEW_ACCOUNT, accountOf, pinUnchanged, ghNoted, type PlannedCommand, type SetupContext } from './setup-flow.ts';
 import { cloneChangeLines, machineChangeLines, readCloneSnapshot, type CloneSnapshot } from './setup-changes.ts';
 import { readContext, readRegistry, type ReadOptions } from './setup-context.ts';
 import { plainPrompter } from './plain.ts';
@@ -143,8 +143,8 @@ function modeOf(args: Args, answers: Answers): Result<Answers> {
   return ok(answers);
 }
 
-const CONFIRM_FLAGS = ['gh', 'guard', 'fix'] as const;
-const CONFIRM_DEFAULTS = ['gh', 'allowOwner', 'guard', 'fix', 'upstream'] as const;
+const CONFIRM_FLAGS = ['gh', 'guard', 'fix', 'repoint', 'fetch'] as const;
+const CONFIRM_DEFAULTS = ['gh', 'allowOwner', 'guard', 'fix', 'upstream', 'repoint', 'fetch'] as const;
 
 /** A passed flag is Yes. With --no-input, a confirm that was not passed is No, not Recommended's Yes. */
 function applyConfirms(args: Args, answers: Answers): void {
@@ -165,7 +165,7 @@ function usage(message: string): number {
 function needsTerminal(given: Answers, recorded: Recorded): number {
   out.fail('setup', 'needs a terminal to ask its questions.');
   out.detail('without one, give the answers as flags and add --no-input:');
-  out.detail('  repown setup <account> [--name "..." --email "..."] [--gh] [--allow-owner <owner>] [--guard] [--auto-upstream] [--fix] --no-input');
+  out.detail('  repown setup <account> [--name "..." --email "..."] [--gh] [--allow-owner <owner>] [--guard] [--auto-upstream] [--fix] [--repoint] [--fetch] --no-input');
   const missing = missingFlags(given, recorded);
   if (missing.length > 0) out.detail('still needed: ' + missing.join(', '));
   return 2;
@@ -190,7 +190,20 @@ function checkAgainst(given: Answers, ctx: SetupContext, allowOwner: string | nu
     out.detail('--fix: gh is not the credential helper for this clone, so there is nothing to undo');
     answers['fix'] = false;
   }
+  dropInapplicable(answers, ctx);
   return ok(answers);
+}
+
+/** `--repoint` and `--fetch` are asked for only where they apply; elsewhere they say so and do nothing. */
+function dropInapplicable(answers: Answers, ctx: SetupContext): void {
+  if (answers['repoint'] === true && !ctx.push.repoint) {
+    out.detail('--repoint: this branch does not push to a URL that a remote here names, so there is nothing to repoint');
+    answers['repoint'] = false;
+  }
+  if (answers['fetch'] === true && fetchTarget(answers, ctx) === null) {
+    out.detail('--fetch: no commit by another address waits behind a remote this clone has never fetched, so there is nothing to fetch');
+    answers['fetch'] = false;
+  }
 }
 
 // ------------------------------------------------------------------- the runs
@@ -278,11 +291,13 @@ interface RunState extends Report {
   readonly git: Git;
   readonly readAuth: ReadAuth;
   readonly confirm?: Confirm;
-  readonly credentialKeys: readonly string[];
+  /** Local keys the run report compares besides the identity: the credential pin, and a key setup may repoint. */
+  readonly watchedKeys: readonly string[];
 }
 
 function runState(git: Git, readAuth: ReadAuth, ctx: SetupContext): Omit<RunState, keyof Report> {
-  return { git, readAuth, credentialKeys: ctx.credentialKeys };
+  const repointed = ctx.push.repoint ? [ctx.push.repoint.key] : [];
+  return { git, readAuth, watchedKeys: [...ctx.credentialKeys, ...repointed] };
 }
 
 function reported(answers: Answers, ctx: SetupContext, repeatGh: boolean): Report {
@@ -297,7 +312,7 @@ function reported(answers: Answers, ctx: SetupContext, repeatGh: boolean): Repor
  * The clone is read before the first step and again after, including a stop or a failure.
  */
 async function execute(plan: readonly PlannedCommand[], state: RunState): Promise<number> {
-  const before = await readCloneSnapshot(state.git, state.credentialKeys);
+  const before = await readCloneSnapshot(state.git, state.watchedKeys);
   const ran = await walk(plan, state.git, state.confirm);
   await reportRun(before, ran, state);
   return ran.code ?? 0;
@@ -420,7 +435,7 @@ async function blockersNow(git: Git, account: string): Promise<Blocker[]> {
 }
 
 async function printClone(before: CloneSnapshot, state: RunState): Promise<void> {
-  const lines = cloneChangeLines(before, await readCloneSnapshot(state.git, state.credentialKeys));
+  const lines = cloneChangeLines(before, await readCloneSnapshot(state.git, state.watchedKeys));
   if (lines.length === 0) { out.detail('nothing changed in this clone'); return; }
   out.detail('changed in this clone:');
   for (const line of lines) out.detail(printable(line));
@@ -507,10 +522,37 @@ function commandFor(argv: readonly string[]): [Command, readonly string[]] {
   return [accountsGroup.actions['add']!, argv.slice(2)];
 }
 
-/** A planned git line. Both are repo-local; neither shells out past the Git wrapper. */
-function gitLine(argv: readonly string[], git: Git): Promise<number> {
-  if (argv.includes('push.autoSetupRemote')) return setAutoUpstream(git);
-  return allowOwner(argv.at(-1)!, git);
+/** A planned git line, each by its own case. None shells out past the Git wrapper. */
+async function gitLine(argv: readonly string[], git: Git): Promise<number> {
+  const step = gitStepOf(argv);
+  if (step === 'upstream') return setAutoUpstream(git);
+  if (step === 'allowOwner') return allowOwner(argv.at(-1)!, git);
+  if (step === 'repoint') return repoint(argv.at(-2)!, argv.at(-1)!, git);
+  if (step === 'fetch') return fetchFirst(argv.at(-1)!, git);
+  out.fail('setup', 'could not run ' + formatCommand(argv) + ': not a step setup plans');
+  return 2;
+}
+
+/** The key's old value is a URL that can hold a token: it is never printed. */
+async function repoint(key: string, remote: string, git: Git): Promise<number> {
+  if (!(await git.setConfig(key, remote, 'local'))) {
+    out.fail('repoint', 'could not write ' + printable(key));
+    return 1;
+  }
+  out.pass('repoint', printable(key) + ' now names ' + printable(remote) + ': pushes go through it');
+  return 0;
+}
+
+/** Prompts off, like reauthor's. A failure is a warning: the rest of the plan still runs. */
+async function fetchFirst(remote: string, git: Git): Promise<number> {
+  const fetched = await git.fetchQuietly(remote);
+  if (fetched.ok) {
+    out.pass('fetch', printable(remote) + ' fetched: repown can now tell which commits it already has');
+    return 0;
+  }
+  out.warn('fetch', 'could not fetch ' + printable(remote) + ' (' + printable(fetched.error) + ')');
+  out.detail('so repown still can\'t tell which of these commits ' + printable(remote) + ' already has');
+  return 0;
 }
 
 /** push.autoSetupRemote, in this clone only, and only when it does not already say true. */

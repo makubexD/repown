@@ -1,6 +1,6 @@
 # Tasks: setup leaves the clone push-ready
 
-Status: Phase 4 build, Task 6 next (⚠: wait for a go). Full-suite run pending since T4 (stopped for low memory)
+Status: Phase 4 build, Task 7 next (⚠: wait for a go). Full-suite run pending since T4 (stopped for low memory)
 
 - [x] Phase 1 clarify (audit WIZ-1..10, newcomer walk s1–s9, research; scope: detect + fix + opt-in re-author)
 - [x] Phase 2 spec (SPEC.md approved; command name `repown reauthor`)
@@ -58,7 +58,7 @@ Rewrites history (recoverable only through the backup ref).
   decisions/README index, README command list, HOW-IT-WORKS card 8, FAQ, CONTRIBUTING map,
   CHANGELOG
 
-## Task 6 ⚠ — Setup steps: repoint the sign-in URL, fetch the destination
+## Task 6 ⚠ — Setup steps: repoint the sign-in URL, fetch the destination [x]
 Writes git config; uses the network.
 - Acceptance: `--repoint` / `--fetch`; Recommended fills them when they apply; review shows
   `git config --local <key> <remote>` and `git fetch <remote>` (no URL); a failed fetch warns

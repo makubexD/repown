@@ -109,6 +109,8 @@ repown                 # in a terminal: starts the guided setup of this clone
    | Question | Recommended | Step by step | Flag |
    | --- | --- | --- | --- |
    | Which account should this clone belong to? | Asked. `repown setup <account>` skips the mode question and uses Recommended, so a recorded account goes straight to the review when nothing else must be asked. A new account also asks where it's hosted, the name and the email. | Asked | `<account>`, `--host`, `--name`, `--email` |
+   | Push through the remote instead of a URL? Asked when the branch pushes to a URL (which can carry its own sign-in) that names the same repository as a remote here. The review shows the key and the remote, never the URL. | Answers Yes without asking | Asked, default Yes | `--repoint` |
+   | Fetch the remote first? Asked when commits by another address wait behind a remote this clone has never fetched, so repown can count which it already has. Prompts are off; a failed fetch is a warning. | Answers Yes without asking | Asked, default Yes | `--fetch` |
    | Let this clone push to origin's owner? Asked when origin belongs to someone else, like an organisation. | Asked, default Yes. No means the guard refuses pushes there. | Asked, default Yes | `--allow-owner <owner>` |
    | Turn the guard on? | Answers Yes without asking | Asked | `--guard` |
    | Push branches without -u? Only on git 2.37+. It sets `push.autoSetupRemote` in this clone only; the guard still checks that first push. | Answers Yes without asking | Asked, default Yes | `--auto-upstream` |

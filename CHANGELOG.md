@@ -10,6 +10,7 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 ### Added
 
 - `repown reauthor [--yes]`: gives this branch's unpushed commits by another address the pinned identity. It fetches the push destination first, rewrites only commits no remote has (from the oldest one by another address), refuses on a merge in that range, uncommitted changes, identity overrides or a destination it can't fetch, runs without hooks, keeps a backup ref, prints the undo, and never pushes (ADR-026).
+- `repown setup --repoint` and `--fetch`, which Recommended answers Yes where they apply. Repoint: where the branch pushes to a URL naming the same repository as a remote, setup points it back at that remote (`git config --local <key> <remote>`); the URL, which can carry a token, is never printed. Fetch: where commits by another address wait behind a remote never fetched, setup fetches it first (prompts off), so the count and the rebase advice are right; a failed fetch is a warning (ADR-026).
 
 ### Fixed
 

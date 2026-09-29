@@ -10,7 +10,7 @@
 import { ghAdvice, upstreamText } from '../commands/status.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { shellWord } from '../core/guard/check.ts';
-import type { UnpushedFact } from '../core/unpushed.ts';
+import { foreignCount, type UnpushedFact } from '../core/unpushed.ts';
 import type { PushFacts } from '../core/push-state.ts';
 import { blockers, type Blocker } from './blockers.ts';
 import type { Account } from '../core/registry.ts';
@@ -216,6 +216,8 @@ function accountSteps(ctx: SetupContext): Step<SetupContext>[] {
 
 function choiceSteps(ctx: SetupContext): Step<SetupContext>[] {
   return [
+    repointStep(ctx),
+    fetchStep(ctx),
     ghStep(ctx),
     { id: 'allowOwner', kind: 'confirm', flag: '--allow-owner', initial: () => true,
       message: 'This repository belongs to "' + printable(ctx.owner ?? '') + '". Let this clone push to it?',
@@ -291,6 +293,39 @@ function upstreamStep(ctx: SetupContext): Step<SetupContext> {
     message: 'Push branches without -u?', hint: UPSTREAM_HINT,
     when: () => offersUpstream(ctx), auto: isRecommended,
   };
+}
+
+function repointStep(ctx: SetupContext): Step<SetupContext> {
+  const target = ctx.push.repoint;
+  return {
+    id: 'repoint', kind: 'confirm', flag: '--repoint', initial: () => true, auto: isRecommended,
+    message: 'Push through ' + printable(target?.remote ?? '') + ' instead of the URL in ' + printable(target?.key ?? '') + '?',
+    hint: 'the same repository; a URL there can carry its own sign-in, so pushes would not sign in as this account, ' +
+      'and repown can\'t tell what it already has. This clone only',
+    when: () => target !== null,
+  };
+}
+
+function fetchStep(ctx: SetupContext): Step<SetupContext> {
+  return {
+    id: 'fetch', kind: 'confirm', flag: '--fetch', initial: () => true, auto: isRecommended,
+    message: (answers) => 'Fetch ' + printable(fetchTarget(answers, ctx) ?? '') + ' first?',
+    hint: 'so repown can tell which of these commits it already has; downloads only, and moves none of your branches',
+    when: (answers) => fetchTarget(answers, ctx) !== null,
+  };
+}
+
+/**
+ * The remote to fetch before counting: commits by another address, behind a remote no
+ * tracking ref reaches -- the destination itself, or the remote a repoint makes it.
+ */
+export function fetchTarget(answers: Answers, ctx: SetupContext): string | null {
+  if (foreignCount(ctx.unpushed, emailOf(answers, ctx) ?? '') === 0) return null;
+  const unknown = ctx.unpushed.unknown;
+  if (unknown?.kind === 'remote') return unknown.name;
+  const repoint = ctx.push.repoint;
+  if (unknown?.kind !== 'url' || !repoint || repoint.tracked || answers['repoint'] !== true) return null;
+  return repoint.remote;
 }
 
 const SWITCH_MESSAGE = 'Also make this account gh\'s active account?';
@@ -495,6 +530,8 @@ export function planCommands(answers: Answers, ctx: SetupContext): PlannedComman
   const account = accountOf(answers);
   const cwd = ctx.cwd ? ['--cwd=' + ctx.cwd] : [];
   const planned: (readonly string[] | null)[] = [
+    repointArgv(answers, ctx),
+    fetchArgv(answers, ctx),
     isNew(answers) ? ['accounts', 'add', '--name=' + String(answers['name']), '--email=' + String(answers['email']),
       '--host=' + hostOf(answers, ctx), '--', account] : null,
     answers['allowOwner'] === true && ctx.owner ? allowOwnerLine(ctx) : null,
@@ -523,8 +560,35 @@ function upstreamArgv(answers: Answers, ctx: SetupContext): string[] | null {
   return autoUpstreamLine(ctx);
 }
 
+function gitIn(ctx: SetupContext): string[] {
+  return ['git', ...(ctx.cwd ? ['-C', ctx.cwd] : [])];
+}
+
 function autoUpstreamLine(ctx: SetupContext): string[] {
-  return ['git', ...(ctx.cwd ? ['-C', ctx.cwd] : []), 'config', '--local', 'push.autoSetupRemote', 'true'];
+  return [...gitIn(ctx), 'config', '--local', 'push.autoSetupRemote', 'true'];
+}
+
+function repointArgv(answers: Answers, ctx: SetupContext): string[] | null {
+  const target = ctx.push.repoint;
+  if (answers['repoint'] !== true || !target) return null;
+  return [...gitIn(ctx), 'config', '--local', target.key, target.remote];
+}
+
+function fetchArgv(answers: Answers, ctx: SetupContext): string[] | null {
+  const remote = answers['fetch'] === true ? fetchTarget(answers, ctx) : null;
+  return remote ? [...gitIn(ctx), 'fetch', remote] : null;
+}
+
+/** Which of setup's git lines this is, read from its shape; null for anything setup does not plan. */
+export type GitStep = 'repoint' | 'fetch' | 'upstream' | 'allowOwner';
+
+export function gitStepOf(argv: readonly string[]): GitStep | null {
+  const sub = argv[1] === '-C' ? argv.slice(3) : argv.slice(1);
+  if (sub[0] === 'fetch' && sub.length === 2) return 'fetch';
+  if (sub[0] !== 'config' || sub[1] !== '--local') return null;
+  if (sub[2] === '--add' && sub[3] === 'repown.allowOwner' && sub.length === 5) return 'allowOwner';
+  if (sub[2] === 'push.autoSetupRemote' && sub.length === 4) return 'upstream';
+  return sub.length === 4 ? 'repoint' : null;
 }
 
 /** What a planned command does, in words for someone who has never used repown. */
@@ -539,7 +603,10 @@ function whatOf(argv: readonly string[], answers: Answers, ctx: SetupContext): s
 }
 
 function gitWhat(argv: readonly string[], ctx: SetupContext): string {
-  if (argv.includes('push.autoSetupRemote')) return 'Push branches without -u: the first push sets the upstream (this clone only)';
+  const step = gitStepOf(argv);
+  if (step === 'repoint') return 'Push through ' + argv.at(-1) + ' instead of the URL in ' + argv.at(-2) + ' (this clone only)';
+  if (step === 'fetch') return 'Fetch ' + argv.at(-1) + ', so repown can tell which commits it already has';
+  if (step === 'upstream') return 'Push branches without -u: the first push sets the upstream (this clone only)';
   return 'Let this clone push to ' + ctx.owner + '\'s repositories';
 }
 
@@ -550,7 +617,7 @@ function ghWhat(account: string, ctx: SetupContext): string {
 }
 
 function allowOwnerLine(ctx: SetupContext): string[] {
-  return ['git', ...(ctx.cwd ? ['-C', ctx.cwd] : []), 'config', '--local', '--add', 'repown.allowOwner', ctx.owner!];
+  return [...gitIn(ctx), 'config', '--local', '--add', 'repown.allowOwner', ctx.owner!];
 }
 
 /**
@@ -828,7 +895,10 @@ function registryChange(answers: Answers): string {
 }
 
 function gitChange(argv: readonly string[]): string {
-  if (argv.includes('push.autoSetupRemote')) return 'push.autoSetupRemote = true';
+  const step = gitStepOf(argv);
+  if (step === 'repoint') return argv.at(-2) + ' = ' + argv.at(-1);
+  if (step === 'fetch') return 'refs/remotes/' + argv.at(-1) + '/*: updated from ' + argv.at(-1) + ' (none of your branches move)';
+  if (step === 'upstream') return 'push.autoSetupRemote = true';
   return 'repown.allowOwner += ' + (argv.at(-1) ?? '');
 }
 

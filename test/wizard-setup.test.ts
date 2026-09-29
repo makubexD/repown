@@ -15,7 +15,7 @@ import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
 import { setupContext as context } from './setup-fixtures.ts';
 import { ok, err } from '../src/core/result.ts';
 import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Review, type ReviewChoice, type StepConfirm } from '../src/wizard/engine.ts';
-import { setupFlow, planCommands, formatCommand, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext } from '../src/wizard/setup-flow.ts';
+import { setupFlow, planCommands, formatCommand, gitStepOf, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext } from '../src/wizard/setup-flow.ts';
 import { pinWrites } from '../src/core/identity.ts';
 import { plainPrompter } from '../src/wizard/plain.ts';
 import { reviewLines } from '../src/wizard/review-text.ts';
@@ -2254,3 +2254,132 @@ function captureStep(onFirst: () => void): { text: () => string; begin: () => vo
   };
   return { text: () => stderr, begin, end: () => { process.stderr.write = write; } };
 }
+
+describe('setup: point the branch back at its remote, fetch the destination first', () => {
+  const THEIRS = 'old@example.invalid';
+  const foreign = { authorEmail: THEIRS, committerEmail: THEIRS, parent: null };
+  const repoint = (tracked: boolean): Partial<SetupContext> =>
+    ({ push: { ...context().push, repoint: { key: 'branch.main.remote', remote: 'origin', tracked } } });
+  const behindUrl: SetupContext['unpushed'] = { branch: 'main', commits: ok([foreign]), unknown: { kind: 'url', key: 'branch.main.remote', remote: 'origin' } };
+  const unfetched: SetupContext['unpushed'] = { branch: 'main', commits: ok([foreign]), unknown: { kind: 'remote', name: 'origin' } };
+  const recommended = (ctx: SetupContext): Answers => setupFlow(ctx).fill!({ mode: 'recommended', account: 'octocat' }, ctx);
+  const plan = (answers: Answers, ctx: SetupContext): (readonly string[])[] => planCommands(answers, ctx).map((command) => command.argv);
+
+  test('Recommended repoints first, and the review shows the key and the remote, never the URL', () => {
+    const ctx = context(repoint(true));
+    const answers = recommended(ctx);
+    const [first] = planCommands(answers, ctx);
+    assert.deepEqual(first?.argv, ['git', 'config', '--local', 'branch.main.remote', 'origin']);
+    assert.equal(formatCommand(first!.argv), 'git config --local branch.main.remote origin');
+    assert.deepEqual(changesOf(first!.argv, answers, ctx), ['branch.main.remote = origin']);
+    assert.match(first!.what, /origin/);
+  });
+
+  test('Recommended fetches first only for commits by another address behind a remote never fetched', () => {
+    const ctx = context({ unpushed: unfetched });
+    const argv = plan(recommended(ctx), ctx);
+    assert.deepEqual(argv[0], ['git', 'fetch', 'origin']);
+    assert.ok(argv.findIndex((line) => line[0] === 'use') > 0, 'fetch runs before the pin');
+    const clean = context({ unpushed: { ...unfetched, commits: ok([]) } });
+    assert.equal(plan(recommended(clean), clean).some((line) => line.includes('fetch')), false, 'a clean clone never fetches');
+    const known = context({ unpushed: { ...unfetched, unknown: null } });
+    assert.equal(plan(recommended(known), known).some((line) => line.includes('fetch')), false, 'a known destination needs no fetch');
+    const mine = { ...foreign, authorEmail: 'octocat@example.invalid', committerEmail: 'octocat@example.invalid' };
+    const own = context({ unpushed: { ...unfetched, commits: ok([mine]) } });
+    assert.equal(plan(recommended(own), own).some((line) => line.includes('fetch')), false, 'own commits need no fetch');
+  });
+
+  test('behind a URL: repoint, then fetch the remote only when it has no tracking refs', () => {
+    const untracked = context({ ...repoint(false), unpushed: behindUrl });
+    assert.deepEqual(plan(recommended(untracked), untracked).slice(0, 2),
+      [['git', 'config', '--local', 'branch.main.remote', 'origin'], ['git', 'fetch', 'origin']]);
+    const tracked = context({ ...repoint(true), unpushed: behindUrl });
+    assert.equal(plan(recommended(tracked), tracked).some((line) => line.includes('fetch')), false);
+    const kept = setupFlow(untracked).fill!({ mode: 'recommended', account: 'octocat', repoint: false }, untracked);
+    assert.equal(plan(kept, untracked).some((line) => line.includes('fetch')), false, 'the URL stays: fetching origin says nothing about it');
+  });
+
+  test('with --cwd, both lines name the clone', () => {
+    const ctx = context({ ...repoint(false), unpushed: behindUrl, cwd: 'repo' });
+    assert.deepEqual(plan(recommended(ctx), ctx).slice(0, 2),
+      [['git', '-C', 'repo', 'config', '--local', 'branch.main.remote', 'origin'], ['git', '-C', 'repo', 'fetch', 'origin']]);
+  });
+
+  test('each git line is read by its shape, not by a word a name could also be', () => {
+    assert.equal(gitStepOf(['git', 'config', '--local', '--add', 'repown.allowOwner', 'fetch']), 'allowOwner');
+    assert.equal(gitStepOf(['git', '-C', 'fetch', 'config', '--local', 'push.autoSetupRemote', 'true']), 'upstream');
+    assert.equal(gitStepOf(['git', 'fetch', 'push.autoSetupRemote']), 'fetch');
+    assert.equal(gitStepOf(['git', 'config', '--local', 'branch.main.remote', 'origin']), 'repoint');
+    assert.equal(gitStepOf(['git', 'push', 'origin']), null);
+    assert.equal(gitStepOf(['git', 'fetch', 'origin', '--prune']), null);
+  });
+
+  test('--no-input without the flags does neither; Step by step asks both', () => {
+    const ctx = context({ ...repoint(false), unpushed: behindUrl });
+    const none = { account: 'octocat', repoint: false, fetch: false, guard: false, gh: false, fix: false, upstream: false, allowOwner: false };
+    assert.equal(plan(none, ctx).some((line) => line[0] === 'git'), false);
+    const asked = setupFlow(ctx).steps.filter((step) => step.when?.({ mode: 'step', account: 'octocat', repoint: true }, ctx) ?? true);
+    const ids = asked.map((step) => step.id);
+    assert.ok(ids.includes('repoint') && ids.includes('fetch'), ids.join(','));
+  });
+});
+
+describe('repown setup: repoint and fetch, in a real clone', () => {
+  let at: Home;
+  beforeEach(() => { at = home(); record(at, 'octocat', 'octocat@example.invalid'); });
+  afterEach(() => at.dispose());
+
+  /** A bare origin holding the first commit, never fetched here (no tracking refs), then a commit by another address. */
+  const unfetchedOrigin = (): string => {
+    const path = join(at.box.dir, '..', 'origin.git');
+    at.box.git('init', '-q', '--bare', path);
+    at.box.git('remote', 'add', 'origin', path);
+    at.box.git('push', '-q', 'origin', 'HEAD:refs/heads/main');
+    at.box.git('update-ref', '-d', 'refs/remotes/origin/main');
+    at.box.git('-c', 'user.name=Someone', '-c', 'user.email=old@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'theirs');
+    return path;
+  };
+  const tracking = (): string => at.box.git('for-each-ref', 'refs/remotes/origin/');
+
+  test('--fetch fetches the destination first; --no-input without it does not', () => {
+    unfetchedOrigin();
+    assert.equal(repown(['setup', 'octocat', '--no-input'], at.box.dir).status, 0);
+    assert.equal(tracking(), '', 'no fetch unless asked');
+    at.box.git('config', '--local', '--unset', 'repown.account');
+    const run = repown(['setup', 'octocat', '--fetch', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /step 1 of \d: Fetch origin/);
+    assert.match(run.stderr, /> git fetch origin/);
+    assert.notEqual(tracking(), '');
+  });
+
+  test('a failed fetch warns, the rest of the plan runs, and the destination stays unknown', () => {
+    rmSync(unfetchedOrigin(), { recursive: true, force: true });
+    const run = repown(['setup', 'octocat', '--fetch', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout + run.stderr, /WARN\s+fetch\s+could not fetch origin \(/);
+    assert.match(localConfig(at), /account = octocat/);
+    assert.equal(tracking(), '');
+  });
+
+  test('--fetch where nothing needs fetching says so and fetches nothing', () => {
+    const run = repown(['setup', 'octocat', '--fetch', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /--fetch: /);
+    assert.doesNotMatch(run.stderr, /> git fetch/);
+  });
+
+  test('--repoint points the branch back at its remote, and nothing prints the URL', () => {
+    at.box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
+    at.box.git('config', 'branch.main.remote', 'https://octocat:ghp_secret@github.com/octocat/project.git');
+    const kept = repown(['setup', 'octocat', '--no-input'], at.box.dir);
+    assert.equal(at.box.git('config', 'branch.main.remote'), 'https://octocat:ghp_secret@github.com/octocat/project.git', 'not without --repoint');
+    assert.doesNotMatch(kept.stdout + kept.stderr, /ghp_secret/);
+    const run = repown(['setup', 'octocat', '--repoint', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(at.box.git('config', 'branch.main.remote'), 'origin');
+    assert.match(run.stderr, /> git config --local branch\.main\.remote origin/);
+    assert.match(run.stderr, /branch\.main\.remote: \(a URL\) -> origin/);
+    assert.doesNotMatch(run.stdout + run.stderr, /ghp_secret|octocat:/);
+  });
+});

@@ -43,6 +43,16 @@ problem".
   `set up for <account>; the next push will fail: <first> (and N more below)`, then every
   blocker's lines. Exit codes are unchanged.
 - The re-author advice offers `or pin that address` only when one address made them all.
+- **Setup can remove two blockers itself, as reviewed steps** (Recommended answers Yes; `--no-input`
+  only with the flag):
+  - *repoint* (`--repoint`): where the branch pushes to a URL naming the same host and path as a
+    remote, `git config --local <key> <remote>`. The URL can hold a token, so the review, the step
+    and the run's report show the key and the remote only;
+  - *fetch* (`--fetch`): only where commits by another address wait behind a remote with no
+    tracking refs (a clean clone never fetches), `git fetch <remote>` with prompts off, as
+    `reauthor` does. A failure is a warning and the destination stays unknown: the other steps
+    still run. The guard stays offline ([ADR-004](ADR-004-destination-owner.md): no network call in the push path); setup already uses the
+    network for gh's sign-in ([ADR-019](ADR-019-repown-signs-accounts-in-to-gh.md)).
 - **`repown reauthor` rewrites, only when asked.** ADR-013 turned rewriting down as destructive
   and the owner's call; the owner now makes that call with one command, and repown makes the
   rewrite as narrow as it can be:

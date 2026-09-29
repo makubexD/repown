@@ -8,7 +8,7 @@
 
 import type { Git } from './git.ts';
 import { ok, type Result } from './result.ts';
-import { pushTarget, type PushTarget } from './push-destination.ts';
+import { pushTarget, unknownDestination, type PushTarget } from './push-destination.ts';
 import { parseGitUrl } from './url.ts';
 import { providerFor } from './hosts/index.ts';
 import { hostileSet } from './guard/check.ts';
@@ -20,6 +20,14 @@ export interface PushDestination {
   readonly owner: string;
   /** `repown.allowOwner` in this clone, lowercased. */
   readonly allowed: readonly string[];
+}
+
+/** A URL in `key` naming the same repository as `remote`: setup can point `key` back at the remote. */
+export interface Repoint {
+  readonly key: string;
+  readonly remote: string;
+  /** The remote has tracking refs, so after the repoint the destination is known without a fetch. */
+  readonly tracked: boolean;
 }
 
 export interface Divergence {
@@ -38,6 +46,7 @@ export interface PushFacts {
   readonly elsewhere: Result<readonly UnpushedCommit[]>;
   /** The config key that carries its own sign-in on the push path (the value is never kept). */
   readonly signinKey: string | null;
+  readonly repoint: Repoint | null;
   readonly destination: PushDestination | null;
   /** Against the tracked ref on the destination; ok(null) when there is none. */
   readonly divergence: Result<Divergence | null>;
@@ -52,12 +61,12 @@ export async function readPushFacts(git: Git, unpushed: UnpushedFact, env: NodeJ
   const head = await git.currentBranch();
   const branch = head?.kind === 'branch' ? head.name : null;
   const target = branch ? await pushTarget(git, branch) : null;
-  const [configOverrides, signinKey, destination, divergence, elsewhere, upstream] = await Promise.all([
-    overridesIn(git), signinOf(git, target), destinationOf(git, target),
+  const [configOverrides, signinKey, repoint, destination, divergence, elsewhere, upstream] = await Promise.all([
+    overridesIn(git), signinOf(git, target), repointOf(git, branch), destinationOf(git, target),
     divergenceOf(git, target), elsewhereOf(git, target), upstreamOf(git, branch, target),
   ]);
   return {
-    unpushed, env: hostileSet(env), configOverrides, elsewhere, signinKey, destination, divergence,
+    unpushed, env: hostileSet(env), configOverrides, elsewhere, signinKey, repoint, destination, divergence,
     detached: head?.kind === 'detached', upstream,
   };
 }
@@ -82,6 +91,13 @@ async function signinOf(git: Git, target: PushTarget | null): Promise<string | n
   }
   const headers = await git.configOrigins('^http\\.(.*\\.)?extraheader$');
   return headers[0]?.key ?? null;
+}
+
+async function repointOf(git: Git, branch: string | null): Promise<Repoint | null> {
+  const unknown = branch ? await unknownDestination(git, branch) : null;
+  if (unknown?.kind !== 'url' || !unknown.remote) return null;
+  const tracked = await git.hasTrackingRefs(unknown.remote);
+  return { key: unknown.key, remote: unknown.remote, tracked: tracked.ok && tracked.value };
 }
 
 async function destinationOf(git: Git, target: PushTarget | null): Promise<PushDestination | null> {

@@ -15,6 +15,7 @@ function facts(overrides: Partial<PushFacts> = {}): PushFacts {
     configOverrides: [],
     elsewhere: ok([]),
     signinKey: null,
+    repoint: null,
     destination: { remote: 'origin', owner: 'octocat', allowed: [] },
     divergence: ok(null),
     detached: false,

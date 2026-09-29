@@ -72,10 +72,14 @@ true, from any scope, setup leaves it alone. The flag is `--auto-upstream`.
 with `--no-input`. Yes/no questions you don't pass as a flag are answered No; the account
 must be given, with `--name` and `--email` if it isn't recorded yet (`--host` defaults to
 origin's). There's no review. Re-running is safe once the account is recorded: drop
-`--name`, `--email` and `--host` then, or it exits `2`.
+`--name`, `--email` and `--host` then, or it exits `2`. `--repoint` and `--fetch` act only
+where they apply (a URL a remote also names; commits by another address behind a remote
+never fetched); elsewhere they say so and do nothing. A failed `--fetch` is a warning, and
+the rest of the steps run.
 
 ```
 repown setup octocat --guard --auto-upstream --no-input
+repown setup octocat --repoint --fetch --guard --no-input
 repown setup octo-work --allow-owner octo-org --guard --no-input
 repown setup octo-work --name "Octo Work" --email octo-work@users.noreply.github.com --no-input
 ```

@@ -64,6 +64,18 @@ describe('readPushFacts', () => {
     assert.equal((await read()).signinKey, 'http.https://github.com/.extraheader');
   });
 
+  test('a URL where a remote would do: the key to repoint and that remote, never the URL', async () => {
+    commit('first');
+    box.git('remote', 'add', 'origin', 'https://github.com/octocat/hello.git');
+    assert.equal((await read()).repoint, null, 'a named remote needs no repoint');
+    box.git('config', 'branch.main.remote', 'https://octocat:ghp_tok@github.com/octocat/hello.git');
+    assert.deepEqual((await read()).repoint, { key: 'branch.main.remote', remote: 'origin', tracked: false });
+    box.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    assert.deepEqual((await read()).repoint, { key: 'branch.main.remote', remote: 'origin', tracked: true });
+    box.git('config', 'branch.main.remote', 'https://octocat:ghp_tok@github.com/octocat/other.git');
+    assert.equal((await read()).repoint, null, 'no remote has that repository');
+  });
+
   test('the destination owner comes from the push target, with this clone\'s allowOwner', async () => {
     commit('first');
     box.git('remote', 'add', 'origin', 'https://github.com/octocat/hello.git');

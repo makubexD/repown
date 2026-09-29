@@ -695,14 +695,16 @@ never suggested.
 | Where it's hosted, and your name and email as commits show them (on GitHub, with where to find your noreply address; this machine's default is shown, never filled in) | the login is new: "a new account", or one picked from the logins already seen | `accounts add <account> --name --email --host` |
 | Also make this account gh's active account? (default No) | a GitHub clone (or one whose origin isn't a URL), gh knows the account, another is active. Recommended does not ask this when the clone is already pinned to that account: it answers No, and the review names the command (`gh auth switch -u <account>`, or `repown use <account> --gh` when gh does not list it) | `use --gh` |
 | Sign in to gh as that account too? (default No) | the same, except gh does not know the account. Yes opens a browser; gh then acts as that account in every terminal. The line under it names gh's active account, or says gh isn't signed in. Recommended skips it the same way when the clone is already pinned to that account | `use --gh` |
+| Push through origin instead of the URL in `branch.main.remote`? (default Yes) | the branch pushes to a URL (from `branch.<name>.pushRemote`, `remote.pushDefault` or `branch.<name>.remote`) naming the same host and path as a remote here. A URL there can carry its own sign-in and is never fetched. The review shows the key and the remote, never the URL, and so does the run's "changed in this clone" (`(a URL) -> origin`). The flag is `--repoint` | `git config --local <key> <remote>` |
+| Fetch origin first? (default Yes) | some unpushed commits are by another address, and the push destination is a remote with no remote-tracking refs (or becomes one by the step above). A clean clone never fetches. Prompts are off, as for `repown reauthor`; a failure prints `WARN fetch could not fetch origin (…)`, the destination stays unknown, and the rest of the steps run. The flag is `--fetch` | `git fetch <remote>` |
 | This repository belongs to "octo-org". Let this clone push to it? (default Yes) | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
 | Turn on the push guard? (default Yes) | the guard is off, no other tool owns the hook, and `core.hooksPath` doesn't redirect hooks | `guard on` |
 | Push branches without -u? (default Yes) | git is 2.37.0 or newer, and `push.autoSetupRemote` is not already true in any scope. The flag is `--auto-upstream`. On older git, or when `git --version` cannot be read, this is not asked and the review notes `git push -u origin <branch>` (the current branch, or `<branch>` when HEAD is detached) | `git config --local push.autoSetupRemote true` |
 | Stop gh answering git's sign-in requests? (whole machine, default No) | a GitHub clone, gh is the helper, and `fix` finds its entries. Still asked in Recommended | `fix --yes` |
 
 **Recommended** answers Yes, and does not ask, the questions that only change this
-clone and need nothing only the user knows: turn the guard on, and push branches
-without `-u`. It also switches gh, without asking, when gh already lists the account
+clone and need nothing only the user knows: push through the remote instead of a URL,
+fetch the destination first, turn the guard on, and push branches without `-u`. It also switches gh, without asking, when gh already lists the account
 and this clone is not already pinned to it. Each of those is still a step in the
 review, and Change an answer can open it. When the clone is already pinned to the
 chosen account, Recommended does not ask about gh and answers No, so the review

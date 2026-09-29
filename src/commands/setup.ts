@@ -22,6 +22,8 @@ export default {
     { name: 'guard', kind: 'boolean', help: 'turn the push guard on (guard on)' },
     { name: 'auto-upstream', kind: 'boolean', help: 'push branches without -u: the first push sets the upstream, in this clone only (push.autoSetupRemote)' },
     { name: 'fix', kind: 'boolean', help: 'stop gh being the credential helper, where it is (fix --yes)' },
+    { name: 'repoint', kind: 'boolean', help: 'where the branch pushes to a URL naming the same repository as a remote, push through that remote instead (git config --local)' },
+    { name: 'fetch', kind: 'boolean', help: 'fetch the push destination first, where commits by another address wait behind a remote never fetched (prompts off)' },
     { name: 'step-by-step', kind: 'boolean', help: 'ask every question instead of the recommended answers (not with --no-input)' },
     { name: 'no-input', kind: 'boolean', help: 'ask nothing: a question not given as a flag is No; exit 2 if the account is incomplete' },
   ],

@@ -46,7 +46,7 @@ were made with. `repown use` warns, and `repown setup`'s review notes it, when t
 current branch has commits no remote has by another address. Re-author it, or them:
 `git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"`
 (`git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when that
-commit has no parent), or pin that address. `<base>` is the short hash of the parent
+commit has no parent), or pin that address when one address made them all. `<base>` is the short hash of the parent
 of the oldest of those commits, so your own commits before it are left alone. If no remote-tracking ref reaches where the branch pushes
 (a remote never fetched or still empty, one that pushes elsewhere than it fetches from, or a
 URL), the warning says so, says how to fetch and count again where it can, and offers the

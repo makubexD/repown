@@ -10,8 +10,9 @@
 import { ghAdvice, upstreamText } from '../commands/status.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { shellWord } from '../core/guard/check.ts';
-import { unpushedLines, type UnpushedFact } from '../core/unpushed.ts';
+import type { UnpushedFact } from '../core/unpushed.ts';
 import type { PushFacts } from '../core/push-state.ts';
+import { blockers, type Blocker } from './blockers.ts';
 import type { Account } from '../core/registry.ts';
 import type { GhState } from '../core/credential/gh.ts';
 import type { GuardState } from '../core/guard/hook.ts';
@@ -619,6 +620,7 @@ function settledReview(answers: Answers, ctx: SetupContext, steps: Review['steps
   const shown: Review = {
     title: 'This clone is already set up', headline: settledLines(answers, ctx).map(printable), steps,
     notes: [...noted(settledNotes(answers, ctx), answers, ctx, plan), ...ghNote(answers, ctx, true)], settled: true,
+    blocked: blockersOf(answers, ctx).length > 0,
   };
   return offer ? { ...shown, ghSignIn: offer } : shown;
 }
@@ -635,10 +637,21 @@ function upstreamOffer(ctx: SetupContext): string | null {
   return 'optional: push branches without -u: repown setup --auto-upstream';
 }
 
+/** What blocks the next push first (ADR-026), then the step's own notes. */
 function noted(lines: readonly string[], answers: Answers, ctx: SetupContext, plan: readonly PlannedCommand[]): string[] {
   const gap = credentialGap(plan, answers, ctx);
-  const body = [...lines, ...extraNotes(answers, ctx), ...(gap ? [gap] : [])];
+  const found = blockersOf(answers, ctx);
+  const upstream = found.some((blocker) => blocker.summary.endsWith('has no upstream')) ? null : upstreamNote(ctx);
+  const body = [...found.flatMap((blocker) => blocker.lines), ...lines, ...(upstream ? [upstream] : []), ...(gap ? [gap] : [])];
   return body.map(printable);
+}
+
+/** The address depends on the account, so the commits were read once and are compared here. */
+export function blockersOf(answers: Answers, ctx: SetupContext): Blocker[] {
+  const email = emailOf(answers, ctx) ?? '';
+  const unpushed = email || !ctx.unpushed.commits.ok ? ctx.unpushed : { ...ctx.unpushed, branch: null };
+  const autoUpstream = answers['upstream'] === true || ctx.upstream.enabled === true;
+  return blockers({ ...ctx.push, unpushed }, { email, account: accountOf(answers), autoUpstream });
 }
 
 /** use's own line, said here only when this run will not run use. Mirrors use.ts credentialConcern. */
@@ -647,18 +660,6 @@ function credentialGap(plan: readonly PlannedCommand[], answers: Answers, ctx: S
   const account = accountOf(answers);
   if (ctx.stored.value.includes(account)) return null;
   return 'No stored credential for ' + account + ' yet: the first push signs in once (your browser opens).';
-}
-
-function extraNotes(answers: Answers, ctx: SetupContext): string[] {
-  const upstream = upstreamNote(ctx);
-  return [...(upstream ? [upstream] : []), ...unpushedNote(answers, ctx)];
-}
-
-/** The address depends on the account, so the commits were read once and are compared here. */
-function unpushedNote(answers: Answers, ctx: SetupContext): string[] {
-  const email = emailOf(answers, ctx) ?? '';
-  if (!email && ctx.unpushed.commits.ok) return [];
-  return unpushedLines(ctx.unpushed, email, accountOf(answers));
 }
 
 /** Old git, or a version that could not be read: say the push the question would have replaced. */

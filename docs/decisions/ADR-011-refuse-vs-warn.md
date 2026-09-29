@@ -1,6 +1,6 @@
 # ADR-011: The guard refuses only what's irreversible; the rest is a warning
 
-**Status:** Accepted. The row for gh active as another account is superseded in part by [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md): `repown status` notes it and does not count it as a warning. A gh that could not be queried stays a warning.
+**Status:** Accepted. The row for gh active as another account is superseded in part by [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md): `repown status` notes it and does not count it as a warning. A gh that could not be queried stays a warning. The row for `GH_TOKEN` and friends is amended by [ADR-026](ADR-026-setup-says-what-blocks-the-next-push.md): `repown setup` names them too, before its closing line (a warning, never a refusal).
 
 ## Context
 

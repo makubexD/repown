@@ -23,6 +23,9 @@ import { setupFlow, planCommands, formatCommand, briefOf, missingFlags, printabl
 import { cloneChangeLines, machineChangeLines, readCloneSnapshot, type CloneSnapshot } from './setup-changes.ts';
 import { readContext, readRegistry, type ReadOptions } from './setup-context.ts';
 import { plainPrompter } from './plain.ts';
+import { blockers, type Blocker } from './blockers.ts';
+import { readPushFacts } from '../core/push-state.ts';
+import { readUnpushed } from '../core/unpushed.ts';
 
 export interface SetupDeps {
   /** The prompter to ask with; the real one is chosen when absent. */
@@ -386,19 +389,34 @@ function halt(remaining: readonly PlannedCommand[], code: number, why?: string):
 
 /** On stderr, like the step lines: stdout carries only what the commands themselves print. */
 async function reportRun(before: CloneSnapshot, ran: WalkResult, state: RunState): Promise<void> {
-  if (ran.code === null) announce(ran.done, ran.skipped, state);
+  if (ran.code === null) await announce(ran.done, ran.skipped, state);
   await printClone(before, state);
   const auth = wantsAuth(ran, state) ? await state.readAuth(state.git) : null;
   printMachine(ran.done, auth);
   if (ran.code === null) closeRun(auth, state);
 }
 
-function announce(done: readonly PlannedCommand[], skipped: readonly PlannedCommand[], report: Report): void {
+async function announce(done: readonly PlannedCommand[], skipped: readonly PlannedCommand[], state: RunState): Promise<void> {
   process.stderr.write('\n');
   const pinned = done.find((planned) => planned.argv[0] === 'use')?.argv.at(-1);
-  const account = pinned ?? (report.pinnedAlready ? report.account : null);
-  if (account) out.detail('done: this clone is set up for ' + printable(account));
+  const account = pinned ?? (state.pinnedAlready ? state.account : null);
+  if (account) closing(account, await blockersNow(state.git, account));
   for (const planned of skipped) out.detail('skipped: ' + printable(planned.what));
+}
+
+/** `done` only with nothing left in the way of the next push; otherwise the first, then each one (ADR-026). */
+function closing(account: string, found: readonly Blocker[]): void {
+  if (found.length === 0) { out.detail('done: this clone is set up for ' + printable(account)); return; }
+  const more = found.length > 1 ? ' (and ' + (found.length - 1) + ' more below)' : '';
+  out.detail('set up for ' + printable(account) + '; the next push will fail: ' + printable(found[0]!.summary) + more);
+  for (const line of found.flatMap((blocker) => blocker.lines)) out.detail('  ' + printable(line));
+}
+
+/** Re-read after the run: a step may have fixed what the review showed, or not. */
+async function blockersNow(git: Git, account: string): Promise<Blocker[]> {
+  const email = await git.getConfig('user.email', 'local') ?? '';
+  const facts = await readPushFacts(git, await readUnpushed(git));
+  return blockers(facts, { email, account, autoUpstream: false });
 }
 
 async function printClone(before: CloneSnapshot, state: RunState): Promise<void> {

@@ -85,6 +85,8 @@ export interface Review {
   readonly notes: readonly string[];
   /** Nothing needs to change. Done exits; an empty plan is not offered as a re-run. */
   readonly settled: boolean;
+  /** Settled, yet something will make the next push fail: the notes open with what. */
+  readonly blocked?: boolean;
   /** Settled screen only: sign this account in to gh, when gh acts as someone else. */
   readonly ghSignIn?: string;
   /** False when nothing has been asked, so Change an answer is not offered. */

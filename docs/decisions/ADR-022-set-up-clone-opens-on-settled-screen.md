@@ -1,6 +1,6 @@
 # ADR-022: A settled clone opens on the already-set-up screen
 
-**Status:** Accepted
+**Status:** Accepted. Amended by [ADR-026](ADR-026-setup-says-what-blocks-the-next-push.md): a settled clone with something blocking its next push says so instead of "Nothing needs to change", and its closing line is not `done`.
 
 ## Context
 

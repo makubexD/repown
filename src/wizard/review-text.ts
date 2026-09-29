@@ -38,6 +38,11 @@ function changesMachine(command: string): boolean {
   return command.startsWith('repown fix');
 }
 
+/** A settled clone's verdict: its settings are right; the notes say what else is not (ADR-026). */
+function settledVerdict(review: Review): string {
+  return review.blocked ? 'Its settings need no change, but the next push will fail:' : 'Nothing needs to change.';
+}
+
 /**
  * The body of the review, line by line, wrapped to `width`. `command` styles each
  * command line (dimmed where the prompter can draw colour), so the plain words stay
@@ -47,7 +52,7 @@ export function reviewLines(review: Review, width = Infinity, command: (text: st
   const words = (text: string): string[] => wrap(text, width);
   // A command's continuation sits deeper, so it can't read as the next command.
   const code = (text: string): string[] => wrap('     ' + text, width - 2).map((line, index) => command(index ? '  ' + line : line));
-  if (review.settled) return [...review.headline.flatMap(words), '', 'Nothing needs to change.', ...notesOf(review).flatMap(words)];
+  if (review.settled) return [...review.headline.flatMap(words), '', settledVerdict(review), ...notesOf(review).flatMap(words)];
   const steps = review.steps.flatMap((step, index) => [
     ...words((index + 1) + '. ' + step.what),
     ...code(step.command),

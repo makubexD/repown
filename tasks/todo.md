@@ -1,6 +1,6 @@
 # Tasks: setup leaves the clone push-ready
 
-Status: Phase 4 build, Task 4 next
+Status: Phase 4 build, Task 5 next. Full-suite run for T4 pending (stopped for low memory); targeted runs green
 
 - [x] Phase 1 clarify (audit WIZ-1..10, newcomer walk s1–s9, research; scope: detect + fix + opt-in re-author)
 - [x] Phase 2 spec (SPEC.md approved; command name `repown reauthor`)
@@ -31,7 +31,7 @@ Reads git config and the environment.
   `src/core/unpushed.ts` (detached count), `test/blockers.test.ts`
 - Docs: none — no user-visible output until Task 4
 
-## Task 4 — Setup says it: blockers first, honest settled screen and closing line
+## Task 4 — Setup says it: blockers first, honest settled screen and closing line [x]
 - Acceptance: review lists blockers before the steps; settled screen says "nothing needs to
   change" only with none (ADR-022 amended) and otherwise names them; `--no-input` on a settled
   clone prints them; closing is `done` only when a re-read finds none, else

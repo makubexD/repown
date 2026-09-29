@@ -80,7 +80,7 @@ export function foreignCount(fact: UnpushedFact, email: string): number {
 
 /** Behind an unknown destination the rebase is right only when it has none of these commits. */
 function advice(fact: UnpushedFact, found: Found, account: string): string[] {
-  const rebase = reauthorLine(found.count, found.base);
+  const rebase = reauthorLine(found);
   if (!fact.unknown) return rebase;
   const holder = holderOf(fact.unknown);
   return [unknownLine(fact.unknown, account), ...rebase.map((line) => 'if ' + holder + ' has none of them, ' + line)];
@@ -126,9 +126,11 @@ function copyable(word: string): boolean {
   return !word.startsWith('-');
 }
 
-function reauthorLine(count: number, base: string): string[] {
-  const them = count === 1 ? 'it' : 'them';
-  return ['re-author ' + them + ': git rebase ' + base + ' ' + AMEND + ', or pin that address'];
+/** Pinning is an alternative only when one address made them all. */
+function reauthorLine(found: Found): string[] {
+  const them = found.count === 1 ? 'it' : 'them';
+  const pin = found.addresses.length === 1 ? ', or pin that address' : '';
+  return ['re-author ' + them + ': git rebase ' + found.base + ' ' + AMEND + pin];
 }
 
 interface Found {

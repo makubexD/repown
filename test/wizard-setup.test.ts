@@ -18,6 +18,7 @@ import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Rev
 import { setupFlow, planCommands, formatCommand, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext } from '../src/wizard/setup-flow.ts';
 import { pinWrites } from '../src/core/identity.ts';
 import { plainPrompter } from '../src/wizard/plain.ts';
+import { reviewLines } from '../src/wizard/review-text.ts';
 import { gitSupportsAutoUpstream } from '../src/core/version.ts';
 import { SETUP_NOTE } from '../src/commands/start.ts';
 import { runSetup } from '../src/wizard/setup-run.ts';
@@ -361,6 +362,32 @@ describe('setup flow', () => {
       ['Record the account', 'Let this clone', 'Stop gh answering', 'Pin this clone', 'Turn on the']);
     assert.deepEqual(review.steps.map((step) => step.command), planCommands(answers, ctx).map((command) => formatCommand(command.argv)));
     assert.deepEqual(review.steps[2]!.detail, ['  global  credential.helper = gh'], 'what fix removes, under its step');
+  });
+
+  test('ADR-026 what blocks the next push comes first among the notes', () => {
+    const base = context({});
+    const ctx = context({ push: { ...base.push, env: ['GH_TOKEN'] }, unpushed: onBranch(['old@example.invalid']) });
+    const notes = setupFlow(ctx).review({ account: 'octocat' }, ctx).notes;
+    assert.match(notes[0]!, /^1 commit on main not on any remote is by old@example\.invalid/);
+    assert.ok(notes.some((line) => line.startsWith('GH_TOKEN is set in this shell')), notes.join('\n'));
+  });
+
+  test('ADR-026 a settled clone with a blocker is not "nothing needs to change"', () => {
+    const base = context({ pinned: 'octocat', pinIntact: true, guard: 'on' });
+    const ctx = context({ pinned: 'octocat', pinIntact: true, guard: 'on', push: { ...base.push, env: ['GIT_AUTHOR_EMAIL'] } });
+    const review = setupFlow(ctx).review({ account: 'octocat' }, ctx);
+    assert.equal(review.settled, true);
+    const text = reviewLines(review).join('\n');
+    assert.doesNotMatch(text, /Nothing needs to change\./);
+    assert.match(text, /Its settings need no change, but the next push will fail:/);
+    assert.match(text, /GIT_AUTHOR_EMAIL is set in this shell/);
+    const calm = setupFlow(base).review({ account: 'octocat' }, base);
+    assert.match(reviewLines(calm).join('\n'), /Nothing needs to change\./);
+  });
+
+  test('WIZ-5 "or pin that address" only when there is one address to pin', () => {
+    assert.match(reviewNotes(context({ unpushed: onBranch(['old@example.invalid']) })), /, or pin that address/);
+    assert.doesNotMatch(reviewNotes(context({ unpushed: onBranch(['a@example.invalid', 'b@example.invalid']) })), /pin that address/);
   });
 
   test('a clone already pinned to that account, as recorded, is settled; anything left to do is not', () => {
@@ -739,7 +766,7 @@ describe('setup flow', () => {
     const ctx = context({ unpushed: onBranch(['old@example.invalid', 'also@example.invalid']) });
     const notes = reviewNotes(ctx);
     assert.match(notes, /2 commits on main not on any remote are by old@example\.invalid, also@example\.invalid; the guard will refuse them/);
-    assert.match(notes, /re-author them: git rebase abc1234 --exec "git commit --amend --no-edit --reset-author --allow-empty", or pin that address/);
+    assert.match(notes, /re-author them: git rebase abc1234 --exec "git commit --amend --no-edit --reset-author --allow-empty"$/m);
     const planned = planCommands({ account: 'octocat', mode: 'recommended', guard: true }, ctx);
     assert.equal(planned.some((command) => command.argv.some((arg) => /rebase|amend|reset-author/.test(arg))), false);
     const settled = context({
@@ -1345,7 +1372,7 @@ describe('repown setup, without a terminal', () => {
     assert.ok(existsSync(hook(at)));
     assert.match(run.stderr, /step 1 of 2: Pin this clone to octocat/);
     assert.match(run.stderr, /step 2 of 2: Turn on the push guard/);
-    assert.match(run.stderr, /done: this clone is set up for octocat/);
+    assert.match(run.stderr, /(?:done: this clone is set up for octocat|set up for octocat; the next push will fail)/);
     assert.match(run.stderr, /check it any time: repown status \(this clone\), repown doctor \(this machine\)/);
     assert.doesNotMatch(run.stdout, /done:|check it any time/, 'setup\'s own lines stay off stdout');
     assert.match(run.stderr, /\n\n {7}step 2 of 2/, 'a blank line between steps');
@@ -1587,7 +1614,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     const run = repown(['setup', 'octocat', '--no-input'], at.box.dir);
     assert.equal(run.status, 0, run.stderr);
     assert.equal(at.box.git('config', '--local', '--list'), before);
-    assert.match(run.stderr, /done: this clone is set up for octocat/);
+    assert.match(run.stderr, /(?:done: this clone is set up for octocat|set up for octocat; the next push will fail)/);
     assert.match(run.stderr, /nothing changed in this clone/);
     assert.doesNotMatch(run.stderr, /repown use /);
   });
@@ -1634,7 +1661,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.doesNotMatch(localConfig(at), /account = octocat/);
     assert.ok(existsSync(hook(at)));
     assert.match(seen.stderr, /skipped: Pin this clone to octocat/);
-    assert.doesNotMatch(seen.stderr, /done: this clone is set up/);
+    assert.doesNotMatch(seen.stderr, /done: this clone is set up|; the next push will fail/);
     assert.deepEqual(seen.confirms[0]?.changes, [
       'user.name = Octo Cat',
       'user.email = octocat@example.invalid',
@@ -1655,7 +1682,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.equal(seen.code, 0, seen.stderr);
     assert.match(localConfig(at), /account = octocat/);
     assert.equal(existsSync(hook(at)), false);
-    assert.match(seen.stderr, /done: this clone is set up for octocat/);
+    assert.match(seen.stderr, /(?:done: this clone is set up for octocat|set up for octocat; the next push will fail)/);
     assert.match(seen.stderr, /skipped: Turn on the push guard: each push is checked first/);
   });
 
@@ -1667,7 +1694,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.equal(seen.code, 0, seen.stderr);
     assert.doesNotMatch(localConfig(at), /repown/);
     assert.equal(existsSync(hook(at)), false);
-    assert.doesNotMatch(seen.stderr, /done: this clone is set up/);
+    assert.doesNotMatch(seen.stderr, /done: this clone is set up|; the next push will fail/);
     assert.match(seen.stderr, /skipped: Pin this clone to octocat/);
     assert.match(seen.stderr, /skipped: Turn on the push guard/);
   });
@@ -1685,7 +1712,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.match(stopped.stderr, /not run:/);
     assert.match(stopped.stderr, /repown use octocat/);
     assert.match(stopped.stderr, /repown guard on/);
-    assert.doesNotMatch(stopped.stderr, /done: this clone is set up/);
+    assert.doesNotMatch(stopped.stderr, /done: this clone is set up|; the next push will fail/);
 
     const cancelled = await runCaptured([
       ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'],
@@ -1706,7 +1733,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.match(localConfig(at), /account = octocat/);
     assert.ok(existsSync(hook(at)));
     assert.match(seen.stderr, /> repown use octocat/);
-    assert.match(seen.stderr, /done: this clone is set up for octocat/);
+    assert.match(seen.stderr, /(?:done: this clone is set up for octocat|set up for octocat; the next push will fail)/);
     assert.doesNotMatch(seen.stderr, /skipped:/);
   });
 
@@ -1744,7 +1771,7 @@ describe('repown setup, on a terminal (scripted)', () => {
   test('after the steps, gh advice is one more done line and the first push is not repeated', async () => {
     const left = await captureSetup(async () => ghAuth('octo-work', ['octo-work']));
     assert.equal(left.code, 0, left.stderr);
-    assert.match(left.stderr, /done: this clone is set up for octocat/);
+    assert.match(left.stderr, /(?:done: this clone is set up for octocat|set up for octocat; the next push will fail)/);
     assert.match(left.stderr, /optional, only if you use gh here: repown use octocat --gh {3}\(signs octocat in to gh\)/);
     assert.doesNotMatch(left.stderr, /first push/);
     const same = await captureSetup(async () => ghAuth('octocat', ['octocat']));
@@ -1955,7 +1982,7 @@ describe('S18 after a setup run', () => {
     ]);
     assert.equal(seen.code, 130);
     assert.match(seen.stderr, /user\.name: Sandbox -> Octo Cat/);
-    assert.doesNotMatch(seen.stderr, / {9}push guard:|done: this clone is set up/);
+    assert.doesNotMatch(seen.stderr, / {9}push guard:|done: this clone is set up|; the next push will fail/);
     assert.ok(seen.stderr.indexOf('not run:') < seen.stderr.indexOf('changed in this clone:'));
   });
 
@@ -1964,7 +1991,7 @@ describe('S18 after a setup run', () => {
     assert.equal(first.code, 0, first.stderr);
     const again = await play([['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'run'], ['step', 'yes']]);
     assert.equal(again.code, 0, again.stderr);
-    assert.match(again.stderr, /done: this clone is set up for octocat/);
+    assert.match(again.stderr, /(?:done: this clone is set up for octocat|set up for octocat; the next push will fail)/);
     assert.match(again.stderr, /nothing changed in this clone/);
     assert.doesNotMatch(again.stderr, /changed in this clone:/);
     assert.ok(again.stderr.indexOf('done:') < again.stderr.indexOf('nothing changed in this clone'));
@@ -1993,7 +2020,7 @@ describe('S18 after a setup run', () => {
     assert.equal(seen.code, 1, seen.stderr);
     assert.match(seen.stderr, /stopped: that command exited 1/);
     assert.match(seen.stderr, /user\.name: Sandbox -> Octo Cat/);
-    assert.doesNotMatch(seen.stderr, / {9}push guard:|done: this clone is set up|check it any time:/);
+    assert.doesNotMatch(seen.stderr, / {9}push guard:|done: this clone is set up|; the next push will fail|check it any time:/);
     assert.ok(seen.stderr.indexOf('exited 1') < seen.stderr.indexOf('changed in this clone:'));
   });
 

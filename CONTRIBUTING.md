@@ -119,12 +119,12 @@ and help text in its own file under `src/commands/`, so help can't drift from th
 | `repown doctor` | `src/commands/doctor.ts`, `src/core/inspect.ts`, `src/core/credential/gcm.ts`, `src/core/credential/gh.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
 | `repown fix` | `src/commands/fix.ts`, `src/core/credential/repair.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
 | `repown accounts list`, `repown accounts add`, `repown accounts remove` | `src/commands/accounts.ts`, `src/core/registry.ts` | [card 2](docs/HOW-IT-WORKS.md#2-remember-an-account), [the registry](docs/CONFIGURATION.md#the-account-registry) |
-| `repown use` | `src/commands/use.ts`, `src/core/identity.ts`, `src/core/registry.ts`, `src/core/credential/gh.ts`, `src/core/unpushed.ts` | [card 3](docs/HOW-IT-WORKS.md#3-pin-a-clone), [per-clone keys](docs/CONFIGURATION.md#per-clone-keys) |
+| `repown use` | `src/commands/use.ts`, `src/core/identity.ts`, `src/core/registry.ts`, `src/core/credential/gh.ts`, `src/core/unpushed.ts`, `src/core/push-destination.ts` | [card 3](docs/HOW-IT-WORKS.md#3-pin-a-clone), [per-clone keys](docs/CONFIGURATION.md#per-clone-keys) |
 | `repown off` | `src/commands/off.ts`, `src/core/identity.ts` | [card 12](docs/HOW-IT-WORKS.md#12-uninstall-or-repown-missing) |
 | `repown guard on`, `repown guard off`, `repown guard status` | `src/commands/guard.ts`, `src/core/guard/hook.ts` | [card 7](docs/HOW-IT-WORKS.md#7-push-what-the-guard-checks), [card 10](docs/HOW-IT-WORKS.md#10-other-hook-tools) |
 | `repown guard check` (the hook calls it) | `src/commands/guard.ts`, `src/core/guard/check.ts` | [card 7](docs/HOW-IT-WORKS.md#7-push-what-the-guard-checks), [card 8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
 | `repown scan` | `src/commands/scan.ts`, `src/core/inspect.ts`, `src/core/git.ts` | [card 11](docs/HOW-IT-WORKS.md#11-audit-re-point-move-machines), [JSON](docs/CONFIGURATION.md#scripts-and-ci) |
-| `repown setup` | `src/commands/setup.ts`, `src/wizard/setup-run.ts`, `src/wizard/setup-context.ts`, `src/wizard/setup-flow.ts`, `src/wizard/setup-changes.ts`, `src/wizard/engine.ts`, `src/wizard/review-text.ts`, `src/wizard/clack.ts`, `src/wizard/plain.ts`, `src/core/unpushed.ts` | [card 13](docs/HOW-IT-WORKS.md#13-guided-setup), [scripts and CI](docs/CONFIGURATION.md#scripts-and-ci) |
+| `repown setup` | `src/commands/setup.ts`, `src/wizard/setup-run.ts`, `src/wizard/setup-context.ts`, `src/wizard/setup-flow.ts`, `src/wizard/setup-changes.ts`, `src/wizard/engine.ts`, `src/wizard/review-text.ts`, `src/wizard/clack.ts`, `src/wizard/plain.ts`, `src/core/unpushed.ts`, `src/core/push-destination.ts` | [card 13](docs/HOW-IT-WORKS.md#13-guided-setup), [scripts and CI](docs/CONFIGURATION.md#scripts-and-ci) |
 
 Shared by all of them:
 - **Parsing, help and dispatch:** `src/program.ts` (the command table; `src/cli.ts` imports it and starts the program), `src/ui/dispatch.ts`, `src/ui/command.ts`

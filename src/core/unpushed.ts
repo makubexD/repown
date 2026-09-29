@@ -82,22 +82,48 @@ export function unpushedLines(fact: UnpushedFact, email: string, account: string
 function advice(fact: UnpushedFact, count: number, account: string): string[] {
   const rebase = reauthorLine(count, fact.rebaseBase);
   if (!fact.unknown) return rebase;
-  const holder = fact.unknown.kind === 'remote' ? show(fact.unknown.name) : 'it';
+  const holder = holderOf(fact.unknown);
   return [unknownLine(fact.unknown, account), ...rebase.map((line) => 'if ' + holder + ' has none of them, ' + line)];
 }
 
-const SKIPPED = ' (the guard skips those)';
+function holderOf(unknown: UnknownDestination): string {
+  return unknown.kind === 'remote' || unknown.kind === 'pushurl' ? show(unknown.name) : 'it';
+}
+
+/** The guard excludes what the pushed branch's remote tip has, not everything the remote holds. */
+const GUARD = ' (the guard skips any already on the branch you push to)';
+const THERE = ', so some of these may already be there' + GUARD;
 
 function unknownLine(unknown: UnknownDestination, account: string): string {
-  const recount = 'then repown use ' + shellWord(show(account)) + ' to count again';
-  if (unknown.kind === 'remote') {
-    return show(unknown.name) + ' has no remote-tracking refs, so some of these may already be on it' + SKIPPED +
-      ': git fetch ' + shellWord(show(unknown.name)) + ', ' + recount;
+  switch (unknown.kind) {
+    case 'remote': return trackingLine(unknown.name, account);
+    case 'pushurl': return show(unknown.name) + ' pushes to another URL than it fetches from' + THERE;
+    case 'url': return urlLine(unknown.key, unknown.remote, account);
+    case 'unnamed': return 'this branch pushes to "' + show(unknown.name) + '", which is not a remote here' + THERE;
+    case 'unread': return 'the remotes could not be read, so some of these may already be on one' + GUARD;
   }
-  const lead = 'this branch pushes to a URL, not a remote, so some of these may already be there' + SKIPPED;
-  if (!unknown.remote) return lead;
-  const remote = shellWord(show(unknown.remote));
-  return lead + ': git config --local ' + shellWord(show(unknown.key)) + ' ' + remote + ', git fetch ' + remote + ', ' + recount;
+}
+
+function trackingLine(name: string, account: string): string {
+  const lead = show(name) + ' has no remote-tracking refs, so some of these may already be on it' + GUARD;
+  if (!copyable(name)) return lead;
+  return lead + ': git fetch ' + shellWord(show(name)) + ', ' + recount(account);
+}
+
+function urlLine(key: string, remote: string | null, account: string): string {
+  const lead = 'this branch pushes to a URL, not a remote' + THERE;
+  if (!remote || !copyable(remote)) return lead;
+  const word = shellWord(show(remote));
+  return lead + ': git config --local ' + shellWord(show(key)) + ' ' + word + ', git fetch ' + word + ', ' + recount(account);
+}
+
+function recount(account: string): string {
+  return 'then repown use ' + shellWord(show(account)) + ' to count again';
+}
+
+/** Quoting keeps a shell from splitting a word, not git from reading `-x` as an option. */
+function copyable(word: string): boolean {
+  return !word.startsWith('-');
 }
 
 function reauthorLine(count: number, base: string | null): string[] {
@@ -160,8 +186,11 @@ function unread(branch: string, error: string): string {
     show(error) + '), so repown can\'t say whether the guard will refuse them';
 }
 
-/** Control characters could redraw the terminal around a line taken from a commit. */
+/**
+ * Control characters could redraw the terminal around a line taken from a commit, and
+ * bidi or zero-width ones make a copyable command read differently from what it pastes.
+ */
 function show(text: string): string {
-  const cleaned = text.replace(/[\x00-\x1f\x7f-\x9f]/g, '?');
+  const cleaned = text.replace(/[\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2066-\u2069\u2028\u2029\ufeff]/g, '?');
   return cleaned.length > 0 ? cleaned : '(none)';
 }

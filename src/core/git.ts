@@ -100,6 +100,13 @@ export class Git {
     return lines(await this.exec(['remote']));
   }
 
+  /** Remote names, in the order git lists them. A failed read is an error, not "none". */
+  async readRemotes(): Promise<Result<string[]>> {
+    const listed = await this.exec(['remote']);
+    if (!succeeded(listed)) return err(listed.stderr.trim() || 'git remote failed');
+    return ok(lines(listed));
+  }
+
   /** Whether any ref exists under `refs/remotes/<remote>/`. A failed read is an error, not "none". */
   async hasTrackingRefs(remote: string): Promise<Result<boolean>> {
     const listed = await this.exec(['for-each-ref', '--count=1', '--format=%(refname)', 'refs/remotes/' + remote + '/']);

@@ -86,6 +86,9 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   Don't add `--path-format`: git before 2.31 echoes it back and exits 0.
 - `check.ts` inspects the author and committer of every commit in the pushed range read from
   stdin (excluding what the remote already has), and every tagger, not the current config.
+- `unpushed.ts` counts against remote-tracking refs, so its rebase advice depends on
+  `push-destination.ts`: a push destination no tracking ref reaches is unknown, and the
+  rebase is then conditional. `FETCH_HEAD` is no proof of a fetch; a failed one writes it (ADR-025).
 - `src/ui/format.ts`: payload (`pass`/`line`/`field`) goes to stdout; `warn`/`fail`/`detail`
   and prompts go to stderr. `noted` is optional advice on stderr, in the same columns as
   `warn`, dim when that stream has colour. `displayPath` shows Windows separators on Windows

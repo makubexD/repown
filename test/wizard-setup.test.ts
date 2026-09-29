@@ -782,15 +782,32 @@ describe('setup flow', () => {
   test('ADR-025 behind a remote with no tracking refs the review says to fetch, and the rebase is conditional', () => {
     const unknown = { kind: 'remote', name: 'my fork' } as const;
     const notes = reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid'], '--root'), unknown } }));
-    assert.match(notes, /my fork has no remote-tracking refs, so some of these may already be on it \(the guard skips those\): git fetch 'my fork', then repown use octocat to count again/);
+    assert.match(notes, /my fork has no remote-tracking refs, so some of these may already be on it \(the guard skips any already on the branch you push to\): git fetch 'my fork', then repown use octocat to count again/);
     assert.match(notes, /if my fork has none of them, re-author it: git rebase --root /);
     assert.doesNotMatch(notes, /^\s*re-author/m);
+  });
+
+  test('ADR-025 a name git would read as an option gets no command, and hidden text is shown', () => {
+    const dashed = { kind: 'remote', name: '--upload-pack=touch x' } as const;
+    const notes = reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: dashed } }));
+    assert.match(notes, /--upload-pack=touch x has no remote-tracking refs, so some of these may already be on it \(the guard skips any already on the branch you push to\)/);
+    assert.doesNotMatch(notes, /git fetch/);
+    const url = { kind: 'url', key: 'branch.main.remote', remote: '-o' } as const;
+    assert.doesNotMatch(reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: url } })), /git config|git fetch/);
+    const bidi = { kind: 'remote', name: 'fork\u202egnp.exe\u200b' } as const;
+    assert.match(reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: bidi } })), /git fetch 'fork\?gnp\.exe\?'/);
+  });
+
+  test('ADR-025 remotes that could not be read are unknown, not "none"', () => {
+    const notes = reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: { kind: 'unread' } } }));
+    assert.match(notes, /the remotes could not be read, so some of these may already be on one \(the guard skips any already on the branch you push to\)/);
+    assert.match(notes, /if it has none of them, re-author it: /);
   });
 
   test('ADR-025 a branch that pushes to a URL no remote has gets no fix command, and no URL', () => {
     const unknown = { kind: 'url', key: 'branch.main.remote', remote: null } as const;
     const notes = reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown } }));
-    assert.match(notes, /this branch pushes to a URL, not a remote, so some of these may already be there \(the guard skips those\)/);
+    assert.match(notes, /this branch pushes to a URL, not a remote, so some of these may already be there \(the guard skips any already on the branch you push to\)/);
     assert.doesNotMatch(notes, /git config --local branch\.main\.remote|git fetch/);
     assert.match(notes, /if it has none of them, re-author it: git rebase abc1234 /);
   });

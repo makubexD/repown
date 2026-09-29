@@ -250,7 +250,8 @@ describe('repown use when the branch pushes where no tracking ref reaches (ADR-0
   afterEach(() => box.dispose());
 
   const RECOUNT = 'then repown use octocat to count again';
-  const UNKNOWN = 'origin has no remote-tracking refs, so some of these may already be on it (the guard skips those): git fetch origin, ' + RECOUNT;
+  const GUARD = ' (the guard skips any already on the branch you push to)';
+  const UNKNOWN = 'origin has no remote-tracking refs, so some of these may already be on it' + GUARD + ': git fetch origin, ' + RECOUNT;
 
   test('a remote never fetched: fetch first, and the rebase only if it has none of them', async () => {
     const published = publishedThenLocal(box);
@@ -282,7 +283,7 @@ describe('repown use when the branch pushes where no tracking ref reaches (ADR-0
     box.git('config', 'branch.main.remote', 'https://octocat:secret-token@github.com/octocat/hello');
     const run = await runUse(box);
     assert.match(run.stderr, new RegExp(escapeRe(
-      'this branch pushes to a URL, not a remote, so some of these may already be there (the guard skips those): ' +
+      'this branch pushes to a URL, not a remote, so some of these may already be there' + GUARD + ': ' +
       'git config --local branch.main.remote origin, git fetch origin, ' + RECOUNT)));
     assert.match(run.stderr, new RegExp(escapeRe('if it has none of them, ' + reauthor('them', '--root'))));
     assert.doesNotMatch(run.stderr, /secret-token|octocat\/hello/);
@@ -306,6 +307,32 @@ describe('repown use when the branch pushes where no tracking ref reaches (ADR-0
     commitAs(box, THEIRS, 'second');
     const run = await runUse(box);
     assert.match(run.stderr, new RegExp(escapeRe('if origin has none of them, ' + reauthor('them', '--root'))));
+  });
+
+  test('a remote that pushes to another URL than it fetches from is unknown, however fetched', async () => {
+    publishedThenLocal(box);
+    box.git('fetch', '-q', 'origin');
+    box.git('config', 'remote.origin.pushurl', 'https://github.com/octocat/fork.git');
+    const run = await runUse(box);
+    assert.match(run.stderr, new RegExp(escapeRe('origin pushes to another URL than it fetches from, so some of these may already be there' + GUARD)));
+    assert.match(run.stderr, /if origin has none of them, re-author it: git rebase /);
+    assert.doesNotMatch(run.stderr, /octocat\/fork/);
+  });
+
+  test('a branch remote that names no configured remote says so, not "a URL"', async () => {
+    publishedThenLocal(box);
+    box.git('config', 'branch.main.remote', 'orign');
+    const run = await runUse(box);
+    assert.match(run.stderr, new RegExp(escapeRe('this branch pushes to "orign", which is not a remote here, so some of these may already be there' + GUARD)));
+    assert.doesNotMatch(run.stderr, /a URL/);
+  });
+
+  test('one remote not named origin, and nothing configured: git push has no destination, so the advice is unchanged', async () => {
+    publishedThenLocal(box);
+    box.git('remote', 'rename', 'origin', 'up');
+    const run = await runUse(box);
+    assert.match(run.stderr, new RegExp('^\\s+' + escapeRe(reauthor('them', '--root')), 'm'));
+    assert.doesNotMatch(run.stderr, /remote-tracking|has none of them/);
   });
 });
 

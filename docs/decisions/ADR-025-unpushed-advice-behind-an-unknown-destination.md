@@ -26,21 +26,30 @@ remote, and a `git pull <url>`. The file is also kept per worktree. Each case br
 ## Decision
 
 - **The destination is where `git push` with no arguments sends the branch:**
-  `branch.<b>.pushRemote`, then `remote.pushDefault`, then `branch.<b>.remote`, then `origin`,
-  then the only remote. Other remotes are ignored. `.` or no destination means nothing is
-  published, and the advice is unchanged.
-- **The destination is unknown** when it is a configured remote with no ref under
-  `refs/remotes/<name>/`, or when that read fails. It is also unknown when it is not a
-  configured remote (a URL, which never gets tracking refs). Offline, an empty remote can't
-  be told from an unfetched one, so the advice doesn't try.
+  `branch.<b>.pushRemote`, then `remote.pushDefault`, then `branch.<b>.remote`, then `origin`.
+  There is no "only remote" fallback: with one remote not named `origin` and none of these
+  set, `git push` fails with "No configured push destination" (measured, git 2.54). Other
+  remotes are ignored. `.` or no destination means nothing is published, and the advice is
+  unchanged.
+- **The destination is unknown** when:
+  - it is a configured remote with no ref under `refs/remotes/<name>/`, or that read fails;
+  - it is a configured remote whose `pushurl` differs from its `url` (fetched from one
+    place, pushed to another), however fetched;
+  - it is not a configured remote: a URL, which never gets tracking refs, or a name that
+    matches no remote;
+  - `git remote` itself fails.
+
+  Offline, an empty remote can't be told from an unfetched one, so the advice doesn't try.
 - **Behind an unknown destination, the fact comes first, then the rebase only on a
   condition:**
-  - `origin has no remote-tracking refs, so some of these may already be on it (the guard skips those): git fetch origin, then repown use <account> to count again`
+  - `origin has no remote-tracking refs, so some of these may already be on it (the guard skips any already on the branch you push to): git fetch origin, then repown use <account> to count again`
   - then `if origin has none of them, re-author them: git rebase <base> ...`
 
-  For a URL, the line instead names a configured remote with the same host and path, if
-  there is one: `git config --local branch.<b>.remote <remote>`, then fetch. The URL itself
-  is never printed, and remote names are shell-quoted.
+  For a URL, the line names a configured remote with the same host and path, if there is
+  one, with the config key that named the URL: `git config --local <key> <remote>`, then
+  fetch. With none, it has no command. The URL itself is never printed. Remote names, keys
+  and the account are shell-quoted, and a name git would read as an option (a leading `-`)
+  gets no command at all.
 - `src/core/push-destination.ts` holds the rule; `src/core/unpushed.ts` renders it.
 
 ## Alternatives considered
@@ -55,10 +64,16 @@ remote, and a `git pull <url>`. The file is also kept per worktree. Each case br
 ## Consequences
 
 - The count sentence is unchanged, so behind an unknown destination it can overcount. The
-  next line says so and says the guard skips what the remote has.
+  next line says so. The guard skips only what the pushed branch's remote tip already has
+  (and only when that commit is here), so commits the remote holds on other branches are
+  still refused.
 - An empty remote stays unknown after a fetch, so it keeps the conditional line, which is
   right for it.
 - A push by URL with no remote configured and no branch config leaves no trace; it keeps
   today's advice.
 - A remote whose name nests in another's (`origin` and `origin/fork`, which `git remote add`
   refuses) can borrow the other's refs.
+- Known means SOME tracking ref, not one for this branch. A `--single-branch` clone
+  (`--depth` implies it) fetches only its first branch, so a feature branch pushed from it has
+  no tracking ref, yet the remote reads as known and the plain rebase is offered. This
+  predates ADR-025 and is not fixed here.

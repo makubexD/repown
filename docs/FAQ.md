@@ -47,9 +47,11 @@ current branch has commits no remote has by another address. Re-author it, or th
 `git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"`
 (`git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when that
 commit has no parent), or pin that address. `<base>` is the short hash of the parent
-of the oldest of those commits. If the branch pushes to a remote this clone never fetched,
-the warning says to `git fetch` it first and offers the rebase only for when the remote has
-none of them: rebasing below what it already has would rewrite published commits
+of the oldest of those commits. If no remote-tracking ref reaches where the branch pushes
+(a remote never fetched or still empty, one that pushes elsewhere than it fetches from, or a
+URL), the warning says so, says how to fetch and count again where it can, and offers the
+rebase only for when that destination has none of them: rebasing below what it already has
+would rewrite published commits
 ([ADR-025](decisions/ADR-025-unpushed-advice-behind-an-unknown-destination.md)). Nothing here rewrites history
 ([card 3](HOW-IT-WORKS.md#3-pin-a-clone), [card 8](HOW-IT-WORKS.md#8-push-refused-and-the-fix)).
 

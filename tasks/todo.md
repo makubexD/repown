@@ -1,12 +1,12 @@
 # Tasks: unpushed-commit advice on a never-fetched remote
 
-Status: Phase 3 (plan) awaiting GATE 3
+Status: Phase 4 build, Task 1 done; spec revised after the doubt review (FETCH_HEAD dropped, ADR-025)
 
 - [x] Phase 1 clarify (quality bar: CLAUDE.md + .claude/rules/code-quality.md)
 - [x] Phase 2 spec (SPEC.md approved)
-- [ ] Phase 3 plan (GATE 3)
+- [x] Phase 3 plan (GATE 3)
 
-## Task 1 ⚠ — `repown use` tells a never-fetched clone to fetch, not to rebase from the root
+## Task 1 ⚠ — `repown use` tells a never-fetched clone to fetch, not to rebase from the root [x]
 
 Reads git config (`remote`, refs, git dir). Size S-M.
 

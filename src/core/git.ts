@@ -100,6 +100,13 @@ export class Git {
     return lines(await this.exec(['remote']));
   }
 
+  /** Whether any ref exists under `refs/remotes/<remote>/`. A failed read is an error, not "none". */
+  async hasTrackingRefs(remote: string): Promise<Result<boolean>> {
+    const listed = await this.exec(['for-each-ref', '--count=1', '--format=%(refname)', 'refs/remotes/' + remote + '/']);
+    if (!succeeded(listed)) return err(listed.stderr.trim() || 'git for-each-ref failed');
+    return ok(lines(listed).length > 0);
+  }
+
   /**
    * The directory every worktree shares -- where hooks and config actually live.
    * In a linked worktree `.git` is a FILE, so joining '.git' to the root gives a

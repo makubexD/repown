@@ -5,11 +5,16 @@
 // `git rebase` onto the parent of the oldest of those commits (`--root` when it
 // has none). The identities come from `git log` through Git.identitiesIn
 // (`--no-show-signature`). The base is `rev-list` and `rev-parse` on Git.
+// Where the branch pushes may have no remote-tracking ref at all; then the range can
+// hold published commits, and the rebase is offered only for when it has none of
+// them (push-destination.ts, ADR-025).
 // scan's address totals are a different question: every ref, counts only, and
 // setup loads them only for the guard question.
 
 import type { CommitIdentity, Git } from './git.ts';
 import { ok, type Result } from './result.ts';
+import { unknownDestination, type UnknownDestination } from './push-destination.ts';
+import { shellWord } from './guard/check.ts';
 
 export interface UnpushedCommit {
   readonly authorEmail: string;
@@ -22,6 +27,8 @@ export interface UnpushedFact {
   readonly commits: Result<readonly UnpushedCommit[]>;
   /** `git rebase` target: a short sha, or `--root`. Null when there is no range to rebase. */
   readonly rebaseBase: string | null;
+  /** Where the branch pushes, when no remote-tracking ref says what it already has. */
+  readonly unknown: UnknownDestination | null;
 }
 
 const ADDRESS_CAP = 3;
@@ -31,12 +38,13 @@ export async function readUnpushed(git: Git): Promise<UnpushedFact> {
   const head = await git.currentBranch();
   if (head?.kind !== 'branch') return quiet(null);
   const commits = await commitsOf(git);
-  if (!commits.ok || commits.value.length === 0) return { branch: head.name, commits, rebaseBase: null };
-  return { branch: head.name, commits, rebaseBase: await rebaseBase(git) };
+  if (!commits.ok || commits.value.length === 0) return { branch: head.name, commits, rebaseBase: null, unknown: null };
+  const [base, unknown] = await Promise.all([rebaseBase(git), unknownDestination(git, head.name)]);
+  return { branch: head.name, commits, rebaseBase: base, unknown };
 }
 
 function quiet(branch: string | null): UnpushedFact {
-  return { branch, commits: ok([]), rebaseBase: null };
+  return { branch, commits: ok([]), rebaseBase: null, unknown: null };
 }
 
 /** Parent of the oldest unpushed commit, or `--root` when that commit has none. */
@@ -58,17 +66,38 @@ function brief(commit: CommitIdentity): UnpushedCommit {
   return { authorEmail: commit.authorEmail, committerEmail: commit.committerEmail };
 }
 
-/** Lines to show. Empty when there is nothing to say. The first is the fact; any other is how to fix it. */
-export function unpushedLines(fact: UnpushedFact, email: string): string[] {
+/**
+ * Lines to show. Empty when there is nothing to say. The first is the fact; any other is how
+ * to fix it. `account` is what to pin again to count again.
+ */
+export function unpushedLines(fact: UnpushedFact, email: string, account: string): string[] {
   if (fact.branch === null) return [];
   if (!fact.commits.ok) return [unread(fact.branch, fact.commits.error)];
-  return foreignLines(fact.branch, fact.commits.value, email, fact.rebaseBase);
+  const found = collect(fact.commits.value, fold(email));
+  if (found.count === 0) return [];
+  return [sentence(fact.branch, found), ...advice(fact, found.count, account)];
 }
 
-function foreignLines(branch: string, commits: readonly UnpushedCommit[], email: string, base: string | null): string[] {
-  const found = collect(commits, fold(email));
-  if (found.count === 0) return [];
-  return [sentence(branch, found), ...reauthorLine(found.count, base)];
+/** Behind an unknown destination the rebase is right only when it has none of these commits. */
+function advice(fact: UnpushedFact, count: number, account: string): string[] {
+  const rebase = reauthorLine(count, fact.rebaseBase);
+  if (!fact.unknown) return rebase;
+  const holder = fact.unknown.kind === 'remote' ? show(fact.unknown.name) : 'it';
+  return [unknownLine(fact.unknown, account), ...rebase.map((line) => 'if ' + holder + ' has none of them, ' + line)];
+}
+
+const SKIPPED = ' (the guard skips those)';
+
+function unknownLine(unknown: UnknownDestination, account: string): string {
+  const recount = 'then repown use ' + shellWord(show(account)) + ' to count again';
+  if (unknown.kind === 'remote') {
+    return show(unknown.name) + ' has no remote-tracking refs, so some of these may already be on it' + SKIPPED +
+      ': git fetch ' + shellWord(show(unknown.name)) + ', ' + recount;
+  }
+  const lead = 'this branch pushes to a URL, not a remote, so some of these may already be there' + SKIPPED;
+  if (!unknown.remote) return lead;
+  const remote = shellWord(show(unknown.remote));
+  return lead + ': git config --local ' + shellWord(show(unknown.key)) + ' ' + remote + ', git fetch ' + remote + ', ' + recount;
 }
 
 function reauthorLine(count: number, base: string | null): string[] {

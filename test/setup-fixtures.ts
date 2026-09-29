@@ -45,7 +45,7 @@ function baseline(): Omit<SetupContext, 'recorded' | 'addresses' | 'suggest'> {
     machineIdentity: { name: null, email: null },
     // No branch: these screens are not the unpushed-commit note. A test that
     // wants the note passes the commits readUnpushed would have read.
-    unpushed: { branch: null, commits: ok([]), rebaseBase: null },
+    unpushed: { branch: null, commits: ok([]), rebaseBase: null, unknown: null },
     // Already on, so these screens are not the upstream question. A test for that
     // question passes enabled: null. An otherwise settled clone where it is still
     // offered counts as settled and names `repown setup --auto-upstream`.

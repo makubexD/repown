@@ -85,6 +85,7 @@ function onBranch(emails: readonly string[], rebaseBase = 'abc1234'): SetupConte
     branch: 'main',
     commits: ok(emails.map((address) => ({ authorEmail: address, committerEmail: address }))),
     rebaseBase,
+    unknown: null,
   };
 }
 
@@ -765,7 +766,7 @@ describe('setup flow', () => {
   });
 
   test('S19 a committer who is not the author counts, and case does not', () => {
-    const mixed = context({ unpushed: { branch: 'main', rebaseBase: 'abc1234', commits: ok([
+    const mixed = context({ unpushed: { branch: 'main', rebaseBase: 'abc1234', unknown: null, commits: ok([
       { authorEmail: 'octocat@example.invalid', committerEmail: 'Other@example.invalid' },
       { authorEmail: 'other@example.invalid', committerEmail: 'octocat@example.invalid' },
     ]) } });
@@ -779,13 +780,13 @@ describe('setup flow', () => {
   });
 
   test('S19 a log that could not be read is a note, and a detached HEAD is not', () => {
-    const broken = context({ unpushed: { branch: 'feature', commits: err('git log failed'), rebaseBase: null } });
+    const broken = context({ unpushed: { branch: 'feature', commits: err('git log failed'), rebaseBase: null, unknown: null } });
     const notes = reviewNotes(broken);
     assert.match(notes, /commits on feature not on any remote could not be read \(git log failed\), so repown can't say whether the guard will refuse them/);
     assert.doesNotMatch(notes, /re-author|are by/);
-    const detached = context({ unpushed: { branch: null, commits: ok([]), rebaseBase: null } });
+    const detached = context({ unpushed: { branch: null, commits: ok([]), rebaseBase: null, unknown: null } });
     assert.doesNotMatch(reviewNotes(detached), /not on any remote/);
-    const hidden = context({ unpushed: { branch: 'main', rebaseBase: 'abc1234', commits: ok([
+    const hidden = context({ unpushed: { branch: 'main', rebaseBase: 'abc1234', unknown: null, commits: ok([
       { authorEmail: 'bad\x1b@example.invalid', committerEmail: 'octocat@example.invalid' },
     ]) } });
     assert.doesNotMatch(reviewNotes(hidden), /\x1b/);

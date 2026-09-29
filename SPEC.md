@@ -19,32 +19,42 @@ once with a token URL, a clone whose tracking refs were deleted).
 Success: repown never prints a rebase command that can reach below what a never-fetched remote
 may already have. It says to fetch first instead.
 
-## Assumptions (correct these at the gate)
+## Assumptions
 
-1. "Never fetched" = the clone has a remote with no ref under `refs/remotes/<name>/`, AND no
-   `FETCH_HEAD` in the git dir (`rev-parse --git-path FETCH_HEAD`). Measured on git 2.54: a
-   fetch of an EMPTY remote creates no tracking ref but does write an empty `FETCH_HEAD`, so
-   without the second condition a brand-new empty GitHub repo would be told to fetch forever.
-2. Offline only: no `ls-remote` (network, credentials; repown's checks here are read-only and
-   local).
-3. The count sentence stays as it is ("N commits on <b> not on any remote are by ..."). It is
-   still literally true of the tracking refs; the new line says why it may be too high.
-4. The remote named is the branch's own remote if it is a configured remote name, else
-   `origin`, else the first never-fetched remote. A branch whose `branch.<b>.remote` is a URL
-   (the field case) falls through to `origin`.
+Revised after the doubt review (Task 1): the first draft used `FETCH_HEAD` as "was fetched".
+Rejected: a FAILED fetch writes an empty `FETCH_HEAD` (measured, git 2.54), so does a fetch of
+any other remote or a `git pull <url>`, and it is per worktree. Each of those brought `--root`
+back. Nothing offline can tell an empty remote from an unfetched one, so the advice is made
+conditional instead.
+
+1. The destination is where `git push` with no arguments sends the branch:
+   `branch.<b>.pushRemote`, else `remote.pushDefault`, else `branch.<b>.remote`, else `origin`
+   if configured, else the only remote if there is exactly one. `.` (this repository) and no
+   destination at all mean nothing is published: unchanged advice. Other remotes are ignored.
+2. The destination is UNKNOWN when it is a configured remote with no ref under
+   `refs/remotes/<name>/` (or that read fails: unknown, never "none"), or when it is not a
+   configured remote at all (a URL; the field case's `branch.master.remote`). A URL keeps no
+   tracking refs, ever.
+3. Offline only: no `ls-remote`, no fetch.
+4. The count sentence stays as it is. The next line says the guard skips what the remote has.
 5. It stays a warning with an unchanged exit code (ADR-011, ADR-020); nothing is rewritten
-   (ADR-013).
+   (ADR-013). Recorded as ADR-025.
+6. Accepted gaps: a push by URL with no remote and no branch config leaves no trace (today's
+   advice); a remote name nested in another's (`origin` and `origin/fork`), which `git remote
+   add` refuses, can borrow the other's refs.
 
 ## Behaviour
 
-| Clone | Line after the count sentence |
+| Destination | Lines after the count sentence |
 | --- | --- |
-| No remote at all | unchanged: `re-author them: git rebase --root ...` (or `<base>`) |
-| Remote fetched (tracking refs or `FETCH_HEAD`) | unchanged |
-| Remote never fetched | `origin has never been fetched, so some of these may already be on it: git fetch origin, then pin again to recount` — and no rebase command |
+| None, `.`, or a remote with tracking refs | unchanged: `re-author them: git rebase <base> ...` |
+| Remote `origin`, no tracking refs | `origin has no remote-tracking refs, so some of these may already be on it (the guard skips those): git fetch origin, then repown use <account> to count again` then `if origin has none of them, re-author them: git rebase <base> ..., or pin that address` |
+| A URL (key `branch.main.remote`), a configured remote `origin` has the same host and path | `this branch pushes to a URL, not a remote, so some of these may already be there (the guard skips those): git config --local branch.main.remote origin, git fetch origin, then repown use <account> to count again` then `if it has none of them, re-author them: ...` |
+| A URL, no remote matches | the same first sentence, no fix clause; then `if it has none of them, ...` |
 
-`them`/`it` and the `, or pin that address` tail follow the existing wording rules only where a
-rebase line is printed.
+The URL itself is never printed (it may hold a token, as in the field case). Remote names go
+through `shellWord`. Every rebase printed for an unknown destination is behind "if ... has none
+of them", which is exactly when `--root`/`<base>` is right.
 
 ## Tech stack, commands, structure
 
@@ -67,12 +77,15 @@ function reauthorLine(count: number, base: string | null): string[] {
 ## Testing strategy
 
 `sandbox()` from `test/helpers.ts`, commits via the existing `commitAs` in `test/use.test.ts`.
-- Never fetched: a bare remote holding the first commits, `remote add origin`, no fetch →
-  warning has the fetch line, no `git rebase`.
-- Same clone after `git fetch origin` → base is the short hash of the remote's tip; count drops.
-- Empty remote fetched once (FETCH_HEAD, no tracking refs) → `--root`, as today.
-- No remote → unchanged (existing S19 tests stay green, untouched).
-- Setup's review shows the same line (`test/wizard-setup.test.ts`).
+- origin holds the first commit (pushed by path, no tracking ref): fetch line + conditional
+  rebase; after `git fetch origin` the base is origin's tip and the fetch line is gone.
+- The field case: `branch.main.remote` = origin's URL: URL line suggesting
+  `git config --local branch.main.remote origin`; the URL is not printed.
+- A failed fetch (origin's path removed) still gives the fetch line, not a bare rebase.
+- `branch.main.pushRemote` names an untracked remote while origin is tracked: unknown.
+- No remote: unchanged (existing S19 tests untouched).
+- Pure line tests in `test/wizard-setup.test.ts` for setup's review, incl. a remote name
+  that needs quoting.
 
 ## Boundaries
 
@@ -82,14 +95,7 @@ function reauthorLine(count: number, base: string | null): string[] {
 
 ## Success criteria
 
-1. The field case prints no `git rebase`, and names `git fetch origin`.
-2. After the fetch the base is the remote tip, not `--root`.
-3. An empty remote that was fetched still gets `--root`.
-4. Existing S19 tests pass unchanged; exit codes unchanged.
-5. HOW-IT-WORKS (unpushed rows), FAQ and CHANGELOG `[Unreleased]` describe the new line.
-
-## Open questions
-
-- Wording of the new line (proposal above).
-- Should `repown status` also warn here? Proposed: no, out of scope (it doesn't show the
-  unpushed warning today).
+1. The field case prints no unconditional `git rebase` and names how to count again.
+2. After a successful fetch the base is the remote tip; after a failed one, still conditional.
+3. No remote / tracked destination: output byte-for-byte as today; exit codes unchanged.
+4. HOW-IT-WORKS, FAQ, CHANGELOG `[Unreleased]` and ADR-025 describe it.

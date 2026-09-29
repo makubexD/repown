@@ -1,12 +1,12 @@
 # Tasks: setup leaves the clone push-ready
 
-Status: Phase 4 build, Task 1 next
+Status: Phase 4 build, Task 2 next
 
 - [x] Phase 1 clarify (audit WIZ-1..10, newcomer walk s1–s9, research; scope: detect + fix + opt-in re-author)
 - [x] Phase 2 spec (SPEC.md approved; command name `repown reauthor`)
 - [x] Phase 3 plan (GATE 3)
 
-## Task 1 — Lock today's clean-clone output
+## Task 1 — Lock today's clean-clone output [x]
 - Acceptance: characterization tests pin setup's review, plan and closing for a clean clone, the
   settled screen with no blockers, and `repown status` on a ready clone; green before any edit.
 - Verify: `node --test test/characterization.test.ts test/wizard-screens.test.ts`

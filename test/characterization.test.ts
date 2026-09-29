@@ -69,6 +69,74 @@ function sources(): string[] {
 /** An import of a package under @clack/, in any form: static, side effect, re-export or dynamic. */
 const CLACK_IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s*)['"`]@clack\//m;
 
+// A clone with nothing in the way of its next push: what setup and status say stays as it is
+// while they learn to name what DOES get in the way (push blockers). Local-path remote, so no
+// host's credential store is read.
+describe('a clean clone keeps its setup and status output', () => {
+  let box: Sandbox;
+  beforeEach(() => { box = sandbox(); cleanClone(box); });
+  afterEach(() => box.dispose());
+
+  const setupArgs = ['setup', 'octocat', '--name=Octo Cat', '--email=octocat@example.invalid', '--guard', '--auto-upstream', '--no-input'];
+
+  test('a first setup lists its steps, says done, and what changed', () => {
+    const run = repown(setupArgs, box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stderr,
+      '       step 1 of 4: Record the account octocat on this machine: octocat@example.invalid\n' +
+      "       > repown accounts add octocat --name 'Octo Cat' --email octocat@example.invalid\n\n" +
+      '       step 2 of 4: Pin this clone to octocat: its commit name and email\n' +
+      '       > repown use octocat\n\n' +
+      '       step 3 of 4: Turn on the push guard: each push is checked first\n' +
+      '       > repown guard on\n\n' +
+      '       step 4 of 4: Push branches without -u: the first push sets the upstream (this clone only)\n' +
+      '       > git config --local push.autoSetupRemote true\n\n' +
+      '       done: this clone is set up for octocat\n' +
+      '       changed in this clone:\n' +
+      '         user.name: Sandbox -> Octo Cat\n' +
+      '         user.email: sandbox@example.invalid -> octocat@example.invalid\n' +
+      '         user.useConfigOnly: (added) true\n' +
+      '         repown.account: (added) octocat\n' +
+      '         push.autoSetupRemote: (added) true\n' +
+      '         push guard: off -> on\n' +
+      '       changed on this machine:\n' +
+      "         this machine's account registry: added octocat\n" +
+      '       check it any time: repown status (this clone), repown doctor (this machine)\n');
+  });
+
+  test('setup again, with no input, changes nothing and says done', () => {
+    repown(setupArgs, box.dir);
+    const run = repown(['setup', 'octocat', '--no-input'], box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stdout, '');
+    assert.equal(run.stderr, '\n       done: this clone is set up for octocat\n       nothing changed in this clone\n' +
+      '       check it any time: repown status (this clone), repown doctor (this machine)\n');
+  });
+
+  test('status shows the clone block and says ready', () => {
+    repown(setupArgs, box.dir);
+    const run = repown(['status'], box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.ok(run.stdout.includes('This clone\n' +
+      '  commits as     Octo Cat <octocat@example.invalid>\n' +
+      '  pushes as      not pinned by repown on this host\n' +
+      '  account        octocat  (recorded)\n' +
+      '  origin         unknown  (this host)\n' +
+      '  upstream       origin/main\n' +
+      '  push guard     on\n'), run.stdout);
+    assert.equal(run.stderr, '\nready: commits use octocat; pushes use this host\'s own sign-in\n');
+  });
+});
+
+/** One commit by the account, pushed with -u to a bare origin by path: nothing left to push. */
+function cleanClone(box: Sandbox): void {
+  const remote = join(box.dir, '..', 'remote.git');
+  box.git('-c', 'user.email=octocat@example.invalid', '-c', 'user.name=Octo Cat', 'commit', '--allow-empty', '-m', 'first');
+  box.git('init', '-q', '--bare', remote);
+  box.git('remote', 'add', 'origin', remote);
+  box.git('push', '-q', '-u', 'origin', 'main');
+}
+
 describe('the prompt library stays inside the wizard', () => {
   test('the pattern recognises every form of import', () => {
     for (const form of ["import * as p from '@clack/prompts';", 'import "@clack/prompts";',

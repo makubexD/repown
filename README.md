@@ -84,7 +84,7 @@ npm install -g repown
 - **Update** with `npm install -g repown@latest`; guarded clones keep working
   ([ADR-003](docs/decisions/ADR-003-hook-calls-installed-cli.md)).
 - **What gets installed:** one optional dependency, for the arrow-key prompts (without it,
-  `setup` asks with numbered choices), pinned exactly
+  `repown setup` and the start screen ask with numbered choices), pinned exactly
   ([ADR-016](docs/decisions/ADR-016-clack-for-the-setup-wizard.md)). The package is
   published from CI with provenance ([how](SECURITY.md#how-the-package-is-published)).
 
@@ -223,9 +223,14 @@ then commit and push.
 
 | Where | What it does |
 | --- | --- |
-| A terminal, inside a clone (pinned or not) | Starts `repown setup` |
-| A terminal, outside a clone | Shows help, exit 0 |
-| No terminal, or the output is redirected | Status. Exit 1 outside a clone |
+| A terminal, inside a clone (pinned or not) | Starts `repown setup`. A line inside that screen says the clone isn't set up yet, or that a pinned clone is being checked ([card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are)) |
+| A terminal, outside a clone or in a bare repository | Opens the start screen ([card 14](docs/HOW-IT-WORKS.md#14-outside-a-clone)) |
+| stdout redirected (stdin and stderr still terminals) | Status inside a clone. The top help outside a clone, exit 0 |
+| No terminal (stdin or stderr is not one) | Status. Exit 1 outside a clone |
+
+The start screen lists the accounts on this machine and the clones it found, then offers
+the next command. The summary is in the frame. Picking a command closes the frame with
+that command. Nothing changes until you pick one.
 
 **Who is this clone?** `repown status` prints:
 

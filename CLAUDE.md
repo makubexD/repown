@@ -39,8 +39,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - **Strip-only TypeScript:** no enums, namespaces or parameter properties. Relative imports
   end in `.ts`.
 - **One runtime dependency, optional:** `@clack/prompts`, imported only by `src/wizard/clack.ts`,
-  which only `repown setup` loads, through a dynamic `import()` (ADR-016). Nothing else may
-  load it; `guard check` never does. Add no other. The lockfile is `npm-shrinkwrap.json`,
+  which `repown setup` and the start screen load through `choosePrompter`, by a dynamic
+  `import()` (ADR-016). Nothing else may import the package; `guard check` never does. Add no other. The lockfile is `npm-shrinkwrap.json`,
   and it ships.
 - **No names or email addresses in the repo.** Use `octocat`, `octo-org`, `octo-work` and `*.example.invalid`. The
   one exception is the owner's GitHub handle, which a public repo's URL, package.json
@@ -67,11 +67,17 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 
 ## Non-obvious structure
 
-- `src/cli.ts` only declares the program; `src/ui/dispatch.ts` dispatches it, and the release
-  tool (`scripts/release.ts`) reuses it. `--help` is intercepted before a command's `run()`, so help
-  never has side effects. A command declares its options in `src/commands/<name>.ts`, and
-  `src/ui/help.ts` renders help from that same declaration, so help can't drift from the
-  parser.
+- `src/program.ts` holds the command table. `src/cli.ts` imports it and starts the program;
+  importing `cli.ts` runs repown, so the start screen's Show help loads that same table from
+  `program.ts`. `src/ui/dispatch.ts` dispatches it, and the release tool (`scripts/release.ts`)
+  reuses it. `chooseDefault` may return a command name, `'help'`, or a runner
+  (`() => Promise<number>`), and dispatch uses that exit code. With no arguments,
+  `src/commands/start.ts` returns a runner for setup (it passes the lead to `runSetup`
+  through `SetupDeps.lead`), a runner for the start screen (`src/wizard/home-run.ts`),
+  status, or the top help. Any argument skips that. `--help` is intercepted before a
+  command's `run()`, so help never has side effects. A command declares its options in
+  `src/commands/<name>.ts`, and `src/ui/help.ts` renders help from that same declaration, so
+  help can't drift from the parser.
 - Adding a host: one provider file in `src/core/hosts/` plus one line in `providers()`
   (index.ts), `generic` last, plus its label and hint in `HOSTS` (`src/wizard/setup-flow.ts`).
 - The hook (`src/core/guard/hook.ts`) is LF-only. It calls the installed CLI's absolute path,
@@ -89,11 +95,15 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   layout isn't. Renaming a JSON field is breaking (ADR-014).
 - `src/wizard/` is `repown setup`: `engine.ts` owns Back, the review loop, the opening
   review (a settled clone's first screen, before any question) and resume (Use another
-  account, or the gh option, continues from there), and draws nothing;
-  `setup-flow.ts` is pure and turns answers into existing commands' argv;
-  `setup-context.ts` reads the clone once, read-only; `setup-run.ts` runs each command's
-  own `run()`, never a copy; `review-text.ts` holds the words both prompters (`plain.ts`,
-  `clack.ts`) share, and wraps them to the window (within the widths clack wraps at itself).
+  account, or the gh option, continues from there), and draws nothing. Its `Prompter.show`
+  draws lines of information inside the frame (clack: a log line in the gutter; plain:
+  indented two spaces). `setup-flow.ts` is pure and turns answers into existing commands'
+  argv; `setup-context.ts` reads the clone once, read-only; `setup-run.ts` runs each
+  command's own `run()`, never a copy; `review-text.ts` holds the words both prompters
+  (`plain.ts`, `clack.ts`) share, and wraps them to the window (within the widths clack
+  wraps at itself). The start screen is the same folder: `home-context.ts` reads
+  (read-only), `home-flow.ts` is pure, `home-text.ts` holds the words, and `home-run.ts`
+  draws through the Prompter (`show`, `choose`) and runs each action's own `run()`.
 
 ## Tests
 
@@ -102,8 +112,12 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   and friends, so neither the machine's config nor the shell running `npm test` leaks in.
 - Guard tests build foreign-authored commits with `git commit-tree`, which doesn't move HEAD.
 - `test/wizard-screens.test.ts` plays `repown setup`'s real screens with key presses
-  (`play()` in `test/setup-fixtures.ts`), including the opening review and resume from it;
-  add a scenario when a screen changes.
+  (`play()` in `test/setup-fixtures.ts`), including the opening review and resume from it,
+  the start screen (the summary in the frame, the hand-over line, Show help, Back from
+  the login question) and the setup lead inside the frame (F5, F6, F8). Add a scenario
+  when a screen changes.
+- `test/home.test.ts` covers the start screen's read, summary lines, menu, and discovery
+  (a refused `.git` at any depth, a bare repository that is not walked).
 - `test/format.test.ts` checks `displayPath` and which streams are coloured. `noted` is
   what prints the gh NOTE on `repown status`.
 - `test/cli.test.ts` spawns the real entry point. Keep `guard check --remote "$1" --url "$2"`

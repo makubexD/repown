@@ -1,6 +1,6 @@
 # ADR-021: Bare repown always opens setup in a terminal
 
-**Status:** Accepted; its note that status and doctor stay unchanged is superseded in part by [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md)
+**Status:** Accepted; its note that status and doctor stay unchanged is superseded in part by [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md); its help outside a clone, in a terminal, by [ADR-024](ADR-024-bare-repown-outside-a-clone-opens-a-start-screen.md)
 
 ## Context
 

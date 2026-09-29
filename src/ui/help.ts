@@ -22,9 +22,10 @@ export function renderTopHelp(entries: ReadonlyMap<string, Command | CommandGrou
 function topHeader(entries: ReadonlyMap<string, Command | CommandGroup>): string[] {
   const lines = ['', '  repown <command> [options]', ''];
   for (const [name, entry] of entries) lines.push('  ' + name.padEnd(10) + entry.summary);
-  lines.push('', '  Bare `repown`, in a terminal: `repown setup` in a clone that isn\'t set up, status in');
-  lines.push('  one that is, and this help outside a clone (exit 0). Without a terminal, or with its');
-  lines.push('  output redirected, it is always status (exit 1 outside a clone).');
+  lines.push('', '  Bare `repown`, with stdin, stdout and stderr all terminals: `repown setup` in a');
+  lines.push('  clone, and a start screen outside a clone or in a bare repository. With only');
+  lines.push('  stdout redirected: status in a clone, and this help outside one (exit 0). With');
+  lines.push('  no terminal on stdin or stderr, it is status (exit 1 outside a clone).');
   lines.push('  Run `repown help <command>` for its options.', '');
   return lines;
 }

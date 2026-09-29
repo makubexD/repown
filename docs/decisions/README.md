@@ -34,6 +34,7 @@ name was free on npm, and is now this package.
 | [021](ADR-021-bare-repown-always-opens-setup.md) | Bare repown always opens setup in a terminal; scripts still get status |
 | [022](ADR-022-set-up-clone-opens-on-settled-screen.md) | A settled clone opens on the already-set-up screen; a no-op pin is left out |
 | [023](ADR-023-status-and-doctor-say-what-matters-first.md) | Status and doctor say what matters first |
+| [024](ADR-024-bare-repown-outside-a-clone-opens-a-start-screen.md) | Bare repown outside a clone opens a start screen; help only when output is redirected |
 
 **Adding one:** create the next number, using the same sections: Status, Context,
 Decision, Alternatives considered, Consequences. Cite it as `ADR-0NN`. Never delete or

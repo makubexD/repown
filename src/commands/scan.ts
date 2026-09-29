@@ -26,7 +26,7 @@ import { flagBool, flagString, wantsJson, FORMAT_OPTION, type Args } from '../ui
 import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
-interface Found {
+export interface Found {
   readonly root: string;
   readonly path: string;
 }
@@ -85,9 +85,9 @@ export default {
  * clones launched a thousand; calls then hit exec's timeout, and a killed
  * `git config --get` reads as "not set" -- rows that looked unpinned but weren't.
  */
-const CONCURRENCY = 6;
+export const CONCURRENCY = 6;
 
-async function mapLimited<T, R>(items: readonly T[], limit: number, work: (item: T) => Promise<R>): Promise<R[]> {
+export async function mapLimited<T, R>(items: readonly T[], limit: number, work: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let next = 0;
   const worker = async (): Promise<void> => {
@@ -118,8 +118,12 @@ function invalidRoot(root: string): string | null {
   return null;
 }
 
-/** A directory that cannot be listed is reported, never silently left out of the audit. */
-async function discover(at: Found, depth: number, unreadable: string[]): Promise<Found[]> {
+/**
+ * A directory that cannot be listed is reported, never silently left out of the audit.
+ * `skip`, when given, drops those child names before they are entered. Scan does not pass one,
+ * so its walk is unchanged; the start screen passes the extra names it ignores.
+ */
+export async function discover(at: Found, depth: number, unreadable: string[], skip?: (name: string) => boolean): Promise<Found[]> {
   if (depth < 0 || !existsSync(at.path)) return [];
   if (existsSync(join(at.path, '.git'))) return [at];
 
@@ -127,10 +131,14 @@ async function discover(at: Found, depth: number, unreadable: string[]): Promise
   try { entries = await readdir(at.path, { withFileTypes: true }); }
   catch { unreadable.push(at.path); return []; }
   const directories = entries
-    .filter((entry) => entry.isDirectory() && entry.name !== 'node_modules')
+    .filter((entry) => entry.isDirectory() && entry.name !== 'node_modules' && !skip?.(entry.name))
     .map((entry) => join(at.path, entry.name));
-  const nested = await Promise.all(directories.map((child) => discover({ root: at.root, path: child }, depth - 1, unreadable)));
+  const nested = await Promise.all(directories.map((child) => discover(childAt(at.root, child), depth - 1, unreadable, skip)));
   return nested.flat();
+}
+
+function childAt(root: string, path: string): Found {
+  return { root, path };
 }
 
 /**

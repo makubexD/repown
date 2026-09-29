@@ -438,9 +438,15 @@ function required(value: unknown): string | null {
 /** A login as hosts spell them: it also becomes part of a profile lookup's URL. */
 const LOGIN = /^[\w.@-]+$/;
 
-function newAccountProblem(value: string, ctx: SetupContext): string | null {
+/** Empty, or not spelled as a login. The start screen asks for a login by this rule too. */
+export function loginProblem(value: string): string | null {
   if (!value.trim()) return 'a value is required';
-  if (!LOGIN.test(value)) return 'use letters, digits and . _ @ - only';
+  return LOGIN.test(value) ? null : 'use letters, digits and . _ @ - only';
+}
+
+function newAccountProblem(value: string, ctx: SetupContext): string | null {
+  const problem = loginProblem(value);
+  if (problem) return problem;
   const clash = Object.keys(ctx.recorded).find((account) => lower(account) === lower(value));
   return clash ? '"' + clash + '" is already recorded on this machine: use it by that name' : null;
 }

@@ -60,6 +60,15 @@ export interface Played {
   readonly screen: string;
 }
 
+/** The same player as `play`, for a screen that is not the setup wizard. */
+export interface PlayedRun {
+  readonly result: unknown;
+  /** Everything drawn, colour and cursor codes removed: every frame, in order. */
+  readonly screen: string;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
 export interface PlayOptions {
   readonly given?: Answers;
   /** How long to wait before calling the wizard stuck: generous, since a loaded CI runner draws slowly. */
@@ -71,21 +80,68 @@ export interface PlayOptions {
 /**
  * Plays the wizard: each group of keys is pressed once the screen has settled after
  * the previous one. A wizard still waiting after the last group ends as 'stuck'.
+ * Pass a function instead of a context to drive some other screen with the same keys.
  */
-export async function play(ctx: SetupContext, keys: readonly (readonly string[])[], options: PlayOptions = {}): Promise<Played> {
+export async function play(ctx: SetupContext, keys: readonly (readonly string[])[], options?: PlayOptions): Promise<Played>;
+export async function play(run: (prompter: Prompter) => Promise<unknown>, keys: readonly (readonly string[])[], options?: PlayOptions): Promise<PlayedRun>;
+export async function play(
+  ctx: SetupContext | ((prompter: Prompter) => Promise<unknown>),
+  keys: readonly (readonly string[])[],
+  options: PlayOptions = {},
+): Promise<Played | PlayedRun> {
+  if (typeof ctx === 'function') return playScreen(ctx, keys, options);
   const { given = {}, patience = 10_000, columns } = options;
+  const stage = openStage(keys, columns);
+  const stuck = new Promise<{ status: 'stuck' }>((resolve) => { setTimeout(() => resolve({ status: 'stuck' }), patience).unref(); });
+  const outcome = await Promise.race([played(ctx, given, stage.prompter), stuck]);
+  stage.stop();
+  return { outcome, screen: stage.screen() };
+}
+
+async function playScreen(run: (prompter: Prompter) => Promise<unknown>, keys: readonly (readonly string[])[], options: PlayOptions): Promise<PlayedRun> {
+  const { patience = 10_000, columns } = options;
+  const stage = openStage(keys, columns);
+  const stuck = new Promise<unknown>((resolve) => { setTimeout(() => resolve({ status: 'stuck' }), patience).unref(); });
+  const captured = await captureWrites(() => Promise.race([run(stage.prompter), stuck]));
+  stage.stop();
+  return { ...captured, screen: stage.screen() };
+}
+
+interface Stage {
+  readonly prompter: Prompter;
+  screen(): string;
+  stop(): void;
+}
+
+function openStage(keys: readonly (readonly string[])[], columns: number | undefined): Stage {
   const input = new PassThrough();
   const output = Object.assign(new PassThrough(), columns ? { columns } : {});
   const queue = [...keys];
-  let screen = '';
+  let drawn = '';
   let idle: NodeJS.Timeout | undefined;
   const pressNext = (): void => { for (const key of queue.shift() ?? []) input.write(key); };
-  output.on('data', (chunk: Buffer) => { screen += chunk.toString(); clearTimeout(idle); idle = setTimeout(pressNext, 40); });
-  const stuck = new Promise<{ status: 'stuck' }>((resolve) => { setTimeout(() => resolve({ status: 'stuck' }), patience).unref(); });
-  const prompter = clackPrompter({ input, output });
-  const outcome = await Promise.race([played(ctx, given, prompter), stuck]);
-  clearTimeout(idle);
-  return { outcome, screen: screen.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '') };
+  output.on('data', (chunk: Buffer) => { drawn += chunk.toString(); clearTimeout(idle); idle = setTimeout(pressNext, 40); });
+  return {
+    prompter: clackPrompter({ input, output }),
+    screen: () => drawn.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ''),
+    stop: () => clearTimeout(idle),
+  };
+}
+
+async function captureWrites<T>(run: () => Promise<T>): Promise<{ result: T; stdout: string; stderr: string }> {
+  let stdout = '';
+  let stderr = '';
+  const writeOut = process.stdout.write;
+  const writeErr = process.stderr.write;
+  // Keep the original write: the test runner reports on these streams too.
+  process.stdout.write = ((chunk: string | Uint8Array) => { stdout += String(chunk); return writeOut.call(process.stdout, chunk); }) as typeof process.stdout.write;
+  process.stderr.write = ((chunk: string | Uint8Array) => { stderr += String(chunk); return writeErr.call(process.stderr, chunk); }) as typeof process.stderr.write;
+  try {
+    return { result: await run(), stdout, stderr };
+  } finally {
+    process.stdout.write = writeOut;
+    process.stderr.write = writeErr;
+  }
 }
 
 async function played(ctx: SetupContext, given: Answers, prompter: Prompter): Promise<Outcome> {

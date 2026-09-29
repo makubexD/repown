@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
-import { runProgram, type Loader, type Program } from '../src/ui/dispatch.ts';
+import { runProgram, type DefaultChoice, type Loader, type Program } from '../src/ui/dispatch.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 
@@ -922,9 +922,18 @@ describe('chooseDefault', () => {
     assert.deepEqual(ran, ['status']);
     assert.equal(captured.out, '');
   });
+
+  test('a runner from the chooser is awaited and its exit code is returned', async () => {
+    const ran: string[] = [];
+    const program = fakeProgram(async () => () => Promise.resolve(7), ran);
+    const captured = await capture(() => runProgram(program, []));
+    assert.equal(captured.code, 7);
+    assert.equal(captured.out, '');
+    assert.deepEqual(ran, []);
+  });
 });
 
-function fakeProgram(choose: (() => Promise<string>) | undefined, ran: string[]): Program {
+function fakeProgram(choose: (() => Promise<DefaultChoice>) | undefined, ran: string[]): Program {
   const load = (name: string): Loader => async () => ({
     summary: name,
     run: async () => { ran.push(name); return 0; },

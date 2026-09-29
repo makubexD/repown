@@ -114,7 +114,8 @@ and help text in its own file under `src/commands/`, so help can't drift from th
 
 | Command | Code | Explained in |
 | --- | --- | --- |
-| `repown status` (bare `repown` when output isn't a terminal) | `src/commands/status.ts`, `src/commands/start.ts`, `src/ui/dispatch.ts`, `src/core/inspect.ts` | [card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are) |
+| `repown status` (bare `repown` when stdin or stderr is not a terminal, and inside a clone when stdout is redirected) | `src/commands/status.ts`, `src/commands/start.ts`, `src/ui/dispatch.ts`, `src/core/inspect.ts` | [card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are) |
+| Start screen (bare `repown` in a terminal, outside a clone or in a bare repository) | `src/commands/start.ts`, `src/wizard/home-context.ts`, `src/wizard/home-flow.ts`, `src/wizard/home-text.ts`, `src/wizard/home-run.ts`, `src/program.ts` | [card 14](docs/HOW-IT-WORKS.md#14-outside-a-clone) |
 | `repown doctor` | `src/commands/doctor.ts`, `src/core/inspect.ts`, `src/core/credential/gcm.ts`, `src/core/credential/gh.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
 | `repown fix` | `src/commands/fix.ts`, `src/core/credential/repair.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
 | `repown accounts list`, `repown accounts add`, `repown accounts remove` | `src/commands/accounts.ts`, `src/core/registry.ts` | [card 2](docs/HOW-IT-WORKS.md#2-remember-an-account), [the registry](docs/CONFIGURATION.md#the-account-registry) |
@@ -126,7 +127,7 @@ and help text in its own file under `src/commands/`, so help can't drift from th
 | `repown setup` | `src/commands/setup.ts`, `src/wizard/setup-run.ts`, `src/wizard/setup-context.ts`, `src/wizard/setup-flow.ts`, `src/wizard/setup-changes.ts`, `src/wizard/engine.ts`, `src/wizard/review-text.ts`, `src/wizard/clack.ts`, `src/wizard/plain.ts`, `src/core/unpushed.ts` | [card 13](docs/HOW-IT-WORKS.md#13-guided-setup), [scripts and CI](docs/CONFIGURATION.md#scripts-and-ci) |
 
 Shared by all of them:
-- **Parsing, help and dispatch:** `src/cli.ts`, `src/ui/dispatch.ts`, `src/ui/command.ts`
+- **Parsing, help and dispatch:** `src/program.ts` (the command table; `src/cli.ts` imports it and starts the program), `src/ui/dispatch.ts`, `src/ui/command.ts`
   (how a command declares its options), `src/ui/args.ts`, `src/ui/help.ts`,
   `src/ui/suggest.ts` (did-you-mean).
 - **Output, colour and prompts:** `src/ui/format.ts`, `src/ui/prompt.ts`.

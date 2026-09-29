@@ -4,10 +4,18 @@
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { ok, err } from '../src/core/result.ts';
+import { registryPath } from '../src/core/registry.ts';
+import { PINNED_NOTE, SETUP_NOTE } from '../src/commands/start.ts';
+import { runHome } from '../src/wizard/home-run.ts';
+import { runSetup } from '../src/wizard/setup-run.ts';
 import { KEY, typed, play, linesWith, setupContext } from './setup-fixtures.ts';
-import { wizard } from '../src/wizard/engine.ts';
+import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
+import { wizard, type Prompter } from '../src/wizard/engine.ts';
 import { plainPrompter } from '../src/wizard/plain.ts';
 import { setupFlow, type SetupContext } from '../src/wizard/setup-flow.ts';
 import { textWidth, wrap } from '../src/wizard/review-text.ts';
@@ -429,6 +437,244 @@ describe('D7 on the plain prompter, at the default width', () => {
     }
   });
 });
+
+describe('start screen, played with key presses', () => {
+  test('F1: every Accounts and Clones line starts with the gutter', async () => {
+    await withProjects(async (root) => {
+      cloneAt(root, 'need');
+      const run = await play((prompter) => runHome({ prompter, cwd: root }), [[esc]], { patience: 20_000 });
+      const lines = run.screen.split('\n').filter((line) => /Accounts|Clones/.test(line));
+      assert.ok(lines.length > 0, run.screen);
+      for (const line of lines) assert.match(line, /^│/, line);
+    });
+  });
+
+  test('F2: no empty line between the summary and What next?', async () => {
+    await withProjects(async (root) => {
+      cloneAt(root, 'need');
+      const run = await play((prompter) => runHome({ prompter, cwd: root }), [[esc]], { patience: 20_000 });
+      const start = run.screen.indexOf('Clones');
+      const end = run.screen.indexOf('What next?');
+      assert.ok(start >= 0 && end > start, run.screen);
+      const empty = run.screen.slice(start, end).split('\n')
+        .filter((line) => line.replace(/\s+$/, '') === '');
+      assert.deepEqual(empty, [], run.screen);
+    });
+  });
+
+  test('H11: picking a clone prints the setup command and reaches setup\'s first screen', async () => {
+    await withProjects(async (root) => {
+      cloneAt(root, 'need');
+      const run = await play((prompter) => runHome({ prompter, cwd: root }), [[enter], [enter], [esc]], { patience: 30_000 });
+      assert.equal(run.result, 130, run.screen + run.stderr);
+      assert.match(run.screen, /└ {2}> repown setup --cwd /);
+      assert.match(run.screen, /need/);
+      const commandAt = run.screen.search(/└ {2}> repown setup --cwd /);
+      const setupAt = run.screen.search(/┌ {2}repown setup\b/);
+      assert.ok(commandAt >= 0 && setupAt > commandAt, run.screen);
+      assert.match(run.screen, /How should setup work\?/);
+    });
+  });
+
+  test('H12: Back from the clone list returns to the menu', async () => {
+    await withProjects(async (root) => {
+      cloneAt(root, 'need');
+      const run = await play((prompter) => runHome({ prompter, cwd: root }), [[enter], [down, enter], [esc]], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen);
+      assert.match(run.screen, /Which clone\?/);
+      assert.match(run.screen, /← Back/);
+      const afterList = run.screen.split('Which clone?').pop() ?? '';
+      assert.match(afterList, /What next\?/, run.screen);
+      assert.doesNotMatch(run.screen, /How should setup work/);
+    });
+  });
+
+  test('H13: Show help prints the top help and exits 0', async () => {
+    await withProjects(async (root) => {
+      const run = await play((prompter) => runHome({ prompter, cwd: root }), [[down, down, enter]], { patience: 20_000 });
+      assert.equal(run.result, 0, run.screen + run.stdout);
+      assert.match(run.screen, /└ {2}> repown --help/);
+      assert.match(run.stdout, /repown <command>/);
+      assert.match(run.stdout, /setup\s+guided setup/);
+    });
+  });
+
+  test('Back from the login question returns to the menu', async () => {
+    await withProjects(async (root) => {
+      const run = await play((prompter) => runHome({ prompter, cwd: root }), [
+        [enter], [...typed('<'), enter], [esc],
+      ], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen);
+      const afterLogin = run.screen.split('The account\'s user name').at(-1) ?? '';
+      assert.match(afterLogin, /What next\?/, run.screen);
+    });
+  });
+
+  test('a login starting with a dash reaches accounts add as the account', async () => {
+    const restore = forceNotTTY();
+    try {
+      await withProjects(async (root) => {
+        const run = await play((prompter) => runHome({ prompter, cwd: root }), [
+          [enter], [...typed('-h'), enter],
+        ], { patience: 20_000 });
+        assert.match(run.screen, /> repown accounts add -- -h/, run.screen + run.stderr);
+        assert.equal(run.result, 1, run.stderr);
+        assert.match(run.stderr, /interactive terminal to ask for the Commit name/);
+        assert.doesNotMatch(run.stderr, /unknown option/);
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  test('F7: the plain prompter indents the summary two spaces', async () => {
+    await withProjects(async (root) => {
+      cloneAt(root, 'need');
+      const input = new PassThrough();
+      const output = new PassThrough();
+      let screen = '';
+      output.on('data', (chunk: Buffer) => { screen += chunk.toString(); });
+      input.end();
+      const prompter = plainPrompter({ input, output });
+      await runHome({ prompter, cwd: root });
+      assert.match(screen, /^ {2}Accounts {3}/m);
+      assert.match(screen, /^ {2}Clones {5}/m);
+    });
+  });
+
+  test('H14: Quit and Esc leave global config, local config and the registry byte-identical', async () => {
+    await withProjects(async (root, box) => {
+      const registry = registryPath();
+      mkdirSync(dirname(registry), { recursive: true });
+      writeFileSync(registry, '{"accounts":{"octocat":{"name":"Octo Cat","email":"octocat@example.invalid"}}}\n');
+      const paths = [box.globalConfig, join(box.dir, '.git', 'config'), registry];
+      const before = paths.map(bytes);
+      const quit = await play((prompter) => runHome({ prompter, cwd: root }), [[down, down, down, enter]], { patience: 20_000 });
+      assert.equal(quit.result, 0, quit.screen);
+      assert.deepEqual(paths.map(bytes), before);
+      const cancelled = await play((prompter) => runHome({ prompter, cwd: root }), [[esc]], { patience: 20_000 });
+      assert.equal(cancelled.result, 130, cancelled.screen);
+      assert.deepEqual(paths.map(bytes), before);
+    });
+  });
+});
+
+describe('setup lead inside a clone', () => {
+  test('F5: an unpinned clone draws the not-set-up line inside setup\'s frame', async () => {
+    await withClone(async (box) => {
+      unpinClone(box);
+      const run = await play(leadSetup(box, SETUP_NOTE), [[esc]], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen + run.stderr);
+      assertLeadInside(run.screen, 'isn\'t set up yet');
+      assert.doesNotMatch(run.stderr, /isn't set up yet/);
+    });
+  });
+
+  test('F6: a pinned clone draws the check-this-clone line inside setup\'s frame', async () => {
+    await withClone(async (box) => {
+      pinClone(box);
+      const run = await play(leadSetup(box, PINNED_NOTE), [[esc]], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen + run.stderr);
+      assertLeadInside(run.screen, 'Starting setup to check this clone');
+      assert.doesNotMatch(run.stderr, /Starting setup to check this clone/);
+    });
+  });
+
+  test('F8: typed setup draws neither lead', async () => {
+    await withClone(async (box) => {
+      unpinClone(box);
+      const run = await play(leadSetup(box), [[esc]], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen + run.stderr);
+      assert.match(run.screen, /┌ {2}repown setup/);
+      assert.doesNotMatch(run.screen, /isn't set up yet/);
+      assert.doesNotMatch(run.screen, /Starting setup to check this clone/);
+    });
+  });
+});
+
+function leadSetup(box: Sandbox, lead?: string): (prompter: Prompter) => Promise<number> {
+  const deps = lead === undefined ? { interactive: true } : { interactive: true, lead };
+  return (prompter) => runSetup({ positional: [], flags: new Map([['cwd', box.dir]]) }, { ...deps, prompter });
+}
+
+function assertLeadInside(screen: string, phrase: string): void {
+  const introAt = screen.search(/┌ {2}repown setup/);
+  const leadAt = screen.indexOf(phrase);
+  const readingAt = screen.indexOf('Reading this clone');
+  assert.ok(introAt >= 0 && leadAt > introAt && readingAt > leadAt, screen);
+  const lines = screen.split('\n').filter((line) => line.includes(phrase));
+  assert.ok(lines.length > 0, screen);
+  for (const line of lines) assert.match(line, /^│/, line);
+}
+
+async function withClone(run: (box: Sandbox) => Promise<void>): Promise<void> {
+  const box = sandbox();
+  const saved = process.env['PATH'];
+  process.env['PATH'] = pathWithoutGh(saved ?? '');
+  try {
+    await run(box);
+  } finally {
+    restorePath(saved);
+    box.dispose();
+  }
+}
+
+function restorePath(saved: string | undefined): void {
+  if (saved === undefined) delete process.env['PATH'];
+  else process.env['PATH'] = saved;
+}
+
+function unpinClone(box: Sandbox): void {
+  box.git('config', '--local', '--unset', 'user.name');
+  box.git('config', '--local', '--unset', 'user.email');
+}
+
+function pinClone(box: Sandbox): void {
+  box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
+  box.git('config', '--local', 'user.name', 'Octo Cat');
+  box.git('config', '--local', 'user.email', 'octocat@example.invalid');
+  box.git('config', '--local', 'credential.https://github.com.username', 'octocat');
+}
+
+async function withProjects(run: (root: string, box: Sandbox) => Promise<void>): Promise<void> {
+  const box = sandbox();
+  const root = join(box.dir, '..', 'projects');
+  mkdirSync(root);
+  const saved = process.env['GIT_CEILING_DIRECTORIES'];
+  process.env['GIT_CEILING_DIRECTORIES'] = join(box.dir, '..');
+  try {
+    await run(root, box);
+  } finally {
+    if (saved === undefined) delete process.env['GIT_CEILING_DIRECTORIES'];
+    else process.env['GIT_CEILING_DIRECTORIES'] = saved;
+    box.dispose();
+  }
+}
+
+/** accounts add asks on a terminal. These screens must reach that ask, not hang in it. */
+function forceNotTTY(): () => void {
+  const streams = [process.stdin, process.stderr];
+  const saved = streams.map((stream) => Object.getOwnPropertyDescriptor(stream, 'isTTY'));
+  for (const stream of streams) Object.defineProperty(stream, 'isTTY', { value: false, configurable: true });
+  return () => {
+    streams.forEach((stream, index) => {
+      const descriptor = saved[index];
+      if (descriptor) Object.defineProperty(stream, 'isTTY', descriptor);
+      else delete (stream as { isTTY?: boolean }).isTTY;
+    });
+  };
+}
+
+function cloneAt(parent: string, name: string): string {
+  const dir = join(parent, name);
+  mkdirSync(dir, { recursive: true });
+  execFileSync('git', ['init', '-q', '-b', 'main', dir]);
+  return dir;
+}
+
+function bytes(path: string): Buffer | null {
+  return existsSync(path) ? readFileSync(path) : null;
+}
 
 /** Columns unset: the plain prompter wraps as it does in an 80-column window. */
 async function playPlain(ctx: SetupContext, lines: string): Promise<string> {

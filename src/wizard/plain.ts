@@ -9,7 +9,7 @@
 
 import { createInterface, type Interface } from 'node:readline/promises';
 import type { Readable, Writable } from 'node:stream';
-import { BACK, CANCEL, type Asked, type Drawn, type Prompter, type Reply, type Review, type ReviewChoice, type StepChoice, type StepConfirm } from './engine.ts';
+import { BACK, CANCEL, type Asked, type Choice, type Drawn, type Prompter, type Reply, type Review, type ReviewChoice, type StepChoice, type StepConfirm } from './engine.ts';
 import { BACK_TO_REVIEW, PICK_QUESTION, RUN_THIS_STEP, reviewDefault, reviewLines, reviewOptions, reviewQuestion, stepConfirmLines, stepOptions, textWidth, wrap } from './review-text.ts';
 
 export interface Streams {
@@ -29,7 +29,9 @@ export function plainPrompter(streams: Streams): Prompter {
     ask: (step, asked) => askStep(wide(), step, asked),
     review: (review) => showReview(session.io(), review, width),
     pickStep: (steps) => pickPlain(session.io(), steps),
-    note: (message) => { for (const line of wrap(message, width)) session.io().say('  ' + line); },
+    choose: (message, options) => choosePlain(session.io(), message, options),
+    note: (message) => sayIndented(session.io(), wrap(message, width)),
+    show: (lines) => sayIndented(session.io(), lines.flatMap((text) => wrap(text, width))),
     close: () => session.close(),
     outro: (message) => session.io().say(message),
     confirmStep: (confirm) => askStepConfirm(wide(), confirm),
@@ -72,6 +74,10 @@ interface Io {
   /** Shows the text the answer is typed after; readline redraws it while the line is edited. */
   readonly write: (text: string) => void;
   readonly say: (text: string) => void;
+}
+
+function sayIndented(io: Io, lines: readonly string[]): void {
+  for (const line of lines) io.say('  ' + line);
 }
 
 /** On a terminal, readline shows the prompt, so it can redraw it while the line is edited. */
@@ -118,6 +124,13 @@ async function askStep(io: Io & { width: number }, step: Drawn, asked: Asked): P
   if (line === null) return CANCEL;
   if (line === BACK_WORD && asked.canGoBack) return BACK;
   return line || (typeof initial === 'string' ? initial : '');
+}
+
+async function choosePlain(io: Io, message: string, options: readonly Choice[]): Promise<string | typeof CANCEL> {
+  io.say(message);
+  const labels = options.map((option) => option.label + (option.hint ? '  -- ' + option.hint : ''));
+  const index = await pickNumber(io, labels, 1);
+  return index === CANCEL ? CANCEL : options[index]!.value;
 }
 
 async function pickPlain(io: Io, steps: readonly Drawn[]): Promise<string | typeof BACK | typeof CANCEL> {

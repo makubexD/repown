@@ -16,21 +16,29 @@ import * as out from './format.ts';
 export type Entry = Command | CommandGroup;
 export type Loader = () => Promise<Entry>;
 
+/** A command name, `'help'` for the top help, or a runner whose exit code is the program's. */
+export type DefaultChoice = string | (() => Promise<number>);
+
 export interface Program {
   readonly name: string;
   readonly commands: Readonly<Record<string, Loader>>;
   /** Runs when no command is typed and no `chooseDefault` is set; without either, the top help is printed. */
   readonly defaultCommand?: string;
-  /** Called only for an empty argv. A command name is dispatched as if typed; `'help'` prints the top help. */
-  readonly chooseDefault?: () => Promise<string>;
+  /** Called only for an empty argv. A command name is dispatched as if typed; `'help'` prints the top help; a function is run. */
+  readonly chooseDefault?: () => Promise<DefaultChoice>;
   readonly topHelp: (entries: ReadonlyMap<string, Entry>) => string[];
   readonly version?: () => string;
 }
 
+/** Every command the program declares, in declaration order. Help uses this, and so can a runner. */
+export async function loadEntries(commands: Readonly<Record<string, Loader>>): Promise<Map<string, Entry>> {
+  const names = Object.keys(commands);
+  const loaded = await Promise.all(names.map((name) => commands[name]!()));
+  return new Map(names.map((name, index) => [name, loaded[index]!]));
+}
+
 async function loadAll(program: Program): Promise<Map<string, Entry>> {
-  const names = Object.keys(program.commands);
-  const entries = await Promise.all(names.map((name) => program.commands[name]!()));
-  return new Map(names.map((name, index) => [name, entries[index]!]));
+  return loadEntries(program.commands);
 }
 
 function reportUsageError(tag: string, message: string): void {
@@ -142,6 +150,7 @@ export async function runProgram(program: Program, argv: readonly string[]): Pro
   if (argv[0] === '--help' || argv[0] === '-h') return runHelp(program, []);
   if (argv[0] === 'help') return runHelp(program, argv.slice(1));
   const words = await bareArgv(program, argv);
+  if (typeof words === 'function') return words();
   if (words === 'help') return runHelp(program, []);
   if (words.length === 0 && program.defaultCommand === undefined) return runHelp(program, []);
 
@@ -150,10 +159,11 @@ export async function runProgram(program: Program, argv: readonly string[]): Pro
   return dispatch(program, top.value);
 }
 
-/** Empty argv with a chooser becomes that command, or `'help'` for the top help. */
-async function bareArgv(program: Program, argv: readonly string[]): Promise<readonly string[] | 'help'> {
+/** Empty argv with a chooser becomes that command, `'help'` for the top help, or a runner. */
+async function bareArgv(program: Program, argv: readonly string[]): Promise<readonly string[] | 'help' | (() => Promise<number>)> {
   if (argv.length > 0 || program.chooseDefault === undefined) return argv;
   const chosen = await program.chooseDefault();
+  if (typeof chosen === 'function') return chosen;
   return chosen === 'help' ? 'help' : [chosen];
 }
 

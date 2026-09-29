@@ -34,6 +34,20 @@ test('after a cancel the closing line follows clack\'s own last gutter line, not
   assert.match(plain(), /│\n└ {2}Running the commands/);
 });
 
+test('show draws each line after the gutter', () => {
+  const output = new PassThrough();
+  let shown = '';
+  output.on('data', (chunk: Buffer) => { shown += chunk.toString(); });
+  const prompter = clackPrompter({ input: new PassThrough(), output });
+  prompter.show?.(['Accounts   1 recorded: octocat', 'Clones     2 below this folder']);
+  const plain = shown.replace(/\x1b\[[0-9;]*m/g, '');
+  for (const text of ['Accounts   1 recorded: octocat', 'Clones     2 below this folder']) {
+    const found = plain.split('\n').filter((line) => line.includes(text));
+    assert.ok(found.length > 0, plain);
+    for (const line of found) assert.match(line, /^│/, line);
+  }
+});
+
 test('the clack prompter answers the engine through its own keys, on the given stream', async () => {
   const input = new PassThrough();
   const output = new PassThrough();

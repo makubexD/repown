@@ -1,6 +1,6 @@
 // The wizard drawn with @clack/prompts: arrow-key choices with a hint each, defaults,
 // a line while state is read, the review in a box. The ONLY file that imports the
-// library, and it is loaded with a dynamic import() by `repown setup` alone (ADR-016),
+// library, and it is loaded with a dynamic import() from choosePrompter (ADR-016),
 // so no other command -- and never the pre-push hook -- depends on it.
 //
 // Everything is drawn on the stream it's given (stderr), so stdout keeps carrying only
@@ -9,7 +9,7 @@
 
 import { styleText } from 'node:util';
 import * as p from '@clack/prompts';
-import { BACK, CANCEL, type Asked, type Drawn, type Prompter, type Reply, type Review, type ReviewChoice, type StepChoice, type StepConfirm } from './engine.ts';
+import { BACK, CANCEL, type Asked, type Choice, type Drawn, type Prompter, type Reply, type Review, type ReviewChoice, type StepChoice, type StepConfirm } from './engine.ts';
 import { BACK_WORD, type Streams } from './plain.ts';
 import { BACK_TO_REVIEW, PICK_QUESTION, RUN_THIS_STEP, reviewDefault, reviewLines, reviewOptions, reviewQuestion, stepConfirmLines, stepOptions, textWidth, wrap } from './review-text.ts';
 
@@ -19,18 +19,12 @@ const GO_BACK = '\u0000back';
 export function clackPrompter(streams: Streams): Prompter {
   const io = { input: streams.input, output: streams.output };
   return {
-    ask: (step, asked) => {
-      if (asked.detail) p.log.info(wrap(asked.detail, widthOf(io, GUTTER)).join('\n'), io);
-      return askStep(step, asked, io);
-    },
+    ask: (step, asked) => askDrawn(step, asked, io),
     review: (review) => showReview(review, io),
-    pickStep: async (steps) => {
-      const id = await p.select({ ...io, message: PICK_QUESTION,
-        options: [...steps.map((step) => ({ value: step.id, label: step.message })), { value: GO_BACK, label: '← ' + BACK_TO_REVIEW }] });
-      if (p.isCancel(id)) return CANCEL;
-      return id === GO_BACK ? BACK : id;
-    },
+    pickStep: (steps) => pickClack(steps, io),
+    choose: (message, options) => chooseClack(message, options, io),
     note: (message) => p.log.warn(wrap(message, widthOf(io, GUTTER)).join('\n'), io),
+    show: (lines) => logLines(io, lines),
     confirmStep: (confirm) => showStep(confirm, io),
     close: () => {},
     intro: (title) => p.intro(title, io),
@@ -40,6 +34,30 @@ export function clackPrompter(streams: Streams): Prompter {
     // cancel must exit 130.
     busy: (message) => p.log.step(message, io),
   };
+}
+
+function askDrawn(step: Drawn, asked: Asked, io: Io): Promise<Reply> {
+  if (asked.detail) p.log.info(wrap(asked.detail, widthOf(io, GUTTER)).join('\n'), io);
+  return askStep(step, asked, io);
+}
+
+async function pickClack(steps: readonly Drawn[], io: Io): Promise<string | typeof BACK | typeof CANCEL> {
+  const id = await p.select({ ...io, message: PICK_QUESTION, options: pickOptions(steps) });
+  if (p.isCancel(id)) return CANCEL;
+  return id === GO_BACK ? BACK : id;
+}
+
+function pickOptions(steps: readonly Drawn[]): { value: string; label: string }[] {
+  return [...steps.map((step) => ({ value: step.id, label: step.message })), { value: GO_BACK, label: '← ' + BACK_TO_REVIEW }];
+}
+
+async function chooseClack(message: string, options: readonly Choice[], io: Io): Promise<string | typeof CANCEL> {
+  const value = await p.select({ ...io, message, options: options.map(choiceOption) });
+  return p.isCancel(value) ? CANCEL : value;
+}
+
+function choiceOption(option: Choice): { value: string; label: string; hint?: string } {
+  return option.hint === undefined ? { value: option.value, label: option.label } : option;
 }
 
 type Io = { readonly input: Streams['input']; readonly output: Streams['output'] };
@@ -110,9 +128,12 @@ function messageOf(step: Drawn, io: Io, extra?: string): string {
 }
 
 async function showStep(confirm: StepConfirm, io: Io): Promise<StepChoice | typeof CANCEL> {
-  const lines = stepConfirmLines(confirm).flatMap((text) => wrap(text, widthOf(io, GUTTER)));
-  p.log.message(lines.join('\n'), io);
+  logLines(io, stepConfirmLines(confirm));
   return chosen(confirm, io);
+}
+
+function logLines(io: Io, lines: readonly string[]): void {
+  p.log.message(lines.flatMap((text) => wrap(text, widthOf(io, GUTTER))).join('\n'), io);
 }
 
 async function chosen(confirm: StepConfirm, io: Io): Promise<StepChoice | typeof CANCEL> {

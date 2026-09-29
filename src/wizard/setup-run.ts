@@ -35,6 +35,8 @@ export interface SetupDeps {
   readonly auth?: ReadAuth;
   /** Tests: the auth snapshot read before the first question. Production reads the machine. */
   readonly preview?: AuthState;
+  /** Drawn inside the frame, after the intro. Bare `repown` passes one; typed `repown setup` does not. */
+  readonly lead?: string;
 }
 
 const CANCELLED = 130;
@@ -48,20 +50,23 @@ export async function runSetup(args: Args, deps: SetupDeps): Promise<number> {
   if (!deps.interactive && !unattended) return needsTerminal(given.value, registry.value.accounts);
 
   const git = gitFor(args);
-  if (!(await git.isRepo())) {
-    out.fail('setup', 'Not a git repository: ' + git.cwd);
-    out.detail('run it inside a clone: cd path/to/repo, then repown setup');
-    return 1;
-  }
+  if (!(await git.isRepo())) return notARepo(git);
   const prompter = unattended ? null : deps.prompter ?? await choosePrompter();
   try {
     return await continueSetup({
       args, git, given: given.value, prompter, accountKind: deps.accountKind, readAuth: deps.auth ?? inspectAuth,
       ...(deps.preview ? { preview: deps.preview } : {}),
+      ...(deps.lead === undefined ? {} : { lead: deps.lead }),
     });
   } finally {
     prompter?.close();
   }
+}
+
+function notARepo(git: Git): number {
+  out.fail('setup', 'Not a git repository: ' + git.cwd);
+  out.detail('run it inside a clone: cd path/to/repo, then repown setup');
+  return 1;
 }
 
 interface Setup {
@@ -73,10 +78,13 @@ interface Setup {
   readonly accountKind?: ReadOptions['accountKind'];
   readonly readAuth: ReadAuth;
   readonly preview?: AuthState;
+  /** Bare `repown` passes the sentence; typed `repown setup` leaves it unset. */
+  readonly lead?: string;
 }
 
-async function continueSetup({ args, git, given, prompter, accountKind, readAuth, preview }: Setup): Promise<number> {
+async function continueSetup({ args, git, given, prompter, accountKind, readAuth, preview, lead }: Setup): Promise<number> {
   prompter?.intro?.('repown setup');
+  drawLead(prompter, lead);
   prompter?.busy?.('Reading this clone and this machine');
   const ctx = await readContext(git, flagString(args, 'cwd'), contextOptions(prompter, accountKind, preview));
   if (!ctx.ok) { out.fail('setup', ctx.error); return 1; }
@@ -84,6 +92,13 @@ async function continueSetup({ args, git, given, prompter, accountKind, readAuth
   if (!answers.ok) return answers.error;
   if (!prompter) return runUnattended(answers.value, ctx.value, git, readAuth);
   return runGuided(answers.value, ctx.value, { git, prompter, readAuth });
+}
+
+/** The bare-repown sentence, inside the frame when the prompter can draw it. */
+function drawLead(prompter: Prompter | null, lead: string | undefined): void {
+  if (lead === undefined) return;
+  if (prompter?.show) prompter.show([lead]);
+  else out.note(lead);
 }
 
 function contextOptions(prompter: Prompter | null, accountKind: ReadOptions['accountKind'], preview?: AuthState): ReadOptions {
@@ -235,8 +250,9 @@ function stoppedBefore(status: 'cancelled' | 'declined', prompter: Prompter): nu
  * @clack/prompts when colour is on for stderr and the terminal can draw it; the plain
  * prompter otherwise, and whenever the optional dependency is absent or fails to load
  * (an older Node skips installing it, ADR-016) -- said once, then carried on.
+ * Setup and the start screen both ask through this, so clack loads in only one place.
  */
-async function choosePrompter(): Promise<Prompter> {
+export async function choosePrompter(): Promise<Prompter> {
   const streams = { input: process.stdin, output: process.stderr };
   if (!useColour(process.stderr) || process.env['TERM'] === 'dumb') return plainPrompter(streams);
   try {

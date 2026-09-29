@@ -1,6 +1,6 @@
 # Tasks: setup leaves the clone push-ready
 
-Status: Phase 4 build, Task 5 next. Full-suite run for T4 pending (stopped for low memory); targeted runs green
+Status: Phase 4 build, Task 6 next (⚠: wait for a go). Full-suite run pending since T4 (stopped for low memory)
 
 - [x] Phase 1 clarify (audit WIZ-1..10, newcomer walk s1–s9, research; scope: detect + fix + opt-in re-author)
 - [x] Phase 2 spec (SPEC.md approved; command name `repown reauthor`)
@@ -45,10 +45,10 @@ Reads git config and the environment.
 ## Checkpoint A (after T1–T4)
 - [ ] `npm test`, `npm run build` green; walk s5–s9 named before the closing line
 
-## Task 5 ⚠ — `repown reauthor`
+## Task 5 ⚠ — `repown reauthor` [x]
 Rewrites history (recoverable only through the backup ref).
 - Acceptance: refusals (detached, dirty, rebase in progress, no pin, url/pushurl/unnamed/unread
-  destination, fetch failed, no terminal without `--yes` → exit 2); fetch first, prompts off;
+  destination, fetch failed, no terminal without `--yes` → exit 1, as `fix`); fetch first, prompts off;
   foreign-only base; backup `refs/repown/backup/<branch>/<time>`; a failed rebase aborts and
   restores; success prints count and undo; the push afterwards passes the guard as a
   fast-forward and the destination's commits are untouched; `--help` from its declaration.

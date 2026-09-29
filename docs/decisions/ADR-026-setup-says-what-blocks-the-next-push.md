@@ -1,6 +1,6 @@
 # ADR-026: Setup says what blocks the next push, and says done only without it
 
-**Status:** Accepted. Amends [ADR-022](ADR-022-set-up-clone-opens-on-settled-screen.md) (a
+**Status:** Accepted. Supersedes in part [ADR-013](ADR-013-deliberately-not-done.md) (rewriting unpushed commits, only when asked). Amends [ADR-022](ADR-022-set-up-clone-opens-on-settled-screen.md) (a
 settled clone with a blocker is not "nothing needs to change") and
 [ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses).
 
@@ -43,6 +43,21 @@ problem".
   `set up for <account>; the next push will fail: <first> (and N more below)`, then every
   blocker's lines. Exit codes are unchanged.
 - The re-author advice offers `or pin that address` only when one address made them all.
+- **`repown reauthor` rewrites, only when asked.** ADR-013 turned rewriting down as destructive
+  and the owner's call; the owner now makes that call with one command, and repown makes the
+  rewrite as narrow as it can be:
+  - it refuses on a detached HEAD, uncommitted or hidden (skip-worktree) changes, an operation
+    in progress, an unpinned clone, identity variables or `author.*`/`committer.*` config that
+    would outrank the pin, `commit.gpgsign` without a terminal, and a destination that is not a
+    remote it can fetch;
+  - it fetches the push destination first, prompts off (a sign-in that would ask fails instead),
+    and needs its tracking refs; with none, `git ls-remote` must show it empty, or it refuses;
+  - it rewrites from the parent of the topologically oldest commit by another address that no
+    remote has, and refuses when that range holds a merge or any commit a remote has;
+  - a backup ref `refs/repown/backup/<branch>/<time>` first, then `git rebase` with
+    `git commit --amend --no-edit --no-verify --reset-author --allow-empty` (hooks off, other
+    branches' refs left alone); on failure the rebase is aborted; afterwards every rewritten
+    commit is checked. It prints the undo (`git reset --keep <backup>`) and never pushes.
 
 ## Alternatives considered
 
@@ -52,6 +67,9 @@ problem".
 | Exit non-zero when a blocker remains | Scripts would notice | Reverses ADR-020 ("a warning, never a refusal"); the setup itself succeeded |
 | Ask the guard question in Recommended when commits would be refused | The user decides | Turning the guard off is the wrong fix for commits that should be re-authored |
 | Check every remote's owner | Simple | The guard checks the destination; other remotes are irrelevant to the push |
+| Keep rewriting out (ADR-013) | Nothing destructive in repown | The user asked for a clone ready to push; the manual `git rebase` advice was the step most likely to go wrong (its `--root` would have rewritten 15 published commits in the field) |
+| `git filter-repo --mailmap` | Handles merges | A new dependency; rewrites every ref unless limited; refuses outside a fresh clone without `--force` |
+| Rewrite without fetching | Offline | Only a fetch shows what the destination has; without it the range can include published commits |
 
 ## Consequences
 

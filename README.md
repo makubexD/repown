@@ -213,6 +213,7 @@ then commit and push.
 | | `repown fix [--dry-run] [--yes]` | undo `gh auth setup-git`, so each clone's pinned account is used; shows what it removes, and the undo, first |
 | Once per clone | `repown setup [<account>]` | guided setup of this clone. Questions, flags and the review: [Quick start](#quick-start). A clone that is already set up opens on that screen |
 | | `repown use <account> [--gh]` | what setup runs: pin this clone to an account. `--gh` switches gh's active account, or signs the account in to gh when needed (in a terminal). `--name` with `--email` skips the registry, the file where repown remembers accounts |
+| | `repown reauthor [--yes]` | give this branch's unpushed commits by another address your pinned identity, so the guard lets them through. Fetches the push destination first, rewrites only what no remote has, keeps a backup ref, never pushes |
 | | `repown guard on \| off \| status` | install, remove or show the pre-push hook (bare `repown guard` shows it) |
 | Any time | `repown status` | this clone's and this machine's settings, and what to fix. Exits 1 on a problem; warnings alone exit 0 |
 | | `repown scan [dir...] [--emails] [--depth <n>] [--format json]` | every clone under the folders (default: this one, 3 levels deep): owner, host, identity, guard, and which email domains its history has. Changes nothing |

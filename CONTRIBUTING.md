@@ -118,6 +118,7 @@ and help text in its own file under `src/commands/`, so help can't drift from th
 | Start screen (bare `repown` in a terminal, outside a clone or in a bare repository) | `src/commands/start.ts`, `src/wizard/home-context.ts`, `src/wizard/home-flow.ts`, `src/wizard/home-text.ts`, `src/wizard/home-run.ts`, `src/program.ts` | [card 14](docs/HOW-IT-WORKS.md#14-outside-a-clone) |
 | `repown doctor` | `src/commands/doctor.ts`, `src/core/inspect.ts`, `src/core/credential/gcm.ts`, `src/core/credential/gh.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
 | `repown fix` | `src/commands/fix.ts`, `src/core/credential/repair.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
+| `repown reauthor` | `src/commands/reauthor.ts`, `src/core/reauthor.ts`, `src/core/push-destination.ts` | [card 8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
 | `repown accounts list`, `repown accounts add`, `repown accounts remove` | `src/commands/accounts.ts`, `src/core/registry.ts` | [card 2](docs/HOW-IT-WORKS.md#2-remember-an-account), [the registry](docs/CONFIGURATION.md#the-account-registry) |
 | `repown use` | `src/commands/use.ts`, `src/core/identity.ts`, `src/core/registry.ts`, `src/core/credential/gh.ts`, `src/core/unpushed.ts`, `src/core/push-destination.ts` | [card 3](docs/HOW-IT-WORKS.md#3-pin-a-clone), [per-clone keys](docs/CONFIGURATION.md#per-clone-keys) |
 | `repown off` | `src/commands/off.ts`, `src/core/identity.ts` | [card 12](docs/HOW-IT-WORKS.md#12-uninstall-or-repown-missing) |

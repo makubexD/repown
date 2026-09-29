@@ -1,6 +1,6 @@
 # ADR-013: Deliberately not done
 
-**Status:** Accepted
+**Status:** Accepted. The row "Rewriting existing history" is superseded in part by [ADR-026](ADR-026-setup-says-what-blocks-the-next-push.md): `repown reauthor` rewrites unpushed commits by another address, only when asked, only what no remote has, behind a backup ref. Published history is still never rewritten.
 
 ## Context
 

@@ -9,6 +9,7 @@ export const COMMANDS: Readonly<Record<string, Loader>> = {
   off: async () => (await import('./commands/off.ts')).default,
   doctor: async () => (await import('./commands/doctor.ts')).default,
   fix: async () => (await import('./commands/fix.ts')).default,
+  reauthor: async () => (await import('./commands/reauthor.ts')).default,
   guard: async () => (await import('./commands/guard.ts')).default,
   accounts: async () => (await import('./commands/accounts.ts')).default,
   scan: async () => (await import('./commands/scan.ts')).default,

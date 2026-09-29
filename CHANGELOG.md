@@ -7,6 +7,10 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+### Added
+
+- `repown reauthor [--yes]`: gives this branch's unpushed commits by another address the pinned identity. It fetches the push destination first, rewrites only commits no remote has (from the oldest one by another address), refuses on a merge in that range, uncommitted changes, identity overrides or a destination it can't fetch, runs without hooks, keeps a backup ref, prints the undo, and never pushes (ADR-026).
+
 ### Fixed
 
 - `repown use` and setup's review no longer advise `git rebase --root` for commits a

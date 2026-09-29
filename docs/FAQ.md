@@ -52,7 +52,7 @@ of the oldest of those commits, so your own commits before it are left alone. If
 URL), the warning says so, says how to fetch and count again where it can, and offers the
 rebase only for when that destination has none of them: rebasing below what it already has
 would rewrite published commits
-([ADR-025](decisions/ADR-025-unpushed-advice-behind-an-unknown-destination.md)). Nothing here rewrites history
+([ADR-025](decisions/ADR-025-unpushed-advice-behind-an-unknown-destination.md)). Or run `repown reauthor`: it fetches first, rewrites only commits no remote has, keeps a backup ref and never pushes. Nothing else here rewrites history
 ([card 3](HOW-IT-WORKS.md#3-pin-a-clone), [card 8](HOW-IT-WORKS.md#8-push-refused-and-the-fix)).
 
 **I ran `repown setup` again and it said "already set up". Is that right?** Yes, when the

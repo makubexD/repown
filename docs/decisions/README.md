@@ -36,7 +36,7 @@ name was free on npm, and is now this package.
 | [023](ADR-023-status-and-doctor-say-what-matters-first.md) | Status and doctor say what matters first |
 | [024](ADR-024-bare-repown-outside-a-clone-opens-a-start-screen.md) | Bare repown outside a clone opens a start screen; help only when output is redirected |
 | [025](ADR-025-unpushed-advice-behind-an-unknown-destination.md) | Unpushed-commit advice is conditional where no tracking ref reaches |
-| [026](ADR-026-setup-says-what-blocks-the-next-push.md) | Setup says what blocks the next push, and says done only without it |
+| [026](ADR-026-setup-says-what-blocks-the-next-push.md) | Setup says what blocks the next push, and says done only without it; `repown reauthor` rewrites unpushed commits by another address, when asked |
 
 **Adding one:** create the next number, using the same sections: Status, Context,
 Decision, Alternatives considered, Consequences. Cite it as `ADR-0NN`. Never delete or

@@ -14,6 +14,8 @@
 // failure, and it is why nothing here treats a non-zero code as an error by
 // itself. See the note in exec.ts.
 
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { run, succeeded, output, lines, type ExecResult } from './exec.ts';
 import { ok, err, type Result } from './result.ts';
 
@@ -255,6 +257,75 @@ export class Git {
     return err('tag chain longer than ' + MAX_TAG_CHAIN + ' starting at ' + sha);
   }
 
+  // ---- rewriting (repown reauthor only) -------------------------------------
+
+  /** A long or networked call: its own environment and timeout. Still only exec.ts spawns. */
+  private execLong(args: readonly string[], env: NodeJS.ProcessEnv, timeoutMs: number): Promise<ExecResult> {
+    return run('git', ['--no-replace-objects', ...args], { cwd: this.cwd, env, timeoutMs });
+  }
+
+  /** Fetch with every prompt off: a sign-in that would ask fails instead. The reason is cleaned for display. */
+  async fetchQuietly(remote: string): Promise<Result<void>> {
+    const fetched = await this.execLong([...QUIET, 'fetch', '--quiet', '--no-recurse-submodules', remote], quietEnv(), NETWORK_MS);
+    return succeeded(fetched) ? ok(undefined) : err(networkReason(fetched));
+  }
+
+  /** How many branches the remote lists (network, prompts off). */
+  async remoteHeadCount(remote: string): Promise<Result<number>> {
+    const listed = await this.execLong([...QUIET, 'ls-remote', '--heads', remote], quietEnv(), NETWORK_MS);
+    return succeeded(listed) ? ok(lines(listed).length) : err(networkReason(listed));
+  }
+
+  /** `git rebase <base> --exec <cmd>`, without moving other branches' refs. */
+  async rebaseExec(base: string, exec: string): Promise<Result<void>> {
+    const args = ['-c', 'rebase.updateRefs=false', 'rebase', '--quiet', base, '--exec', exec];
+    const rebased = await this.execLong(args, process.env, REBASE_MS);
+    return succeeded(rebased) ? ok(undefined) : err(rebased.timedOut ? 'timed out' : networkReason(rebased));
+  }
+
+  async abortRebase(): Promise<boolean> {
+    return succeeded(await this.exec(['rebase', '--abort']));
+  }
+
+  async updateRef(ref: string, sha: string): Promise<boolean> {
+    return succeeded(await this.exec(['update-ref', ref, sha]));
+  }
+
+  /** Full hash of `rev`, or null when it does not resolve. */
+  async revParse(rev: string): Promise<string | null> {
+    return output(await this.exec(['rev-parse', '--verify', '--quiet', rev + '^{commit}']));
+  }
+
+  /** Full hash of the first parent; null for a root commit. */
+  async parentOf(sha: string): Promise<string | null> {
+    return output(await this.exec(['rev-parse', '--verify', '--quiet', sha + '^']));
+  }
+
+  async countIn(range: readonly string[]): Promise<Result<number>> {
+    const counted = await this.exec(['rev-list', '--count', ...range]);
+    const count = Number(counted.stdout.trim());
+    return succeeded(counted) && Number.isInteger(count) ? ok(count) : err(counted.stderr.trim() || 'git rev-list failed');
+  }
+
+  /** Tracked changes, or entries hidden with skip-worktree / assume-unchanged, that a rebase could clobber. */
+  async hasTrackedChanges(): Promise<Result<boolean>> {
+    const [status, files] = await Promise.all([
+      this.exec(['status', '--porcelain', '--untracked-files=no']), this.exec(['ls-files', '-v']),
+    ]);
+    if (!succeeded(status) || !succeeded(files)) return err('git status failed');
+    const hidden = lines(files).some((line) => /^([a-z]|S) /.test(line));
+    return ok(status.stdout.trim().length > 0 || hidden);
+  }
+
+  /** The operation a half-finished rebase, merge, cherry-pick, revert or bisect left, or null. */
+  async operationInProgress(): Promise<string | null> {
+    for (const [path, name] of IN_PROGRESS) {
+      const where = output(await this.exec(['rev-parse', '--git-path', path]));
+      if (where && existsSync(resolve(this.cwd, where))) return name;
+    }
+    return null;
+  }
+
   /** `git rev-list --left-right --count A...B`: commits only on the left, and only on the right. */
   async leftRightCount(range: string): Promise<Result<{ left: number; right: number }>> {
     const counted = await this.exec(['rev-list', '--left-right', '--count', range]);
@@ -286,7 +357,9 @@ export class Git {
    * clone. Excluding the mirror branch leaves the commits written HERE.
    */
   async emailCounts(exclude?: string): Promise<Result<Map<string, number>>> {
-    const range = exclude ? ['--all', '--not', exclude] : ['--all'];
+    // repown reauthor's backups keep the old commits alive; they are not this clone's history.
+    const all = ['--exclude=refs/repown/*', '--all'];
+    const range = exclude ? [...all, '--not', exclude] : all;
     // --no-show-signature: a scanned repository's own log.showSignature + gpg.program
     // would otherwise run a program of its choosing.
     const result = await this.exec(['log', '--no-show-signature', ...range, '--format=%ae%n%ce']);
@@ -316,6 +389,31 @@ function parseOriginLine(line: string): ConfigEntry[] {
  * so nothing an author writes can shift them; the subject cannot reach past its
  * own terminator either. Records are a fixed IDENTITY_FIELDS long.
  */
+const NETWORK_MS = 120_000;
+const REBASE_MS = 600_000;
+/** Empty askPass: git asks no helper for a password (GIT_TERMINAL_PROMPT covers the terminal). */
+const QUIET = ['-c', 'core.askPass=', '-c', 'credential.interactive=false'];
+const IN_PROGRESS: readonly (readonly [string, string])[] = [
+  ['rebase-merge', 'rebase'], ['rebase-apply', 'rebase'], ['MERGE_HEAD', 'merge'],
+  ['CHERRY_PICK_HEAD', 'cherry-pick'], ['REVERT_HEAD', 'revert'], ['BISECT_LOG', 'bisect'],
+];
+
+/** The whole environment, with every way git or ssh could prompt turned off. */
+function quietEnv(): NodeJS.ProcessEnv {
+  const { GIT_ASKPASS: _git, SSH_ASKPASS: _ssh, ...rest } = process.env;
+  return {
+    ...rest, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never',
+    GIT_SSH_COMMAND: process.env['GIT_SSH_COMMAND'] ?? 'ssh -o BatchMode=yes',
+  };
+}
+
+/** git's last error line, with any credentials in a URL masked and control characters removed. */
+function networkReason(result: ExecResult): string {
+  if (result.timedOut) return 'timed out';
+  const last = result.stderr.trim().split('\n').filter(Boolean).at(-1) ?? 'git failed';
+  return last.replace(/(\w+:\/\/)[^@\s/]*@/g, '$1***@').replace(/[\x00-\x1f\x7f-\x9f]/g, '?');
+}
+
 /** `<sha> <parent> [<parent>...]`; a root has none. */
 function parentPair(line: string): [string, string | null] {
   const [sha = '', first = ''] = line.trim().split(' ');

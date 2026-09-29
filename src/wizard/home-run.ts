@@ -97,7 +97,7 @@ async function recordAccount(prompter: Prompter): Promise<number> {
   const login = await askLogin(prompter);
   if (login === CANCEL) return finish(prompter, CANCELLED, CANCELLED_CODE);
   const argv = commandFor({ kind: 'account', login });
-  return runOwn(prompter, accountsGroup.actions['add']!, [login], argv);
+  return runOwn(prompter, accountsGroup.actions['add']!, ['--', login], argv);
 }
 
 async function askLogin(prompter: Prompter): Promise<string | typeof CANCEL> {

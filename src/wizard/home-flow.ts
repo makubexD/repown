@@ -9,8 +9,9 @@ import { HOME_DEPTH, type HomeClone, type HomeState } from './home-context.ts';
 import {
   CD_NOTE, CHECK_MACHINE, HELPER_LINE, HINT_ACCOUNT, HINT_DOCTOR, HINT_FIX,
   NONE_RECORDED, NOT_SET_UP, QUIT, RECORD_ACCOUNT, SET_UP, SETUP_CLONE, SHOW_HELP, STOP_GH,
-  clonesNone, clonesSome, couldNotRead, moreClones, recordedLine, setupHint,
+  clonesNone, clonesSome, couldNotRead, moreClones, recordedLine, setupHint, unreadableLine,
 } from './home-text.ts';
+import { printable } from './setup-flow.ts';
 
 /** Shown choices. `back` returns to the menu; the others run a command or leave. */
 export const MENU = {
@@ -55,18 +56,25 @@ export function listedClones(home: HomeState): CloneList {
 
 /**
  * The command the action stands for. `--cwd=<path>` is how setup's own plans spell
- * it, so the printed line is `repown setup --cwd <path>`.
+ * it. `accounts add` puts `--` before the login, as that plan does, so a login
+ * that starts with a dash stays the account.
  */
 export function commandFor(action: HomeAction): readonly string[] {
   if (action.kind === 'setup') return ['setup', '--cwd=' + action.path];
   if (action.kind === 'fix') return ['fix'];
-  if (action.kind === 'account') return ['accounts', 'add', action.login];
+  if (action.kind === 'account') return ['accounts', 'add', '--', action.login];
   return ['doctor'];
 }
 
 function accountsText(registry: Result<Registry>): string {
   if (!registry.ok) return couldNotRead(registryPath());
-  const names = Object.keys(registry.value.accounts).sort();
+  return accountsSummary(registry.value);
+}
+
+function accountsSummary(registry: Registry): string {
+  const names = Object.keys(registry.accounts).sort();
+  const unread = registry.unreadable.length;
+  if (unread > 0) return unreadableLine(names.length, unread, registryPath());
   return names.length === 0 ? NONE_RECORDED : recordedLine(names);
 }
 
@@ -100,7 +108,7 @@ function orderClones(home: HomeState): HomeClone[] {
 }
 
 function cloneChoice(cwd: string, clone: HomeClone): Choice {
-  return { value: clone.path, label: relative(cwd, clone.path), hint: clone.setUp ? SET_UP : NOT_SET_UP };
+  return { value: clone.path, label: printable(relative(cwd, clone.path)), hint: clone.setUp ? SET_UP : NOT_SET_UP };
 }
 
 function row(label: string, value: string): string {

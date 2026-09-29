@@ -470,6 +470,23 @@ describe('start screen, played with key presses', () => {
     });
   });
 
+  test('a login starting with a dash reaches accounts add as the account', async () => {
+    const restore = forceNotTTY();
+    try {
+      await withProjects(async (root) => {
+        const run = await play((prompter) => runHome({ prompter, cwd: root }), [
+          [enter], [...typed('-h'), enter],
+        ], { patience: 20_000 });
+        assert.match(run.stderr, /> repown accounts add -- -h/, run.screen + run.stderr);
+        assert.equal(run.result, 1, run.stderr);
+        assert.match(run.stderr, /interactive terminal to ask for the Commit name/);
+        assert.doesNotMatch(run.stderr, /unknown option/);
+      });
+    } finally {
+      restore();
+    }
+  });
+
   test('H14: Quit and Esc leave global config, local config and the registry byte-identical', async () => {
     await withProjects(async (root, box) => {
       const registry = registryPath();
@@ -500,6 +517,20 @@ async function withProjects(run: (root: string, box: Sandbox) => Promise<void>):
     else process.env['GIT_CEILING_DIRECTORIES'] = saved;
     box.dispose();
   }
+}
+
+/** accounts add asks on a terminal. These screens must reach that ask, not hang in it. */
+function forceNotTTY(): () => void {
+  const streams = [process.stdin, process.stderr];
+  const saved = streams.map((stream) => Object.getOwnPropertyDescriptor(stream, 'isTTY'));
+  for (const stream of streams) Object.defineProperty(stream, 'isTTY', { value: false, configurable: true });
+  return () => {
+    streams.forEach((stream, index) => {
+      const descriptor = saved[index];
+      if (descriptor) Object.defineProperty(stream, 'isTTY', descriptor);
+      else delete (stream as { isTTY?: boolean }).isTTY;
+    });
+  };
 }
 
 function cloneAt(parent: string, name: string): string {

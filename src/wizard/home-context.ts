@@ -2,7 +2,8 @@
 // credential helper, and the clones below this folder. Read-only. A directory
 // it cannot list is skipped; `repown scan` is the command that reports those.
 
-import { resolve } from 'node:path';
+import { readdir } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { Git } from '../core/git.ts';
 import { inspectRepo, type RepoState } from '../core/inspect.ts';
 import { planRepair } from '../core/credential/repair.ts';
@@ -56,20 +57,52 @@ async function ghHelper(cwd: string): Promise<boolean> {
 
 async function clonesOf(cwd: string, deps: HomeDeps): Promise<HomeClone[]> {
   const found = await findClones(cwd, deps);
-  return mapLimited(found, CONCURRENCY, (dir) => describeClone(dir, deps));
+  const described = await mapLimited(found, CONCURRENCY, (dir) => describeClone(dir, deps));
+  return described.filter(isClone);
 }
 
 async function findClones(cwd: string, deps: HomeDeps): Promise<readonly string[]> {
   if (deps.findClones) return deps.findClones(cwd);
+  const found = await search(cwd, HOME_DEPTH);
+  return found.some((path) => samePath(path, cwd)) ? belowSelf(cwd) : found;
+}
+
+async function search(dir: string, depth: number): Promise<string[]> {
   const unreadable: string[] = [];
-  const found = await discover({ root: cwd, path: cwd }, HOME_DEPTH, unreadable, skipHomeEntry);
+  const found = await discover({ root: dir, path: dir }, depth, unreadable, skipHomeEntry);
   return found.map((entry) => entry.path);
 }
 
-async function describeClone(dir: string, deps: HomeDeps): Promise<HomeClone> {
+/** discover stopped on this folder's own `.git`. Its children are still HOME_DEPTH levels down. */
+async function belowSelf(cwd: string): Promise<string[]> {
+  const names = await childNames(cwd);
+  const nested = await Promise.all(names.map((name) => search(join(cwd, name), HOME_DEPTH - 1)));
+  return nested.flat();
+}
+
+/** Child directories the start screen would enter. An unlistable folder is skipped. */
+async function childNames(cwd: string): Promise<string[]> {
+  try {
+    const entries = await readdir(cwd, { withFileTypes: true });
+    return entries.filter((entry) => entry.isDirectory() && !skipHomeEntry(entry.name)).map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+}
+
+function samePath(path: string, cwd: string): boolean {
+  return resolve(path) === resolve(cwd);
+}
+
+async function describeClone(dir: string, deps: HomeDeps): Promise<HomeClone | null> {
   const inspect = deps.inspect ?? inspectRepo;
   const repo = await inspect(new Git(dir));
+  if (!repo.isRepo) return null;
   return { path: resolve(dir), setUp: identityProblems(repo).length === 0 };
+}
+
+function isClone(clone: HomeClone | null): clone is HomeClone {
+  return clone !== null;
 }
 
 /** Dot-directories, node_modules, and on Windows AppData. Only the start screen passes this. */

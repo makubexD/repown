@@ -62,8 +62,9 @@ without asking ([card 13](HOW-IT-WORKS.md#13-guided-setup)).
 
 **I ran `repown` outside a clone. What happens?** In a terminal (stdin, stdout and
 stderr), a start screen. It shows the accounts on this machine (or `could not read`
-and the registry's path), a line when gh serves git's credentials, and the clones found
-up to 2 levels below. You can set one of those up, stop gh serving credentials, record an
+and the registry's path, or `N unreadable in <path>: run repown accounts list` when
+the file has entries it cannot read), a line when gh serves git's credentials, and
+the clones found up to 2 levels below. You can set one of those up, stop gh serving credentials, record an
 account, check this machine, or show help. Nothing changes until you pick one. Quit
 exits 0. Esc or Ctrl-C exits 130. With no clones below, it says to `cd` into a clone
 (or `git clone` one), then run `repown`. With stdout redirected it prints the top help

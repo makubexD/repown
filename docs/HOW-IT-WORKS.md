@@ -1012,6 +1012,7 @@ What next?
 | Line | When | Value |
 | --- | --- | --- |
 | `Accounts` | the registry was read | `none recorded`, or `2 recorded: octocat, octo-work` (the logins, sorted) |
+| `Accounts` | the file has entries repown cannot read | `1 recorded, 1 unreadable in <path>: run repown accounts list`, or, when nothing in it could be read, `1 unreadable in <path>: run repown accounts list`. The menu stays |
 | `Accounts` | the registry could not be read | `could not read` and that path. Never `none` |
 | `Helper` | gh's per-host helper entries, the ones `repown fix` removes, are present | `gh serves git's credentials: run repown fix` |
 | `Clones` | clones were found, up to 2 levels below | `3 below this folder: 2 not set up, 1 set up` |
@@ -1022,8 +1023,10 @@ need one. The Helper line, and **Stop gh serving credentials**, appear only when
 entries are present.
 
 **Discovery** looks 2 levels down. It skips dot-directories, `node_modules`, and on
-Windows `AppData`. A folder it cannot list is skipped with no message. `repown scan`
-still warns `could not read <path> -- not scanned`, and its own walk is unchanged.
+Windows `AppData`. A folder it cannot list is skipped with no message. A directory
+git does not accept as a repository is not listed, and a `.git` in this folder that
+git refuses does not hide the clones below it. `repown scan` still warns
+`could not read <path> -- not scanned`, and its own walk is unchanged.
 
 **No clones found.** The menu has no **Set up a clone found here**. The summary and the
 note are:
@@ -1040,8 +1043,9 @@ A plain terminal prints it indented two spaces, as above.
 
 **Set up a clone found here.** Only when at least one clone was found. The list is the
 clones, not set up first, each as its path relative to this folder, with `not set up`
-or `set up`. At most 20 are listed. When more were found, a line above the list names
-the rest, for example `and 5 more: repown scan`. **← Back** returns to the menu.
+or `set up`. A control character in that label is shown as an escape; setup still
+receives the path itself. At most 20 are listed. When more were found, a line above
+the list names the rest, for example `and 5 more: repown scan`. **← Back** returns to the menu.
 
 ```
 Which clone?
@@ -1065,7 +1069,9 @@ exits 0.
 **Record an account** asks `The account's user name (login)`, with the hint
 `the name you sign in with, e.g. octocat; not your email address`. An empty answer is
 `a value is required`. Anything outside letters, digits and `. _ @ -` is
-`use letters, digits and . _ @ - only`. It then runs `repown accounts add`:
+`use letters, digits and . _ @ - only`. It then runs `repown accounts add`. A login
+that starts with a dash is printed and passed after `--`, so it stays the account
+name (`repown accounts add -- -h`):
 
 ```
        > repown accounts add octocat

@@ -33,6 +33,12 @@ export function recordedLine(names: readonly string[]): string {
   return names.length + ' recorded: ' + names.join(', ');
 }
 
+/** Entries the registry file has, but that could not be read as accounts. */
+export function unreadableLine(recorded: number, unreadable: number, path: string): string {
+  const tail = unreadable + ' unreadable in ' + path + ': run repown accounts list';
+  return recorded === 0 ? tail : recorded + ' recorded, ' + tail;
+}
+
 export function couldNotRead(path: string): string {
   return 'could not read ' + path;
 }

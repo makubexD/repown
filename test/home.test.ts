@@ -6,10 +6,11 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
+import { ok } from '../src/core/result.ts';
 import { registryPath } from '../src/core/registry.ts';
-import { readHome } from '../src/wizard/home-context.ts';
+import { readHome, type HomeState } from '../src/wizard/home-context.ts';
 import { commandFor, homeNote, listedClones, menuItems, summaryLines } from '../src/wizard/home-flow.ts';
-import { formatCommand } from '../src/wizard/setup-flow.ts';
+import { formatCommand, printable } from '../src/wizard/setup-flow.ts';
 import { sandbox, type Sandbox } from './helpers.ts';
 
 describe('start screen', () => {
@@ -90,6 +91,59 @@ describe('start screen', () => {
     assert.equal(list.clones[0]!.label, 'c00');
     assert.equal(list.clones[19]!.label, 'c19');
   });
+
+  test('a registry with one valid and one unreadable entry says both, and the menu stays', async () => {
+    const path = writeRegistry(JSON.stringify({ accounts: {
+      octocat: { name: 'Octo Cat', email: 'octocat@example.invalid' },
+      broken: { name: 1 },
+    } }));
+    cloneAt(root, 'need', false);
+    const home = await readHome(root);
+    assert.equal(shown(home, 'Accounts'),
+      '  Accounts   1 recorded, 1 unreadable in ' + path + ': run repown accounts list');
+    const labels = menuItems(home).map((item) => item.label);
+    assert.ok(labels.includes('Set up a clone found here'));
+    assert.ok(labels.includes('Record an account'));
+  });
+
+  test('a registry with only unreadable entries does not say none recorded', async () => {
+    const path = writeRegistry(JSON.stringify({ accounts: { broken: {} } }));
+    const home = await readHome(root);
+    const accounts = shown(home, 'Accounts');
+    assert.equal(accounts, '  Accounts   1 unreadable in ' + path + ': run repown accounts list');
+    assert.equal(accounts.includes('none'), false);
+    assert.deepEqual(menuItems(home).map((item) => item.label), [
+      'Record an account', 'Check this machine', 'Show help', 'Quit',
+    ]);
+  });
+
+  test('a stray .git file in this folder does not hide the clones below it', async () => {
+    const child = cloneAt(root, 'need', false);
+    const nested = cloneAt(join(root, 'group'), 'deep', false);
+    writeFileSync(join(root, '.git'), 'not a repository\n');
+    const found = (await readHome(root)).clones.map((clone) => relative(root, clone.path)).sort();
+    assert.deepEqual(found, [relative(root, child), relative(root, nested)].sort());
+  });
+
+  test('a child with an empty .git directory is not listed', async () => {
+    mkdirSync(join(root, 'empty', '.git'), { recursive: true });
+    const real = cloneAt(root, 'need', false);
+    const found = (await readHome(root)).clones.map((clone) => clone.path);
+    assert.deepEqual(found, [resolve(real)]);
+  });
+
+  test('a clone label escapes control characters and the value stays the path', () => {
+    const cwd = join('work', 'code');
+    const path = join(cwd, 'odd\tname');
+    const home: HomeState = {
+      cwd, registry: ok({ accounts: {}, unreadable: [] }), ghIsHelper: false,
+      clones: [{ path, setUp: false }],
+    };
+    const [choice] = listedClones(home).clones;
+    assert.equal(choice!.value, path);
+    assert.equal(choice!.label, printable('odd\tname'));
+    assert.equal(choice!.label.includes('\t'), false);
+  });
 });
 
 describe('start screen commands', () => {
@@ -99,10 +153,20 @@ describe('start screen commands', () => {
     assert.deepEqual(setup, ['setup', '--cwd=' + path]);
     assert.match(formatCommand(setup), /repown setup --cwd /);
     assert.deepEqual(commandFor({ kind: 'fix' }), ['fix']);
-    assert.deepEqual(commandFor({ kind: 'account', login: 'octocat' }), ['accounts', 'add', 'octocat']);
+    assert.deepEqual(commandFor({ kind: 'account', login: 'octocat' }), ['accounts', 'add', '--', 'octocat']);
+    assert.match(formatCommand(commandFor({ kind: 'account', login: 'octocat' })), /^repown accounts add octocat$/);
+    assert.deepEqual(commandFor({ kind: 'account', login: '-h' }), ['accounts', 'add', '--', '-h']);
+    assert.match(formatCommand(commandFor({ kind: 'account', login: '-h' })), /repown accounts add -- -h/);
     assert.deepEqual(commandFor({ kind: 'doctor' }), ['doctor']);
   });
 });
+
+function writeRegistry(raw: string): string {
+  const path = registryPath();
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, raw);
+  return path;
+}
 
 function shown(home: Awaited<ReturnType<typeof readHome>>, label: string): string {
   const line = summaryLines(home).find((text) => text.includes(label));

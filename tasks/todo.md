@@ -1,6 +1,6 @@
 # Tasks: setup leaves the clone push-ready
 
-Status: Phase 4 build, Task 2 next
+Status: Phase 4 build, Task 3 next (spec revised after the doubt review)
 
 - [x] Phase 1 clarify (audit WIZ-1..10, newcomer walk s1–s9, research; scope: detect + fix + opt-in re-author)
 - [x] Phase 2 spec (SPEC.md approved; command name `repown reauthor`)
@@ -13,7 +13,7 @@ Status: Phase 4 build, Task 2 next
 - Files: `test/characterization.test.ts` (and/or `test/wizard-screens.test.ts`)
 - Docs: none — tests only, no behaviour change
 
-## Task 2 — Rebase base: the parent of the oldest FOREIGN unpushed commit
+## Task 2 — Rebase base: the parent of the oldest FOREIGN unpushed commit [x]
 - Acceptance: own commits before the first foreign one are never in the rebase; `--root` only
   when the oldest foreign commit is the root; ADR-025 behaviour otherwise unchanged.
 - Verify: `node --test test/use.test.ts test/wizard-setup.test.ts`

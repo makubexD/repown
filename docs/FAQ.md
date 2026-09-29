@@ -47,7 +47,7 @@ current branch has commits no remote has by another address. Re-author it, or th
 `git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"`
 (`git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when that
 commit has no parent), or pin that address. `<base>` is the short hash of the parent
-of the oldest of those commits. If no remote-tracking ref reaches where the branch pushes
+of the oldest of those commits, so your own commits before it are left alone. If no remote-tracking ref reaches where the branch pushes
 (a remote never fetched or still empty, one that pushes elsewhere than it fetches from, or a
 URL), the warning says so, says how to fetch and count again where it can, and offers the
 rebase only for when that destination has none of them: rebasing below what it already has

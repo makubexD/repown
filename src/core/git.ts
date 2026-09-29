@@ -255,15 +255,11 @@ export class Git {
     return err('tag chain longer than ' + MAX_TAG_CHAIN + ' starting at ' + sha);
   }
 
-  /** Full hash of the oldest commit in `range`, or null when none or git cannot list them. */
-  async oldestIn(range: readonly string[]): Promise<string | null> {
-    const listed = lines(await this.exec(['rev-list', '--reverse', ...range]));
-    return listed[0] ?? null;
-  }
-
-  /** Short hash of the parent. Null when the commit is a root or cannot be read. */
-  async parentShort(sha: string): Promise<string | null> {
-    return output(await this.exec(['rev-parse', '--verify', '--short', sha + '^']));
+  /** Each commit in `range` (full hash) and its first parent's short hash, null for a root. */
+  async firstParentsIn(range: readonly string[]): Promise<Result<Map<string, string | null>>> {
+    const listed = await this.exec(['log', '--no-show-signature', '--format=%H %p', ...range]);
+    if (!succeeded(listed)) return err(listed.stderr.trim() || 'git log failed');
+    return ok(new Map(lines(listed).map(parentPair)));
   }
 
   /** Whether this clone has the commit at all -- a remote tip it never fetched is absent. */
@@ -310,7 +306,13 @@ function parseOriginLine(line: string): ConfigEntry[] {
  * so nothing an author writes can shift them; the subject cannot reach past its
  * own terminator either. Records are a fixed IDENTITY_FIELDS long.
  */
-const IDENTITY_FORMAT = '%H%x00%ae%x00%ce%x00%an%x00%cn%x00%s%x00';
+/** `<sha> <parent> [<parent>...]`; a root has none. */
+function parentPair(line: string): [string, string | null] {
+  const [sha = '', first = ''] = line.trim().split(' ');
+  return [sha, first || null];
+}
+
+const IDENTITY_FORMAT ='%H%x00%ae%x00%ce%x00%an%x00%cn%x00%s%x00';
 const IDENTITY_FIELDS = 6;
 const MAX_TAG_CHAIN = 16;
 const SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/;

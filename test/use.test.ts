@@ -151,9 +151,20 @@ describe('repown use warns about unpushed commits by another address (S19)', () 
     assert.equal(box.git('rev-parse', 'HEAD'), sha, 'use must not rewrite the commit');
     assert.equal(box.git('log', '-1', '--format=%ae'), THEIRS);
     assert.match(run.stderr, new RegExp('WARN\\s+commits\\s+1 commit on main not on any remote is by ' + THEIRS + '; the guard will refuse it'));
-    assert.match(run.stderr, new RegExp(escapeRe(reauthor('it', '--root'))));
+    assert.match(run.stderr, new RegExp(escapeRe(reauthor('it', box.git('rev-parse', '--short', 'HEAD^')))));
     assert.doesNotMatch(run.stdout, /not on any remote/);
     assert.doesNotMatch(run.stderr, /could not be read/);
+  });
+
+  test('the rebase starts after your own commits: at the parent of the oldest foreign one', async () => {
+    commitAs(box, OURS, 'ours, root');
+    const lastOwn = commitAs(box, OURS, 'ours, second');
+    commitAs(box, THEIRS, 'theirs');
+    commitAs(box, OURS, 'ours again');
+    commitAs(box, THEIRS, 'theirs again');
+    const run = await runUse(box);
+    assert.match(run.stderr, /2 commits on main not on any remote are by other@example\.invalid/);
+    assert.match(run.stderr, new RegExp(escapeRe(reauthor('them', box.git('rev-parse', '--short', lastOwn)))));
   });
 
   test('a foreign committer is named even when the author is the pinned address', async () => {
@@ -171,7 +182,7 @@ describe('repown use warns about unpushed commits by another address (S19)', () 
     commitAs(box, 'a@example.invalid', 'again', 'a@example.invalid');
     const run = await runUse(box);
     assert.match(run.stderr, /2 commits on main not on any remote are by a@example\.invalid, b@example\.invalid; the guard will refuse them/);
-    assert.match(run.stderr, new RegExp(escapeRe(reauthor('them', '--root'))));
+    assert.match(run.stderr, new RegExp(escapeRe(reauthor('them', box.git('rev-parse', '--short', 'HEAD~2')))));
   });
 
   test('an address that only differs by case from the pin is not foreign', async () => {

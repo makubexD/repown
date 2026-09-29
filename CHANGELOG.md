@@ -15,6 +15,8 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   remote, they say so, say how to fetch and count again where there is a remote to fetch,
   and offer the rebase only for when the destination has none of those commits. The URL
   is never printed (ADR-025).
+- The suggested `git rebase` starts at the parent of the oldest commit by another address,
+  not the oldest unpushed one, so your own commits before it are never rewritten.
 
 ## [0.3.0] - 2026-09-29
 

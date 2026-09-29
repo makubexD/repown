@@ -80,11 +80,13 @@ const textOf = (review: Review): string[] =>
 const argvOf = (answers: Answers, ctx: SetupContext): (readonly string[])[] =>
   planCommands(answers, ctx).map((command) => command.argv);
 
+/** Newest first, as git log lists them; the oldest commit's parent is `rebaseBase`. */
 function onBranch(emails: readonly string[], rebaseBase = 'abc1234'): SetupContext['unpushed'] {
+  const parentOf = (index: number): string | null =>
+    index < emails.length - 1 ? 'fff' + index : rebaseBase === '--root' ? null : rebaseBase;
   return {
     branch: 'main',
-    commits: ok(emails.map((address) => ({ authorEmail: address, committerEmail: address }))),
-    rebaseBase,
+    commits: ok(emails.map((address, index) => ({ authorEmail: address, committerEmail: address, parent: parentOf(index) }))),
     unknown: null,
   };
 }
@@ -766,9 +768,9 @@ describe('setup flow', () => {
   });
 
   test('S19 a committer who is not the author counts, and case does not', () => {
-    const mixed = context({ unpushed: { branch: 'main', rebaseBase: 'abc1234', unknown: null, commits: ok([
-      { authorEmail: 'octocat@example.invalid', committerEmail: 'Other@example.invalid' },
-      { authorEmail: 'other@example.invalid', committerEmail: 'octocat@example.invalid' },
+    const mixed = context({ unpushed: { branch: 'main', unknown: null, commits: ok([
+      { authorEmail: 'octocat@example.invalid', committerEmail: 'Other@example.invalid', parent: 'fff0' },
+      { authorEmail: 'other@example.invalid', committerEmail: 'octocat@example.invalid', parent: 'abc1234' },
     ]) } });
     assert.match(reviewNotes(mixed), /2 commits on main not on any remote are by Other@example\.invalid; the guard will refuse them/);
     const same = context({ unpushed: onBranch(['Octocat@example.invalid']) });
@@ -813,14 +815,14 @@ describe('setup flow', () => {
   });
 
   test('S19 a log that could not be read is a note, and a detached HEAD is not', () => {
-    const broken = context({ unpushed: { branch: 'feature', commits: err('git log failed'), rebaseBase: null, unknown: null } });
+    const broken = context({ unpushed: { branch: 'feature', commits: err('git log failed'), unknown: null } });
     const notes = reviewNotes(broken);
     assert.match(notes, /commits on feature not on any remote could not be read \(git log failed\), so repown can't say whether the guard will refuse them/);
     assert.doesNotMatch(notes, /re-author|are by/);
-    const detached = context({ unpushed: { branch: null, commits: ok([]), rebaseBase: null, unknown: null } });
+    const detached = context({ unpushed: { branch: null, commits: ok([]), unknown: null } });
     assert.doesNotMatch(reviewNotes(detached), /not on any remote/);
-    const hidden = context({ unpushed: { branch: 'main', rebaseBase: 'abc1234', unknown: null, commits: ok([
-      { authorEmail: 'bad\x1b@example.invalid', committerEmail: 'octocat@example.invalid' },
+    const hidden = context({ unpushed: { branch: 'main', unknown: null, commits: ok([
+      { authorEmail: 'bad\x1b@example.invalid', committerEmail: 'octocat@example.invalid', parent: 'abc1234' },
     ]) } });
     assert.doesNotMatch(reviewNotes(hidden), /\x1b/);
     assert.match(reviewNotes(hidden), /bad\?@example\.invalid/);
@@ -1282,8 +1284,10 @@ describe('setup context: would `use` change anything here?', () => {
     const emails = ctx.unpushed.commits.value.map((commit) => commit.authorEmail);
     assert.deepEqual(emails, ['work@example.invalid', 'octocat@example.invalid']);
     assert.match(reviewNotes(ctx, { account: 'octocat' }), /1 commit on main not on any remote is by work@example\.invalid/);
-    assert.match(reviewNotes(ctx, { account: 'octocat' }), /re-author it: git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty", or pin that address/);
+    const ownFirst = at.box.git('rev-parse', '--short', ours);
+    assert.match(reviewNotes(ctx, { account: 'octocat' }), new RegExp('re-author it: git rebase ' + ownFirst + ' --exec "git commit --amend --no-edit --reset-author --allow-empty", or pin that address'));
     assert.match(reviewNotes(ctx, { account: 'octo-work' }), /1 commit on main not on any remote is by octocat@example\.invalid/);
+    assert.match(reviewNotes(ctx, { account: 'octo-work' }), /re-author it: git rebase --root /);
     assert.doesNotMatch(reviewNotes(ctx, { account: 'octo-work' }), /work@example\.invalid/);
     at.box.git('update-ref', 'refs/remotes/origin/main', foreign);
     const published = await read();

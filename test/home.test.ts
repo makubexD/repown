@@ -8,9 +8,12 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { ok } from '../src/core/result.ts';
 import { registryPath } from '../src/core/registry.ts';
+import { CANCEL, type Prompter } from '../src/wizard/engine.ts';
 import { readHome, type HomeState } from '../src/wizard/home-context.ts';
 import { commandFor, homeNote, listedClones, menuItems, summaryLines } from '../src/wizard/home-flow.ts';
+import { runHome } from '../src/wizard/home-run.ts';
 import { formatCommand, printable } from '../src/wizard/setup-flow.ts';
+import { displayPath } from '../src/ui/format.ts';
 import { sandbox, type Sandbox } from './helpers.ts';
 
 describe('start screen', () => {
@@ -132,6 +135,50 @@ describe('start screen', () => {
     assert.deepEqual(found, [resolve(real)]);
   });
 
+  test('a refused .git one level down does not hide the clone inside it', async () => {
+    mkdirSync(join(root, 'archive', '.git'), { recursive: true });
+    const app = cloneAt(join(root, 'archive'), 'app', false);
+    const found = (await readHome(root)).clones.map((clone) => relative(root, clone.path));
+    assert.deepEqual(found, [relative(root, app)]);
+  });
+
+  test('a refused .git at depth 2 does not open a search at depth 3', async () => {
+    const stuck = join(root, 'level', 'stop');
+    mkdirSync(join(stuck, '.git'), { recursive: true });
+    cloneAt(stuck, 'too-deep', false);
+    const found = (await readHome(root)).clones.map((clone) => relative(root, clone.path));
+    assert.deepEqual(found, []);
+  });
+
+  test('a bare repository is not walked for clones', async () => {
+    execFileSync('git', ['init', '--bare', '-q', root]);
+    cloneAt(root, 'decoy', false);
+    const home = await readHome(root);
+    assert.deepEqual(home.clones, []);
+    assert.equal(shown(home, 'Clones'), 'Clones     none below this folder (2 levels)');
+  });
+
+  test('a registry key containing ESC or a newline is shown escaped', () => {
+    const accounts = {
+      'octo\ncat': { name: 'Octo Cat', email: 'octocat@example.invalid' },
+      'octo\x1bcat': { name: 'Octo Cat', email: 'octocat@example.invalid' },
+    };
+    const home: HomeState = {
+      cwd: 'work', registry: ok({ accounts, unreadable: [] }), ghIsHelper: false, clones: [],
+    };
+    const line = shown(home, 'Accounts');
+    const escaped = [printable('octo\ncat'), printable('octo\x1bcat')].join(', ');
+    assert.equal(line, 'Accounts   2 recorded: ' + escaped);
+    assert.equal(/[\x00-\x1f]/.test(line), false);
+  });
+
+  test('the title escapes control characters in the folder path', async () => {
+    const cwd = join('work', 'octo\x1bcode');
+    const title = await shownTitle(cwd);
+    assert.equal(title, 'repown · not a clone: ' + displayPath(printable(cwd)));
+    assert.equal(title.includes('\x1b'), false);
+  });
+
   test('a clone label escapes control characters and the value stays the path', () => {
     const cwd = join('work', 'code');
     const path = join(cwd, 'odd\tname');
@@ -160,6 +207,25 @@ describe('start screen commands', () => {
     assert.deepEqual(commandFor({ kind: 'doctor' }), ['doctor']);
   });
 });
+
+async function shownTitle(cwd: string): Promise<string> {
+  let title = '';
+  await runHome({ prompter: cancelPrompter((text) => { title = text; }), cwd, read: emptyRead });
+  return title;
+}
+
+function cancelPrompter(intro: (title: string) => void): Prompter {
+  const stop = async (): Promise<typeof CANCEL> => CANCEL;
+  return {
+    intro, note() {}, close() {}, show() {},
+    choose: stop, ask: stop, pickStep: stop,
+    review: async () => 'done', confirmStep: async () => 'stop',
+  };
+}
+
+function emptyRead(cwd: string): Promise<HomeState> {
+  return Promise.resolve({ cwd, registry: ok({ accounts: {}, unreadable: [] }), ghIsHelper: false, clones: [] });
+}
 
 function writeRegistry(raw: string): string {
   const path = registryPath();

@@ -17,7 +17,7 @@ import { BACK, CANCEL, type Asked, type Drawn, type Prompter } from './engine.ts
 import { readHome, type HomeState } from './home-context.ts';
 import { BACK as HOME_BACK, MENU, commandFor, homeNote, listedClones, menuItems, summaryLines } from './home-flow.ts';
 import { BACK_LABEL, BUSY, CANCELLED, LOGIN_HINT, LOGIN_MESSAGE, QUIT, WHAT_NEXT, WHICH_CLONE, homeTitle } from './home-text.ts';
-import { formatCommand, loginProblem } from './setup-flow.ts';
+import { formatCommand, loginProblem, printable } from './setup-flow.ts';
 import { choosePrompter, runSetup } from './setup-run.ts';
 
 const CANCELLED_CODE = 130;
@@ -35,7 +35,7 @@ const LOGIN_STEP: Drawn = {
   validate: (value) => loginProblem(String(value)),
 };
 
-const LOGIN_ASKED: Asked = { initial: undefined, choices: [], detail: undefined, canGoBack: false };
+const LOGIN_ASKED: Asked = { initial: undefined, choices: [], detail: undefined, canGoBack: true };
 
 export async function runHome(deps: HomeRunDeps = {}): Promise<number> {
   const prompter = deps.prompter ?? await choosePrompter();
@@ -48,7 +48,7 @@ export async function runHome(deps: HomeRunDeps = {}): Promise<number> {
 
 async function openHome(prompter: Prompter, deps: HomeRunDeps): Promise<number> {
   const cwd = deps.cwd ?? process.cwd();
-  prompter.intro?.(homeTitle(cwd));
+  prompter.intro?.(homeTitle(printable(cwd)));
   prompter.busy?.(BUSY);
   const home = await (deps.read ?? readHome)(cwd);
   showLines(prompter, summaryLines(home));
@@ -92,17 +92,18 @@ async function runInClone(prompter: Prompter, cwd: string): Promise<number> {
   return runSetup(setupArgs(cwd), { interactive: true, prompter });
 }
 
-async function recordAccount(prompter: Prompter): Promise<number> {
+async function recordAccount(prompter: Prompter): Promise<number | null> {
   const login = await askLogin(prompter);
   if (login === CANCEL) return finish(prompter, CANCELLED, CANCELLED_CODE);
+  if (login === BACK) return null;
   const argv = commandFor({ kind: 'account', login });
   return runOwn(prompter, accountsGroup.actions['add']!, ['--', login], argv);
 }
 
-async function askLogin(prompter: Prompter): Promise<string | typeof CANCEL> {
+async function askLogin(prompter: Prompter): Promise<string | typeof CANCEL | typeof BACK> {
   for (;;) {
     const reply = await prompter.ask(LOGIN_STEP, LOGIN_ASKED);
-    if (reply === CANCEL || reply === BACK) return CANCEL;
+    if (reply === CANCEL || reply === BACK) return reply;
     const problem = loginProblem(String(reply));
     if (!problem) return String(reply).trim();
     prompter.note(problem);

@@ -75,7 +75,7 @@ function accountsSummary(registry: Registry): string {
   const names = Object.keys(registry.accounts).sort();
   const unread = registry.unreadable.length;
   if (unread > 0) return unreadableLine(names.length, unread, registryPath());
-  return names.length === 0 ? NONE_RECORDED : recordedLine(names);
+  return names.length === 0 ? NONE_RECORDED : recordedLine(names.map(printable));
 }
 
 function clonesText(clones: readonly HomeClone[]): string {

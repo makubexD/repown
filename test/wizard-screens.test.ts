@@ -499,6 +499,17 @@ describe('start screen, played with key presses', () => {
     });
   });
 
+  test('Back from the login question returns to the menu', async () => {
+    await withProjects(async (root) => {
+      const run = await play((prompter) => runHome({ prompter, cwd: root }), [
+        [enter], [...typed('<'), enter], [esc],
+      ], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen);
+      const afterLogin = run.screen.split('The account\'s user name').at(-1) ?? '';
+      assert.match(afterLogin, /What next\?/, run.screen);
+    });
+  });
+
   test('a login starting with a dash reaches accounts add as the account', async () => {
     const restore = forceNotTTY();
     try {

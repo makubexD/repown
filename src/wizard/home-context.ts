@@ -3,7 +3,7 @@
 // it cannot list is skipped; `repown scan` is the command that reports those.
 
 import { readdir } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { Git } from '../core/git.ts';
 import { inspectRepo, type RepoState } from '../core/inspect.ts';
 import { planRepair } from '../core/credential/repair.ts';
@@ -63,21 +63,44 @@ async function clonesOf(cwd: string, deps: HomeDeps): Promise<HomeClone[]> {
 
 async function findClones(cwd: string, deps: HomeDeps): Promise<readonly string[]> {
   if (deps.findClones) return deps.findClones(cwd);
-  const found = await search(cwd, HOME_DEPTH);
-  return found.some((path) => samePath(path, cwd)) ? belowSelf(cwd) : found;
+  if (await new Git(cwd).isBare()) return [];
+  return clonesWithin(cwd, HOME_DEPTH);
+}
+
+/**
+ * Repositories at most `depth` levels down, counting a repository at `dir`.
+ * Git accepting a directory stops the walk. Git refusing one is not a clone;
+ * the levels still left are searched inside it. This folder is that rule at depth 0.
+ */
+async function clonesWithin(dir: string, depth: number): Promise<string[]> {
+  if (depth < 0) return [];
+  const found = await search(dir, depth);
+  const parts = await mapLimited(found, CONCURRENCY, (path) => keepOrEnter(dir, path, depth));
+  return parts.flat();
+}
+
+async function keepOrEnter(searched: string, path: string, budget: number): Promise<string[]> {
+  if (await new Git(path).isRepo()) return [path];
+  return enterRefused(path, budget - levelsBelow(searched, path));
+}
+
+/** One of `remaining` is spent stepping into `dir`; what is left is searched below it. */
+async function enterRefused(dir: string, remaining: number): Promise<string[]> {
+  if (remaining <= 0) return [];
+  const names = await childNames(dir);
+  const nested = await mapLimited(names, CONCURRENCY, (name) => clonesWithin(join(dir, name), remaining - 1));
+  return nested.flat();
+}
+
+function levelsBelow(root: string, path: string): number {
+  const rel = relative(resolve(root), resolve(path));
+  return rel === '' ? 0 : rel.split(sep).length;
 }
 
 async function search(dir: string, depth: number): Promise<string[]> {
   const unreadable: string[] = [];
   const found = await discover({ root: dir, path: dir }, depth, unreadable, skipHomeEntry);
   return found.map((entry) => entry.path);
-}
-
-/** discover stopped on this folder's own `.git`. Its children are still HOME_DEPTH levels down. */
-async function belowSelf(cwd: string): Promise<string[]> {
-  const names = await childNames(cwd);
-  const nested = await Promise.all(names.map((name) => search(join(cwd, name), HOME_DEPTH - 1)));
-  return nested.flat();
 }
 
 /** Child directories the start screen would enter. An unlistable folder is skipped. */
@@ -88,10 +111,6 @@ async function childNames(cwd: string): Promise<string[]> {
   } catch {
     return [];
   }
-}
-
-function samePath(path: string, cwd: string): boolean {
-  return resolve(path) === resolve(cwd);
 }
 
 async function describeClone(dir: string, deps: HomeDeps): Promise<HomeClone | null> {

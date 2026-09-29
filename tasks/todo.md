@@ -1,6 +1,6 @@
 # Tasks: setup leaves the clone push-ready
 
-Status: Phase 4 build, Task 3 next (spec revised after the doubt review)
+Status: Phase 4 build, Task 4 next
 
 - [x] Phase 1 clarify (audit WIZ-1..10, newcomer walk s1–s9, research; scope: detect + fix + opt-in re-author)
 - [x] Phase 2 spec (SPEC.md approved; command name `repown reauthor`)
@@ -20,7 +20,7 @@ Status: Phase 4 build, Task 3 next (spec revised after the doubt review)
 - Files: `src/core/unpushed.ts`, `src/core/git.ts`, `test/use.test.ts`
 - Docs: HOW-IT-WORKS card 3 row and card 8, FAQ ("parent of the oldest of those commits"), CHANGELOG
 
-## Task 3 ⚠ — Blockers: what will make the next commit, pull or push fail
+## Task 3 ⚠ — Blockers: what will make the next commit, pull or push fail [x]
 Reads git config and the environment.
 - Acceptance: `blockers(ctx)` returns, in order: foreign unpushed; sign-in URL remote (never
   printed); `GIT_*_EMAIL`/`GH_TOKEN`/`GITHUB_TOKEN` set; destination owner not allowed; diverged

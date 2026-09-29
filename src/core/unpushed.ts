@@ -73,6 +73,11 @@ export function unpushedLines(fact: UnpushedFact, email: string, account: string
   return [sentence(fact.branch, found), ...advice(fact, found, account)];
 }
 
+/** How many unpushed commits carry an address other than `email`. Zero when they could not be read. */
+export function foreignCount(fact: UnpushedFact, email: string): number {
+  return fact.commits.ok ? collect(fact.commits.value, fold(email)).count : 0;
+}
+
 /** Behind an unknown destination the rebase is right only when it has none of these commits. */
 function advice(fact: UnpushedFact, found: Found, account: string): string[] {
   const rebase = reauthorLine(found.count, found.base);

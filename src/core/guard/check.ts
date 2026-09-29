@@ -86,6 +86,11 @@ export async function check(input: CheckInput): Promise<Refusal[]> {
   return [...destination, ...await checkCommits(input, identity.email)];
 }
 
+/** The names of the variables above that are set (non-empty) in `env`, in that order. */
+export function hostileSet(env: NodeJS.ProcessEnv): string[] {
+  return HOSTILE.filter(([name]) => !!env[name]).map(([name]) => name);
+}
+
 function checkEnvironment(): Refusal[] {
   return HOSTILE.flatMap(([name, why]) => {
     if (!process.env[name]) return [];

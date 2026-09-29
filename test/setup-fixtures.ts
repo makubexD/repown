@@ -46,6 +46,11 @@ function baseline(): Omit<SetupContext, 'recorded' | 'addresses' | 'suggest'> {
     // No branch: these screens are not the unpushed-commit note. A test that
     // wants the note passes the commits readUnpushed would have read.
     unpushed: { branch: null, commits: ok([]), unknown: null },
+    // Nothing else in the way of the next push, unless a test says so.
+    push: {
+      env: [], configOverrides: [], elsewhere: ok([]), signinKey: null, destination: null,
+      divergence: ok(null), detached: false, upstream: null,
+    },
     // Already on, so these screens are not the upstream question. A test for that
     // question passes enabled: null. An otherwise settled clone where it is still
     // offered counts as settled and names `repown setup --auto-upstream`.

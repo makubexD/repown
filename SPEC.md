@@ -41,54 +41,95 @@ git-town, git-filter-repo and clig.dev. Summary of states that fail after "done"
 ## Behaviour
 
 ### 1. Push blockers (read offline, shown first)
-`src/wizard/blockers.ts` (pure) turns the context into an ordered list; setup's review and the
-settled screen show it before the steps, and the closing line reads it.
+`src/wizard/blockers.ts` (pure) turns facts read once into an ordered list; setup's review and the
+settled screen show it before the steps, and the closing line reads it. Revised after the doubt
+review of Tasks 3-7 (16 findings, most measured on git 2.54; reconciled in the table below).
 - foreign unpushed commits (existing `unpushedLines`, with ADR-025's unknown-destination line)
-- a branch remote that is a URL with userinfo (never printed): "this branch pushes to a URL that
-  carries its own sign-in; pushes use it, not <account>"
-- identity/env variables set in this shell (names only)
+- commits the guard refuses although another remote has them (a fork: on `upstream`, not on the
+  destination), counted with the guard's own exclusion (`--remotes=<destination>`)
+- a sign-in carried by the push path, never printed: userinfo in `branch.<b>.remote` (a URL),
+  `remote.<dest>.url` or `remote.<dest>.pushurl`, or an `http.*.extraheader`
+- identity/token variables set in this shell (names only), and `author.email`/`committer.email` config
 - push destination owner not allowed (destination, not origin)
-- diverged from the tracked ref: "main is N behind and M ahead of origin/main: git pull --rebase first"
-- no upstream and `push.autoSetupRemote` stays off: "the first push needs git push -u origin <b>"
-- detached HEAD: "HEAD is detached: git switch <branch> before pushing"; foreign commits counted
+- diverged from `@{u}`, only when `@{u}` is on the push destination (a triangular workflow is not
+  blocked): "main is N behind and M ahead of origin/main: push and pull fail until you git pull --rebase"
+- no upstream, only where a plain `git push` would fail: `push.default` unset/simple/upstream, no
+  pushRemote/pushDefault, and `push.autoSetupRemote` off
+- detached HEAD
+- a fact that could not be read is its own blocker ("could not …"), never absent
 
 ### 2. New steps in setup (each a reviewed step, printed as its real command)
 Order in the plan: repoint → fetch → accounts add → allowOwner → fix → use → guard → upstream → reauthor.
 - **Repoint** (Recommended: on when a remote has the URL's host and path): `git config --local <key> <remote>`.
-  Flag `--repoint`. Never prints the URL.
-- **Fetch** (Recommended: on when the push destination is a configured remote with no tracking
-  refs, or diverged may be stale): `git fetch <remote>` with prompts off, via `exec.ts`.
-  Flag `--fetch`. A failure prints `WARN fetch could not fetch <remote> (<reason>)` and the
-  remote stays unknown.
-- **Re-author** (asked in both modes, default No, only when foreign unpushed commits exist):
-  "Re-author N commits by a@, b@ as <account>? Only if you made them. A backup is kept."
-  Flag `--reauthor`. Runs `repown reauthor --yes`.
+  Flag `--repoint`. Never prints the URL. Listed in the run's "changed in this clone".
+- **Fetch** (Recommended: on only when there are foreign unpushed commits AND the destination is a
+  configured remote with no tracking refs; a clean clone never fetches): `git fetch <remote>`.
+  Flag `--fetch`. Always returns 0: a failure prints `WARN fetch could not fetch <remote> (<reason>)`
+  (reason sanitised, URLs redacted) and the destination stays unknown; the rest of the plan runs.
+- **Re-author** (asked in both modes, default No, only when foreign unpushed commits exist): "Re-author
+  your unpushed commits by a@, b@ as <account>? Only if you made them; repown shows the exact list
+  after fetching, and keeps a backup." Flag `--reauthor`. Runs `repown reauthor --yes` last, so a
+  refusal (exit 1, like any failed step) skips nothing else.
 - `--no-input`: unanswered = No (existing rule); `--fetch`/`--repoint`/`--reauthor` opt in.
+- setup-run dispatch gets explicit cases for the new argv (no fall-through to `accounts add` or allowOwner).
+
+### Network hygiene (fetch and ls-remote, in setup and reauthor)
+Environment = the whole `process.env` plus `GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`, and with
+`GIT_ASKPASS`/`SSH_ASKPASS` removed; `-c core.askPass=`; `GIT_SSH_COMMAND="ssh -o BatchMode=yes"` unless the
+user set one; `--no-recurse-submodules`; timeout 120 s. Rebase timeout: 10 minutes.
 
 ### 3. `repown reauthor` (new command; cli skill grammar, like `use` and `fix`)
 `repown reauthor [--yes] [--cwd <dir>]`
-1. Refuse (exit 1, nothing changed) when: detached HEAD, dirty tree, rebase/merge in progress,
-   no pin, or the destination is `url`/`pushurl`/`unnamed`/`unread` ("point the branch at a remote first").
-2. `git fetch <destination>` (prompts off). On failure: refuse, "could not fetch; nothing rewritten".
-   After success the destination is known: tracking refs, or none because it is empty.
-3. Foreign commits = `HEAD --not --remotes` whose author or committer is not the pinned address.
-   None → "nothing to re-author", exit 0.
-4. Base = parent of the oldest foreign commit (`--root` only when it has none and the fetch
-   showed the destination empty). Show the count, addresses and base; without `--yes` ask
-   (terminal only; no terminal and no `--yes` → exit 2 naming `--yes`).
-5. Backup: `refs/repown/backup/<branch>/<unix-time>` → HEAD. Then
-   `git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"`.
-   Commit signing, if configured, applies to the new commits; existing signatures are dropped (said).
-6. Rebase fails → `git rebase --abort`, branch back at the backup, exit 1.
-7. Success: `OK reauthor N commits now by <address>`; `undo: git reset --keep refs/repown/backup/...`.
-   Never pushes; never touches anything the destination has.
+1. Refuse (exit 1, nothing changed) when: detached HEAD; tracked changes or skip-worktree /
+   assume-unchanged entries; a rebase, merge, cherry-pick or bisect in progress; no pin;
+   `GIT_*_EMAIL`/`GIT_*_NAME` set or `author.email`/`committer.email` config (the rewrite would not use the pin);
+   `commit.gpgsign` true with no terminal; destination `url`/`pushurl`/`unnamed`/`unread`.
+2. `git fetch <destination>` (network hygiene). On failure: refuse, "could not fetch; nothing rewritten".
+3. Known = the destination has tracking refs. With none: `git ls-remote --heads <destination>`; no heads
+   proves it empty; heads but no tracking refs (no fetch refspec, mirror refspec, single-branch)
+   → refuse ("this clone does not track <remote>'s branches").
+4. Foreign = `HEAD --not --remotes` (published anywhere is never rewritten) whose author or
+   committer is not the pin. None → "nothing to re-author", exit 0.
+5. Refuse when `base..HEAD` contains a merge, or is not exactly the unpushed set from base on
+   (never flatten or rewrite a commit a remote has). Base = full hash of the parent of the
+   topologically oldest foreign commit (`--topo-order`); `--root` only when that commit is a root
+   AND step 3 proved the destination empty; a root with a non-empty destination → refuse.
+6. Show count, addresses, base (short) and "author dates are reset"; without `--yes` ask (terminal
+   only; no terminal and no `--yes` → exit 2 naming `--yes`).
+7. Backup `refs/repown/backup/<branch>/<unix-time>` → HEAD (excluded from scan's `--all` counts). Then
+   `git -c rebase.updateRefs=false rebase --no-update-refs <base> --exec "git commit --amend --no-edit --no-verify --reset-author --allow-empty"`.
+8. Rebase fails or times out → `git rebase --abort`; if HEAD is not the backup, report and exit 1.
+9. Verify: re-read `base..HEAD` identities; any not the pin → exit 1 with the backup named.
+10. Success: `OK reauthor N commits now by <address>`;
+    `undo: git reset --keep refs/repown/backup/... (drops commits made since)`. Never pushes.
+    Setup lists "history rewritten: N commits (backup refs/repown/...)" under changes.
 
 ### 4. Closing line and status
 - Setup: `done: this clone is set up for <account>` only with no blockers left after the run
-  (re-read); otherwise `set up for <account>; the next push will fail: <first blocker> (and N more above)`. Exit code unchanged (0).
+  (re-read); otherwise `set up for <account>; the next push will fail: <first blocker> (and N more above)`.
+  Exit code unchanged (0) unless a step failed (existing rule).
 - Settled screen and `--no-input` on a settled clone print the blockers (WIZ-2, WIZ-3).
 - `repown status`: blockers printed in ADR-023's first block; `ready:` only without them.
-  `--format json` unchanged (no status JSON exists; scan/accounts untouched).
+
+### Doubt review (Tasks 3-7), reconciled
+| # | Finding | Class | Where |
+| --- | --- | --- | --- |
+| 1 | a merge in the range: rebase flattens it and rewrites others' commits | actionable | reauthor 5 |
+| 2 | a successful fetch does not prove empty | actionable | reauthor 3 (ls-remote) |
+| 3 | 30 s timeout kills rebase/fetch | actionable | hygiene, reauthor 8 |
+| 4 | user hooks run per amend | actionable | `--no-verify` |
+| 5 | `rebase.updateRefs` rewrites other branches | actionable | reauthor 7 |
+| 6 | `author.email`/env override the pin | actionable | reauthor 1, 9; blockers |
+| 7 | a failed step halts setup; dispatch fall-throughs | actionable | setup steps |
+| 8 | askpass, ssh prompts, submodules; env replaced whole | actionable | hygiene |
+| 9 | blockers exclude all remotes, the guard only the destination | actionable | blockers (fork line) |
+| 10 | the question's count is stale; tags | actionable (wording) / trade-off (tags: the guard ignores them too) | re-author step |
+| 11 | backup refs in `--all` | actionable | reauthor 7 |
+| 12 | run report hides the rewrite | actionable | repoint, reauthor 10 |
+| 13 | clean clones would fetch | actionable | fetch trigger |
+| 14 | triangular divergence, push.default=current | actionable | blockers |
+| 15 | credentials via url/pushurl/extraheader | actionable (insteadOf: trade-off, documented) | blockers |
+| 16 | dates, gpg, undo, short hash, root, dirty definition, fetch reason | actionable | reauthor 1, 5, 6, 10; hygiene |
 
 ## Out of scope
 Force-push, rewriting anything the destination has, `--single-branch` refspec coverage

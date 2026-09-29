@@ -11,6 +11,7 @@ import { ghAdvice, upstreamText } from '../commands/status.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { shellWord } from '../core/guard/check.ts';
 import { unpushedLines, type UnpushedFact } from '../core/unpushed.ts';
+import type { PushFacts } from '../core/push-state.ts';
 import type { Account } from '../core/registry.ts';
 import type { GhState } from '../core/credential/gh.ts';
 import type { GuardState } from '../core/guard/hook.ts';
@@ -66,6 +67,8 @@ export interface SetupContext {
   readonly addresses: Result<ReadonlyMap<string, number>>;
   /** Commits on the current branch that no remote has. Compared here with the planned email. */
   readonly unpushed: UnpushedFact;
+  /** What else decides whether the next commit, pull or push works (blockers.ts). */
+  readonly push: Omit<PushFacts, 'unpushed'>;
   /** Global `user.name` and `user.email`. Shown, never assumed to be this account. */
   readonly machineIdentity: { readonly name: string | null; readonly email: string | null };
   /** Git's `push.autoSetupRemote`: whether this git has it, the effective value, the branch. */

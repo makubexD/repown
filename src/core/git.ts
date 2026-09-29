@@ -255,6 +255,16 @@ export class Git {
     return err('tag chain longer than ' + MAX_TAG_CHAIN + ' starting at ' + sha);
   }
 
+  /** `git rev-list --left-right --count A...B`: commits only on the left, and only on the right. */
+  async leftRightCount(range: string): Promise<Result<{ left: number; right: number }>> {
+    const counted = await this.exec(['rev-list', '--left-right', '--count', range]);
+    const [left, right] = (succeeded(counted) ? counted.stdout.trim() : '').split(/\s+/).map(Number);
+    if (!succeeded(counted) || !Number.isInteger(left) || !Number.isInteger(right)) {
+      return err(counted.stderr.trim() || 'git rev-list could not count ' + range);
+    }
+    return ok({ left: left!, right: right! });
+  }
+
   /** Each commit in `range` (full hash) and its first parent's short hash, null for a root. */
   async firstParentsIn(range: readonly string[]): Promise<Result<Map<string, string | null>>> {
     const listed = await this.exec(['log', '--no-show-signature', '--format=%H %p', ...range]);

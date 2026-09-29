@@ -44,6 +44,25 @@ export async function unknownDestination(git: Git, branch: string): Promise<Unkn
   return { kind: 'url', key: set.key, remote: await remoteWithUrl(git, listed.value, name) };
 }
 
+/** Where a plain `git push` sends the branch: a configured remote, or a URL and the key naming it. */
+export interface PushTarget {
+  /** The remote's name, or the URL (or unknown name) the config gave. */
+  readonly name: string;
+  readonly isRemote: boolean;
+  /** The config key that named it; null for the `origin` default. */
+  readonly key: string | null;
+}
+
+/** Null when there is no destination, it is `.`, or the remotes could not be listed. */
+export async function pushTarget(git: Git, branch: string): Promise<PushTarget | null> {
+  const listed = await git.readRemotes();
+  if (!listed.ok) return null;
+  const set = await configuredTarget(git, branch);
+  const name = set?.value ?? (listed.value.includes('origin') ? 'origin' : null);
+  if (!name || name === '.') return null;
+  return { name, isRemote: listed.value.includes(name), key: set?.key ?? null };
+}
+
 /** git's own order for a push with no arguments. */
 async function configuredTarget(git: Git, branch: string): Promise<Configured | null> {
   const keys = ['branch.' + branch + '.pushRemote', 'remote.pushDefault', 'branch.' + branch + '.remote'];

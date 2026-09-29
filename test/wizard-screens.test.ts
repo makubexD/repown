@@ -10,10 +10,12 @@ import { dirname, join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { ok, err } from '../src/core/result.ts';
 import { registryPath } from '../src/core/registry.ts';
+import { PINNED_NOTE, SETUP_NOTE } from '../src/commands/start.ts';
 import { runHome } from '../src/wizard/home-run.ts';
+import { runSetup } from '../src/wizard/setup-run.ts';
 import { KEY, typed, play, linesWith, setupContext } from './setup-fixtures.ts';
-import { sandbox, type Sandbox } from './helpers.ts';
-import { wizard } from '../src/wizard/engine.ts';
+import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
+import { wizard, type Prompter } from '../src/wizard/engine.ts';
 import { plainPrompter } from '../src/wizard/plain.ts';
 import { setupFlow, type SetupContext } from '../src/wizard/setup-flow.ts';
 import { textWidth, wrap } from '../src/wizard/review-text.ts';
@@ -545,6 +547,83 @@ describe('start screen, played with key presses', () => {
     });
   });
 });
+
+describe('setup lead inside a clone', () => {
+  test('F5: an unpinned clone draws the not-set-up line inside setup\'s frame', async () => {
+    await withClone(async (box) => {
+      unpinClone(box);
+      const run = await play(leadSetup(box, SETUP_NOTE), [[esc]], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen + run.stderr);
+      assertLeadInside(run.screen, 'isn\'t set up yet');
+      assert.doesNotMatch(run.stderr, /isn't set up yet/);
+    });
+  });
+
+  test('F6: a pinned clone draws the check-this-clone line inside setup\'s frame', async () => {
+    await withClone(async (box) => {
+      pinClone(box);
+      const run = await play(leadSetup(box, PINNED_NOTE), [[esc]], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen + run.stderr);
+      assertLeadInside(run.screen, 'Starting setup to check this clone');
+      assert.doesNotMatch(run.stderr, /Starting setup to check this clone/);
+    });
+  });
+
+  test('F8: typed setup draws neither lead', async () => {
+    await withClone(async (box) => {
+      unpinClone(box);
+      const run = await play(leadSetup(box), [[esc]], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen + run.stderr);
+      assert.match(run.screen, /┌ {2}repown setup/);
+      assert.doesNotMatch(run.screen, /isn't set up yet/);
+      assert.doesNotMatch(run.screen, /Starting setup to check this clone/);
+    });
+  });
+});
+
+function leadSetup(box: Sandbox, lead?: string): (prompter: Prompter) => Promise<number> {
+  const deps = lead === undefined ? { interactive: true } : { interactive: true, lead };
+  return (prompter) => runSetup({ positional: [], flags: new Map([['cwd', box.dir]]) }, { ...deps, prompter });
+}
+
+function assertLeadInside(screen: string, phrase: string): void {
+  const introAt = screen.search(/┌ {2}repown setup/);
+  const leadAt = screen.indexOf(phrase);
+  const readingAt = screen.indexOf('Reading this clone');
+  assert.ok(introAt >= 0 && leadAt > introAt && readingAt > leadAt, screen);
+  const lines = screen.split('\n').filter((line) => line.includes(phrase));
+  assert.ok(lines.length > 0, screen);
+  for (const line of lines) assert.match(line, /^│/, line);
+}
+
+async function withClone(run: (box: Sandbox) => Promise<void>): Promise<void> {
+  const box = sandbox();
+  const saved = process.env['PATH'];
+  process.env['PATH'] = pathWithoutGh(saved ?? '');
+  try {
+    await run(box);
+  } finally {
+    restorePath(saved);
+    box.dispose();
+  }
+}
+
+function restorePath(saved: string | undefined): void {
+  if (saved === undefined) delete process.env['PATH'];
+  else process.env['PATH'] = saved;
+}
+
+function unpinClone(box: Sandbox): void {
+  box.git('config', '--local', '--unset', 'user.name');
+  box.git('config', '--local', '--unset', 'user.email');
+}
+
+function pinClone(box: Sandbox): void {
+  box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
+  box.git('config', '--local', 'user.name', 'Octo Cat');
+  box.git('config', '--local', 'user.email', 'octocat@example.invalid');
+  box.git('config', '--local', 'credential.https://github.com.username', 'octocat');
+}
 
 async function withProjects(run: (root: string, box: Sandbox) => Promise<void>): Promise<void> {
   const box = sandbox();

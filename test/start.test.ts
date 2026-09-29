@@ -95,28 +95,25 @@ describe('chooseStart outside a repository', () => {
   });
 });
 
-const SETUP_SENTENCE =
-  'This clone isn\'t set up yet, so repown is starting setup (repown status shows its settings).\n';
-const PINNED_SENTENCE =
-  'Starting setup to check this clone (repown status shows its settings without asking anything).\n';
-
 describe('startDefault', () => {
   let box: Sandbox;
   beforeEach(() => { box = sandbox(); });
   afterEach(() => box.dispose());
 
-  test('S1: an unpinned clone prints the not-set-up sentence on stderr', async () => {
+  test('S1: an unpinned clone returns the setup runner and prints nothing', async () => {
     unpin(box);
+    assert.equal(await chooseStart(deps(box, true, true)), 'setup');
     const run = await captured(() => startDefault(deps(box, true, true)));
-    assert.equal(run.choice, 'setup');
-    assert.equal(run.stderr, SETUP_SENTENCE);
+    assert.equal(typeof run.choice, 'function');
+    assert.equal(run.stderr, '');
   });
 
-  test('a pinned clone prints the check-this-clone sentence on stderr', async () => {
+  test('a pinned clone returns the setup runner and prints nothing', async () => {
     pinGithub(box);
+    assert.equal(await chooseStart(deps(box, true, true)), 'setup');
     const run = await captured(() => startDefault(deps(box, true, true)));
-    assert.equal(run.choice, 'setup');
-    assert.equal(run.stderr, PINNED_SENTENCE);
+    assert.equal(typeof run.choice, 'function');
+    assert.equal(run.stderr, '');
   });
 
   test('status and help print nothing; the start screen prints nothing until it runs', async () => {

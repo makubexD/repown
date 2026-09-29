@@ -2,19 +2,21 @@
 // arguments were typed, so `repown guard check` never imports it.
 //
 // Setup starts when stdin, stderr and stdout are all terminals, in any clone,
-// pinned or not. Those same terminals outside a clone, including a bare
-// repository, open the start screen: a runner, so its modules load only then.
-// With stdout redirected outside a clone, the top help. Everything else is status.
+// pinned or not. It is a runner, so setup loads only then, and the lead line
+// is drawn inside setup's frame rather than before it. Those same terminals
+// outside a clone, including a bare repository, open the start screen: a
+// runner too. With stdout redirected outside a clone, the top help.
+// Everything else is status.
 
 import { Git } from '../core/git.ts';
 import { inspectRepo } from '../core/inspect.ts';
 import { identityProblems } from './status.ts';
-import * as out from '../ui/format.ts';
+import type { Args } from '../ui/args.ts';
 import { interactive } from '../ui/prompt.ts';
 
-const SETUP_NOTE =
+export const SETUP_NOTE =
   'This clone isn\'t set up yet, so repown is starting setup (repown status shows its settings).';
-const PINNED_NOTE =
+export const PINNED_NOTE =
   'Starting setup to check this clone (repown status shows its settings without asking anything).';
 
 interface StartDeps {
@@ -25,7 +27,7 @@ interface StartDeps {
 
 type StartChoice = 'setup' | 'status' | 'help' | 'home';
 
-/** A command name, `'help'`, or the start screen's runner. */
+/** A command name, `'help'`, or a runner for setup or the start screen. */
 export type StartResult = string | (() => Promise<number>);
 
 interface StartPick {
@@ -33,21 +35,30 @@ interface StartPick {
   readonly pinned: boolean;
 }
 
-/** Setup, status, the start screen, or the top help. No output: the caller prints the setup line. */
+/** Setup, status, the start screen, or the top help. No output. */
 export async function chooseStart(deps: StartDeps): Promise<StartChoice> {
   return (await pickStart(deps)).choice;
 }
 
-/** Real deps for this process, plus the one stderr line when setup starts. The home runner prints nothing until it is called. */
+/** Real deps for this process. Setup and the start screen are runners: nothing is printed until they are called. */
 export async function startDefault(deps: StartDeps = realDeps()): Promise<StartResult> {
   const pick = await pickStart(deps);
-  if (pick.choice === 'setup') out.note(pick.pinned ? PINNED_NOTE : SETUP_NOTE);
+  if (pick.choice === 'setup') return () => startSetup(pick.pinned);
   if (pick.choice === 'home') return startHome;
   return pick.choice;
 }
 
 function startHome(): Promise<number> {
   return import('../wizard/home-run.ts').then((mod) => mod.runHome());
+}
+
+function startSetup(pinned: boolean): Promise<number> {
+  const lead = pinned ? PINNED_NOTE : SETUP_NOTE;
+  return import('../wizard/setup-run.ts').then((mod) => mod.runSetup(bareArgs(), { interactive: true, lead }));
+}
+
+function bareArgs(): Args {
+  return { positional: [], flags: new Map<string, string | boolean>() };
 }
 
 async function pickStart(deps: StartDeps): Promise<StartPick> {

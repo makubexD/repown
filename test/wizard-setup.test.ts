@@ -19,6 +19,7 @@ import { setupFlow, planCommands, formatCommand, changesOf, briefOf, missingFlag
 import { pinWrites } from '../src/core/identity.ts';
 import { plainPrompter } from '../src/wizard/plain.ts';
 import { gitSupportsAutoUpstream } from '../src/core/version.ts';
+import { SETUP_NOTE } from '../src/commands/start.ts';
 import { runSetup } from '../src/wizard/setup-run.ts';
 import { cloneChangeLines, machineChangeLines, readCloneSnapshot, type CloneSnapshot } from '../src/wizard/setup-changes.ts';
 import { readContext } from '../src/wizard/setup-context.ts';
@@ -2081,6 +2082,39 @@ function ghAuth(active: string, logins: readonly string[]): AuthState {
 const WAIT_CHILD = 'const fs=require("fs");fs.writeFileSync(process.argv[1],"up");' +
   'const stop=process.argv[1]+".stop";' +
   'const wait=()=>{if(fs.existsSync(stop))process.exit(0);else setTimeout(wait,15)};wait()';
+
+describe('the setup lead on the plain prompter', () => {
+  test('F7: the lead is indented two spaces', async () => {
+    const box = sandbox();
+    const saved = process.env['PATH'];
+    process.env['PATH'] = pathWithoutGh(saved ?? '');
+    try {
+      const shown = await plainLead(box);
+      const lines = shown.split('\n').filter((line) => /isn't set up yet|shows its settings/.test(line));
+      assert.ok(lines.length > 0, shown);
+      for (const line of lines) assert.match(line, /^ {2}\S/, shown);
+    } finally {
+      if (saved === undefined) delete process.env['PATH'];
+      else process.env['PATH'] = saved;
+      box.dispose();
+    }
+  });
+});
+
+async function plainLead(box: Sandbox): Promise<string> {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  let shown = '';
+  output.on('data', (chunk: Buffer) => { shown += chunk.toString(); });
+  const prompter = plainPrompter({ input, output });
+  input.end();
+  const code = await runSetup(
+    { positional: [], flags: new Map([['cwd', box.dir]]) },
+    { interactive: true, prompter, lead: SETUP_NOTE },
+  );
+  assert.equal(code, 130, shown);
+  return shown;
+}
 
 describe('Ctrl-C during gh sign-in', () => {
   test('a SIGINT while inherit is running still runs the next setup step', async () => {

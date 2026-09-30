@@ -65,6 +65,11 @@ problem".
   address, default No and never filled in by Recommended, since only the user knows whether they
   made them. It runs `repown reauthor --yes` last, so a refusal skips no other step; like `fix`,
   Enter at the review is Decline and at the step is Skip.
+- **Network calls never prompt** (setup's fetch; reauthor's fetch and `ls-remote`): the whole
+  environment with `GIT_TERMINAL_PROMPT=0` and `GCM_INTERACTIVE=never`, no askpass,
+  `-c core.askPass=`, and `--no-recurse-submodules`; ssh gets `BatchMode=yes` only where neither
+  `GIT_SSH_COMMAND`, `GIT_SSH` nor `core.sshCommand` names a command already, since setting it
+  would replace a per-account key. A fetch times out at 120 s, the rebase at 10 minutes.
 - **`repown reauthor` rewrites, only when asked.** ADR-013 turned rewriting down as destructive
   and the owner's call; the owner now makes that call with one command, and repown makes the
   rewrite as narrow as it can be:

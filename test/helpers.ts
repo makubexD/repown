@@ -6,7 +6,7 @@
 // REPOWN_CONFIG_DIR is the same idea for the account registry: an empty directory
 // inside the sandbox, so a test never reads or writes this machine's accounts.
 
-import { existsSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -51,7 +51,7 @@ export function sandbox(): Sandbox {
   const work = join(dir, 'repo');
   const git = (...args: string[]): string =>
     execFileSync('git', args, { cwd: work, encoding: 'utf8' }).trim();
-  initRepo(work, git);
+  initRepo(work);
   return {
     dir: work,
     globalConfig,
@@ -76,10 +76,12 @@ function isolate(dir: string, globalConfig: string, systemConfig: string): Recor
   return saved;
 }
 
-function initRepo(work: string, git: (...args: string[]) => string): void {
+// The [user] block `git config --local` writes: a tab before each key, and LF.
+const SANDBOX_USER = '[user]\n\tname = Sandbox\n\temail = sandbox@example.invalid\n';
+
+function initRepo(work: string): void {
   execFileSync('git', ['init', '-q', '-b', 'main', work], { encoding: 'utf8' });
-  git('config', '--local', 'user.name', 'Sandbox');
-  git('config', '--local', 'user.email', 'sandbox@example.invalid');
+  appendFileSync(join(work, '.git', 'config'), SANDBOX_USER);
 }
 
 function restore(saved: Record<string, string | undefined>): void {

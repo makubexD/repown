@@ -1,11 +1,11 @@
 # colour-safe tests and faster Windows CI
 
-Status: Task 2 done; next: Task 3. One commit per task, TDD, and that commit ticks the line.
+Status: Task 3 done; next: Task 4. One commit per task, TDD, and that commit ticks the line.
 
 - [x] 0. Plan: SPEC.md + tasks/todo.md - Docs: none (scaffolding, removed at close-out)
 - [x] 1. Colour-safe sandbox() and plainTerminal(), plus the forced-colour ubuntu Node 24 CI row (red first: the suite fails with FORCE_COLOR=1 and CLICOLOR_FORCE=1) - Docs: none (the colour rule is written in Task 5)
 - [x] 2. Cache the fake gh.exe and git-credential-manager.exe builds, once per test process - Docs: none
-- [ ] 3. Write the sandbox [user] section with fs, instead of two git config spawns - Docs: none
+- [x] 3. Write the sandbox [user] section with fs, instead of two git config spawns - Docs: none
 - [ ] 4. Shard the Windows test job (3 shards, Node 22 and 24); measure the TEMP/Defender tweak and keep it only if faster - Docs: none (ci.yml header comments are Task 5)
 - [ ] 5. Docs sweep: CONTRIBUTING (one shard locally, the colour rule), CLAUDE.md Tests (what sandbox() clears), ci.yml header comments - Docs: CONTRIBUTING.md, CLAUDE.md, .github/workflows/ci.yml
 - [ ] Phase 5 review (code, docs drift, Windows shard count and wall-clock)

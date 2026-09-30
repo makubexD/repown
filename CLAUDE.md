@@ -113,6 +113,11 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - Anything touching git uses `sandbox()` from `test/helpers.ts`. It isolates
   `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`, the registry (`REPOWN_CONFIG_DIR`) and gh's accounts (`GH_CONFIG_DIR`), and clears `GIT_DIR`, `GIT_*_EMAIL`, `GH_TOKEN`
   and friends, so neither the machine's config nor the shell running `npm test` leaks in.
+  It also clears `NO_COLOR`, `FORCE_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE`, `COLORTERM` and `TERM`.
+- `plainTerminal()` clears those same six in a file that does not use `sandbox()`.
+  A test that wants colour sets it explicitly.
+- `test/fake-exe.ts` compiles the fake `gh.exe` and `git-credential-manager.exe` once
+  per process and reuses that build.
 - Guard tests build foreign-authored commits with `git commit-tree`, which doesn't move HEAD.
 - `test/wizard-screens.test.ts` plays `repown setup`'s real screens with key presses
   (`play()` in `test/setup-fixtures.ts`), including the opening review and resume from it,

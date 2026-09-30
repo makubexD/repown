@@ -19,6 +19,12 @@
 
 name: CI
 
+# A/B switch for the Windows TEMP/Defender step in the test job.
+# Measurement only: Opus runs once with this set to '1' and once without,
+# then removes whichever loses.
+env:
+  WIN_TEMP_TWEAK: '1'
+
 on:
   push:
     branches: [main]
@@ -36,15 +42,18 @@ concurrency:
 
 jobs:
   test:
-    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    name: "test (${{ matrix.os }}, node ${{ matrix.node }}${{ matrix.shard && format(', shard {0}/3', matrix.shard) || '' }})"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        # Linux and Windows on Node 22 and 24, because those are where this
-        # actually runs. macOS gets one job rather than a full
+        # Linux on Node 22 and 24, because that is where this actually runs
+        # alongside Windows. macOS gets one job rather than a full
         # row: what it adds over Linux is a different filesystem and path
         # case-sensitivity, which one configuration exercises just as well as two.
+        # Windows is not in `os`. Each Node is three include rows (shard 1, 2
+        # and 3), so those tests are not also run unsharded. The three shards
+        # together cover every test file once.
         # 22, not 20. The SOURCE needs a newer Node than the shipped package
         # does, and the two requirements are genuinely different:
         #   - running the tests needs glob support in `node --test`, and type
@@ -52,7 +61,7 @@ jobs:
         #   - running the PACKAGE needs neither, because it ships compiled JS.
         # So `engines` stays at >=20, and the install job below proves that claim
         # on Node 20 rather than leaving it as an assertion.
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
         node: ['22', '24']
         include:
           - os: macos-latest
@@ -60,6 +69,24 @@ jobs:
           - os: ubuntu-latest
             node: '24'
             force_color: '1'
+          - os: windows-latest
+            node: '22'
+            shard: 1
+          - os: windows-latest
+            node: '22'
+            shard: 2
+          - os: windows-latest
+            node: '22'
+            shard: 3
+          - os: windows-latest
+            node: '24'
+            shard: 1
+          - os: windows-latest
+            node: '24'
+            shard: 2
+          - os: windows-latest
+            node: '24'
+            shard: 3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -81,17 +108,42 @@ jobs:
       - name: Typecheck and build
         run: npm run build
 
+      # Measurement only. Opus will measure one run with WIN_TEMP_TWEAK=1 and one
+      # without, then remove whichever loses. Not a decision to keep this step.
+      - name: Point TEMP at RUNNER_TEMP and exclude it from Defender
+        if: matrix.os == 'windows-latest' && env.WIN_TEMP_TWEAK == '1'
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'repown-tmp'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          foreach ($path in @($dir, $env:GITHUB_WORKSPACE)) {
+            try {
+              Add-MpPreference -ExclusionPath $path -ErrorAction Stop
+            } catch {
+              $msg = $_.Exception.Message -replace '\r?\n', ' '
+              Write-Host "::warning::Defender exclusion was not applied for ${path}: $msg"
+            }
+          }
+          "TEMP=$dir" >> $env:GITHUB_ENV
+          "TMP=$dir" >> $env:GITHUB_ENV
+
       - name: Test
-        if: matrix.force_color != '1'
+        if: "matrix.force_color != '1' && !matrix.shard"
         run: npm test
 
       # ubuntu Node 24 forces colour so a leak of these variables fails CI.
       - name: Test
-        if: matrix.force_color == '1'
+        if: "matrix.force_color == '1' && !matrix.shard"
         run: npm test
         env:
           FORCE_COLOR: '1'
           CLICOLOR_FORCE: '1'
+
+      # bash so the quoted glob is passed to node, the same way npm test does.
+      - name: Test
+        if: matrix.shard
+        shell: bash
+        run: node --test --test-shard=${{ matrix.shard }}/3 "test/*.test.ts"
 
   # Deliberately on the OLDEST Node the package claims to support. `engines` says
   # >=20, and this is what makes that a tested fact rather than a hopeful number:

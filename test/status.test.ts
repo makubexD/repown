@@ -6,7 +6,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
@@ -16,11 +16,12 @@ import { ghStateFrom } from '../src/core/credential/gh.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 import { loadRegistry, registryPath } from '../src/core/registry.ts';
 import { err, ok } from '../src/core/result.ts';
-import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
+import { pathWithoutGh, plainTerminal, sandbox, type Sandbox } from './helpers.ts';
+import { compileFakeExe } from './fake-exe.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 const TITLE = 'repown status · current settings of this clone';
-for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name];
+plainTerminal();
 
 interface Run { readonly status: number; readonly stdout: string; readonly stderr: string; }
 
@@ -775,24 +776,8 @@ function fakeGhEnv(box: Sandbox, extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessE
 }
 
 function installFakeGh(bin: string): void {
-  if (process.platform === 'win32') compileFakeGh(bin);
+  if (process.platform === 'win32') copyFileSync(compileFakeExe('gh.exe', FAKE_GH_CS), join(bin, 'gh.exe'));
   else writeFileSync(join(bin, 'gh'), FAKE_GH_SH, { mode: 0o755 });
-}
-
-function compileFakeGh(bin: string): void {
-  const source = join(bin, 'fake-gh.cs');
-  writeFileSync(source, FAKE_GH_CS);
-  const run = spawnSync(cscPath(), ['/nologo', '/out:' + join(bin, 'gh.exe'), source], { encoding: 'utf8' });
-  assert.equal(run.status, 0, run.stdout + run.stderr);
-}
-
-function cscPath(): string {
-  const root = join(process.env['WINDIR'] ?? 'C:\\Windows', 'Microsoft.NET');
-  const found = ['Framework64', 'Framework']
-    .map((name) => join(root, name, 'v4.0.30319', 'csc.exe'))
-    .find((path) => existsSync(path));
-  if (!found) throw new Error('csc.exe is not installed');
-  return found;
 }
 
 const FAKE_GH_CS = `

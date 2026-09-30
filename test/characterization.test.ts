@@ -8,11 +8,11 @@ import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { sandbox, type Sandbox } from './helpers.ts';
+import { plainTerminal, sandbox, type Sandbox } from './helpers.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 const SRC = fileURLToPath(new URL('../src', import.meta.url));
-for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name];
+plainTerminal();
 
 function repown(args: readonly string[], cwd: string): { status: number; stdout: string; stderr: string } {
   const run = spawnSync(process.execPath, [CLI, ...args], { cwd, input: '', env: process.env, encoding: 'utf8' });

@@ -7,11 +7,12 @@ import { test, describe, before, after, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict';
 import { spawnSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { readFileSync, existsSync, mkdtempSync, rmSync, mkdirSync, writeFileSync, cpSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, rmSync, mkdirSync, writeFileSync, cpSync, copyFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
-import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
+import { pathWithoutGh, plainTerminal, sandbox, type Sandbox } from './helpers.ts';
+import { compileFakeExe } from './fake-exe.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 import { runProgram, type DefaultChoice, type Loader, type Program } from '../src/ui/dispatch.ts';
 
@@ -19,7 +20,7 @@ const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 
 // Assertions read plain text. A shell that exports FORCE_COLOR (some terminals and
 // CI runners do) would otherwise colour every spawned run's output.
-for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name];
+plainTerminal();
 
 interface Run {
   readonly status: number;
@@ -1012,24 +1013,8 @@ function recordOctocat(box: Sandbox): void {
 }
 
 function installFakeGh(bin: string): void {
-  if (process.platform === 'win32') compileFakeGh(bin);
+  if (process.platform === 'win32') copyFileSync(compileFakeExe('gh.exe', FAKE_GH_CS), join(bin, 'gh.exe'));
   else writeFileSync(join(bin, 'gh'), FAKE_GH_SH, { mode: 0o755 });
-}
-
-function compileFakeGh(bin: string): void {
-  const source = join(bin, 'fake-gh.cs');
-  writeFileSync(source, FAKE_GH_CS);
-  const run = spawnSync(cscPath(), ['/nologo', '/out:' + join(bin, 'gh.exe'), source], { encoding: 'utf8' });
-  assert.equal(run.status, 0, run.stdout + run.stderr);
-}
-
-function cscPath(): string {
-  const root = join(process.env['WINDIR'] ?? 'C:\\Windows', 'Microsoft.NET');
-  const found = ['Framework64', 'Framework']
-    .map((name) => join(root, name, 'v4.0.30319', 'csc.exe'))
-    .find((path) => existsSync(path));
-  if (!found) throw new Error('csc.exe is not installed');
-  return found;
 }
 
 async function capture(run: () => Promise<number>): Promise<{ code: number; out: string }> {

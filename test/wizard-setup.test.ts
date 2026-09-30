@@ -11,7 +11,7 @@ import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
+import { pathWithoutGh, plainTerminal, sandbox, type Sandbox } from './helpers.ts';
 import { setupContext as context } from './setup-fixtures.ts';
 import { ok, err } from '../src/core/result.ts';
 import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Review, type ReviewChoice, type StepConfirm } from '../src/wizard/engine.ts';
@@ -31,7 +31,7 @@ import { inherit, handingOver } from '../src/core/exec.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
-for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name];
+plainTerminal();
 
 // ---------------------------------------------------------------- the flow
 

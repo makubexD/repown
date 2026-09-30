@@ -4,11 +4,12 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
-import { sandbox, type Sandbox } from './helpers.ts';
+import { plainTerminal, sandbox, type Sandbox } from './helpers.ts';
+import { compileFakeExe } from './fake-exe.ts';
 import { ok, err } from '../src/core/result.ts';
 import { registryPath, type Account, type Registry } from '../src/core/registry.ts';
 import type { Result } from '../src/core/result.ts';
@@ -20,7 +21,7 @@ import { displayPath } from '../src/ui/format.ts';
 import { ghStateFrom } from '../src/core/credential/gh.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 
-for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name];
+plainTerminal();
 
 const GITHUB: Account = { name: 'Octo Cat', email: 'octocat@example.invalid' };
 const NOT_YET = 'not signed in yet (the first push signs in)';
@@ -485,28 +486,12 @@ function doctorEnv(bin: string): NodeJS.ProcessEnv {
 
 function installFakes(bin: string): void {
   if (process.platform === 'win32') {
-    compile(bin, 'gh.exe', FAKE_GH_CS);
-    compile(bin, 'git-credential-manager.exe', FAKE_GCM_CS);
+    copyFileSync(compileFakeExe('gh.exe', FAKE_GH_CS), join(bin, 'gh.exe'));
+    copyFileSync(compileFakeExe('git-credential-manager.exe', FAKE_GCM_CS), join(bin, 'git-credential-manager.exe'));
     return;
   }
   writeFileSync(join(bin, 'gh'), FAKE_GH_SH, { mode: 0o755 });
   writeFileSync(join(bin, 'git-credential-manager'), FAKE_GCM_SH, { mode: 0o755 });
-}
-
-function compile(bin: string, out: string, source: string): void {
-  const file = join(bin, out.replace(/\.exe$/, '.cs'));
-  writeFileSync(file, source);
-  const run = spawnSync(cscPath(), ['/nologo', '/out:' + join(bin, out), file], { encoding: 'utf8' });
-  assert.equal(run.status, 0, run.stdout + run.stderr);
-}
-
-function cscPath(): string {
-  const root = join(process.env['WINDIR'] ?? 'C:\\Windows', 'Microsoft.NET');
-  const found = ['Framework64', 'Framework']
-    .map((name) => join(root, name, 'v4.0.30319', 'csc.exe'))
-    .find((path) => existsSync(path));
-  if (!found) throw new Error('csc.exe is not installed');
-  return found;
 }
 
 const FAKE_GH_CS = `

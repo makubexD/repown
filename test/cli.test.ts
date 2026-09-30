@@ -11,7 +11,7 @@ import { readFileSync, existsSync, mkdtempSync, rmSync, mkdirSync, writeFileSync
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
-import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
+import { pathWithoutGh, plainTerminal, sandbox, type Sandbox } from './helpers.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 import { runProgram, type DefaultChoice, type Loader, type Program } from '../src/ui/dispatch.ts';
 
@@ -19,7 +19,7 @@ const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 
 // Assertions read plain text. A shell that exports FORCE_COLOR (some terminals and
 // CI runners do) would otherwise colour every spawned run's output.
-for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name];
+plainTerminal();
 
 interface Run {
   readonly status: number;

@@ -8,7 +8,7 @@ import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
-import { sandbox, type Sandbox } from './helpers.ts';
+import { plainTerminal, sandbox, type Sandbox } from './helpers.ts';
 import { ok, err } from '../src/core/result.ts';
 import { registryPath, type Account, type Registry } from '../src/core/registry.ts';
 import type { Result } from '../src/core/result.ts';
@@ -20,7 +20,7 @@ import { displayPath } from '../src/ui/format.ts';
 import { ghStateFrom } from '../src/core/credential/gh.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 
-for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name];
+plainTerminal();
 
 const GITHUB: Account = { name: 'Octo Cat', email: 'octocat@example.invalid' };
 const NOT_YET = 'not signed in yet (the first push signs in)';

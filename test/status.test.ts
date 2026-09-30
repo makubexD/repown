@@ -16,11 +16,11 @@ import { ghStateFrom } from '../src/core/credential/gh.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 import { loadRegistry, registryPath } from '../src/core/registry.ts';
 import { err, ok } from '../src/core/result.ts';
-import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
+import { pathWithoutGh, plainTerminal, sandbox, type Sandbox } from './helpers.ts';
 
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 const TITLE = 'repown status · current settings of this clone';
-for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name];
+plainTerminal();
 
 interface Run { readonly status: number; readonly stdout: string; readonly stderr: string; }
 

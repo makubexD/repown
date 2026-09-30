@@ -9,12 +9,12 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { sandbox, type Sandbox } from './helpers.ts';
+import { plainTerminal, sandbox, type Sandbox } from './helpers.ts';
 import { draft, release, notes, releasable, repoWebUrl } from '../scripts/release/changelog-text.ts';
 import { inspectPack } from '../scripts/release/pack.ts';
 
 const TOOL = fileURLToPath(new URL('../scripts/release.ts', import.meta.url));
-for (const name of ['FORCE_COLOR', 'NO_COLOR', 'TERM']) delete process.env[name];
+plainTerminal();
 
 const REPO = 'https://github.com/octocat/hello-world';
 const HEADER = '# Changelog\n\nNotes.\n\n';

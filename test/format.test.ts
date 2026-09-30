@@ -61,5 +61,7 @@ describe('printable', () => {
     const shown = printable('a' + odd.join('') + 'z');
     assert.equal(shown, 'a' + ['001b', '007f', '200b', '202e', '2066', '2028', '2029', 'feff'].map((hex) => String.fromCharCode(92) + 'u' + hex).join('') + 'z');
     assert.equal(printable('octocat@example.invalid · origin/main'), 'octocat@example.invalid · origin/main');
+    const more = [0xad, 0x61c, 0x2060, 0xfffa, 0xe0041].map((code) => String.fromCodePoint(code)).join('');
+    assert.equal(printable(more), ['00ad', '061c', '2060', 'fffa', 'e0041'].map((hex) => String.fromCharCode(92) + 'u' + hex).join(''));
   });
 });

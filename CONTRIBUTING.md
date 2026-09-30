@@ -114,7 +114,7 @@ and help text in its own file under `src/commands/`, so help can't drift from th
 
 | Command | Code | Explained in |
 | --- | --- | --- |
-| `repown status` (bare `repown` when stdin or stderr is not a terminal, and inside a clone when stdout is redirected) | `src/commands/status.ts`, `src/commands/start.ts`, `src/ui/dispatch.ts`, `src/core/inspect.ts` | [card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are) |
+| `repown status` (bare `repown` when stdin or stderr is not a terminal, and inside a clone when stdout is redirected) | `src/commands/status.ts`, `src/commands/start.ts`, `src/ui/dispatch.ts`, `src/core/inspect.ts`, `src/core/push-state.ts`, `src/core/blockers.ts` | [card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are) |
 | Start screen (bare `repown` in a terminal, outside a clone or in a bare repository) | `src/commands/start.ts`, `src/wizard/home-context.ts`, `src/wizard/home-flow.ts`, `src/wizard/home-text.ts`, `src/wizard/home-run.ts`, `src/program.ts` | [card 14](docs/HOW-IT-WORKS.md#14-outside-a-clone) |
 | `repown doctor` | `src/commands/doctor.ts`, `src/core/inspect.ts`, `src/core/credential/gcm.ts`, `src/core/credential/gh.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
 | `repown fix` | `src/commands/fix.ts`, `src/core/credential/repair.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
@@ -125,7 +125,7 @@ and help text in its own file under `src/commands/`, so help can't drift from th
 | `repown guard on`, `repown guard off`, `repown guard status` | `src/commands/guard.ts`, `src/core/guard/hook.ts` | [card 7](docs/HOW-IT-WORKS.md#7-push-what-the-guard-checks), [card 10](docs/HOW-IT-WORKS.md#10-other-hook-tools) |
 | `repown guard check` (the hook calls it) | `src/commands/guard.ts`, `src/core/guard/check.ts` | [card 7](docs/HOW-IT-WORKS.md#7-push-what-the-guard-checks), [card 8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
 | `repown scan` | `src/commands/scan.ts`, `src/core/inspect.ts`, `src/core/git.ts` | [card 11](docs/HOW-IT-WORKS.md#11-audit-re-point-move-machines), [JSON](docs/CONFIGURATION.md#scripts-and-ci) |
-| `repown setup` | `src/commands/setup.ts`, `src/wizard/setup-run.ts`, `src/wizard/setup-context.ts`, `src/wizard/setup-flow.ts`, `src/wizard/setup-changes.ts`, `src/wizard/engine.ts`, `src/wizard/review-text.ts`, `src/wizard/clack.ts`, `src/wizard/plain.ts`, `src/core/unpushed.ts`, `src/core/push-destination.ts` | [card 13](docs/HOW-IT-WORKS.md#13-guided-setup), [scripts and CI](docs/CONFIGURATION.md#scripts-and-ci) |
+| `repown setup` | `src/commands/setup.ts`, `src/core/push-state.ts`, `src/core/blockers.ts`, `src/wizard/setup-run.ts`, `src/wizard/setup-context.ts`, `src/wizard/setup-flow.ts`, `src/wizard/setup-changes.ts`, `src/wizard/engine.ts`, `src/wizard/review-text.ts`, `src/wizard/clack.ts`, `src/wizard/plain.ts`, `src/core/unpushed.ts`, `src/core/push-destination.ts` | [card 13](docs/HOW-IT-WORKS.md#13-guided-setup), [scripts and CI](docs/CONFIGURATION.md#scripts-and-ci) |
 
 Shared by all of them:
 - **Parsing, help and dispatch:** `src/program.ts` (the command table; `src/cli.ts` imports it and starts the program), `src/ui/dispatch.ts`, `src/ui/command.ts`

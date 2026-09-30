@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { sandbox, type Sandbox } from './helpers.ts';
 import { Git } from '../src/core/git.ts';
 import { planReauthor, applyReauthor } from '../src/core/reauthor.ts';
@@ -172,13 +172,16 @@ describe('repown reauthor', () => {
     assert.equal(after.ok && after.value.get(THEIRS), 2, 'the one published commit (author and committer), not the backup\'s');
   });
 
-  test('user hooks do not run on the rewritten commits', () => {
+  test('no hook runs during the rewrite: not commit-msg, prepare-commit-msg, post-commit or post-rewrite', () => {
     field();
     const hooks = join(box.dir, '.git', 'hooks');
     mkdirSync(hooks, { recursive: true });
-    writeFileSync(join(hooks, 'commit-msg'), '#!/bin/sh\necho hooked >> "$1"\n', { mode: 0o755 });
+    const marker = join(box.dir, '..', 'hook-ran');
+    for (const name of ['commit-msg', 'prepare-commit-msg']) writeFileSync(join(hooks, name), '#!/bin/sh\necho hooked >> "$1"\n', { mode: 0o755 });
+    for (const name of ['post-commit', 'post-rewrite', 'pre-rebase']) writeFileSync(join(hooks, name), '#!/bin/sh\necho ' + name + ' >> "' + marker.replace(/\\/g, '/') + '"\n', { mode: 0o755 });
     assert.equal(repown(['reauthor', '--yes']).status, 0);
     assert.doesNotMatch(box.git('log', '--format=%B', 'origin/main..HEAD'), /hooked/);
+    assert.equal(existsSync(marker), false, 'no post-commit, post-rewrite or pre-rebase hook ran');
   });
 
   test('without a terminal and without --yes it asks for --yes and changes nothing', () => {

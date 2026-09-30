@@ -13,7 +13,7 @@ import { shellWord } from '../core/guard/check.ts';
 import { printable } from '../ui/format.ts';
 import { foreignAddresses, foreignCount, type UnpushedFact } from '../core/unpushed.ts';
 import type { PushFacts } from '../core/push-state.ts';
-import { blockers, type Blocker } from './blockers.ts';
+import { blockers, type Blocker } from '../core/blockers.ts';
 import type { Account } from '../core/registry.ts';
 import type { GhState } from '../core/credential/gh.ts';
 import type { GuardState } from '../core/guard/hook.ts';
@@ -251,6 +251,28 @@ function reauthorStep(ctx: SetupContext): Step<SetupContext> {
   };
 }
 
+/**
+ * `--repoint`, `--fetch` and `--reauthor` apply only where their step would be asked; elsewhere
+ * each is turned off with a note saying why. Read before any question, so a repoint not yet
+ * answered counts as the Yes Recommended gives it (a later No drops the fetch from the plan).
+ */
+export function keptFlags(given: Answers, ctx: SetupContext): { readonly answers: Answers; readonly notes: string[] } {
+  const answers = { ...given };
+  const notes: string[] = [];
+  const drop = (key: string, note: string): void => { answers[key] = false; notes.push('--' + key + ': ' + note); };
+  if (answers['repoint'] === true && !ctx.push.repoint) drop('repoint', 'this branch does not push to a URL that a remote here names, so there is nothing to repoint');
+  if (answers['fetch'] === true && fetchTarget({ ...answers, repoint: answers['repoint'] ?? true }, ctx) === null) drop('fetch', fetchDropped(answers, ctx));
+  if (answers['reauthor'] === true && !reauthorOffered(answers, ctx)) drop('reauthor', 'no unpushed commit here is by another address, so there is nothing to re-author');
+  return { answers, notes };
+}
+
+function fetchDropped(answers: Answers, ctx: SetupContext): string {
+  if (answers['repoint'] === false && fetchTarget({ ...answers, repoint: true }, ctx) !== null) {
+    return 'this branch pushes to a URL, so fetching ' + printable(ctx.push.repoint!.remote) + ' tells nothing about it: add --repoint';
+  }
+  return 'no commit by another address waits behind a remote this clone has never fetched, so there is nothing to fetch';
+}
+
 /** Some unpushed commits carry an address other than the chosen account's. */
 export function reauthorOffered(answers: Answers, ctx: SetupContext): boolean {
   return othersOf(answers, ctx).length > 0;
@@ -322,9 +344,9 @@ function repointStep(ctx: SetupContext): Step<SetupContext> {
   const target = ctx.push.repoint;
   return {
     id: 'repoint', kind: 'confirm', flag: '--repoint', initial: () => true, auto: isRecommended,
-    message: 'Push through ' + printable(target?.remote ?? '') + ' instead of the URL in ' + printable(target?.key ?? '') + '?',
-    hint: 'the same repository; a URL there can carry its own sign-in, so pushes would not sign in as this account, ' +
-      'and repown can\'t tell what it already has. This clone only',
+    message: 'Push through ' + printable(target?.remote ?? '') + ' instead of the URL set for this branch?',
+    hint: 'that URL names the same repository as ' + printable(target?.remote ?? '') + ', but it can carry its own sign-in, so ' +
+      'pushes would not sign in as this account, and it is never fetched. Changes ' + printable(target?.key ?? '') + ', this clone only',
     when: () => target !== null,
   };
 }
@@ -333,7 +355,8 @@ function fetchStep(ctx: SetupContext): Step<SetupContext> {
   return {
     id: 'fetch', kind: 'confirm', flag: '--fetch', initial: () => true, auto: isRecommended,
     message: (answers) => 'Fetch ' + printable(fetchTarget(answers, ctx) ?? '') + ' first?',
-    hint: 'so repown can tell which of these commits it already has; downloads only, and moves none of your branches',
+    hint: (answers) => 'so repown can tell which of your unpushed commits ' + printable(fetchTarget(answers, ctx) ?? '') +
+      ' already has; downloads only, moves none of your branches, and never asks for a password',
     when: (answers) => fetchTarget(answers, ctx) !== null,
   };
 }

@@ -1,5 +1,5 @@
 // The facts about this clone that decide whether its next commit, pull or push works:
-// read once, offline, for setup and status to turn into blockers (src/wizard/blockers.ts).
+// read once, offline, for setup and status to turn into blockers (src/core/blockers.ts).
 //
 // Every read that fails is kept as a failure (a Result), never as "nothing found", so
 // a clone that could not be read is never reported ready. The push target is resolved
@@ -85,9 +85,9 @@ function carriesSecret(raw: string | null): boolean {
 async function signinOf(git: Git, target: PushTarget | null): Promise<string | null> {
   if (target && !target.isRemote && carriesSecret(target.name)) return target.key;
   if (target?.isRemote) {
-    for (const key of ['remote.' + target.name + '.pushurl', 'remote.' + target.name + '.url']) {
-      if (carriesSecret(await git.getConfig(key))) return key;
-    }
+    // A push uses pushurl when there is one, so a token in the fetch url does not sign it in.
+    const key = await git.getConfig('remote.' + target.name + '.pushurl') !== null ? 'remote.' + target.name + '.pushurl' : 'remote.' + target.name + '.url';
+    if (carriesSecret(await git.getConfig(key))) return key;
   }
   const headers = await git.configOrigins('^http\\.(.*\\.)?extraheader$');
   return headers[0]?.key ?? null;

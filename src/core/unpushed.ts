@@ -33,7 +33,9 @@ export interface UnpushedFact {
 }
 
 const ADDRESS_CAP = 3;
-const AMEND = '--exec "git commit --amend --no-edit --reset-author --allow-empty"';
+/** The one re-author command: the advice prints it, and `repown reauthor` runs it. */
+export const AMEND_COMMAND = 'git commit --amend --no-edit --reset-author --allow-empty';
+const AMEND = '--exec "' + AMEND_COMMAND + '"';
 
 export async function readUnpushed(git: Git): Promise<UnpushedFact> {
   const head = await git.currentBranch();
@@ -150,17 +152,29 @@ function collect(commits: readonly UnpushedCommit[], wanted: string): Found {
   return { count: foreign.length, addresses: distinct(foreign, wanted), base: foreign.at(-1)?.parent ?? '--root' };
 }
 
-function own(commit: UnpushedCommit, wanted: string): boolean {
+type Identity = Pick<UnpushedCommit, 'authorEmail' | 'committerEmail'>;
+
+/** Author and committer are both `email`, in any case. */
+export function isOwn(commit: Identity, email: string): boolean {
+  return own(commit, fold(email));
+}
+
+/** The addresses other than `email` on these commits, each once, as first spelled. */
+export function otherAddresses(commits: readonly Identity[], email: string): string[] {
+  return distinct(commits, fold(email));
+}
+
+function own(commit: Identity, wanted: string): boolean {
   return fold(commit.authorEmail) === wanted && fold(commit.committerEmail) === wanted;
 }
 
-function distinct(commits: readonly UnpushedCommit[], wanted: string): string[] {
+function distinct(commits: readonly Identity[], wanted: string): string[] {
   const seen = new Map<string, string>();
   for (const address of commits.flatMap(both)) remember(seen, address, wanted);
   return [...seen.values()];
 }
 
-function both(commit: UnpushedCommit): string[] {
+function both(commit: Identity): string[] {
   return [commit.authorEmail, commit.committerEmail];
 }
 

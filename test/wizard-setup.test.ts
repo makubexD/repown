@@ -15,7 +15,7 @@ import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
 import { setupContext as context } from './setup-fixtures.ts';
 import { ok, err } from '../src/core/result.ts';
 import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Review, type ReviewChoice, type StepConfirm } from '../src/wizard/engine.ts';
-import { setupFlow, planCommands, formatCommand, gitStepOf, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext } from '../src/wizard/setup-flow.ts';
+import { setupFlow, planCommands, formatCommand, gitStepOf, keptFlags, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext } from '../src/wizard/setup-flow.ts';
 import { pinWrites } from '../src/core/identity.ts';
 import { plainPrompter } from '../src/wizard/plain.ts';
 import { reviewLines, reviewDefault } from '../src/wizard/review-text.ts';
@@ -1373,7 +1373,7 @@ describe('repown setup, without a terminal', () => {
     assert.ok(existsSync(hook(at)));
     assert.match(run.stderr, /step 1 of 2: Pin this clone to octocat/);
     assert.match(run.stderr, /step 2 of 2: Turn on the push guard/);
-    assert.match(run.stderr, /(?:done: this clone is set up for octocat|set up for octocat; the next push will fail)/);
+    assert.match(run.stderr, /done: this clone is set up for octocat$/m);
     assert.match(run.stderr, /check it any time: repown status \(this clone\), repown doctor \(this machine\)/);
     assert.doesNotMatch(run.stdout, /done:|check it any time/, 'setup\'s own lines stay off stdout');
     assert.match(run.stderr, /\n\n {7}step 2 of 2/, 'a blank line between steps');
@@ -1615,7 +1615,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     const run = repown(['setup', 'octocat', '--no-input'], at.box.dir);
     assert.equal(run.status, 0, run.stderr);
     assert.equal(at.box.git('config', '--local', '--list'), before);
-    assert.match(run.stderr, /(?:done: this clone is set up for octocat|set up for octocat; the next push will fail)/);
+    assert.match(run.stderr, /done: this clone is set up for octocat$/m);
     assert.match(run.stderr, /nothing changed in this clone/);
     assert.doesNotMatch(run.stderr, /repown use /);
   });
@@ -1683,7 +1683,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.equal(seen.code, 0, seen.stderr);
     assert.match(localConfig(at), /account = octocat/);
     assert.equal(existsSync(hook(at)), false);
-    assert.match(seen.stderr, /(?:done: this clone is set up for octocat|set up for octocat; the next push will fail)/);
+    assert.match(seen.stderr, /done: this clone is set up for octocat$/m);
     assert.match(seen.stderr, /skipped: Turn on the push guard: each push is checked first/);
   });
 
@@ -1734,7 +1734,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.match(localConfig(at), /account = octocat/);
     assert.ok(existsSync(hook(at)));
     assert.match(seen.stderr, /> repown use octocat/);
-    assert.match(seen.stderr, /(?:done: this clone is set up for octocat|set up for octocat; the next push will fail)/);
+    assert.match(seen.stderr, /done: this clone is set up for octocat$/m);
     assert.doesNotMatch(seen.stderr, /skipped:/);
   });
 
@@ -1772,7 +1772,7 @@ describe('repown setup, on a terminal (scripted)', () => {
   test('after the steps, gh advice is one more done line and the first push is not repeated', async () => {
     const left = await captureSetup(async () => ghAuth('octo-work', ['octo-work']));
     assert.equal(left.code, 0, left.stderr);
-    assert.match(left.stderr, /(?:done: this clone is set up for octocat|set up for octocat; the next push will fail)/);
+    assert.match(left.stderr, /done: this clone is set up for octocat$/m);
     assert.match(left.stderr, /optional, only if you use gh here: repown use octocat --gh {3}\(signs octocat in to gh\)/);
     assert.doesNotMatch(left.stderr, /first push/);
     const same = await captureSetup(async () => ghAuth('octocat', ['octocat']));
@@ -1992,7 +1992,7 @@ describe('S18 after a setup run', () => {
     assert.equal(first.code, 0, first.stderr);
     const again = await play([['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'run'], ['step', 'yes']]);
     assert.equal(again.code, 0, again.stderr);
-    assert.match(again.stderr, /(?:done: this clone is set up for octocat|set up for octocat; the next push will fail)/);
+    assert.match(again.stderr, /done: this clone is set up for octocat$/m);
     assert.match(again.stderr, /nothing changed in this clone/);
     assert.doesNotMatch(again.stderr, /changed in this clone:/);
     assert.ok(again.stderr.indexOf('done:') < again.stderr.indexOf('nothing changed in this clone'));
@@ -2298,6 +2298,18 @@ describe('setup: point the branch back at its remote, fetch the destination firs
     assert.equal(plan(recommended(tracked), tracked).some((line) => line.includes('fetch')), false);
     const kept = setupFlow(untracked).fill!({ mode: 'recommended', account: 'octocat', repoint: false }, untracked);
     assert.equal(plan(kept, untracked).some((line) => line.includes('fetch')), false, 'the URL stays: fetching origin says nothing about it');
+  });
+
+  test('--fetch given as a flag still fetches behind a URL that the repoint will fix', () => {
+    const ctx = context({ ...repoint(false), unpushed: behindUrl });
+    const given = { account: 'octocat', mode: 'recommended', fetch: true };
+    const kept = keptFlags(given, ctx).answers;
+    assert.equal(kept['fetch'], true, 'the repoint has not been asked yet, and Recommended answers it Yes');
+    assert.deepEqual(plan(setupFlow(ctx).fill!(kept, ctx), ctx).slice(0, 2),
+      [['git', 'config', '--local', 'branch.main.remote', 'origin'], ['git', 'fetch', 'origin']]);
+    const unattended = keptFlags({ ...given, repoint: false }, ctx);
+    assert.equal(unattended.answers['fetch'], false, 'without --repoint the URL stays, so there is nothing to fetch');
+    assert.match(unattended.notes.join('\n'), /--fetch: .*add --repoint/);
   });
 
   test('with --cwd, both lines name the clone', () => {

@@ -72,10 +72,11 @@ true, from any scope, setup leaves it alone. The flag is `--auto-upstream`.
 with `--no-input`. Yes/no questions you don't pass as a flag are answered No; the account
 must be given, with `--name` and `--email` if it isn't recorded yet (`--host` defaults to
 origin's). There's no review. Re-running is safe once the account is recorded: drop
-`--name`, `--email` and `--host` then, or it exits `2`. `--repoint` and `--fetch` act only
-where they apply (a URL a remote also names; commits by another address behind a remote
-never fetched); elsewhere they say so and do nothing. A failed `--fetch` is a warning, and
-the rest of the steps run.
+`--name`, `--email` and `--host` then, or it exits `2`. `--repoint`, `--fetch` and `--reauthor`
+act only where they apply (a URL a remote also names; commits by another address behind a
+remote never fetched; commits by another address); elsewhere they say so and do nothing. A
+failed `--fetch` is a warning, and the rest of the steps run. `--reauthor` is the confirmation
+for the rewrite, as `--fix` is for `fix`; it runs last, and a refusal ends setup with exit `1`.
 
 ```
 repown setup octocat --guard --auto-upstream --no-input
@@ -95,7 +96,9 @@ Nothing is written when `repown setup` refuses:
   `core.hooksPath` points elsewhere. `--fix` when gh isn't the helper is dropped with a note.
 
 Other commands without a terminal: `repown use` of an unrecorded account exits `1` (record
-it first, or pass `--name` and `--email`), and `repown fix` without `--yes` exits `1` when it has something to remove. For
+it first, or pass `--name` and `--email`), `repown fix` without `--yes` exits `1` when it has something to remove, and `repown reauthor`
+without `--yes` exits `1` when it has something to rewrite (and refuses when `commit.gpgsign`
+is on, since signing may need a terminal). For
 checks, `repown` exits `1` when something is wrong (a fresh CI clone is never pinned, so
 it always does there), and `repown doctor` when gh is the credential helper. More in [card 13](HOW-IT-WORKS.md#13-guided-setup).
 

@@ -54,7 +54,7 @@ async function apply(git: Git, plan: ReauthorPlan, email: string): Promise<numbe
   if (!done.ok) { out.fail('reauthor', printable(done.error)); return 1; }
   const noun = done.value.count === 1 ? '1 commit' : done.value.count + ' commits';
   out.pass('reauthor', noun + ' now by ' + printable(email));
-  out.detail('undo: git reset --keep ' + done.value.backup + ' (drops commits made since)');
+  out.detail('undo: git reset --keep ' + printable(done.value.backup) + ' (drops commits made since)');
   out.detail('nothing was pushed: git push when you are ready');
   return 0;
 }

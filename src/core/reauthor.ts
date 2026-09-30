@@ -4,12 +4,14 @@
 // push destination first and rewrites only commits no remote has, from the parent of the
 // topologically oldest one by another address; a merge in that range, a commit a remote has
 // inside it, or a destination whose branches this clone does not track is a refusal. The
-// rebase runs with hooks off and without moving other branches, behind a backup ref, and is
-// checked afterwards. Nothing here pushes.
+// rebase runs with no hook at all, without autosquash and without moving other branches,
+// behind a backup ref that is never overwritten, and is checked afterwards: every commit
+// still there, each by the pin. Nothing here pushes.
 
-import type { CommitIdentity, Git } from './git.ts';
+import type { Git } from './git.ts';
 import { ok, err, type Result } from './result.ts';
 import { pushTarget, unknownDestination } from './push-destination.ts';
+import { AMEND_COMMAND, isOwn, otherAddresses } from './unpushed.ts';
 
 /** What would be rewritten: `count` commits from `base` (a full hash, or `--root`) to HEAD. */
 export interface ReauthorPlan {
@@ -28,7 +30,6 @@ export interface Rewritten {
 
 const IDENTITY_ENV = ['GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL'];
 const IDENTITY_CONFIG = ['author.email', 'committer.email', 'author.name', 'committer.name'];
-export const AMEND = 'git commit --amend --no-edit --no-verify --reset-author --allow-empty';
 
 /** Null: nothing by another address. An error is a refusal, and nothing was changed. */
 export async function planReauthor(git: Git, email: string, interactive: boolean): Promise<Result<ReauthorPlan | null>> {
@@ -94,7 +95,7 @@ interface Scope {
 async function foreignRange(git: Git, scope: Scope): Promise<Result<ReauthorPlan | null>> {
   const listed = await git.identitiesIn(['--topo-order', 'HEAD', '--not', '--remotes']);
   if (!listed.ok) return listed;
-  const foreign = listed.value.filter((commit) => !own(commit, scope.email));
+  const foreign = listed.value.filter((commit) => !isOwn(commit, scope.email));
   const oldest = foreign.at(-1);
   if (!oldest) return ok(null);
   const parent = await git.parentOf(oldest.sha);
@@ -102,7 +103,7 @@ async function foreignRange(git: Git, scope: Scope): Promise<Result<ReauthorPlan
   const base = parent ?? '--root';
   const checked = await checkRange(git, base);
   if (!checked.ok) return checked;
-  return ok({ branch: scope.branch, remote: scope.remote, base, count: checked.value, addresses: addressesOf(foreign, scope.email) });
+  return ok({ branch: scope.branch, remote: scope.remote, base, count: checked.value, addresses: otherAddresses(foreign, scope.email) });
 }
 
 /** The range must be linear and unpublished: a rebase flattens merges and rewrites all it covers. */
@@ -119,37 +120,40 @@ async function checkRange(git: Git, base: string): Promise<Result<number>> {
   return ok(all.value);
 }
 
-function own(commit: CommitIdentity, email: string): boolean {
-  return commit.authorEmail.toLowerCase() === email.toLowerCase() && commit.committerEmail.toLowerCase() === email.toLowerCase();
-}
-
-function addressesOf(commits: readonly CommitIdentity[], email: string): string[] {
-  const seen = new Set<string>();
-  for (const address of commits.flatMap((commit) => [commit.authorEmail, commit.committerEmail])) {
-    if (address.toLowerCase() !== email.toLowerCase()) seen.add(address);
-  }
-  return [...seen];
-}
-
 /** Backup, rebase, check. On any failure HEAD is put back where it was, or the backup is named. */
 export async function applyReauthor(git: Git, plan: ReauthorPlan, email: string): Promise<Result<Rewritten>> {
   const head = await git.revParse('HEAD');
   const backup = 'refs/repown/backup/' + plan.branch + '/' + Math.floor(Date.now() / 1000);
-  if (!head || !await git.updateRef(backup, head)) return err('could not write the backup ref; nothing rewritten');
-  const rebased = await git.rebaseExec(plan.base, AMEND);
-  if (!rebased.ok) return err(await restored(git, head, backup, rebased.error));
+  if (!head || !await git.createRef(backup, head)) return err('could not write a new backup ref (one from this second exists?); nothing rewritten');
+  const rebased = await git.rebaseExec(plan.base, AMEND_COMMAND);
+  if (!rebased.ok) return err(await restored(git, { head, branch: plan.branch, backup }, rebased.error));
+  return checked(git, plan, email, backup);
+}
+
+/** Every planned commit is still there, and each is by the pin; otherwise the backup is named. */
+async function checked(git: Git, plan: ReauthorPlan, email: string, backup: string): Promise<Result<Rewritten>> {
   const range = plan.base === '--root' ? ['HEAD'] : [plan.base + '..HEAD'];
   const after = await git.identitiesIn(range);
-  if (!after.ok || after.value.some((commit) => !own(commit, email))) {
-    return err('the rewritten commits do not all carry ' + email + '; the original is at ' + backup);
+  if (!after.ok) return err('the rewritten commits could not be read (' + after.error + '); the original is at ' + backup);
+  if (after.value.length !== plan.count) {
+    return err(plan.count + ' commits were planned but ' + after.value.length + ' came out; the original is at ' + backup);
   }
+  if (after.value.some((commit) => !isOwn(commit, email))) return err('the rewritten commits do not all carry ' + email + '; the original is at ' + backup);
   return ok({ count: after.value.length, backup });
 }
 
-async function restored(git: Git, head: string, backup: string, why: string): Promise<string> {
-  await git.abortRebase();
-  const now = await git.revParse('HEAD');
-  return now === head
+interface Before {
+  readonly head: string;
+  readonly branch: string;
+  readonly backup: string;
+}
+
+/** "Nothing rewritten" only when the abort worked and the branch is back on its old commit. */
+async function restored(git: Git, before: Before, why: string): Promise<string> {
+  const aborted = await git.abortRebase() || await git.operationInProgress() === null;
+  const [now, branch] = await Promise.all([git.revParse('HEAD'), git.currentBranch()]);
+  const back = aborted && now === before.head && branch?.kind === 'branch' && branch.name === before.branch;
+  return back
     ? 'the rebase failed (' + why + '); nothing rewritten'
-    : 'the rebase failed (' + why + ') and HEAD did not return; the original is at ' + backup;
+    : 'the rebase failed (' + why + ') and the branch did not return; finish with git rebase --abort, and the original is at ' + before.backup;
 }

@@ -15,7 +15,9 @@
 // itself. See the note in exec.ts.
 
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { run, succeeded, output, lines, type ExecResult } from './exec.ts';
 import { ok, err, type Result } from './result.ts';
 
@@ -266,19 +268,30 @@ export class Git {
 
   /** Fetch with every prompt off: a sign-in that would ask fails instead. The reason is cleaned for display. */
   async fetchQuietly(remote: string): Promise<Result<void>> {
-    const fetched = await this.execLong([...QUIET, 'fetch', '--quiet', '--no-recurse-submodules', remote], quietEnv(), NETWORK_MS);
+    const fetched = await this.execLong([...QUIET, 'fetch', '--quiet', '--no-recurse-submodules', remote], await this.quietEnvHere(), NETWORK_MS);
     return succeeded(fetched) ? ok(undefined) : err(networkReason(fetched));
   }
 
   /** How many branches the remote lists (network, prompts off). */
   async remoteHeadCount(remote: string): Promise<Result<number>> {
-    const listed = await this.execLong([...QUIET, 'ls-remote', '--heads', remote], quietEnv(), NETWORK_MS);
+    const listed = await this.execLong([...QUIET, 'ls-remote', '--heads', remote], await this.quietEnvHere(), NETWORK_MS);
     return succeeded(listed) ? ok(lines(listed).length) : err(networkReason(listed));
   }
 
-  /** `git rebase <base> --exec <cmd>`, without moving other branches' refs. */
+  /** Prompts off. ssh gets BatchMode only where neither the shell nor this clone names an ssh command. */
+  private async quietEnvHere(): Promise<NodeJS.ProcessEnv> {
+    return quietEnv(process.env, await this.getConfig('core.sshCommand') !== null);
+  }
+
+  /**
+   * `git rebase <base> --exec <cmd>`, without moving other branches' refs, without folding
+   * commits (autosquash), and with no hook at all: hooksPath names a directory that does not
+   * exist, and `-c` reaches the --exec child too, so its `git commit` runs none either.
+   */
   async rebaseExec(base: string, exec: string): Promise<Result<void>> {
-    const args = ['-c', 'rebase.updateRefs=false', 'rebase', '--quiet', base, '--exec', exec];
+    const noHooks = join(tmpdir(), 'repown-no-hooks-' + randomUUID());
+    const off = ['-c', 'rebase.updateRefs=false', '-c', 'rebase.autoSquash=false', '-c', 'core.hooksPath=' + noHooks];
+    const args = [...off, 'rebase', '--quiet', base, '--exec', exec];
     const rebased = await this.execLong(args, process.env, REBASE_MS);
     return succeeded(rebased) ? ok(undefined) : err(rebased.timedOut ? 'timed out' : networkReason(rebased));
   }
@@ -287,8 +300,9 @@ export class Git {
     return succeeded(await this.exec(['rebase', '--abort']));
   }
 
-  async updateRef(ref: string, sha: string): Promise<boolean> {
-    return succeeded(await this.exec(['update-ref', ref, sha]));
+  /** Creates `ref` at `sha`; refuses when it exists already, so nothing is overwritten. */
+  async createRef(ref: string, sha: string): Promise<boolean> {
+    return succeeded(await this.exec(['update-ref', ref, sha, '']));
   }
 
   /** Full hash of `rev`, or null when it does not resolve. */
@@ -398,20 +412,23 @@ const IN_PROGRESS: readonly (readonly [string, string])[] = [
   ['CHERRY_PICK_HEAD', 'cherry-pick'], ['REVERT_HEAD', 'revert'], ['BISECT_LOG', 'bisect'],
 ];
 
-/** The whole environment, with every way git or ssh could prompt turned off. */
-function quietEnv(): NodeJS.ProcessEnv {
-  const { GIT_ASKPASS: _git, SSH_ASKPASS: _ssh, ...rest } = process.env;
-  return {
-    ...rest, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never',
-    GIT_SSH_COMMAND: process.env['GIT_SSH_COMMAND'] ?? 'ssh -o BatchMode=yes',
-  };
+/**
+ * The whole environment, with every way git could prompt turned off. ssh is made
+ * non-interactive only where nothing names an ssh command already: GIT_SSH_COMMAND outranks
+ * core.sshCommand and GIT_SSH, so setting it would replace a per-account key (`ssh -i ...`).
+ */
+export function quietEnv(env: NodeJS.ProcessEnv, sshConfigured: boolean): NodeJS.ProcessEnv {
+  const { GIT_ASKPASS: _git, SSH_ASKPASS: _ssh, ...rest } = env;
+  const ownSsh = sshConfigured || !!env['GIT_SSH_COMMAND'] || !!env['GIT_SSH'];
+  const batch = ownSsh ? {} : { GIT_SSH_COMMAND: 'ssh -o BatchMode=yes' };
+  return { ...rest, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', ...batch };
 }
 
-/** git's last error line, with any credentials in a URL masked and control characters removed. */
-function networkReason(result: ExecResult): string {
+/** git's last error line, with a URL's credentials and query masked and control characters removed. */
+export function networkReason(result: ExecResult): string {
   if (result.timedOut) return 'timed out';
   const last = result.stderr.trim().split('\n').filter(Boolean).at(-1) ?? 'git failed';
-  return last.replace(/(\w+:\/\/)[^@\s/]*@/g, '$1***@').replace(/[\x00-\x1f\x7f-\x9f]/g, '?');
+  return last.replace(/(\w+:\/\/)\S*@/g, '$1***@').replace(/(\w+:\/\/[^\s?]*)\?[^\s'"]*/g, '$1?***').replace(/[\x00-\x1f\x7f-\x9f]/g, '?');
 }
 
 /** `<sha> <parent> [<parent>...]`; a root has none. */
@@ -420,7 +437,7 @@ function parentPair(line: string): [string, string | null] {
   return [sha, first || null];
 }
 
-const IDENTITY_FORMAT ='%H%x00%ae%x00%ce%x00%an%x00%cn%x00%s%x00';
+const IDENTITY_FORMAT = '%H%x00%ae%x00%ce%x00%an%x00%cn%x00%s%x00';
 const IDENTITY_FIELDS = 6;
 const MAX_TAG_CHAIN = 16;
 const SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/;

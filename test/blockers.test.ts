@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { blockers, type PushFacts } from '../src/wizard/blockers.ts';
+import { blockers, type PushFacts } from '../src/core/blockers.ts';
 import { ok, err } from '../src/core/result.ts';
 
 const EMAIL = 'octocat@example.invalid';
@@ -63,6 +63,9 @@ test('a branch remote with its own sign-in names the key, never the URL', () => 
   const [first] = blockers(facts({ signinKey: 'branch.main.remote' }), CHOICE);
   assert.equal(first!.summary, 'the branch pushes with its own sign-in');
   assert.equal(first!.lines[0], 'branch.main.remote carries its own sign-in, so pushes from main use it, not octocat');
+  const fixable = blockers(facts({ signinKey: 'branch.main.remote', repoint: { key: 'branch.main.remote', remote: 'origin', tracked: true } }), CHOICE);
+  assert.equal(fixable[0]!.lines[0], 'branch.main.remote carries its own sign-in, so pushes from main use it, not octocat: ' +
+    'point it back at origin with repown setup --repoint');
 });
 
 test('commits another remote has but the destination lacks: the guard refuses them too', () => {

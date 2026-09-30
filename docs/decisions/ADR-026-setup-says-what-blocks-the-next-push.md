@@ -1,13 +1,13 @@
 # ADR-026: Setup says what blocks the next push, and says done only without it
 
 **Status:** Accepted. Supersedes in part [ADR-013](ADR-013-deliberately-not-done.md) (rewriting unpushed commits, only when asked). Amends [ADR-022](ADR-022-set-up-clone-opens-on-settled-screen.md) (a
-settled clone with a blocker is not "nothing needs to change") and
-[ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses).
+settled clone with a blocker is not "nothing needs to change"),
+[ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses), [ADR-020](ADR-020-setup-leaves-clone-ready.md) (done only without blockers) and [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md) (`WARN push` first; status's closing line).
 
 ## Context
 
 In a field test, `repown setup` pinned a clone, printed `done: this clone is set up for
-makubexD`, and the next `git push` was refused by repown's own guard (51 commits by other
+octocat`, and the next `git push` was refused by repown's own guard (51 commits by other
 addresses). The review had mentioned the commits, but after the steps, just before "Run them",
 and "done" read as the opposite. The same clone pushed through a URL carrying a token.
 
@@ -22,7 +22,7 @@ problem".
 ## Decision
 
 - **Push blockers are read once, offline** (`src/core/push-state.ts`) and turned into ordered
-  lines by one pure function (`src/wizard/blockers.ts`), shared by setup, its closing line and `repown status` (first among its warnings, `WARN push`; a missing upstream stays in its field there):
+  lines by one pure function (`src/core/blockers.ts`), shared by setup, its closing line and `repown status` (first among its warnings, `WARN push`; a missing upstream stays in its field there):
   - commits by another address no remote has (the existing lines), and those another remote
     has but the push destination lacks, counted with the guard's own exclusion;
   - a sign-in carried by the push path: userinfo with a password or token in

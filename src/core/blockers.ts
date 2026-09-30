@@ -5,12 +5,12 @@
 // (or git) is about to refuse. A fact that could not be read is a blocker of its own,
 // never an absence (a skipped check must not look passed).
 
-import type { Result } from '../core/result.ts';
-import { unpushedLines, foreignCount, type UnpushedCommit, type UnpushedFact } from '../core/unpushed.ts';
-import { shellWord } from '../core/guard/check.ts';
-import type { Divergence, PushDestination, PushFacts } from '../core/push-state.ts';
+import type { Result } from './result.ts';
+import { unpushedLines, foreignCount, type UnpushedCommit, type UnpushedFact } from './unpushed.ts';
+import { shellWord } from './guard/check.ts';
+import type { Divergence, PushDestination, PushFacts } from './push-state.ts';
 
-export type { PushFacts } from '../core/push-state.ts';
+export type { PushFacts } from './push-state.ts';
 
 /** Who the clone is (or is about to be) pinned to, and whether new branches get an upstream. */
 export interface PushChoice {
@@ -37,7 +37,7 @@ export function blockers(facts: PushFacts, choice: PushChoice): Blocker[] {
   return [
     ...unpushedBlocker(facts.unpushed, choice),
     ...elsewhereBlocker(facts.elsewhere, facts.destination, branch, choice.email),
-    ...signinBlocker(facts.signinKey, branch, choice.account),
+    ...signinBlocker(facts, branch, choice.account),
     ...facts.env.map((name) => envBlocker(name, choice.email)),
     ...facts.configOverrides.map((key) => configBlocker(key, choice.email)),
     ...ownerBlocker(facts.destination, branch, choice.account),
@@ -55,12 +55,15 @@ function unpushedBlocker(fact: UnpushedFact, choice: PushChoice): Blocker[] {
   return [{ kind: 'unpushed', summary: count + (count === 1 ? ' commit' : ' commits') + ' by another address', lines }];
 }
 
-function signinBlocker(key: string | null, branch: string, account: string): Blocker[] {
+/** Where a remote names the same repository, the fix is setup's repoint. */
+function signinBlocker(facts: PushFacts, branch: string, account: string): Blocker[] {
+  const key = facts.signinKey;
   if (!key) return [];
+  const fix = facts.repoint?.key === key ? ': point it back at ' + facts.repoint.remote + ' with repown setup --repoint' : '';
   return [{
     kind: 'signin',
     summary: 'the branch pushes with its own sign-in',
-    lines: [key + ' carries its own sign-in, so pushes from ' + branch + ' use it, not ' + account],
+    lines: [key + ' carries its own sign-in, so pushes from ' + branch + ' use it, not ' + account + fix],
   }];
 }
 

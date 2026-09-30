@@ -20,11 +20,11 @@ import reauthorCommand from '../commands/reauthor.ts';
 import guardGroup from '../commands/guard.ts';
 import accountsGroup from '../commands/accounts.ts';
 import { wizard, refusedGiven, CANCEL, type Answers, type Prompter, type StepChoice } from './engine.ts';
-import { setupFlow, planCommands, formatCommand, fetchTarget, gitStepOf, reauthorOffered, briefOf, missingFlags, printable, dropFixPrefix, NEW_ACCOUNT, accountOf, pinUnchanged, ghNoted, type PlannedCommand, type SetupContext } from './setup-flow.ts';
+import { setupFlow, planCommands, formatCommand, gitStepOf, keptFlags, briefOf, missingFlags, printable, dropFixPrefix, NEW_ACCOUNT, accountOf, pinUnchanged, ghNoted, type PlannedCommand, type SetupContext } from './setup-flow.ts';
 import { cloneChangeLines, machineChangeLines, readCloneSnapshot, type CloneSnapshot } from './setup-changes.ts';
 import { readContext, readRegistry, type ReadOptions } from './setup-context.ts';
 import { plainPrompter } from './plain.ts';
-import { blockers, type Blocker } from './blockers.ts';
+import { blockers, type Blocker } from '../core/blockers.ts';
 import { readPushFacts } from '../core/push-state.ts';
 import { readUnpushed } from '../core/unpushed.ts';
 
@@ -191,24 +191,9 @@ function checkAgainst(given: Answers, ctx: SetupContext, allowOwner: string | nu
     out.detail('--fix: gh is not the credential helper for this clone, so there is nothing to undo');
     answers['fix'] = false;
   }
-  dropInapplicable(answers, ctx);
-  return ok(answers);
-}
-
-/** `--repoint` and `--fetch` are asked for only where they apply; elsewhere they say so and do nothing. */
-function dropInapplicable(answers: Answers, ctx: SetupContext): void {
-  if (answers['repoint'] === true && !ctx.push.repoint) {
-    out.detail('--repoint: this branch does not push to a URL that a remote here names, so there is nothing to repoint');
-    answers['repoint'] = false;
-  }
-  if (answers['fetch'] === true && fetchTarget(answers, ctx) === null) {
-    out.detail('--fetch: no commit by another address waits behind a remote this clone has never fetched, so there is nothing to fetch');
-    answers['fetch'] = false;
-  }
-  if (answers['reauthor'] === true && !reauthorOffered(answers, ctx)) {
-    out.detail('--reauthor: no unpushed commit here is by another address, so there is nothing to re-author');
-    answers['reauthor'] = false;
-  }
+  const kept = keptFlags(answers, ctx);
+  for (const note of kept.notes) out.detail(note);
+  return ok(kept.answers);
 }
 
 // ------------------------------------------------------------------- the runs

@@ -26,7 +26,7 @@ import { gitFor, type Args } from '../ui/args.ts';
 import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 import { printable } from '../ui/format.ts';
-import { blockers, type Blocker } from '../wizard/blockers.ts';
+import { blockers, type Blocker } from '../core/blockers.ts';
 import { readPushFacts } from '../core/push-state.ts';
 import { readUnpushed } from '../core/unpushed.ts';
 

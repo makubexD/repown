@@ -59,7 +59,12 @@ describe('readPushFacts', () => {
     box.git('config', '--unset', 'branch.main.remote');
     box.git('config', 'remote.origin.pushurl', 'https://ghp_abc@github.com/octocat/hello.git');
     assert.equal((await read()).signinKey, 'remote.origin.pushurl');
+    box.git('config', 'remote.origin.url', 'https://octocat:ghp_abc@github.com/octocat/hello.git');
+    box.git('config', 'remote.origin.pushurl', 'https://github.com/octocat/hello.git');
+    assert.equal((await read()).signinKey, null, 'a push uses the clean pushurl; the token in url signs in only fetches');
     box.git('config', '--unset', 'remote.origin.pushurl');
+    assert.equal((await read()).signinKey, 'remote.origin.url');
+    box.git('config', 'remote.origin.url', 'https://github.com/octocat/hello.git');
     box.git('config', 'http.https://github.com/.extraheader', 'AUTHORIZATION: basic xyz');
     assert.equal((await read()).signinKey, 'http.https://github.com/.extraheader');
   });

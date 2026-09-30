@@ -85,7 +85,41 @@ Runs `repown reauthor --yes` from the wizard.
 - Docs: HOW-IT-WORKS status card, ADR-020 and ADR-023 status lines, CHANGELOG
 
 ## Checkpoint B (after T5–T8)
-- [ ] `npm test`, `npm run build` green
-- [ ] walk s1–s9 re-run with `scratchpad/walk/harness.ts`: every failure fixed or named
-- [ ] Phase 5 review (code-reviewer, docs drift, security-auditor for ⚠, wizard-auditor)
+- [x] `npm test`, `npm run build` green (809 pass, 1 skipped)
+- [x] walk s1–s9 re-run with `scratchpad/walk/harness.ts` (Enter at every question, so re-author No):
+  every failure named by setup's closing line (s1–s3 commits by another address, s5 diverged,
+  s7 detached, s8 GIT_AUTHOR_EMAIL, s9 destination owner); s4, s6 done and push. Named, not fixed:
+  - s5b: a teammate's commit on the remote, never fetched: setup says done, pull/push then fail.
+    Offline read can't see it, and a clean clone never fetches (spec); git's own message explains it.
+  - s9: setup says the push to octo-org will fail, but it passes: the harness's url.insteadOf rewrites
+    the URL to a local path, and the guard reads no owner from a path. Same before this branch
+    (setup said done then). For the security review: the guard fails open on an ownerless URL.
+- [x] Phase 5 review (code-reviewer, docs drift, security-auditor for ⚠, wizard-auditor). Fixed:
+  - WIZ-1 `--fetch` was dropped behind a URL a repoint would fix (flags checked before the repoint
+    question): `keptFlags` counts an unasked repoint as Recommended's Yes; the note names `--repoint`.
+  - ssh: quiet fetch/ls-remote no longer override `core.sshCommand` / `GIT_SSH` (per-account keys).
+  - reauthor: no hook at all (core.hooksPath to a missing dir, reaches the --exec child), no
+    autosquash, the commit count checked after, "nothing rewritten" only when the abort worked and
+    the branch is back, backup ref never overwritten, printed through printable(); one AMEND and
+    one own/other-address rule shared with unpushed.ts.
+  - sign-in blocker reads the URL a push uses (pushurl when set), and names `repown setup --repoint`
+    where it applies; networkReason masks a URL's credentials to the last @ and its query;
+    printable() covers soft hyphen, ALM, word joiners, interlinear marks and tag characters.
+  - WIZ-3 six tests now expect `done:` exactly; WIZ-5 plainer repoint/fetch hints.
+  - blockers.ts moved to src/core/ (status and setup both read it).
+  - docs: status card row, card 8 (undo, own commits after the oldest foreign one rewritten,
+    backup never removed, refusals as examples), card 13 and CONFIGURATION (`--reauthor` is the
+    confirmation; a refusal ends setup with exit 1), ADR-026 status line and example handle,
+    CONTRIBUTING map, README row order and status ending.
+  Deferred (named, not fixed):
+  - reauthor judges "published" by `--not --remotes`: a narrow fetch refspec, a pushed tag or a
+    push to a bare URL can hide what the remote has (the next push is then non-fast-forward).
+  - the timeout kills only the direct child (Windows git wrapper); `--end-of-options` on fetch.
+  - setup/status predict the owner from the configured URL, not the one insteadOf/pushInsteadOf
+    makes (`git remote get-url --push` would match what the hook sees).
+  - sparse checkouts are always refused (skip-worktree); advice (date order) and reauthor
+    (topo order) may start at different commits with merges or clock skew; remote names with `/`
+    or glob characters; status skips the owner blocker when origin's differs from the destination's;
+    WIZ-6 the review shows `git fetch origin`, setup runs it with prompts off.
+  Asked at GATE 5: guard-off blockers; settled clone and the reauthor offer; `--reauthor` as the yes.
 - [ ] Phase 6 close-out

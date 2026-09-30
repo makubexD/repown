@@ -95,6 +95,16 @@ export function dim(text: string): string {
   return paint(process.stdout, 'dim', text);
 }
 
+/**
+ * Control characters, and the invisible, line-breaking or direction-changing ones, as visible
+ * escapes: text read from git, a remote URL or a commit must neither redraw the screen nor
+ * read as another name.
+ */
+export function printable(text: string): string {
+  return text.replace(/[\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2066-\u2069\u2028\u2029\ufeff]/g,
+    (char) => '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0'));
+}
+
 /** Shown to a person. Windows uses native separators; any other platform is unchanged. */
 export function displayPath(path: string): string {
   if (process.platform !== 'win32') return path;

@@ -313,6 +313,7 @@ ready: commits and pushes use octocat · gh: optional (see the note above)
 | 🔴 `gh is the git credential helper` | only gh's active account can push | `repown fix` |
 | 🟡 `no credential helper is set` / `cannot tell whether it honours` | a GitHub https clone, and the helper isn't Git Credential Manager | `repown doctor` ([card 1](#1-set-up-the-machine)) |
 | NOTE `gh active as "…"` | the gh CLI would act as another account; git pushes are unaffected. Printed after the identity line, and not counted as a warning | `gh auth switch -u <account>` when that account is signed in to gh; `repown use <account> --gh` when it is not |
+| 🟡 `push …` (first among the warnings) | something will stop the next push: commits by another address the guard will refuse, a sign-in in the push URL, an identity or token variable in this shell, `author.email` in config, a destination owner (said once, by the `origin` row when that fires), a diverged branch, a detached HEAD. Read only for a pinned clone; a missing upstream stays in the `upstream` field | the line under it: `repown reauthor`, `repown setup --repoint`, unset the variable, … ([card 8](#8-push-refused-and-the-fix)) |
 | 🟡 `gh could not be queried` | who `gh pr create` acts as is unknown | `gh auth status` |
 | 🟡 `origin belongs to "octo-org"` | an organisation repository | `git config --local --add repown.allowOwner octo-org` |
 | 🟡 `guard off` | pushes are not checked | `repown guard on` |
@@ -335,7 +336,9 @@ host's credentials are pinned, or `ready: commits use <account>; pushes use this
 host's own sign-in` where they are not (Azure DevOps, a local path, or any other
 remote repown does not pin). ` · N warning(s)` follows when there are warnings;
 the NOTE is not in that count. When the NOTE is the only finding, the line is
-` · gh: optional (see the note above)`. With a problem it ends with a count
+` · gh: optional (see the note above)`. When something will stop the next push, it ends
+`the next push will fail: <the first> (and N more above)` instead, and still exits 0
+([ADR-026](decisions/ADR-026-setup-says-what-blocks-the-next-push.md)). With a problem it ends with a count
 (`1 problem, 2 warnings`), adding `: run repown setup` when an identity problem
 is among them. A gh query that could not be run stays a warning. On Windows the
 clone path uses backslashes; elsewhere it is shown as git printed it

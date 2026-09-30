@@ -22,6 +22,7 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   and offer the rebase only for when the destination has none of those commits. The URL
   is never printed (ADR-025).
 - `repown setup` no longer says `done` when the next push would fail. It names what is in the way, first among the review's notes, on the already-set-up screen, and in its closing line (`set up for <account>; the next push will fail: …`): commits the guard will refuse, a sign-in in the push URL, identity or token variables, `author.email` in config, a destination owner, a diverged branch, a missing upstream, a detached HEAD (ADR-026).
+- `repown status` no longer says `ready` when the next push would fail. It prints what is in the way first among its warnings (`WARN push`), and ends `the next push will fail: …`; the exit code is unchanged (ADR-026).
 - The re-author advice says `or pin that address` only when one address made them all.
 - The suggested `git rebase` starts at the parent of the oldest commit by another address,
   not the oldest unpushed one, so your own commits before it are never rewritten.

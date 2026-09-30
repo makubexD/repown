@@ -3,7 +3,7 @@
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { displayPath, useColour } from '../src/ui/format.ts';
+import { displayPath, printable, useColour } from '../src/ui/format.ts';
 
 const TERMINAL = { isTTY: true } as NodeJS.WriteStream;
 const PIPE = { isTTY: false } as NodeJS.WriteStream;
@@ -52,5 +52,14 @@ describe('displayPath: Windows native separators, elsewhere unchanged', () => {
   test('a path that is already native is left as it was read', () => {
     const native = process.platform === 'win32' ? 'C:\\Tools\\git-credential-manager.exe' : '/usr/bin/git-credential-manager';
     assert.equal(displayPath(native), native);
+  });
+});
+
+describe('printable', () => {
+  test('control, bidi, line-separator and byte-order characters become visible escapes; the rest is unchanged', () => {
+    const odd = [0x1b, 0x7f, 0x200b, 0x202e, 0x2066, 0x2028, 0x2029, 0xfeff].map((code) => String.fromCharCode(code));
+    const shown = printable('a' + odd.join('') + 'z');
+    assert.equal(shown, 'a' + ['001b', '007f', '200b', '202e', '2066', '2028', '2029', 'feff'].map((hex) => String.fromCharCode(92) + 'u' + hex).join('') + 'z');
+    assert.equal(printable('octocat@example.invalid · origin/main'), 'octocat@example.invalid · origin/main');
   });
 });

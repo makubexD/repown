@@ -1,6 +1,6 @@
 # Tasks: setup leaves the clone push-ready
 
-Status: Phase 4 build, Task 8 next. Full-suite run pending since T4 (stopped for low memory)
+Status: Phase 4 build done (T1–T8). Checkpoint B next: walk, Phase 5 review, Phase 6 close-out
 
 - [x] Phase 1 clarify (audit WIZ-1..10, newcomer walk s1–s9, research; scope: detect + fix + opt-in re-author)
 - [x] Phase 2 spec (SPEC.md approved; command name `repown reauthor`)
@@ -77,7 +77,7 @@ Runs `repown reauthor --yes` from the wizard.
 - Files: `src/wizard/setup-flow.ts`, `src/wizard/setup-run.ts`, `src/commands/setup.ts`, tests
 - Docs: README (flag), HOW-IT-WORKS card 13, CHANGELOG
 
-## Task 8 — Status shows the blockers
+## Task 8 — Status shows the blockers [x]
 - Acceptance: blockers in ADR-023's first block; `ready:` only without them; a ready clone's
   output unchanged (T1 lock).
 - Verify: `node --test test/status.test.ts test/characterization.test.ts`

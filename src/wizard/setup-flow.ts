@@ -10,6 +10,7 @@
 import { ghAdvice, upstreamText } from '../commands/status.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { shellWord } from '../core/guard/check.ts';
+import { printable } from '../ui/format.ts';
 import { foreignAddresses, foreignCount, type UnpushedFact } from '../core/unpushed.ts';
 import type { PushFacts } from '../core/push-state.ts';
 import { blockers, type Blocker } from './blockers.ts';
@@ -660,14 +661,8 @@ export function formatCommand(argv: readonly string[]): string {
   return printable(['repown', ...words.map(shellWord)].join(' '));
 }
 
-/**
- * Control characters, and the invisible or direction-changing ones, as visible escapes:
- * a value read from a remote URL must neither redraw the screen nor read as another name.
- */
-export function printable(text: string): string {
-  return text.replace(/[\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g,
-    (char) => '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0'));
-}
+/** Setup's own importers read it from here; the one definition is in the output helpers. */
+export { printable };
 
 /** `--name=value` as `--name value`, unless the value starts with a dash and would read as an option. */
 function splitOption(token: string): string[] {

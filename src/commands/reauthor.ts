@@ -8,6 +8,7 @@ import { flagBool, gitFor, type Args } from '../ui/args.ts';
 import type { Command } from '../ui/command.ts';
 import type { Git } from '../core/git.ts';
 import * as out from '../ui/format.ts';
+import { printable } from '../ui/format.ts';
 
 export default {
   summary: 'rewrite this branch\'s unpushed commits by another address as the pinned account',
@@ -56,9 +57,4 @@ async function apply(git: Git, plan: ReauthorPlan, email: string): Promise<numbe
   out.detail('undo: git reset --keep ' + done.value.backup + ' (drops commits made since)');
   out.detail('nothing was pushed: git push when you are ready');
   return 0;
-}
-
-/** Text from git or from commits: control and bidi characters could redraw the terminal. */
-function printable(text: string): string {
-  return text.replace(/[\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2066-\u2069\u2028\u2029\ufeff]/g, '?');
 }

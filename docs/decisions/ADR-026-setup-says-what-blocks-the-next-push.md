@@ -22,7 +22,7 @@ problem".
 ## Decision
 
 - **Push blockers are read once, offline** (`src/core/push-state.ts`) and turned into ordered
-  lines by one pure function (`src/wizard/blockers.ts`), shared by setup and its closing line:
+  lines by one pure function (`src/wizard/blockers.ts`), shared by setup, its closing line and `repown status` (first among its warnings, `WARN push`; a missing upstream stays in its field there):
   - commits by another address no remote has (the existing lines), and those another remote
     has but the push destination lacks, counted with the guard's own exclusion;
   - a sign-in carried by the push path: userinfo with a password or token in

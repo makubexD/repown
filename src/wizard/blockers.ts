@@ -19,7 +19,11 @@ export interface PushChoice {
   readonly autoUpstream: boolean;
 }
 
+/** Which fact it is, so a report that already shows one of them its own way can leave it out. */
+export type BlockerKind = 'unpushed' | 'elsewhere' | 'signin' | 'env' | 'config' | 'owner' | 'divergence' | 'upstream' | 'detached';
+
 export interface Blocker {
+  readonly kind: BlockerKind;
   /** A few words for the closing line: `the next push will fail: <summary>`. */
   readonly summary: string;
   /** What to show: the fact first, then how to fix it. */
@@ -46,14 +50,15 @@ export function blockers(facts: PushFacts, choice: PushChoice): Blocker[] {
 function unpushedBlocker(fact: UnpushedFact, choice: PushChoice): Blocker[] {
   const lines = unpushedLines(fact, choice.email, choice.account);
   if (lines.length === 0) return [];
-  if (!fact.commits.ok) return [{ summary: 'unpushed commits could not be read', lines }];
+  if (!fact.commits.ok) return [{ kind: 'unpushed', summary: 'unpushed commits could not be read', lines }];
   const count = foreignCount(fact, choice.email);
-  return [{ summary: count + (count === 1 ? ' commit' : ' commits') + ' by another address', lines }];
+  return [{ kind: 'unpushed', summary: count + (count === 1 ? ' commit' : ' commits') + ' by another address', lines }];
 }
 
 function signinBlocker(key: string | null, branch: string, account: string): Blocker[] {
   if (!key) return [];
   return [{
+    kind: 'signin',
     summary: 'the branch pushes with its own sign-in',
     lines: [key + ' carries its own sign-in, so pushes from ' + branch + ' use it, not ' + account],
   }];
@@ -61,12 +66,13 @@ function signinBlocker(key: string | null, branch: string, account: string): Blo
 
 /** Counted with the guard's own exclusion, so a fork's upstream commits are not missed. */
 function elsewhereBlocker(elsewhere: Result<readonly UnpushedCommit[]>, destination: PushDestination | null, branch: string, email: string): Blocker[] {
-  if (!elsewhere.ok) return [{ summary: 'commits on other remotes could not be read', lines: ['commits on other remotes could not be read (' + elsewhere.error + ')'] }];
+  if (!elsewhere.ok) return [{ kind: 'elsewhere', summary: 'commits on other remotes could not be read', lines: ['commits on other remotes could not be read (' + elsewhere.error + ')'] }];
   const count = foreignCount({ branch, commits: elsewhere, unknown: null }, email);
   if (count === 0) return [];
   const where = destination?.remote ?? 'the destination';
   const noun = count === 1 ? '1 commit' : count + ' commits';
   return [{
+    kind: 'elsewhere',
     summary: noun + ' from another remote',
     lines: [noun + ' on ' + branch + ' by another address ' + (count === 1 ? 'is' : 'are') + ' on another remote but not on ' + where +
       ': the guard will refuse them (a fork mirroring upstream? see repown.mirrorBranch)'],
@@ -75,6 +81,7 @@ function elsewhereBlocker(elsewhere: Result<readonly UnpushedCommit[]>, destinat
 
 function configBlocker(key: string, email: string): Blocker {
   return {
+    kind: 'config',
     summary: key + ' is set',
     lines: [key + ' is set in git config: commits made here won' + "'" + 't use ' + email + ' (unset it: git config --unset ' + key + ')'],
   };
@@ -84,6 +91,7 @@ function envBlocker(name: string, email: string): Blocker {
   const identity = TOKENS.includes(name) ? '' : ': commits made here won\'t use ' + email + ',';
   const joiner = identity ? ' and' : ':';
   return {
+    kind: 'env',
     summary: name + ' is set',
     lines: [name + ' is set in this shell' + identity + joiner + ' the guard refuses every push while it is set (unset it)'],
   };
@@ -95,6 +103,7 @@ function ownerBlocker(destination: PushDestination | null, branch: string, accou
   if (owner === account.toLowerCase() || destination.allowed.includes(owner)) return [];
   const where = destination.remote ?? 'its URL';
   return [{
+    kind: 'owner',
     summary: 'the push goes to "' + destination.owner + '"',
     lines: [branch + ' pushes to ' + where + ', owned by "' + destination.owner + '", not ' + account +
       ': the guard will refuse it. If you belong there: git config --local --add repown.allowOwner ' + shellWord(destination.owner)],
@@ -103,11 +112,12 @@ function ownerBlocker(destination: PushDestination | null, branch: string, accou
 
 function divergenceBlocker(divergence: Result<Divergence | null>, branch: string): Blocker[] {
   if (!divergence.ok) {
-    return [{ summary: branch + ' could not be compared with its upstream', lines: [branch + ' could not be compared with its upstream (' + divergence.error + ')'] }];
+    return [{ kind: 'divergence', summary: branch + ' could not be compared with its upstream', lines: [branch + ' could not be compared with its upstream (' + divergence.error + ')'] }];
   }
   const found = divergence.value;
   if (!found || found.behind === 0 || found.ahead === 0) return [];
   return [{
+    kind: 'divergence',
     summary: branch + ' has diverged from ' + found.tracked,
     lines: [branch + ' is ' + found.behind + ' behind and ' + found.ahead + ' ahead of ' + found.tracked +
       ': push and pull fail until you git pull --rebase'],
@@ -117,9 +127,9 @@ function divergenceBlocker(divergence: Result<Divergence | null>, branch: string
 function upstreamBlocker(facts: PushFacts, branch: string, autoUpstream: boolean): Blocker[] {
   if (facts.upstream !== 'missing' || autoUpstream) return [];
   const remote = shellWord(facts.destination?.remote ?? 'origin');
-  return [{ summary: branch + ' has no upstream', lines: [branch + ' has no upstream: the first push needs git push -u ' + remote + ' ' + shellWord(branch)] }];
+  return [{ kind: 'upstream', summary: branch + ' has no upstream', lines: [branch + ' has no upstream: the first push needs git push -u ' + remote + ' ' + shellWord(branch)] }];
 }
 
 function detachedBlocker(): Blocker {
-  return { summary: 'HEAD is detached', lines: ['HEAD is detached: git pull and a plain git push fail here; git switch to a branch first'] };
+  return { kind: 'detached', summary: 'HEAD is detached', lines: ['HEAD is detached: git pull and a plain git push fail here; git switch to a branch first'] };
 }

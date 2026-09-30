@@ -53,6 +53,14 @@ problem".
     `reauthor` does. A failure is a warning and the destination stays unknown: the other steps
     still run. The guard stays offline ([ADR-004](ADR-004-destination-owner.md): no network call in the push path); setup already uses the
     network for gh's sign-in ([ADR-019](ADR-019-repown-signs-accounts-in-to-gh.md)).
+- **With the guard off, what only the guard would refuse blocks nothing.** Commits by another
+  address, commits another remote has, the destination owner and `GH_TOKEN`/`GITHUB_TOKEN` are
+  still said, as `the guard is off, so …`, but setup says `done` and status `ready`. A hook this
+  clone does not own, or a redirected `core.hooksPath`, counts as guarded: it may call the
+  guard, and saying a push will fail beats saying one will pass. Identity variables and config,
+  a diverged branch, a sign-in in the URL and a detached HEAD block either way.
+- **The settled screen offers Re-author them** where unpushed commits carry another address:
+  it reviews the one `repown reauthor --yes` step, as Sign in to gh reviews `use --gh`.
 - **Setup asks before it re-authors** (`--reauthor`): only where unpushed commits carry another
   address, default No and never filled in by Recommended, since only the user knows whether they
   made them. It runs `repown reauthor --yes` last, so a refusal skips no other step; like `fix`,

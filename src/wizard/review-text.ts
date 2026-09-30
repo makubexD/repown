@@ -107,13 +107,14 @@ export function reviewOptions(review: Review): ReviewOption[] {
   ];
 }
 
-/** Done, then a way to pick another account or sign in to gh. Change an answer stays once questions were asked. */
+/** Done, then a way to pick another account, sign in to gh or re-author. Change an answer stays once questions were asked. */
 function settledOptions(review: Review): ReviewOption[] {
   const options: ReviewOption[] = [
     { value: 'done', label: 'Done', hint: 'change nothing' },
     { value: 'account', label: 'Use another account', hint: 'choose a different account for this clone' },
   ];
   if (review.ghSignIn) options.push({ value: 'gh', label: review.ghSignIn });
+  if (review.reauthorOffer) options.push({ value: 'reauthor', label: review.reauthorOffer, hint: 'only if you made them; a backup is kept' });
   if (review.edits !== false) options.push({ value: 'edit', label: 'Change an answer' });
   return options;
 }

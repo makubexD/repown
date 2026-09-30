@@ -26,6 +26,7 @@ import { readContext, readRegistry, type ReadOptions } from './setup-context.ts'
 import { plainPrompter } from './plain.ts';
 import { blockers, type Blocker } from '../core/blockers.ts';
 import { readPushFacts } from '../core/push-state.ts';
+import { guardState, hookLocation } from '../core/guard/hook.ts';
 import { readUnpushed } from '../core/unpushed.ts';
 
 export interface SetupDeps {
@@ -409,19 +410,24 @@ async function announce(done: readonly PlannedCommand[], skipped: readonly Plann
   for (const planned of skipped) out.detail('skipped: ' + printable(planned.what));
 }
 
-/** `done` only with nothing left in the way of the next push; otherwise the first, then each one (ADR-026). */
+/**
+ * `done` only with nothing left in the way of the next push; otherwise the first, then each one
+ * (ADR-026). What blocks nothing (the guard is off) still gets its lines, under `done`.
+ */
 function closing(account: string, found: readonly Blocker[]): void {
-  if (found.length === 0) { out.detail('done: this clone is set up for ' + printable(account)); return; }
-  const more = found.length > 1 ? ' (and ' + (found.length - 1) + ' more below)' : '';
-  out.detail('set up for ' + printable(account) + '; the next push will fail: ' + printable(found[0]!.summary) + more);
+  const blocking = found.filter((blocker) => blocker.blocks);
+  const more = blocking.length > 1 ? ' (and ' + (blocking.length - 1) + ' more below)' : '';
+  const [first] = blocking;
+  out.detail(first ? 'set up for ' + printable(account) + '; the next push will fail: ' + printable(first.summary) + more
+    : 'done: this clone is set up for ' + printable(account));
   for (const line of found.flatMap((blocker) => blocker.lines)) out.detail('  ' + printable(line));
 }
 
 /** Re-read after the run: a step may have fixed what the review showed, or not. */
 async function blockersNow(git: Git, account: string): Promise<Blocker[]> {
   const email = await git.getConfig('user.email', 'local') ?? '';
-  const facts = await readPushFacts(git, await readUnpushed(git));
-  return blockers(facts, { email, account, autoUpstream: false });
+  const [facts, guard, hook] = await Promise.all([readPushFacts(git, await readUnpushed(git)), guardState(git), hookLocation(git)]);
+  return blockers(facts, { email, account, autoUpstream: false, guarded: guard !== 'off' || hook?.redirected === true });
 }
 
 async function printClone(before: CloneSnapshot, state: RunState): Promise<void> {

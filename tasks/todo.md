@@ -121,5 +121,7 @@ Runs `repown reauthor --yes` from the wizard.
     (topo order) may start at different commits with merges or clock skew; remote names with `/`
     or glob characters; status skips the owner blocker when origin's differs from the destination's;
     WIZ-6 the review shows `git fetch origin`, setup runs it with prompts off.
-  Asked at GATE 5: guard-off blockers; settled clone and the reauthor offer; `--reauthor` as the yes.
+  GATE 5 decisions (user, 2026-09-29): guard off -> what only the guard refuses is a warning that
+  blocks nothing (a foreign hook or redirected hooksPath counts as guarded); the settled screen
+  offers Re-author them; `--reauthor` stays the confirmation, as `--fix` is. All three done.
 - [ ] Phase 6 close-out

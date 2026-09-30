@@ -371,6 +371,15 @@ describe('repown status: what will stop the next push', () => {
     assert.equal(closing(run.stderr), 'the next push will fail: 1 commit by another address');
   });
 
+  test('with the guard off, commits by another address are a warning and the clone is ready', () => {
+    pinGithub(box);
+    theirs();
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(warnings(run.stderr)[0] ?? '', /^WARN\s+push\s+1 commit on main not on any remote is by old@example\.invalid; the guard is off, so it pushes as it is/);
+    assert.equal(closing(run.stderr), 'ready: commits and pushes use octocat · 2 warnings');
+  });
+
   test('a variable the guard refuses is named, with the others counted after the first', () => {
     pinGithub(box);
     guardOn(box);

@@ -20,7 +20,7 @@ import type { GuardState } from '../core/guard/hook.ts';
 import type { Result } from '../core/result.ts';
 import { pinWrites, type IdentityValues } from '../core/identity.ts';
 import { stepDefault } from './review-text.ts';
-import type { Answers, Choice, Flow, Review, Step, StepConfirm } from './engine.ts';
+import type { Answers, Choice, Flow, Resume, Review, Step, StepConfirm } from './engine.ts';
 
 /** The "a new account" choice. Empty, so it can never be a real account's name. */
 export const NEW_ACCOUNT = '';
@@ -136,10 +136,16 @@ function openingReview(ctx: SetupContext): Review | null {
   return shown.settled ? { ...shown, edits: false } : null;
 }
 
-function resumeAt(choice: 'account' | 'gh', ctx: SetupContext): { readonly answers: Answers; readonly start: number } {
+function resumeAt(choice: Resume, ctx: SetupContext): { readonly answers: Answers; readonly start: number } {
   if (choice === 'gh') return { answers: ghAnswers(ctx), start: steps(ctx).length };
+  if (choice === 'reauthor') return { answers: reauthorAnswers(ctx), start: steps(ctx).length };
   const start = steps(ctx).findIndex((step) => step.id === 'account');
   return { answers: { mode: 'recommended' }, start: start < 0 ? 0 : start };
+}
+
+/** The settled screen's Re-author them: the pinned account's answers, with that one step. */
+function reauthorAnswers(ctx: SetupContext): Answers {
+  return recommendedAnswers({ mode: 'recommended', account: ctx.pinned ?? '', reauthor: true }, ctx);
 }
 
 function ghAnswers(ctx: SetupContext): Answers {
@@ -726,10 +732,12 @@ function pendingReview(answers: Answers, ctx: SetupContext, steps: Review['steps
 
 function settledReview(answers: Answers, ctx: SetupContext, steps: Review['steps'], plan: readonly PlannedCommand[]): Review {
   const offer = ghOffer(accountOf(answers), ctx);
+  const reauthor = reauthorOffered(answers, ctx) ? { reauthorOffer: 'Re-author them as ' + printable(accountOf(answers)) } : {};
   const shown: Review = {
+    ...reauthor,
     title: 'This clone is already set up', headline: settledLines(answers, ctx).map(printable), steps,
     notes: [...noted(settledNotes(answers, ctx), answers, ctx, plan), ...ghNote(answers, ctx, true)], settled: true,
-    blocked: blockersOf(answers, ctx).length > 0,
+    blocked: blockersOf(answers, ctx).some((blocker) => blocker.blocks),
   };
   return offer ? { ...shown, ghSignIn: offer } : shown;
 }
@@ -760,7 +768,8 @@ export function blockersOf(answers: Answers, ctx: SetupContext): Blocker[] {
   const email = emailOf(answers, ctx) ?? '';
   const unpushed = email || !ctx.unpushed.commits.ok ? ctx.unpushed : { ...ctx.unpushed, branch: null };
   const autoUpstream = answers['upstream'] === true || ctx.upstream.enabled === true;
-  return blockers({ ...ctx.push, unpushed }, { email, account: accountOf(answers), autoUpstream });
+  const guarded = answers['guard'] === true || ctx.guard !== 'off' || ctx.redirected;
+  return blockers({ ...ctx.push, unpushed }, { email, account: accountOf(answers), autoUpstream, guarded });
 }
 
 /** use's own line, said here only when this run will not run use. Mirrors use.ts credentialConcern. */

@@ -65,14 +65,15 @@ function brief(commit: CommitIdentity, parent: string | null): UnpushedCommit {
 
 /**
  * Lines to show. Empty when there is nothing to say. The first is the fact; any other is how
- * to fix it. `account` is what to pin again to count again.
+ * to fix it. `account` is what to pin again to count again. `guarded` false: the guard is off, so
+ * the first line says they push as they are rather than that the guard will refuse them.
  */
-export function unpushedLines(fact: UnpushedFact, email: string, account: string): string[] {
+export function unpushedLines(fact: UnpushedFact, email: string, account: string, guarded = true): string[] {
   if (fact.branch === null) return [];
   if (!fact.commits.ok) return [unread(fact.branch, fact.commits.error)];
   const found = collect(fact.commits.value, fold(email));
   if (found.count === 0) return [];
-  return [sentence(fact.branch, found), ...advice(fact, found, account)];
+  return [sentence(fact.branch, found, guarded), ...advice(fact, found, account)];
 }
 
 /** How many unpushed commits carry an address other than `email`. Zero when they could not be read. */
@@ -188,12 +189,13 @@ function fold(address: string): string {
   return address.toLowerCase();
 }
 
-function sentence(branch: string, found: Found): string {
-  const noun = found.count === 1 ? '1 commit' : found.count + ' commits';
-  const verb = found.count === 1 ? 'is' : 'are';
-  const them = found.count === 1 ? 'it' : 'them';
-  return noun + ' on ' + show(branch) + ' not on any remote ' + verb + ' by ' +
-    list(found.addresses) + '; the guard will refuse ' + them;
+function sentence(branch: string, found: Found, guarded: boolean): string {
+  const one = found.count === 1;
+  const noun = one ? '1 commit' : found.count + ' commits';
+  const guard = guarded ? 'the guard will refuse ' + (one ? 'it' : 'them')
+    : 'the guard is off, so ' + (one ? 'it pushes as it is' : 'they push as they are');
+  return noun + ' on ' + show(branch) + ' not on any remote ' + (one ? 'is' : 'are') + ' by ' +
+    list(found.addresses) + '; ' + guard;
 }
 
 function list(addresses: readonly string[]): string {

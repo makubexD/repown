@@ -406,6 +406,15 @@ describe('repown setup, played with key presses', () => {
     assert.match(shown, /repown reauthor --yes/);
   });
 
+  test('a settled clone with commits by another address offers Re-author them on its first screen', async () => {
+    const theirs = { authorEmail: 'old@example.invalid', committerEmail: 'old@example.invalid', parent: 'abc1234' };
+    const ctx = setupContext({ pinned: 'octocat', pinIntact: true, guard: 'on', unpushed: { branch: 'main', commits: ok([theirs]), unknown: null } });
+    const { outcome, screen } = await play(ctx, [[esc]]);
+    assert.equal(outcome.status, 'cancelled', screen);
+    assert.match(screen, /This clone is already set up/);
+    assert.match(screen, /Re-author them as octocat/);
+  });
+
   test('old git skips that question and the settled screen names git push -u', async () => {
     const ctx = setupContext({
       pinned: 'octocat', guard: 'on', pinIntact: true,

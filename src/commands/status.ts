@@ -200,11 +200,12 @@ function matchesRecord(repo: RepoState, entry: Account): boolean {
 
 interface Problem { readonly what: string; readonly fix: string; }
 
-/** Read only for a clone whose identity is pinned: without it, the identity problem comes first. */
+/** Read only when status finds no problem: otherwise the problem comes first. */
 async function pushBlockers(repo: RepoState, account: string): Promise<Blocker[]> {
   const facts = await readPushFacts(repo.git, await readUnpushed(repo.git));
+  const guarded = repo.guard !== 'off' || repo.hook?.redirected === true;
   // The upstream field already says how to push a branch without one: not a warning here.
-  return blockers(facts, { email: repo.identity.email ?? '', account, autoUpstream: true });
+  return blockers(facts, { email: repo.identity.email ?? '', account, autoUpstream: true, guarded });
 }
 
 /** First among the warnings. An owner the origin warning names is not said twice. */
@@ -233,9 +234,12 @@ function closeStatus(end: StatusEnd): void {
 
 function closingLine(end: StatusEnd): string {
   if (end.problems.length > 0) return tally(end.problems.length, end.warnings.length) + setupHint(end.repo);
-  const [first] = end.blockers;
-  if (!first) return readyLine(end.repo, end.account, end.warnings, end.ghNote);
-  const more = end.blockers.length > 1 ? ' (and ' + (end.blockers.length - 1) + ' more above)' : '';
+  const blocking = end.blockers.filter((blocker) => blocker.blocks);
+  const [first] = blocking;
+  // What blocks nothing (the guard is off) is still a warning, and counted as one.
+  const quiet = end.blockers.filter((blocker) => !blocker.blocks).map(() => 'push');
+  if (!first) return readyLine(end.repo, end.account, [...quiet, ...end.warnings], end.ghNote);
+  const more = blocking.length > 1 ? ' (and ' + (blocking.length - 1) + ' more above)' : '';
   return 'the next push will fail: ' + printable(first.summary) + more;
 }
 

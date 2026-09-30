@@ -15,7 +15,7 @@ import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
 import { setupContext as context } from './setup-fixtures.ts';
 import { ok, err } from '../src/core/result.ts';
 import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Review, type ReviewChoice, type StepConfirm } from '../src/wizard/engine.ts';
-import { setupFlow, planCommands, formatCommand, gitStepOf, keptFlags, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext } from '../src/wizard/setup-flow.ts';
+import { setupFlow, planCommands, formatCommand, gitStepOf, keptFlags, blockersOf, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext } from '../src/wizard/setup-flow.ts';
 import { pinWrites } from '../src/core/identity.ts';
 import { plainPrompter } from '../src/wizard/plain.ts';
 import { reviewLines, reviewDefault } from '../src/wizard/review-text.ts';
@@ -763,7 +763,7 @@ describe('setup flow', () => {
   });
 
   test('S19 the review notes unpushed commits by another address, and Recommended does not rewrite them', () => {
-    const ctx = context({ unpushed: onBranch(['old@example.invalid', 'also@example.invalid']) });
+    const ctx = context({ guard: 'on', unpushed: onBranch(['old@example.invalid', 'also@example.invalid']) });
     const notes = reviewNotes(ctx);
     assert.match(notes, /2 commits on main not on any remote are by old@example\.invalid, also@example\.invalid; the guard will refuse them/);
     assert.match(notes, /re-author them: git rebase abc1234 --exec "git commit --amend --no-edit --reset-author --allow-empty"$/m);
@@ -795,7 +795,7 @@ describe('setup flow', () => {
   });
 
   test('S19 a committer who is not the author counts, and case does not', () => {
-    const mixed = context({ unpushed: { branch: 'main', unknown: null, commits: ok([
+    const mixed = context({ guard: 'on', unpushed: { branch: 'main', unknown: null, commits: ok([
       { authorEmail: 'octocat@example.invalid', committerEmail: 'Other@example.invalid', parent: 'fff0' },
       { authorEmail: 'other@example.invalid', committerEmail: 'octocat@example.invalid', parent: 'abc1234' },
     ]) } });
@@ -2366,6 +2366,29 @@ describe('setup: re-author the commits by another address, only when asked', () 
     assert.equal(planCommands(no, ctx).some((command) => command.argv[0] === 'reauthor'), false);
   });
 
+  test('a settled clone with commits by another address offers Re-author them, which reviews that one step', async () => {
+    const ctx = foreignCtx({ pinned: 'octocat', pinIntact: true, guard: 'on' });
+    const offered = scripted([['review', 'reauthor'], ['review', 'decline']]);
+    assert.deepEqual(await wizard(setupFlow(ctx), ctx, {}, offered), { status: 'declined' });
+    assert.equal(offered.reviews[0]?.settled, true);
+    assert.equal(offered.reviews[0]?.reauthorOffer, 'Re-author them as octocat');
+    assert.equal(offered.reviews[1]?.settled, false);
+    assert.deepEqual(offered.reviews[1]?.steps.map((step) => step.command), ['repown reauthor --yes']);
+    const clean = context({ pinned: 'octocat', pinIntact: true, guard: 'on' });
+    assert.equal(setupFlow(clean).opening!(clean)?.reauthorOffer, undefined, 'nothing to re-author, nothing offered');
+  });
+
+  test('with the guard off, commits by another address are a warning: done, not a push that will fail', () => {
+    const off = foreignCtx({ pinned: 'octocat', pinIntact: true, guard: 'off', upstream: { supported: true, enabled: true, branch: 'main', tracked: null } });
+    const answers = { mode: 'recommended', account: 'octocat', guard: false };
+    const shown = setupFlow(off).review(answers, off);
+    assert.equal(shown.blocked ?? false, false);
+    assert.match(shown.notes.join(' '), /the guard is off, so (it|they) push/);
+    assert.equal(blockersOf(answers, off).some((blocker) => blocker.blocks), false);
+    const on = { ...answers, guard: true };
+    assert.equal(blockersOf(on, off).some((blocker) => blocker.blocks), true, 'turning the guard on in this run makes them block');
+  });
+
   test('rewriting history needs a deliberate yes: Enter is Decline at the review and Skip at the step', () => {
     const ctx = foreignCtx();
     const answers = setupFlow(ctx).fill!({ mode: 'recommended', account: 'octocat', reauthor: true }, ctx);
@@ -2442,6 +2465,14 @@ describe('repown setup: repoint and fetch, in a real clone', () => {
     assert.match(run.stderr, /set up for octocat; the next push will fail: 1 commit by another address/);
     const push = spawnSync('git', ['push', 'origin', 'HEAD:main'], { cwd: at.box.dir, encoding: 'utf8', env: process.env });
     assert.notEqual(push.status, 0, 'the guard refuses it');
+  });
+
+  test('the field case with the guard left off: done, and the commits named as a warning', () => {
+    unfetchedOrigin();
+    const run = repown(['setup', 'octocat', '--fetch', '--auto-upstream', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /done: this clone is set up for octocat$/m);
+    assert.match(run.stderr, /1 commit on main not on any remote is by old@example\.invalid; the guard is off, so it pushes as it is/);
   });
 
   test('--reauthor with nothing by another address says so and rewrites nothing', () => {

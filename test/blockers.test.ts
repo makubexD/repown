@@ -6,7 +6,7 @@ import { blockers, type PushFacts } from '../src/core/blockers.ts';
 import { ok, err } from '../src/core/result.ts';
 
 const EMAIL = 'octocat@example.invalid';
-const CHOICE = { email: EMAIL, account: 'octocat', autoUpstream: false };
+const CHOICE = { email: EMAIL, account: 'octocat', autoUpstream: false, guarded: true };
 
 function facts(overrides: Partial<PushFacts> = {}): PushFacts {
   return {
@@ -126,4 +126,23 @@ test('blockers come in a fixed order: commits, fork commits, sign-in, variables,
     '1 commit by another address', '2 commits from another remote', 'the branch pushes with its own sign-in', 'GH_TOKEN is set', 'author.email is set',
     'the push goes to "octo-org"', 'main has diverged from origin/main', 'main has no upstream',
   ]);
+});
+
+test('with the guard off, what only the guard would refuse is said but blocks nothing', () => {
+  const off = { ...CHOICE, guarded: false };
+  const org = { remote: 'origin', owner: 'octo-org', allowed: [] };
+  const found = blockers(facts({
+    unpushed: foreign(2), elsewhere: ok(theirs(1)), env: ['GH_TOKEN', 'GIT_AUTHOR_EMAIL'], destination: org,
+  }), off);
+  const byKind = new Map(found.map((blocker) => [blocker.summary, blocker]));
+  assert.equal(byKind.get('2 commits by another address')?.blocks, false);
+  assert.match(byKind.get('2 commits by another address')!.lines[0]!, /; the guard is off, so they push as they are$/);
+  assert.equal(byKind.get('1 commit from another remote')?.blocks, false);
+  assert.match(byKind.get('1 commit from another remote')!.lines[0]!, /: the guard is off, so it pushes as it is/);
+  assert.equal(byKind.get('the push goes to "octo-org"')?.blocks, false);
+  assert.match(byKind.get('the push goes to "octo-org"')!.lines[0]!, /the guard is off, so it pushes there anyway/);
+  assert.equal(byKind.get('GH_TOKEN is set')?.blocks, false);
+  assert.equal(byKind.get('GIT_AUTHOR_EMAIL is set')?.blocks, true, 'an identity variable still changes every commit');
+  assert.equal(byKind.get('GIT_AUTHOR_EMAIL is set')!.lines[0], "GIT_AUTHOR_EMAIL is set in this shell: commits made here won't use " + EMAIL + ' (unset it)');
+  assert.ok(blockers(facts({ unpushed: foreign(2) }), CHOICE).every((blocker) => blocker.blocks), 'guarded: all block');
 });

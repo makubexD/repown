@@ -199,7 +199,8 @@ with no account and no flags, and setup opens on this screen, before any questio
 **Done** changes nothing. **Use another account** asks which account this clone should
 use. When gh acts as someone else, a third option is **Sign in to gh as `<account>`** (or
 **Make `<account>` gh's active account** when gh already lists it) and runs
-`repown use <account> --gh`. The upstream line shows the tracked branch (for example
+`repown use <account> --gh`. With unpushed commits by another address, **Re-author them**
+is offered too (`repown reauthor --yes`). The upstream line shows the tracked branch (for example
 `origin/main`) when there is one, otherwise `set on the first push (push.autoSetupRemote)`
 when that setting is on, otherwise nothing. It is the same value `repown status` shows,
 and `repown status` shows all of this without asking. Every screen:

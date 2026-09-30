@@ -313,7 +313,7 @@ ready: commits and pushes use octocat · gh: optional (see the note above)
 | 🔴 `gh is the git credential helper` | only gh's active account can push | `repown fix` |
 | 🟡 `no credential helper is set` / `cannot tell whether it honours` | a GitHub https clone, and the helper isn't Git Credential Manager | `repown doctor` ([card 1](#1-set-up-the-machine)) |
 | NOTE `gh active as "…"` | the gh CLI would act as another account; git pushes are unaffected. Printed after the identity line, and not counted as a warning | `gh auth switch -u <account>` when that account is signed in to gh; `repown use <account> --gh` when it is not |
-| 🟡 `push …` (first among the warnings) | something will stop the next push: commits by another address the guard will refuse (no remote has them, or another remote has them but the destination lacks them), a sign-in in the push URL, an identity or token variable in this shell, `author.email` in config, a destination owner (said once, by the `origin` row when that fires), a diverged branch, a detached HEAD. Read only when status finds no problem; a missing upstream stays in the `upstream` field | the line under it: the `git rebase` advice (or `repown reauthor`), `git config --unset …`, unset the variable, `git pull --rebase`; a sign-in in the push URL: `repown setup --repoint` ([card 8](#8-push-refused-and-the-fix)) |
+| 🟡 `push …` (first among the warnings) | something will stop the next push: commits by another address the guard will refuse (no remote has them, or another remote has them but the destination lacks them), a sign-in in the push URL, an identity or token variable in this shell, `author.email` in config, a destination owner (said once, by the `origin` row when that fires), a diverged branch, a detached HEAD. Read only when status finds no problem; a missing upstream stays in the `upstream` field. With the guard off, what only the guard would refuse (commits by another address, an owner, `GH_TOKEN`) says `the guard is off, so …`, counts as a warning, and the clone is still `ready` | the line under it: the `git rebase` advice (or `repown reauthor`), `git config --unset …`, unset the variable, `git pull --rebase`; a sign-in in the push URL: `repown setup --repoint` ([card 8](#8-push-refused-and-the-fix)) |
 | 🟡 `gh could not be queried` | who `gh pr create` acts as is unknown | `gh auth status` |
 | 🟡 `origin belongs to "octo-org"` | an organisation repository | `git config --local --add repown.allowOwner octo-org` |
 | 🟡 `guard off` | pushes are not checked | `repown guard on` |
@@ -762,7 +762,9 @@ and Recommended's answers. **Done** changes nothing (exit 0). **Use another acco
 continues at the account question, in Recommended; Back returns to this screen.
 **Sign in to gh as `<account>`** is offered only when gh acts as another account. It
 reviews one step, `repown use <account> --gh`. When gh already lists the account, the
-option is **Make `<account>` gh's active account**. **Change an answer** is not on this
+option is **Make `<account>` gh's active account**. **Re-author them as `<account>`** is
+offered only when unpushed commits carry another address; it reviews one step,
+`repown reauthor --yes`, whose Enter is Decline. **Change an answer** is not on this
 first screen. Step by step can still reach the same screen after its questions, and
 then Change an answer is there.
 
@@ -964,7 +966,9 @@ Stop, or Esc, prints `not run:` and the commands that did not get their turn. Ex
 **Done** writes nothing. **Use another account** asks which account, then the rest of
 Recommended. When gh acts as someone else, a third option is **Sign in to gh as
 octocat** (or **Make octocat gh's active account** when gh already lists it). Choosing
-it reviews `repown use octocat --gh` and nothing else. The box then says
+it reviews `repown use octocat --gh` and nothing else. With unpushed commits by another
+address, **Re-author them as octocat** is offered too, and reviews `repown reauthor --yes`
+alone. The box then says
 `If you use gh here, choose "Sign in to gh as octocat" below.`
 (or `Make octocat gh's active account` when gh already lists it).
 The `upstream` line is the tracked ref (for example `origin/main`) when there is

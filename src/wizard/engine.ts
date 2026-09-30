@@ -14,7 +14,14 @@ export const CANCEL = Symbol('cancel');
 export type Answer = string | boolean;
 export type Answers = Record<string, Answer>;
 export type Reply = Answer | typeof BACK | typeof CANCEL;
-export type ReviewChoice = 'run' | 'back' | 'edit' | 'decline' | 'done' | 'account' | 'gh' | typeof CANCEL;
+export type ReviewChoice = 'run' | 'back' | 'edit' | 'decline' | 'done' | 'account' | 'gh' | 'reauthor' | typeof CANCEL;
+
+/** A settled screen's choices that continue into the flow rather than end it. */
+export type Resume = 'account' | 'gh' | 'reauthor';
+
+function isResume(choice: ReviewChoice): choice is Resume {
+  return choice === 'account' || choice === 'gh' || choice === 'reauthor';
+}
 export type StepChoice = 'yes' | 'skip' | 'stop';
 
 /** What one planned step would change, shown before it runs in step-by-step mode. */
@@ -89,6 +96,8 @@ export interface Review {
   readonly blocked?: boolean;
   /** Settled screen only: sign this account in to gh, when gh acts as someone else. */
   readonly ghSignIn?: string;
+  /** Settled screen only: re-author the unpushed commits by another address. */
+  readonly reauthorOffer?: string;
   /** False when nothing has been asked, so Change an answer is not offered. */
   readonly edits?: boolean;
 }
@@ -111,7 +120,7 @@ export interface Flow<C> {
   /** Shown before the first question when nothing was given as a flag. Null starts the questions. */
   opening?(context: C): Review | null;
   /** Where an opening choice continues: its answers, and the step index to ask from. */
-  resume?(choice: 'account' | 'gh', context: C): { readonly answers: Answers; readonly start: number };
+  resume?(choice: Resume, context: C): { readonly answers: Answers; readonly start: number };
 }
 
 export interface Prompter {
@@ -288,7 +297,7 @@ interface Scene<C> {
 function openingChoice<C>(scene: Scene<C>, choice: ReviewChoice): Next {
   const stopped = stoppedChoice(choice);
   if (stopped) return { outcome: stopped, pass: scene.pass };
-  if (choice === 'account' || choice === 'gh') return { outcome: null, pass: resumed(scene, choice, null) };
+  if (isResume(choice)) return { outcome: null, pass: resumed(scene, choice, null) };
   if (choice === 'edit') scene.prompter.note('nothing has been asked yet');
   return { outcome: null, pass: scene.pass };
 }
@@ -305,7 +314,7 @@ interface Walked {
   readonly asked: readonly number[];
 }
 
-function resumed<C>(scene: Scene<C>, choice: 'account' | 'gh', walk: Walked | null): Pass {
+function resumed<C>(scene: Scene<C>, choice: Resume, walk: Walked | null): Pass {
   const spot = scene.flow.resume?.(choice, scene.context);
   const start = spot?.start ?? 0;
   return {
@@ -315,9 +324,9 @@ function resumed<C>(scene: Scene<C>, choice: 'account' | 'gh', walk: Walked | nu
   };
 }
 
-function branchAnswers(choice: 'account' | 'gh', freshAnswers: Answers, walk: Walked | null): Answers {
+function branchAnswers(choice: Resume, freshAnswers: Answers, walk: Walked | null): Answers {
   if (!walk) return freshAnswers;
-  return choice === 'gh' ? { ...walk.answers, gh: true } : walk.answers;
+  return choice === 'account' ? walk.answers : { ...walk.answers, [choice]: true };
 }
 
 async function takePass<C>(flow: Flow<C>, context: C, pass: Pass, prompter: Prompter): Promise<Next> {
@@ -332,7 +341,7 @@ async function afterReview<C>(scene: Scene<C>, walk: Walked): Promise<Next> {
   const choice = await scene.prompter.review(shown);
   const direct = directChoice(choice, shown, walk.answers);
   if (direct) return { outcome: direct, pass: scene.pass };
-  if (choice === 'account' || choice === 'gh') return { outcome: null, pass: resumed(scene, choice, walk) };
+  if (isResume(choice)) return { outcome: null, pass: resumed(scene, choice, walk) };
   return restart(scene, walk, choice);
 }
 

@@ -109,11 +109,14 @@ repown                 # in a terminal: starts the guided setup of this clone
    | Question | Recommended | Step by step | Flag |
    | --- | --- | --- | --- |
    | Which account should this clone belong to? | Asked. `repown setup <account>` skips the mode question and uses Recommended, so a recorded account goes straight to the review when nothing else must be asked. A new account also asks where it's hosted, the name and the email. | Asked | `<account>`, `--host`, `--name`, `--email` |
+   | Push through the remote instead of a URL? Asked when the branch pushes to a URL (which can carry its own sign-in) that names the same repository as a remote here. The review shows the key and the remote, never the URL. | Answers Yes without asking | Asked, default Yes | `--repoint` |
+   | Fetch the remote first? Asked when commits by another address wait behind a remote this clone has never fetched, so repown can count which it already has. Prompts are off; a failed fetch is a warning. | Answers Yes without asking | Asked, default Yes | `--fetch` |
    | Let this clone push to origin's owner? Asked when origin belongs to someone else, like an organisation. | Asked, default Yes. No means the guard refuses pushes there. | Asked, default Yes | `--allow-owner <owner>` |
    | Turn the guard on? | Answers Yes without asking | Asked | `--guard` |
    | Push branches without -u? Only on git 2.37+. It sets `push.autoSetupRemote` in this clone only; the guard still checks that first push. | Answers Yes without asking | Asked, default Yes | `--auto-upstream` |
    | gh. "Switch gh too" makes `gh pr create` match. | Switches without asking when gh already lists the account and the clone is not already pinned to it. A sign-in, which opens a browser, is asked, default No. Skips the question when the clone is already pinned to that account. | Asked | `--gh` |
    | Take git's sign-ins back from gh? Machine-wide. | Asked, default No. Answer Yes if `repown doctor` said gh is the helper, or pushes from your other account's clones fail. | Asked, default No | `--fix` |
+   | Re-author your unpushed commits by another address as this account? Asked when commits you made before pinning (or an IDE made) carry another email. Only if you made them. It runs last, as `repown reauthor --yes`: it fetches first, rewrites only what no remote has, keeps a backup, and never pushes. | Asked, default No. Enter at the review is Decline when this is a step. | Asked, default No; Enter at the step is Skip | `--reauthor` |
 
    Step by step asks every question: `--step-by-step`.
    `--no-input` asks nothing ([scripts and CI](docs/CONFIGURATION.md#scripts-and-ci)).
@@ -196,7 +199,8 @@ with no account and no flags, and setup opens on this screen, before any questio
 **Done** changes nothing. **Use another account** asks which account this clone should
 use. When gh acts as someone else, a third option is **Sign in to gh as `<account>`** (or
 **Make `<account>` gh's active account** when gh already lists it) and runs
-`repown use <account> --gh`. The upstream line shows the tracked branch (for example
+`repown use <account> --gh`. With unpushed commits by another address, **Re-author them**
+is offered too (`repown reauthor --yes`). The upstream line shows the tracked branch (for example
 `origin/main`) when there is one, otherwise `set on the first push (push.autoSetupRemote)`
 when that setting is on, otherwise nothing. It is the same value `repown status` shows,
 and `repown status` shows all of this without asking. Every screen:
@@ -213,8 +217,9 @@ then commit and push.
 | | `repown fix [--dry-run] [--yes]` | undo `gh auth setup-git`, so each clone's pinned account is used; shows what it removes, and the undo, first |
 | Once per clone | `repown setup [<account>]` | guided setup of this clone. Questions, flags and the review: [Quick start](#quick-start). A clone that is already set up opens on that screen |
 | | `repown use <account> [--gh]` | what setup runs: pin this clone to an account. `--gh` switches gh's active account, or signs the account in to gh when needed (in a terminal). `--name` with `--email` skips the registry, the file where repown remembers accounts |
+| | `repown reauthor [--yes]` | give this branch's unpushed commits by another address your pinned identity, so the guard lets them through. Fetches the push destination first, rewrites only what no remote has, keeps a backup ref, never pushes |
 | | `repown guard on \| off \| status` | install, remove or show the pre-push hook (bare `repown guard` shows it) |
-| Any time | `repown status` | this clone's and this machine's settings, and what to fix. Exits 1 on a problem; warnings alone exit 0 |
+| Any time | `repown status` | this clone's and this machine's settings, and what to fix. It ends `ready: …`, or `the next push will fail: …` with what is in the way. Exits 1 on a problem; warnings alone exit 0 |
 | | `repown scan [dir...] [--emails] [--depth <n>] [--format json]` | every clone under the folders (default: this one, 3 levels deep): owner, host, identity, guard, and which email domains its history has. Changes nothing |
 | Rarely | `repown accounts list \| add \| remove` | the accounts this machine knows (bare `repown accounts` lists them; `add` takes `--name`, `--email`, `--host github\|azdo\|generic`; `list --format json` for scripts) |
 | | `repown off` | unpin this clone, leaving global config alone; warns if the guard is still on |

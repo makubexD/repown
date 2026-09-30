@@ -16,9 +16,9 @@ export const PICK_QUESTION = 'Which answer do you want to change?';
 export const BACK_TO_REVIEW = 'Back to the review';
 export const RUN_THIS_STEP = 'Run this step?';
 
-/** Yes, unless the command changes the whole machine: that needs a deliberate yes, as in the review. */
+/** Yes, unless the command changes the whole machine or rewrites commits: that needs a deliberate yes, as in the review. */
 export function stepDefault(command: string): 'yes' | 'skip' {
-  return changesMachine(command) ? 'skip' : 'yes';
+  return needsDeliberateYes(command) ? 'skip' : 'yes';
 }
 
 export function stepOptions(): Array<{ value: StepChoice; label: string }> {
@@ -34,8 +34,14 @@ export function stepConfirmLines(brief: { readonly changes: readonly string[]; r
   return [...brief.changes, '', brief.why, '> ' + brief.command];
 }
 
-function changesMachine(command: string): boolean {
-  return command.startsWith('repown fix');
+/** `fix` changes the whole machine; `reauthor` rewrites commits. */
+function needsDeliberateYes(command: string): boolean {
+  return command.startsWith('repown fix') || command.startsWith('repown reauthor');
+}
+
+/** A settled clone's verdict: its settings are right; the notes say what else is not (ADR-026). */
+function settledVerdict(review: Review): string {
+  return review.blocked ? 'Its settings need no change, but the next push will fail:' : 'Nothing needs to change.';
 }
 
 /**
@@ -47,7 +53,7 @@ export function reviewLines(review: Review, width = Infinity, command: (text: st
   const words = (text: string): string[] => wrap(text, width);
   // A command's continuation sits deeper, so it can't read as the next command.
   const code = (text: string): string[] => wrap('     ' + text, width - 2).map((line, index) => command(index ? '  ' + line : line));
-  if (review.settled) return [...review.headline.flatMap(words), '', 'Nothing needs to change.', ...notesOf(review).flatMap(words)];
+  if (review.settled) return [...review.headline.flatMap(words), '', settledVerdict(review), ...notesOf(review).flatMap(words)];
   const steps = review.steps.flatMap((step, index) => [
     ...words((index + 1) + '. ' + step.what),
     ...code(step.command),
@@ -101,22 +107,23 @@ export function reviewOptions(review: Review): ReviewOption[] {
   ];
 }
 
-/** Done, then a way to pick another account or sign in to gh. Change an answer stays once questions were asked. */
+/** Done, then a way to pick another account, sign in to gh or re-author. Change an answer stays once questions were asked. */
 function settledOptions(review: Review): ReviewOption[] {
   const options: ReviewOption[] = [
     { value: 'done', label: 'Done', hint: 'change nothing' },
     { value: 'account', label: 'Use another account', hint: 'choose a different account for this clone' },
   ];
   if (review.ghSignIn) options.push({ value: 'gh', label: review.ghSignIn });
+  if (review.reauthorOffer) options.push({ value: 'reauthor', label: review.reauthorOffer, hint: 'only if you made them; a backup is kept' });
   if (review.edits !== false) options.push({ value: 'edit', label: 'Change an answer' });
   return options;
 }
 
 /**
- * The choice Enter takes: the first, unless a step changes the whole machine
- * (`fix`), which, like its own question, needs a deliberate yes.
+ * The choice Enter takes: the first, unless a step changes the whole machine or rewrites commits
+ * (`fix`, `reauthor`), which, like its own question, needs a deliberate yes.
  */
 export function reviewDefault(review: Review): ReviewOption['value'] {
-  const machineWide = review.steps.some((step) => changesMachine(step.command));
-  return !review.settled && machineWide ? 'decline' : reviewOptions(review)[0]!.value;
+  const deliberate = review.steps.some((step) => needsDeliberateYes(step.command));
+  return !review.settled && deliberate ? 'decline' : reviewOptions(review)[0]!.value;
 }

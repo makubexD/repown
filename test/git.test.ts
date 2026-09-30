@@ -1,7 +1,7 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { sandbox, type Sandbox } from './helpers.ts';
-import { Git } from '../src/core/git.ts';
+import { Git, quietEnv, networkReason } from '../src/core/git.ts';
 import { writeFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -187,5 +187,42 @@ describe('empty config values', () => {
     // The filtering reader still drops it -- that is its job elsewhere.
     const filtered = await git.getAllConfig('credential.https://github.com.helper', 'global');
     assert.equal(filtered.length, 1);
+  });
+});
+
+describe('quiet network calls', () => {
+  test('ssh is made non-interactive only where nothing names an ssh command already', () => {
+    assert.equal(quietEnv({}, false)['GIT_SSH_COMMAND'], 'ssh -o BatchMode=yes');
+    assert.equal(quietEnv({}, true)['GIT_SSH_COMMAND'], undefined, 'core.sshCommand (ssh -i <key>) stays in charge');
+    assert.equal(quietEnv({ GIT_SSH: 'plink' }, false)['GIT_SSH_COMMAND'], undefined, 'GIT_SSH stays in charge');
+    assert.equal(quietEnv({ GIT_SSH_COMMAND: 'ssh -i key' }, false)['GIT_SSH_COMMAND'], 'ssh -i key');
+    const env = quietEnv({ GIT_ASKPASS: 'x', SSH_ASKPASS: 'y', PATH: 'p' }, false);
+    assert.equal(env['GIT_ASKPASS'], undefined);
+    assert.equal(env['SSH_ASKPASS'], undefined);
+    assert.equal(env['GIT_TERMINAL_PROMPT'], '0');
+    assert.equal(env['PATH'], 'p');
+  });
+
+  test('a failure reason masks every credential and query in a URL', () => {
+    const reason = (stderr: string): string => networkReason({ code: 128, stdout: '', stderr });
+    assert.equal(reason('fatal: https://u:pa/ss@github.com/o/r.git not found'), 'fatal: https://***@github.com/o/r.git not found');
+    assert.equal(reason('fatal: https://u:p@ss@github.com/o/r.git'), 'fatal: https://***@github.com/o/r.git');
+    assert.equal(reason('fatal: https://github.com/o/r.git?token=abc: 403'), 'fatal: https://github.com/o/r.git?*** 403');
+    assert.equal(reason('fatal: could not read Username?'), 'fatal: could not read Username?', 'a question mark in plain text stays');
+  });
+});
+
+describe('createRef', () => {
+  let box: Sandbox;
+  before(() => { box = sandbox(); box.git('commit', '-q', '--allow-empty', '-m', 'one'); });
+  after(() => box.dispose());
+
+  test('writes a new ref and refuses to overwrite one that exists', async () => {
+    const git = new Git(box.dir);
+    const head = box.git('rev-parse', 'HEAD');
+    assert.equal(await git.createRef('refs/repown/backup/main/1', head), true);
+    box.git('commit', '-q', '--allow-empty', '-m', 'two');
+    assert.equal(await git.createRef('refs/repown/backup/main/1', box.git('rev-parse', 'HEAD')), false);
+    assert.equal(box.git('rev-parse', 'refs/repown/backup/main/1'), head);
   });
 });

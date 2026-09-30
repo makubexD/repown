@@ -10,14 +10,17 @@
 import { ghAdvice, upstreamText } from '../commands/status.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { shellWord } from '../core/guard/check.ts';
-import { unpushedLines, type UnpushedFact } from '../core/unpushed.ts';
+import { printable } from '../ui/format.ts';
+import { foreignAddresses, foreignCount, type UnpushedFact } from '../core/unpushed.ts';
+import type { PushFacts } from '../core/push-state.ts';
+import { blockers, type Blocker } from '../core/blockers.ts';
 import type { Account } from '../core/registry.ts';
 import type { GhState } from '../core/credential/gh.ts';
 import type { GuardState } from '../core/guard/hook.ts';
 import type { Result } from '../core/result.ts';
 import { pinWrites, type IdentityValues } from '../core/identity.ts';
 import { stepDefault } from './review-text.ts';
-import type { Answers, Choice, Flow, Review, Step, StepConfirm } from './engine.ts';
+import type { Answers, Choice, Flow, Resume, Review, Step, StepConfirm } from './engine.ts';
 
 /** The "a new account" choice. Empty, so it can never be a real account's name. */
 export const NEW_ACCOUNT = '';
@@ -66,6 +69,8 @@ export interface SetupContext {
   readonly addresses: Result<ReadonlyMap<string, number>>;
   /** Commits on the current branch that no remote has. Compared here with the planned email. */
   readonly unpushed: UnpushedFact;
+  /** What else decides whether the next commit, pull or push works (blockers.ts). */
+  readonly push: Omit<PushFacts, 'unpushed'>;
   /** Global `user.name` and `user.email`. Shown, never assumed to be this account. */
   readonly machineIdentity: { readonly name: string | null; readonly email: string | null };
   /** Git's `push.autoSetupRemote`: whether this git has it, the effective value, the branch. */
@@ -131,10 +136,16 @@ function openingReview(ctx: SetupContext): Review | null {
   return shown.settled ? { ...shown, edits: false } : null;
 }
 
-function resumeAt(choice: 'account' | 'gh', ctx: SetupContext): { readonly answers: Answers; readonly start: number } {
+function resumeAt(choice: Resume, ctx: SetupContext): { readonly answers: Answers; readonly start: number } {
   if (choice === 'gh') return { answers: ghAnswers(ctx), start: steps(ctx).length };
+  if (choice === 'reauthor') return { answers: reauthorAnswers(ctx), start: steps(ctx).length };
   const start = steps(ctx).findIndex((step) => step.id === 'account');
   return { answers: { mode: 'recommended' }, start: start < 0 ? 0 : start };
+}
+
+/** The settled screen's Re-author them: the pinned account's answers, with that one step. */
+function reauthorAnswers(ctx: SetupContext): Answers {
+  return recommendedAnswers({ mode: 'recommended', account: ctx.pinned ?? '', reauthor: true }, ctx);
 }
 
 function ghAnswers(ctx: SetupContext): Answers {
@@ -212,6 +223,8 @@ function accountSteps(ctx: SetupContext): Step<SetupContext>[] {
 
 function choiceSteps(ctx: SetupContext): Step<SetupContext>[] {
   return [
+    repointStep(ctx),
+    fetchStep(ctx),
     ghStep(ctx),
     { id: 'allowOwner', kind: 'confirm', flag: '--allow-owner', initial: () => true,
       message: 'This repository belongs to "' + printable(ctx.owner ?? '') + '". Let this clone push to it?',
@@ -228,7 +241,51 @@ function choiceSteps(ctx: SetupContext): Step<SetupContext>[] {
       hint: 'undo any time: gh auth setup-git', initial: () => false, when: () => ctx.fixLines !== null,
       detail: () => 'gh answers git\'s sign-in requests with its active account only, so clones of your other accounts ' +
         'get password prompts. Yes hands that job back to Git Credential Manager, for every repository on this machine' },
+    reauthorStep(ctx),
   ];
+}
+
+/** Never answered by Recommended: only the user knows whether they made those commits. */
+function reauthorStep(ctx: SetupContext): Step<SetupContext> {
+  return {
+    id: 'reauthor', kind: 'confirm', flag: '--reauthor', initial: () => false,
+    message: (answers) => 'Re-author your unpushed commits by ' + printable(othersOf(answers, ctx).join(', ')) +
+      ' as ' + printable(accountOf(answers)) + '?',
+    hint: 'only if you made them: they get this account\'s name and email. repown fetches first, rewrites only ' +
+      'what no remote has, keeps a backup, and never pushes',
+    when: (answers) => reauthorOffered(answers, ctx),
+  };
+}
+
+/**
+ * `--repoint`, `--fetch` and `--reauthor` apply only where their step would be asked; elsewhere
+ * each is turned off with a note saying why. Read before any question, so a repoint not yet
+ * answered counts as the Yes Recommended gives it (a later No drops the fetch from the plan).
+ */
+export function keptFlags(given: Answers, ctx: SetupContext): { readonly answers: Answers; readonly notes: string[] } {
+  const answers = { ...given };
+  const notes: string[] = [];
+  const drop = (key: string, note: string): void => { answers[key] = false; notes.push('--' + key + ': ' + note); };
+  if (answers['repoint'] === true && !ctx.push.repoint) drop('repoint', 'this branch does not push to a URL that a remote here names, so there is nothing to repoint');
+  if (answers['fetch'] === true && fetchTarget({ ...answers, repoint: answers['repoint'] ?? true }, ctx) === null) drop('fetch', fetchDropped(answers, ctx));
+  if (answers['reauthor'] === true && !reauthorOffered(answers, ctx)) drop('reauthor', 'no unpushed commit here is by another address, so there is nothing to re-author');
+  return { answers, notes };
+}
+
+function fetchDropped(answers: Answers, ctx: SetupContext): string {
+  if (answers['repoint'] === false && fetchTarget({ ...answers, repoint: true }, ctx) !== null) {
+    return 'this branch pushes to a URL, so fetching ' + printable(ctx.push.repoint!.remote) + ' tells nothing about it: add --repoint';
+  }
+  return 'no commit by another address waits behind a remote this clone has never fetched, so there is nothing to fetch';
+}
+
+/** Some unpushed commits carry an address other than the chosen account's. */
+export function reauthorOffered(answers: Answers, ctx: SetupContext): boolean {
+  return othersOf(answers, ctx).length > 0;
+}
+
+function othersOf(answers: Answers, ctx: SetupContext): readonly string[] {
+  return foreignAddresses(ctx.unpushed, emailOf(answers, ctx) ?? '');
 }
 
 /** Labels for a newcomer; the providers' own labels stay as `repown` prints them elsewhere. */
@@ -287,6 +344,40 @@ function upstreamStep(ctx: SetupContext): Step<SetupContext> {
     message: 'Push branches without -u?', hint: UPSTREAM_HINT,
     when: () => offersUpstream(ctx), auto: isRecommended,
   };
+}
+
+function repointStep(ctx: SetupContext): Step<SetupContext> {
+  const target = ctx.push.repoint;
+  return {
+    id: 'repoint', kind: 'confirm', flag: '--repoint', initial: () => true, auto: isRecommended,
+    message: 'Push through ' + printable(target?.remote ?? '') + ' instead of the URL set for this branch?',
+    hint: 'that URL names the same repository as ' + printable(target?.remote ?? '') + ', but it can carry its own sign-in, so ' +
+      'pushes would not sign in as this account, and it is never fetched. Changes ' + printable(target?.key ?? '') + ', this clone only',
+    when: () => target !== null,
+  };
+}
+
+function fetchStep(ctx: SetupContext): Step<SetupContext> {
+  return {
+    id: 'fetch', kind: 'confirm', flag: '--fetch', initial: () => true, auto: isRecommended,
+    message: (answers) => 'Fetch ' + printable(fetchTarget(answers, ctx) ?? '') + ' first?',
+    hint: (answers) => 'so repown can tell which of your unpushed commits ' + printable(fetchTarget(answers, ctx) ?? '') +
+      ' already has; downloads only, moves none of your branches, and never asks for a password',
+    when: (answers) => fetchTarget(answers, ctx) !== null,
+  };
+}
+
+/**
+ * The remote to fetch before counting: commits by another address, behind a remote no
+ * tracking ref reaches -- the destination itself, or the remote a repoint makes it.
+ */
+export function fetchTarget(answers: Answers, ctx: SetupContext): string | null {
+  if (foreignCount(ctx.unpushed, emailOf(answers, ctx) ?? '') === 0) return null;
+  const unknown = ctx.unpushed.unknown;
+  if (unknown?.kind === 'remote') return unknown.name;
+  const repoint = ctx.push.repoint;
+  if (unknown?.kind !== 'url' || !repoint || repoint.tracked || answers['repoint'] !== true) return null;
+  return repoint.remote;
 }
 
 const SWITCH_MESSAGE = 'Also make this account gh\'s active account?';
@@ -491,6 +582,8 @@ export function planCommands(answers: Answers, ctx: SetupContext): PlannedComman
   const account = accountOf(answers);
   const cwd = ctx.cwd ? ['--cwd=' + ctx.cwd] : [];
   const planned: (readonly string[] | null)[] = [
+    repointArgv(answers, ctx),
+    fetchArgv(answers, ctx),
     isNew(answers) ? ['accounts', 'add', '--name=' + String(answers['name']), '--email=' + String(answers['email']),
       '--host=' + hostOf(answers, ctx), '--', account] : null,
     answers['allowOwner'] === true && ctx.owner ? allowOwnerLine(ctx) : null,
@@ -498,6 +591,7 @@ export function planCommands(answers: Answers, ctx: SetupContext): PlannedComman
     useArgv(answers, ctx),
     answers['guard'] === true ? ['guard', 'on', ...cwd] : null,
     upstreamArgv(answers, ctx),
+    answers['reauthor'] === true && reauthorOffered(answers, ctx) ? ['reauthor', '--yes', ...cwd] : null,
   ];
   return planned.filter((argv): argv is readonly string[] => argv !== null).map((argv) => ({ argv, what: whatOf(argv, answers, ctx) }));
 }
@@ -519,8 +613,35 @@ function upstreamArgv(answers: Answers, ctx: SetupContext): string[] | null {
   return autoUpstreamLine(ctx);
 }
 
+function gitIn(ctx: SetupContext): string[] {
+  return ['git', ...(ctx.cwd ? ['-C', ctx.cwd] : [])];
+}
+
 function autoUpstreamLine(ctx: SetupContext): string[] {
-  return ['git', ...(ctx.cwd ? ['-C', ctx.cwd] : []), 'config', '--local', 'push.autoSetupRemote', 'true'];
+  return [...gitIn(ctx), 'config', '--local', 'push.autoSetupRemote', 'true'];
+}
+
+function repointArgv(answers: Answers, ctx: SetupContext): string[] | null {
+  const target = ctx.push.repoint;
+  if (answers['repoint'] !== true || !target) return null;
+  return [...gitIn(ctx), 'config', '--local', target.key, target.remote];
+}
+
+function fetchArgv(answers: Answers, ctx: SetupContext): string[] | null {
+  const remote = answers['fetch'] === true ? fetchTarget(answers, ctx) : null;
+  return remote ? [...gitIn(ctx), 'fetch', remote] : null;
+}
+
+/** Which of setup's git lines this is, read from its shape; null for anything setup does not plan. */
+export type GitStep = 'repoint' | 'fetch' | 'upstream' | 'allowOwner';
+
+export function gitStepOf(argv: readonly string[]): GitStep | null {
+  const sub = argv[1] === '-C' ? argv.slice(3) : argv.slice(1);
+  if (sub[0] === 'fetch' && sub.length === 2) return 'fetch';
+  if (sub[0] !== 'config' || sub[1] !== '--local') return null;
+  if (sub[2] === '--add' && sub[3] === 'repown.allowOwner' && sub.length === 5) return 'allowOwner';
+  if (sub[2] === 'push.autoSetupRemote' && sub.length === 4) return 'upstream';
+  return sub.length === 4 ? 'repoint' : null;
 }
 
 /** What a planned command does, in words for someone who has never used repown. */
@@ -530,12 +651,16 @@ function whatOf(argv: readonly string[], answers: Answers, ctx: SetupContext): s
   if (argv[0] === 'git') return gitWhat(argv, ctx);
   if (argv[0] === 'fix') return 'Stop gh answering git\'s sign-in requests (whole machine)';
   if (argv[0] === 'guard') return 'Turn on the push guard: each push is checked first';
+  if (argv[0] === 'reauthor') return 'Re-author your unpushed commits by other addresses as ' + account + ' (a backup is kept; nothing is pushed)';
   if (answers['gh'] === true) return ghWhat(account, ctx);
   return 'Pin this clone to ' + account + (ctx.credentialPinned ? ': its commit name, email and push sign-in' : ': its commit name and email');
 }
 
 function gitWhat(argv: readonly string[], ctx: SetupContext): string {
-  if (argv.includes('push.autoSetupRemote')) return 'Push branches without -u: the first push sets the upstream (this clone only)';
+  const step = gitStepOf(argv);
+  if (step === 'repoint') return 'Push through ' + argv.at(-1) + ' instead of the URL in ' + argv.at(-2) + ' (this clone only)';
+  if (step === 'fetch') return 'Fetch ' + argv.at(-1) + ', so repown can tell which commits it already has';
+  if (step === 'upstream') return 'Push branches without -u: the first push sets the upstream (this clone only)';
   return 'Let this clone push to ' + ctx.owner + '\'s repositories';
 }
 
@@ -546,7 +671,7 @@ function ghWhat(account: string, ctx: SetupContext): string {
 }
 
 function allowOwnerLine(ctx: SetupContext): string[] {
-  return ['git', ...(ctx.cwd ? ['-C', ctx.cwd] : []), 'config', '--local', '--add', 'repown.allowOwner', ctx.owner!];
+  return [...gitIn(ctx), 'config', '--local', '--add', 'repown.allowOwner', ctx.owner!];
 }
 
 /**
@@ -565,14 +690,8 @@ export function formatCommand(argv: readonly string[]): string {
   return printable(['repown', ...words.map(shellWord)].join(' '));
 }
 
-/**
- * Control characters, and the invisible or direction-changing ones, as visible escapes:
- * a value read from a remote URL must neither redraw the screen nor read as another name.
- */
-export function printable(text: string): string {
-  return text.replace(/[\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g,
-    (char) => '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0'));
-}
+/** Setup's own importers read it from here; the one definition is in the output helpers. */
+export { printable };
 
 /** `--name=value` as `--name value`, unless the value starts with a dash and would read as an option. */
 function splitOption(token: string): string[] {
@@ -613,9 +732,12 @@ function pendingReview(answers: Answers, ctx: SetupContext, steps: Review['steps
 
 function settledReview(answers: Answers, ctx: SetupContext, steps: Review['steps'], plan: readonly PlannedCommand[]): Review {
   const offer = ghOffer(accountOf(answers), ctx);
+  const reauthor = reauthorOffered(answers, ctx) ? { reauthorOffer: 'Re-author them as ' + printable(accountOf(answers)) } : {};
   const shown: Review = {
+    ...reauthor,
     title: 'This clone is already set up', headline: settledLines(answers, ctx).map(printable), steps,
     notes: [...noted(settledNotes(answers, ctx), answers, ctx, plan), ...ghNote(answers, ctx, true)], settled: true,
+    blocked: blockersOf(answers, ctx).some((blocker) => blocker.blocks),
   };
   return offer ? { ...shown, ghSignIn: offer } : shown;
 }
@@ -632,10 +754,22 @@ function upstreamOffer(ctx: SetupContext): string | null {
   return 'optional: push branches without -u: repown setup --auto-upstream';
 }
 
+/** What blocks the next push first (ADR-026), then the step's own notes. */
 function noted(lines: readonly string[], answers: Answers, ctx: SetupContext, plan: readonly PlannedCommand[]): string[] {
   const gap = credentialGap(plan, answers, ctx);
-  const body = [...lines, ...extraNotes(answers, ctx), ...(gap ? [gap] : [])];
+  const found = blockersOf(answers, ctx);
+  const upstream = found.some((blocker) => blocker.summary.endsWith('has no upstream')) ? null : upstreamNote(ctx);
+  const body = [...found.flatMap((blocker) => blocker.lines), ...lines, ...(upstream ? [upstream] : []), ...(gap ? [gap] : [])];
   return body.map(printable);
+}
+
+/** The address depends on the account, so the commits were read once and are compared here. */
+export function blockersOf(answers: Answers, ctx: SetupContext): Blocker[] {
+  const email = emailOf(answers, ctx) ?? '';
+  const unpushed = email || !ctx.unpushed.commits.ok ? ctx.unpushed : { ...ctx.unpushed, branch: null };
+  const autoUpstream = answers['upstream'] === true || ctx.upstream.enabled === true;
+  const guarded = answers['guard'] === true || ctx.guard !== 'off' || ctx.redirected;
+  return blockers({ ...ctx.push, unpushed }, { email, account: accountOf(answers), autoUpstream, guarded });
 }
 
 /** use's own line, said here only when this run will not run use. Mirrors use.ts credentialConcern. */
@@ -644,18 +778,6 @@ function credentialGap(plan: readonly PlannedCommand[], answers: Answers, ctx: S
   const account = accountOf(answers);
   if (ctx.stored.value.includes(account)) return null;
   return 'No stored credential for ' + account + ' yet: the first push signs in once (your browser opens).';
-}
-
-function extraNotes(answers: Answers, ctx: SetupContext): string[] {
-  const upstream = upstreamNote(ctx);
-  return [...(upstream ? [upstream] : []), ...unpushedNote(answers, ctx)];
-}
-
-/** The address depends on the account, so the commits were read once and are compared here. */
-function unpushedNote(answers: Answers, ctx: SetupContext): string[] {
-  const email = emailOf(answers, ctx) ?? '';
-  if (!email && ctx.unpushed.commits.ok) return [];
-  return unpushedLines(ctx.unpushed, email, accountOf(answers));
 }
 
 /** Old git, or a version that could not be read: say the push the question would have replaced. */
@@ -802,6 +924,7 @@ export function changesOf(argv: readonly string[], answers: Answers, ctx: SetupC
   if (argv[0] === 'git') return [gitChange(argv)];
   if (argv[0] === 'fix') return fixChanges(ctx);
   if (argv[0] === 'guard') return [guardChange(ctx)];
+  if (argv[0] === 'reauthor') return [reauthorChange(answers, ctx)];
   return useChanges(argv, answers, ctx);
 }
 
@@ -824,8 +947,17 @@ function registryChange(answers: Answers): string {
 }
 
 function gitChange(argv: readonly string[]): string {
-  if (argv.includes('push.autoSetupRemote')) return 'push.autoSetupRemote = true';
+  const step = gitStepOf(argv);
+  if (step === 'repoint') return argv.at(-2) + ' = ' + argv.at(-1);
+  if (step === 'fetch') return 'refs/remotes/' + argv.at(-1) + '/*: updated from ' + argv.at(-1) + ' (none of your branches move)';
+  if (step === 'upstream') return 'push.autoSetupRemote = true';
   return 'repown.allowOwner += ' + (argv.at(-1) ?? '');
+}
+
+function reauthorChange(answers: Answers, ctx: SetupContext): string {
+  const branch = ctx.unpushed.branch ?? 'this branch';
+  return branch + ': unpushed commits by ' + othersOf(answers, ctx).join(', ') + ' get ' + (emailOf(answers, ctx) ?? '') +
+    '; the original stays at refs/repown/backup/' + branch + '/<time>';
 }
 
 function fixChanges(ctx: SetupContext): string[] {

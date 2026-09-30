@@ -20,8 +20,8 @@ export interface CloneSnapshot {
   readonly guard: GuardState;
 }
 
-export async function readCloneSnapshot(git: Git, credentialKeys: readonly string[]): Promise<CloneSnapshot> {
-  const keys = [...LEADING, ...credentialKeys];
+export async function readCloneSnapshot(git: Git, watched: readonly string[]): Promise<CloneSnapshot> {
+  const keys = [...LEADING, ...watched];
   const found = await Promise.all(keys.map((key) => git.getConfig(key, 'local')));
   const [allowOwner, autoUpstream, guard] = await Promise.all([
     git.getAllConfig(ALLOW_OWNER, 'local'),
@@ -58,9 +58,14 @@ function keep(line: string | null): string[] {
 
 function valueChange(key: string, before: string | null, after: string | null): string | null {
   if (before === after) return null;
-  if (before === null) return '  ' + key + ': (added) ' + after;
-  if (after === null) return '  ' + key + ': ' + before + ' -> (removed)';
-  return '  ' + key + ': ' + before + ' -> ' + after;
+  if (before === null) return '  ' + key + ': (added) ' + shown(after!);
+  if (after === null) return '  ' + key + ': ' + shown(before) + ' -> (removed)';
+  return '  ' + key + ': ' + shown(before) + ' -> ' + shown(after);
+}
+
+/** A URL (`scheme://` or scp-style `user@host:`) can hold a token: the report names it, never shows it. */
+function shown(value: string): string {
+  return /^[a-z][\w+.-]*:\/\//i.test(value) || /^[^\s@/]+@[^\s:/]+:/.test(value) ? '(a URL)' : value;
 }
 
 function guardChange(before: GuardState, after: GuardState): string | null {

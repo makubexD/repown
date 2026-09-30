@@ -350,6 +350,67 @@ describe('repown status ready line', () => {
   });
 });
 
+describe('repown status: what will stop the next push', () => {
+  let box: Sandbox;
+  beforeEach(() => { box = sandbox(); });
+  afterEach(() => box.dispose());
+
+  const theirs = (): void => {
+    box.git('-c', 'user.name=Someone', '-c', 'user.email=old@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'theirs');
+  };
+  const warnings = (stderr: string): string[] => stderr.split('\n').filter((line) => line.startsWith('WARN  '));
+
+  test('commits by another address come first among the warnings, and there is no ready line', () => {
+    pinGithub(box);
+    guardOn(box);
+    theirs();
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(warnings(run.stderr)[0] ?? '', /^WARN\s+push\s+1 commit on main not on any remote is by old@example\.invalid/);
+    assert.doesNotMatch(run.stderr, /ready:/);
+    assert.equal(closing(run.stderr), 'the next push will fail: 1 commit by another address');
+  });
+
+  test('with the guard off, commits by another address are a warning and the clone is ready', () => {
+    pinGithub(box);
+    theirs();
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(warnings(run.stderr)[0] ?? '', /^WARN\s+push\s+1 commit on main not on any remote is by old@example\.invalid; the guard is off, so it pushes as it is/);
+    assert.equal(closing(run.stderr), 'ready: commits and pushes use octocat · 2 warnings');
+  });
+
+  test('a variable the guard refuses is named, with the others counted after the first', () => {
+    pinGithub(box);
+    guardOn(box);
+    theirs();
+    const run = repown(['status'], box.dir, { ...quietEnv(), GH_TOKEN: 'not-a-real-token' });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /WARN\s+push\s+GH_TOKEN is set in this shell/);
+    assert.doesNotMatch(run.stderr, /not-a-real-token/);
+    assert.equal(closing(run.stderr), 'the next push will fail: 1 commit by another address (and 1 more above)');
+  });
+
+  test('a push to another owner is said once, by the origin warning, and still is not ready', () => {
+    pinGithub(box);
+    guardOn(box);
+    box.git('remote', 'set-url', 'origin', 'https://github.com/octo-org/project.git');
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(warnings(run.stderr).filter((line) => line.includes('octo-org')).length, 1, run.stderr);
+    assert.match(closing(run.stderr), /^the next push will fail: the push goes to "octo-org"/);
+  });
+
+  test('a missing upstream stays in its field, not a warning, and the clone is still ready', () => {
+    pinGithub(box);
+    guardOn(box);
+    box.git('-c', 'user.name=Octo Cat', '-c', 'user.email=octocat@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'mine');
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(counted(run.stderr, 'WARN'), 0, run.stderr);
+    assert.match(closing(run.stderr), /^ready: /);
+  });
+});
+
 describe('repown status account', () => {
   let box: Sandbox;
   beforeEach(() => { box = sandbox(); });

@@ -1,6 +1,6 @@
 # ADR-023: Status and doctor say what matters first
 
-**Status:** Accepted
+**Status:** Accepted. Amended by [ADR-026](ADR-026-setup-says-what-blocks-the-next-push.md): status prints what will stop the next push first among its warnings (`WARN push`), and its closing line says `the next push will fail: …` instead of `ready:` while any remains; the exit code is unchanged.
 
 ## Context
 

@@ -2,7 +2,7 @@
 // how it should work: Recommended fills in the guard, upstream and a gh switch, and
 // still asks when origin belongs to someone else. Step by step asks each one.
 // It shows the commands its answers stand for, and runs exactly those --
-// `accounts add`, `use`, `guard on`, `fix` -- so anything it
+// `accounts add`, `use`, `guard on`, `fix`, `reauthor`, and a few git lines -- so anything it
 // does can be done, or scripted, without it (src/wizard/setup-run.ts).
 
 import { providers } from '../core/hosts/index.ts';
@@ -22,6 +22,9 @@ export default {
     { name: 'guard', kind: 'boolean', help: 'turn the push guard on (guard on)' },
     { name: 'auto-upstream', kind: 'boolean', help: 'push branches without -u: the first push sets the upstream, in this clone only (push.autoSetupRemote)' },
     { name: 'fix', kind: 'boolean', help: 'stop gh being the credential helper, where it is (fix --yes)' },
+    { name: 'repoint', kind: 'boolean', help: 'where the branch pushes to a URL naming the same repository as a remote, push through that remote instead (git config --local)' },
+    { name: 'fetch', kind: 'boolean', help: 'fetch the push destination first, where commits by another address wait behind a remote never fetched (prompts off)' },
+    { name: 'reauthor', kind: 'boolean', help: 'rewrite this branch\'s unpushed commits by another address as the account, last (reauthor --yes)' },
     { name: 'step-by-step', kind: 'boolean', help: 'ask every question instead of the recommended answers (not with --no-input)' },
     { name: 'no-input', kind: 'boolean', help: 'ask nothing: a question not given as a flag is No; exit 2 if the account is incomplete' },
   ],

@@ -15,9 +15,10 @@ import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
 import { setupContext as context } from './setup-fixtures.ts';
 import { ok, err } from '../src/core/result.ts';
 import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Review, type ReviewChoice, type StepConfirm } from '../src/wizard/engine.ts';
-import { setupFlow, planCommands, formatCommand, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext } from '../src/wizard/setup-flow.ts';
+import { setupFlow, planCommands, formatCommand, gitStepOf, keptFlags, blockersOf, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext } from '../src/wizard/setup-flow.ts';
 import { pinWrites } from '../src/core/identity.ts';
 import { plainPrompter } from '../src/wizard/plain.ts';
+import { reviewLines, reviewDefault } from '../src/wizard/review-text.ts';
 import { gitSupportsAutoUpstream } from '../src/core/version.ts';
 import { SETUP_NOTE } from '../src/commands/start.ts';
 import { runSetup } from '../src/wizard/setup-run.ts';
@@ -80,11 +81,13 @@ const textOf = (review: Review): string[] =>
 const argvOf = (answers: Answers, ctx: SetupContext): (readonly string[])[] =>
   planCommands(answers, ctx).map((command) => command.argv);
 
+/** Newest first, as git log lists them; the oldest commit's parent is `rebaseBase`. */
 function onBranch(emails: readonly string[], rebaseBase = 'abc1234'): SetupContext['unpushed'] {
+  const parentOf = (index: number): string | null =>
+    index < emails.length - 1 ? 'fff' + index : rebaseBase === '--root' ? null : rebaseBase;
   return {
     branch: 'main',
-    commits: ok(emails.map((address) => ({ authorEmail: address, committerEmail: address }))),
-    rebaseBase,
+    commits: ok(emails.map((address, index) => ({ authorEmail: address, committerEmail: address, parent: parentOf(index) }))),
     unknown: null,
   };
 }
@@ -359,6 +362,32 @@ describe('setup flow', () => {
       ['Record the account', 'Let this clone', 'Stop gh answering', 'Pin this clone', 'Turn on the']);
     assert.deepEqual(review.steps.map((step) => step.command), planCommands(answers, ctx).map((command) => formatCommand(command.argv)));
     assert.deepEqual(review.steps[2]!.detail, ['  global  credential.helper = gh'], 'what fix removes, under its step');
+  });
+
+  test('ADR-026 what blocks the next push comes first among the notes', () => {
+    const base = context({});
+    const ctx = context({ push: { ...base.push, env: ['GH_TOKEN'] }, unpushed: onBranch(['old@example.invalid']) });
+    const notes = setupFlow(ctx).review({ account: 'octocat' }, ctx).notes;
+    assert.match(notes[0]!, /^1 commit on main not on any remote is by old@example\.invalid/);
+    assert.ok(notes.some((line) => line.startsWith('GH_TOKEN is set in this shell')), notes.join('\n'));
+  });
+
+  test('ADR-026 a settled clone with a blocker is not "nothing needs to change"', () => {
+    const base = context({ pinned: 'octocat', pinIntact: true, guard: 'on' });
+    const ctx = context({ pinned: 'octocat', pinIntact: true, guard: 'on', push: { ...base.push, env: ['GIT_AUTHOR_EMAIL'] } });
+    const review = setupFlow(ctx).review({ account: 'octocat' }, ctx);
+    assert.equal(review.settled, true);
+    const text = reviewLines(review).join('\n');
+    assert.doesNotMatch(text, /Nothing needs to change\./);
+    assert.match(text, /Its settings need no change, but the next push will fail:/);
+    assert.match(text, /GIT_AUTHOR_EMAIL is set in this shell/);
+    const calm = setupFlow(base).review({ account: 'octocat' }, base);
+    assert.match(reviewLines(calm).join('\n'), /Nothing needs to change\./);
+  });
+
+  test('WIZ-5 "or pin that address" only when there is one address to pin', () => {
+    assert.match(reviewNotes(context({ unpushed: onBranch(['old@example.invalid']) })), /, or pin that address/);
+    assert.doesNotMatch(reviewNotes(context({ unpushed: onBranch(['a@example.invalid', 'b@example.invalid']) })), /pin that address/);
   });
 
   test('a clone already pinned to that account, as recorded, is settled; anything left to do is not', () => {
@@ -734,10 +763,10 @@ describe('setup flow', () => {
   });
 
   test('S19 the review notes unpushed commits by another address, and Recommended does not rewrite them', () => {
-    const ctx = context({ unpushed: onBranch(['old@example.invalid', 'also@example.invalid']) });
+    const ctx = context({ guard: 'on', unpushed: onBranch(['old@example.invalid', 'also@example.invalid']) });
     const notes = reviewNotes(ctx);
     assert.match(notes, /2 commits on main not on any remote are by old@example\.invalid, also@example\.invalid; the guard will refuse them/);
-    assert.match(notes, /re-author them: git rebase abc1234 --exec "git commit --amend --no-edit --reset-author --allow-empty", or pin that address/);
+    assert.match(notes, /re-author them: git rebase abc1234 --exec "git commit --amend --no-edit --reset-author --allow-empty"$/m);
     const planned = planCommands({ account: 'octocat', mode: 'recommended', guard: true }, ctx);
     assert.equal(planned.some((command) => command.argv.some((arg) => /rebase|amend|reset-author/.test(arg))), false);
     const settled = context({
@@ -766,9 +795,9 @@ describe('setup flow', () => {
   });
 
   test('S19 a committer who is not the author counts, and case does not', () => {
-    const mixed = context({ unpushed: { branch: 'main', rebaseBase: 'abc1234', unknown: null, commits: ok([
-      { authorEmail: 'octocat@example.invalid', committerEmail: 'Other@example.invalid' },
-      { authorEmail: 'other@example.invalid', committerEmail: 'octocat@example.invalid' },
+    const mixed = context({ guard: 'on', unpushed: { branch: 'main', unknown: null, commits: ok([
+      { authorEmail: 'octocat@example.invalid', committerEmail: 'Other@example.invalid', parent: 'fff0' },
+      { authorEmail: 'other@example.invalid', committerEmail: 'octocat@example.invalid', parent: 'abc1234' },
     ]) } });
     assert.match(reviewNotes(mixed), /2 commits on main not on any remote are by Other@example\.invalid; the guard will refuse them/);
     const same = context({ unpushed: onBranch(['Octocat@example.invalid']) });
@@ -813,14 +842,14 @@ describe('setup flow', () => {
   });
 
   test('S19 a log that could not be read is a note, and a detached HEAD is not', () => {
-    const broken = context({ unpushed: { branch: 'feature', commits: err('git log failed'), rebaseBase: null, unknown: null } });
+    const broken = context({ unpushed: { branch: 'feature', commits: err('git log failed'), unknown: null } });
     const notes = reviewNotes(broken);
     assert.match(notes, /commits on feature not on any remote could not be read \(git log failed\), so repown can't say whether the guard will refuse them/);
     assert.doesNotMatch(notes, /re-author|are by/);
-    const detached = context({ unpushed: { branch: null, commits: ok([]), rebaseBase: null, unknown: null } });
+    const detached = context({ unpushed: { branch: null, commits: ok([]), unknown: null } });
     assert.doesNotMatch(reviewNotes(detached), /not on any remote/);
-    const hidden = context({ unpushed: { branch: 'main', rebaseBase: 'abc1234', unknown: null, commits: ok([
-      { authorEmail: 'bad\x1b@example.invalid', committerEmail: 'octocat@example.invalid' },
+    const hidden = context({ unpushed: { branch: 'main', unknown: null, commits: ok([
+      { authorEmail: 'bad\x1b@example.invalid', committerEmail: 'octocat@example.invalid', parent: 'abc1234' },
     ]) } });
     assert.doesNotMatch(reviewNotes(hidden), /\x1b/);
     assert.match(reviewNotes(hidden), /bad\?@example\.invalid/);
@@ -1136,7 +1165,8 @@ function home(): Home {
   const registry = mkdtempSync(join(tmpdir(), 'repown-registry-'));
   const saved = process.env['REPOWN_CONFIG_DIR'];
   process.env['REPOWN_CONFIG_DIR'] = registry;
-  box.git('commit', '-q', '--allow-empty', '-m', 'base');
+  // By the account most tests pin, so the clone has no commit by another address unless a test makes one.
+  box.git('-c', 'user.name=Octo Cat', '-c', 'user.email=octocat@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'base');
   return { box, registry, dispose: () => {
     if (saved === undefined) delete process.env['REPOWN_CONFIG_DIR']; else process.env['REPOWN_CONFIG_DIR'] = saved;
     rmSync(registry, { recursive: true, force: true });
@@ -1282,8 +1312,10 @@ describe('setup context: would `use` change anything here?', () => {
     const emails = ctx.unpushed.commits.value.map((commit) => commit.authorEmail);
     assert.deepEqual(emails, ['work@example.invalid', 'octocat@example.invalid']);
     assert.match(reviewNotes(ctx, { account: 'octocat' }), /1 commit on main not on any remote is by work@example\.invalid/);
-    assert.match(reviewNotes(ctx, { account: 'octocat' }), /re-author it: git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty", or pin that address/);
+    const ownFirst = at.box.git('rev-parse', '--short', ours);
+    assert.match(reviewNotes(ctx, { account: 'octocat' }), new RegExp('re-author it: git rebase ' + ownFirst + ' --exec "git commit --amend --no-edit --reset-author --allow-empty", or pin that address'));
     assert.match(reviewNotes(ctx, { account: 'octo-work' }), /1 commit on main not on any remote is by octocat@example\.invalid/);
+    assert.match(reviewNotes(ctx, { account: 'octo-work' }), /re-author it: git rebase --root /);
     assert.doesNotMatch(reviewNotes(ctx, { account: 'octo-work' }), /work@example\.invalid/);
     at.box.git('update-ref', 'refs/remotes/origin/main', foreign);
     const published = await read();
@@ -1341,7 +1373,7 @@ describe('repown setup, without a terminal', () => {
     assert.ok(existsSync(hook(at)));
     assert.match(run.stderr, /step 1 of 2: Pin this clone to octocat/);
     assert.match(run.stderr, /step 2 of 2: Turn on the push guard/);
-    assert.match(run.stderr, /done: this clone is set up for octocat/);
+    assert.match(run.stderr, /done: this clone is set up for octocat$/m);
     assert.match(run.stderr, /check it any time: repown status \(this clone\), repown doctor \(this machine\)/);
     assert.doesNotMatch(run.stdout, /done:|check it any time/, 'setup\'s own lines stay off stdout');
     assert.match(run.stderr, /\n\n {7}step 2 of 2/, 'a blank line between steps');
@@ -1583,7 +1615,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     const run = repown(['setup', 'octocat', '--no-input'], at.box.dir);
     assert.equal(run.status, 0, run.stderr);
     assert.equal(at.box.git('config', '--local', '--list'), before);
-    assert.match(run.stderr, /done: this clone is set up for octocat/);
+    assert.match(run.stderr, /done: this clone is set up for octocat$/m);
     assert.match(run.stderr, /nothing changed in this clone/);
     assert.doesNotMatch(run.stderr, /repown use /);
   });
@@ -1630,7 +1662,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.doesNotMatch(localConfig(at), /account = octocat/);
     assert.ok(existsSync(hook(at)));
     assert.match(seen.stderr, /skipped: Pin this clone to octocat/);
-    assert.doesNotMatch(seen.stderr, /done: this clone is set up/);
+    assert.doesNotMatch(seen.stderr, /done: this clone is set up|; the next push will fail/);
     assert.deepEqual(seen.confirms[0]?.changes, [
       'user.name = Octo Cat',
       'user.email = octocat@example.invalid',
@@ -1651,7 +1683,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.equal(seen.code, 0, seen.stderr);
     assert.match(localConfig(at), /account = octocat/);
     assert.equal(existsSync(hook(at)), false);
-    assert.match(seen.stderr, /done: this clone is set up for octocat/);
+    assert.match(seen.stderr, /done: this clone is set up for octocat$/m);
     assert.match(seen.stderr, /skipped: Turn on the push guard: each push is checked first/);
   });
 
@@ -1663,7 +1695,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.equal(seen.code, 0, seen.stderr);
     assert.doesNotMatch(localConfig(at), /repown/);
     assert.equal(existsSync(hook(at)), false);
-    assert.doesNotMatch(seen.stderr, /done: this clone is set up/);
+    assert.doesNotMatch(seen.stderr, /done: this clone is set up|; the next push will fail/);
     assert.match(seen.stderr, /skipped: Pin this clone to octocat/);
     assert.match(seen.stderr, /skipped: Turn on the push guard/);
   });
@@ -1681,7 +1713,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.match(stopped.stderr, /not run:/);
     assert.match(stopped.stderr, /repown use octocat/);
     assert.match(stopped.stderr, /repown guard on/);
-    assert.doesNotMatch(stopped.stderr, /done: this clone is set up/);
+    assert.doesNotMatch(stopped.stderr, /done: this clone is set up|; the next push will fail/);
 
     const cancelled = await runCaptured([
       ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'],
@@ -1702,7 +1734,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.match(localConfig(at), /account = octocat/);
     assert.ok(existsSync(hook(at)));
     assert.match(seen.stderr, /> repown use octocat/);
-    assert.match(seen.stderr, /done: this clone is set up for octocat/);
+    assert.match(seen.stderr, /done: this clone is set up for octocat$/m);
     assert.doesNotMatch(seen.stderr, /skipped:/);
   });
 
@@ -1740,7 +1772,7 @@ describe('repown setup, on a terminal (scripted)', () => {
   test('after the steps, gh advice is one more done line and the first push is not repeated', async () => {
     const left = await captureSetup(async () => ghAuth('octo-work', ['octo-work']));
     assert.equal(left.code, 0, left.stderr);
-    assert.match(left.stderr, /done: this clone is set up for octocat/);
+    assert.match(left.stderr, /done: this clone is set up for octocat$/m);
     assert.match(left.stderr, /optional, only if you use gh here: repown use octocat --gh {3}\(signs octocat in to gh\)/);
     assert.doesNotMatch(left.stderr, /first push/);
     const same = await captureSetup(async () => ghAuth('octocat', ['octocat']));
@@ -1951,7 +1983,7 @@ describe('S18 after a setup run', () => {
     ]);
     assert.equal(seen.code, 130);
     assert.match(seen.stderr, /user\.name: Sandbox -> Octo Cat/);
-    assert.doesNotMatch(seen.stderr, / {9}push guard:|done: this clone is set up/);
+    assert.doesNotMatch(seen.stderr, / {9}push guard:|done: this clone is set up|; the next push will fail/);
     assert.ok(seen.stderr.indexOf('not run:') < seen.stderr.indexOf('changed in this clone:'));
   });
 
@@ -1960,7 +1992,7 @@ describe('S18 after a setup run', () => {
     assert.equal(first.code, 0, first.stderr);
     const again = await play([['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'run'], ['step', 'yes']]);
     assert.equal(again.code, 0, again.stderr);
-    assert.match(again.stderr, /done: this clone is set up for octocat/);
+    assert.match(again.stderr, /done: this clone is set up for octocat$/m);
     assert.match(again.stderr, /nothing changed in this clone/);
     assert.doesNotMatch(again.stderr, /changed in this clone:/);
     assert.ok(again.stderr.indexOf('done:') < again.stderr.indexOf('nothing changed in this clone'));
@@ -1989,7 +2021,7 @@ describe('S18 after a setup run', () => {
     assert.equal(seen.code, 1, seen.stderr);
     assert.match(seen.stderr, /stopped: that command exited 1/);
     assert.match(seen.stderr, /user\.name: Sandbox -> Octo Cat/);
-    assert.doesNotMatch(seen.stderr, / {9}push guard:|done: this clone is set up|check it any time:/);
+    assert.doesNotMatch(seen.stderr, / {9}push guard:|done: this clone is set up|; the next push will fail|check it any time:/);
     assert.ok(seen.stderr.indexOf('exited 1') < seen.stderr.indexOf('changed in this clone:'));
   });
 
@@ -1997,7 +2029,7 @@ describe('S18 after a setup run', () => {
     at.box.git('config', '--local', 'push.autoSetupRemote', 'true');
     const base = scripted([
       ['mode', 'step'], ['account', NEW_ACCOUNT], ['newAccount', 'octo-work'], ['host', 'github'],
-      ['name', 'Octo Work'], ['email', 'work@example.invalid'], ['guard', false], ['review', 'run'],
+      ['name', 'Octo Work'], ['email', 'work@example.invalid'], ['guard', false], ['reauthor', false], ['review', 'run'],
       ['step', 'yes'], ['step', 'yes'],
     ]);
     const prompter: Prompter = {
@@ -2223,3 +2255,249 @@ function captureStep(onFirst: () => void): { text: () => string; begin: () => vo
   };
   return { text: () => stderr, begin, end: () => { process.stderr.write = write; } };
 }
+
+describe('setup: point the branch back at its remote, fetch the destination first', () => {
+  const THEIRS = 'old@example.invalid';
+  const foreign = { authorEmail: THEIRS, committerEmail: THEIRS, parent: null };
+  const repoint = (tracked: boolean): Partial<SetupContext> =>
+    ({ push: { ...context().push, repoint: { key: 'branch.main.remote', remote: 'origin', tracked } } });
+  const behindUrl: SetupContext['unpushed'] = { branch: 'main', commits: ok([foreign]), unknown: { kind: 'url', key: 'branch.main.remote', remote: 'origin' } };
+  const unfetched: SetupContext['unpushed'] = { branch: 'main', commits: ok([foreign]), unknown: { kind: 'remote', name: 'origin' } };
+  const recommended = (ctx: SetupContext): Answers => setupFlow(ctx).fill!({ mode: 'recommended', account: 'octocat' }, ctx);
+  const plan = (answers: Answers, ctx: SetupContext): (readonly string[])[] => planCommands(answers, ctx).map((command) => command.argv);
+
+  test('Recommended repoints first, and the review shows the key and the remote, never the URL', () => {
+    const ctx = context(repoint(true));
+    const answers = recommended(ctx);
+    const [first] = planCommands(answers, ctx);
+    assert.deepEqual(first?.argv, ['git', 'config', '--local', 'branch.main.remote', 'origin']);
+    assert.equal(formatCommand(first!.argv), 'git config --local branch.main.remote origin');
+    assert.deepEqual(changesOf(first!.argv, answers, ctx), ['branch.main.remote = origin']);
+    assert.match(first!.what, /origin/);
+  });
+
+  test('Recommended fetches first only for commits by another address behind a remote never fetched', () => {
+    const ctx = context({ unpushed: unfetched });
+    const argv = plan(recommended(ctx), ctx);
+    assert.deepEqual(argv[0], ['git', 'fetch', 'origin']);
+    assert.ok(argv.findIndex((line) => line[0] === 'use') > 0, 'fetch runs before the pin');
+    const clean = context({ unpushed: { ...unfetched, commits: ok([]) } });
+    assert.equal(plan(recommended(clean), clean).some((line) => line.includes('fetch')), false, 'a clean clone never fetches');
+    const known = context({ unpushed: { ...unfetched, unknown: null } });
+    assert.equal(plan(recommended(known), known).some((line) => line.includes('fetch')), false, 'a known destination needs no fetch');
+    const mine = { ...foreign, authorEmail: 'octocat@example.invalid', committerEmail: 'octocat@example.invalid' };
+    const own = context({ unpushed: { ...unfetched, commits: ok([mine]) } });
+    assert.equal(plan(recommended(own), own).some((line) => line.includes('fetch')), false, 'own commits need no fetch');
+  });
+
+  test('behind a URL: repoint, then fetch the remote only when it has no tracking refs', () => {
+    const untracked = context({ ...repoint(false), unpushed: behindUrl });
+    assert.deepEqual(plan(recommended(untracked), untracked).slice(0, 2),
+      [['git', 'config', '--local', 'branch.main.remote', 'origin'], ['git', 'fetch', 'origin']]);
+    const tracked = context({ ...repoint(true), unpushed: behindUrl });
+    assert.equal(plan(recommended(tracked), tracked).some((line) => line.includes('fetch')), false);
+    const kept = setupFlow(untracked).fill!({ mode: 'recommended', account: 'octocat', repoint: false }, untracked);
+    assert.equal(plan(kept, untracked).some((line) => line.includes('fetch')), false, 'the URL stays: fetching origin says nothing about it');
+  });
+
+  test('--fetch given as a flag still fetches behind a URL that the repoint will fix', () => {
+    const ctx = context({ ...repoint(false), unpushed: behindUrl });
+    const given = { account: 'octocat', mode: 'recommended', fetch: true };
+    const kept = keptFlags(given, ctx).answers;
+    assert.equal(kept['fetch'], true, 'the repoint has not been asked yet, and Recommended answers it Yes');
+    assert.deepEqual(plan(setupFlow(ctx).fill!(kept, ctx), ctx).slice(0, 2),
+      [['git', 'config', '--local', 'branch.main.remote', 'origin'], ['git', 'fetch', 'origin']]);
+    const unattended = keptFlags({ ...given, repoint: false }, ctx);
+    assert.equal(unattended.answers['fetch'], false, 'without --repoint the URL stays, so there is nothing to fetch');
+    assert.match(unattended.notes.join('\n'), /--fetch: .*add --repoint/);
+  });
+
+  test('with --cwd, both lines name the clone', () => {
+    const ctx = context({ ...repoint(false), unpushed: behindUrl, cwd: 'repo' });
+    assert.deepEqual(plan(recommended(ctx), ctx).slice(0, 2),
+      [['git', '-C', 'repo', 'config', '--local', 'branch.main.remote', 'origin'], ['git', '-C', 'repo', 'fetch', 'origin']]);
+  });
+
+  test('each git line is read by its shape, not by a word a name could also be', () => {
+    assert.equal(gitStepOf(['git', 'config', '--local', '--add', 'repown.allowOwner', 'fetch']), 'allowOwner');
+    assert.equal(gitStepOf(['git', '-C', 'fetch', 'config', '--local', 'push.autoSetupRemote', 'true']), 'upstream');
+    assert.equal(gitStepOf(['git', 'fetch', 'push.autoSetupRemote']), 'fetch');
+    assert.equal(gitStepOf(['git', 'config', '--local', 'branch.main.remote', 'origin']), 'repoint');
+    assert.equal(gitStepOf(['git', 'push', 'origin']), null);
+    assert.equal(gitStepOf(['git', 'fetch', 'origin', '--prune']), null);
+  });
+
+  test('--no-input without the flags does neither; Step by step asks both', () => {
+    const ctx = context({ ...repoint(false), unpushed: behindUrl });
+    const none = { account: 'octocat', repoint: false, fetch: false, guard: false, gh: false, fix: false, upstream: false, allowOwner: false };
+    assert.equal(plan(none, ctx).some((line) => line[0] === 'git'), false);
+    const asked = setupFlow(ctx).steps.filter((step) => step.when?.({ mode: 'step', account: 'octocat', repoint: true }, ctx) ?? true);
+    const ids = asked.map((step) => step.id);
+    assert.ok(ids.includes('repoint') && ids.includes('fetch'), ids.join(','));
+  });
+});
+
+describe('setup: re-author the commits by another address, only when asked', () => {
+  const theirs = { authorEmail: 'old@example.invalid', committerEmail: 'old@example.invalid', parent: 'abc1234' };
+  const foreignCtx = (overrides: Partial<SetupContext> = {}): SetupContext =>
+    context({ unpushed: { branch: 'main', commits: ok([theirs]), unknown: null }, ...overrides });
+  const asked = (ctx: SetupContext, answers: Answers): string[] =>
+    setupFlow(ctx).steps.filter((step) => step.when?.(answers, ctx) ?? true).map((step) => step.id);
+
+  test('asked in both modes, default No, and only with commits by another address', () => {
+    const ctx = foreignCtx();
+    const step = setupFlow(ctx).steps.find((candidate) => candidate.id === 'reauthor');
+    assert.equal(step?.auto, undefined, 'Recommended asks it: it never answers Yes itself');
+    assert.equal(step?.initial?.({}, ctx), false);
+    assert.ok(asked(ctx, { mode: 'recommended', account: 'octocat' }).includes('reauthor'));
+    assert.ok(asked(ctx, { mode: 'step', account: 'octocat' }).includes('reauthor'));
+    assert.equal(asked(context(), { mode: 'step', account: 'octocat' }).includes('reauthor'), false);
+    const mine = context({ unpushed: { branch: 'main', commits: ok([{ ...theirs, authorEmail: 'octocat@example.invalid', committerEmail: 'octocat@example.invalid' }]), unknown: null } });
+    assert.equal(asked(mine, { mode: 'step', account: 'octocat' }).includes('reauthor'), false);
+  });
+
+  test('Yes runs `reauthor --yes` last, after the pin, the guard and a fetch; No leaves it out', () => {
+    const ctx = foreignCtx({ unpushed: { branch: 'main', commits: ok([theirs]), unknown: { kind: 'remote', name: 'origin' } }, cwd: 'repo' });
+    const answers = setupFlow(ctx).fill!({ mode: 'recommended', account: 'octocat', reauthor: true }, ctx);
+    const argv = planCommands(answers, ctx).map((command) => command.argv);
+    assert.deepEqual(argv.at(-1), ['reauthor', '--yes', '--cwd=repo']);
+    assert.deepEqual(argv[0], ['git', '-C', 'repo', 'fetch', 'origin']);
+    const no = setupFlow(ctx).fill!({ mode: 'recommended', account: 'octocat', reauthor: false }, ctx);
+    assert.equal(planCommands(no, ctx).some((command) => command.argv[0] === 'reauthor'), false);
+  });
+
+  test('a settled clone with commits by another address offers Re-author them, which reviews that one step', async () => {
+    const ctx = foreignCtx({ pinned: 'octocat', pinIntact: true, guard: 'on' });
+    const offered = scripted([['review', 'reauthor'], ['review', 'decline']]);
+    assert.deepEqual(await wizard(setupFlow(ctx), ctx, {}, offered), { status: 'declined' });
+    assert.equal(offered.reviews[0]?.settled, true);
+    assert.equal(offered.reviews[0]?.reauthorOffer, 'Re-author them as octocat');
+    assert.equal(offered.reviews[1]?.settled, false);
+    assert.deepEqual(offered.reviews[1]?.steps.map((step) => step.command), ['repown reauthor --yes']);
+    const clean = context({ pinned: 'octocat', pinIntact: true, guard: 'on' });
+    assert.equal(setupFlow(clean).opening!(clean)?.reauthorOffer, undefined, 'nothing to re-author, nothing offered');
+  });
+
+  test('with the guard off, commits by another address are a warning: done, not a push that will fail', () => {
+    const off = foreignCtx({ pinned: 'octocat', pinIntact: true, guard: 'off', upstream: { supported: true, enabled: true, branch: 'main', tracked: null } });
+    const answers = { mode: 'recommended', account: 'octocat', guard: false };
+    const shown = setupFlow(off).review(answers, off);
+    assert.equal(shown.blocked ?? false, false);
+    assert.match(shown.notes.join(' '), /the guard is off, so (it|they) push/);
+    assert.equal(blockersOf(answers, off).some((blocker) => blocker.blocks), false);
+    const on = { ...answers, guard: true };
+    assert.equal(blockersOf(on, off).some((blocker) => blocker.blocks), true, 'turning the guard on in this run makes them block');
+  });
+
+  test('rewriting history needs a deliberate yes: Enter is Decline at the review and Skip at the step', () => {
+    const ctx = foreignCtx();
+    const answers = setupFlow(ctx).fill!({ mode: 'recommended', account: 'octocat', reauthor: true }, ctx);
+    const shown = setupFlow(ctx).review(answers, ctx);
+    assert.equal(reviewDefault(shown), 'decline');
+    const planned = planCommands(answers, ctx).find((command) => command.argv[0] === 'reauthor')!;
+    const brief = briefOf(planned, answers, ctx);
+    assert.equal(brief.initial, 'skip');
+    assert.match(brief.changes.join('\n'), /old@example\.invalid .*octocat@example\.invalid.*refs\/repown\/backup\//);
+  });
+});
+
+describe('repown setup: repoint and fetch, in a real clone', () => {
+  let at: Home;
+  beforeEach(() => { at = home(); record(at, 'octocat', 'octocat@example.invalid'); });
+  afterEach(() => at.dispose());
+
+  /** A bare origin holding the first commit, never fetched here (no tracking refs), then a commit by another address. */
+  const unfetchedOrigin = (): string => {
+    const path = join(at.box.dir, '..', 'origin.git');
+    at.box.git('init', '-q', '--bare', path);
+    at.box.git('remote', 'add', 'origin', path);
+    at.box.git('push', '-q', 'origin', 'HEAD:refs/heads/main');
+    at.box.git('update-ref', '-d', 'refs/remotes/origin/main');
+    at.box.git('-c', 'user.name=Someone', '-c', 'user.email=old@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'theirs');
+    return path;
+  };
+  const tracking = (): string => at.box.git('for-each-ref', 'refs/remotes/origin/');
+
+  test('--fetch fetches the destination first; --no-input without it does not', () => {
+    unfetchedOrigin();
+    assert.equal(repown(['setup', 'octocat', '--no-input'], at.box.dir).status, 0);
+    assert.equal(tracking(), '', 'no fetch unless asked');
+    at.box.git('config', '--local', '--unset', 'repown.account');
+    const run = repown(['setup', 'octocat', '--fetch', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /step 1 of \d: Fetch origin/);
+    assert.match(run.stderr, /> git fetch origin/);
+    assert.notEqual(tracking(), '');
+  });
+
+  test('a failed fetch warns, the rest of the plan runs, and the destination stays unknown', () => {
+    rmSync(unfetchedOrigin(), { recursive: true, force: true });
+    const run = repown(['setup', 'octocat', '--fetch', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout + run.stderr, /WARN\s+fetch\s+could not fetch origin \(/);
+    assert.match(localConfig(at), /account = octocat/);
+    assert.equal(tracking(), '');
+  });
+
+  test('--fetch where nothing needs fetching says so and fetches nothing', () => {
+    const run = repown(['setup', 'octocat', '--fetch', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /--fetch: /);
+    assert.doesNotMatch(run.stderr, /> git fetch/);
+  });
+
+  test('the field case, re-authored: the closing line says done and the push passes the guard', () => {
+    unfetchedOrigin();
+    const run = repown(['setup', 'octocat', '--fetch', '--guard', '--auto-upstream', '--reauthor', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /> repown reauthor --yes/);
+    assert.match(run.stderr, /done: this clone is set up for octocat/);
+    assert.equal(at.box.git('log', '-1', '--format=%ae|%ce'), 'octocat@example.invalid|octocat@example.invalid');
+    const push = spawnSync('git', ['push', 'origin', 'HEAD:main'], { cwd: at.box.dir, encoding: 'utf8', env: process.env });
+    assert.equal(push.status, 0, push.stderr);
+  });
+
+  test('the field case, not re-authored: the closing line names the commits the guard will refuse', () => {
+    unfetchedOrigin();
+    const run = repown(['setup', 'octocat', '--fetch', '--guard', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.doesNotMatch(run.stderr, /repown reauthor/);
+    assert.match(run.stderr, /set up for octocat; the next push will fail: 1 commit by another address/);
+    const push = spawnSync('git', ['push', 'origin', 'HEAD:main'], { cwd: at.box.dir, encoding: 'utf8', env: process.env });
+    assert.notEqual(push.status, 0, 'the guard refuses it');
+  });
+
+  test('the field case with the guard left off: done, and the commits named as a warning', () => {
+    unfetchedOrigin();
+    const run = repown(['setup', 'octocat', '--fetch', '--auto-upstream', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /done: this clone is set up for octocat$/m);
+    assert.match(run.stderr, /1 commit on main not on any remote is by old@example\.invalid; the guard is off, so it pushes as it is/);
+  });
+
+  test('--reauthor with nothing by another address says so and rewrites nothing', () => {
+    const path = join(at.box.dir, '..', 'origin.git');
+    at.box.git('init', '-q', '--bare', path);
+    at.box.git('remote', 'add', 'origin', path);
+    at.box.git('push', '-q', '-u', 'origin', 'HEAD:main');
+    const before = at.box.git('rev-parse', 'HEAD');
+    const run = repown(['setup', 'octocat', '--reauthor', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /--reauthor: /);
+    assert.equal(at.box.git('rev-parse', 'HEAD'), before);
+  });
+
+  test('--repoint points the branch back at its remote, and nothing prints the URL', () => {
+    at.box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
+    at.box.git('config', 'branch.main.remote', 'https://octocat:ghp_secret@github.com/octocat/project.git');
+    const kept = repown(['setup', 'octocat', '--no-input'], at.box.dir);
+    assert.equal(at.box.git('config', 'branch.main.remote'), 'https://octocat:ghp_secret@github.com/octocat/project.git', 'not without --repoint');
+    assert.doesNotMatch(kept.stdout + kept.stderr, /ghp_secret/);
+    const run = repown(['setup', 'octocat', '--repoint', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(at.box.git('config', 'branch.main.remote'), 'origin');
+    assert.match(run.stderr, /> git config --local branch\.main\.remote origin/);
+    assert.match(run.stderr, /branch\.main\.remote: \(a URL\) -> origin/);
+    assert.doesNotMatch(run.stdout + run.stderr, /ghp_secret|octocat:/);
+  });
+});

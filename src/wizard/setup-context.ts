@@ -14,6 +14,7 @@ import { providers, type Profile } from '../core/hosts/index.ts';
 import { ok, err, type Result } from '../core/result.ts';
 import { previewLines } from '../commands/fix.ts';
 import { readUnpushed, type UnpushedFact } from '../core/unpushed.ts';
+import { readPushFacts } from '../core/push-state.ts';
 import { SOURCE_GCM, SOURCE_GH, SOURCE_OWNS, type DetectedAccount, type SetupContext, type UpstreamRead } from './setup-flow.ts';
 
 export interface DetectionInput {
@@ -119,6 +120,7 @@ export async function readContext(git: Git, cwd: string | null, options: ReadOpt
 }
 
 interface Facts {
+  readonly push: SetupContext['push'];
   readonly pinned: string | null;
   readonly pinIntact: boolean;
   readonly allowed: readonly string[];
@@ -141,6 +143,7 @@ async function readFacts(git: Git, repo: RepoState, recorded: Readonly<Record<st
 }
 
 interface Loaded {
+  readonly push: SetupContext['push'];
   readonly auth: AuthState;
   readonly pinned: string | null;
   readonly allowed: readonly string[];
@@ -156,7 +159,7 @@ interface Loaded {
 
 async function loadClone(git: Git, repo: RepoState, options: ReadOptions): Promise<Loaded> {
   const authPromise = options.auth ? Promise.resolve(options.auth) : inspectAuth(git, repo.originUrl ?? undefined);
-  const [auth, pinned, allowed, planned, addresses, helpers, ownerIsUser, upstream, unpushed] = await Promise.all([
+  const [auth, pinned, allowed, planned, addresses, helpers, ownerIsUser, upstream, [unpushed, push]] = await Promise.all([
     authPromise,
     git.getConfig('repown.account', 'local'),
     git.getAllConfig('repown.allowOwner', 'local'),
@@ -165,10 +168,17 @@ async function loadClone(git: Git, repo: RepoState, options: ReadOptions): Promi
     git.getAllConfigRaw('credential.helper'),
     authPromise.then((auth) => askOwnerIsUser(repo, auth, options)),
     readUpstream(git),
-    readUnpushed(git),
+    readUnpushedAndPush(git),
   ]);
   const { machineName: name, machineEmail: email } = repo.identity;
-  return { auth, pinned, allowed, planned, addresses, unpushed, helpers, name, email, ownerIsUser, upstream };
+  return { auth, pinned, allowed, planned, addresses, unpushed, push, helpers, name, email, ownerIsUser, upstream };
+}
+
+/** The push facts reuse the unpushed read; `unpushed` stays its own field, as tests set it alone. */
+async function readUnpushedAndPush(git: Git): Promise<[UnpushedFact, SetupContext['push']]> {
+  const unpushed = await readUnpushed(git);
+  const { unpushed: _, ...push } = await readPushFacts(git, unpushed);
+  return [unpushed, push];
 }
 
 /** Version, effective push.autoSetupRemote, the branch and its tracked ref. One read; nothing is written. */
@@ -193,7 +203,7 @@ function trackedOf(head: CurrentBranch | null, tracked: string | null): string |
 async function finishFacts(git: Git, repo: RepoState, recorded: Readonly<Record<string, Account>>, loaded: Loaded): Promise<Facts> {
   const ghIsHelper = anyGhHelper(loaded.auth, loaded.planned, loaded.helpers);
   return {
-    pinned: loaded.pinned, allowed: loaded.allowed, addresses: loaded.addresses, unpushed: loaded.unpushed,
+    pinned: loaded.pinned, allowed: loaded.allowed, addresses: loaded.addresses, unpushed: loaded.unpushed, push: loaded.push,
     name: loaded.name, email: loaded.email, ownerIsUser: loaded.ownerIsUser, ghIsHelper, stored: loaded.auth.stored,
     gh: loaded.auth.ghPresent ? loaded.auth.gh : null,
     pinIntact: await pinIntact(git, loaded.pinned, recorded[loaded.pinned ?? ''], repo),
@@ -218,7 +228,7 @@ function assemble(cwd: string | null, recorded: Readonly<Record<string, Account>
     guard: repo.guard,
     redirected: repo.hook?.redirected ?? false, hookPath: repo.hook?.path ?? null,
     fixLines: facts.fixLines,
-    addresses: facts.addresses, unpushed: facts.unpushed,
+    addresses: facts.addresses, unpushed: facts.unpushed, push: facts.push,
     machineIdentity: { name: facts.name, email: facts.email },
     upstream: facts.upstream, stored: facts.stored,
     suggest: suggester(),

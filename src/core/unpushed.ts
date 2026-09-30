@@ -2,9 +2,10 @@
 //
 // Pinning does not rewrite them (ADR-013). The guard refuses them at push
 // (ADR-002, ADR-011), so `use` and setup's review say so first, with a copyable
-// `git rebase` onto the parent of the oldest of those commits (`--root` when it
-// has none). The identities come from `git log` through Git.identitiesIn
-// (`--no-show-signature`). The base is `rev-list` and `rev-parse` on Git.
+// `git rebase` onto the parent of the oldest of those commits by another address
+// (`--root` when it has none), so the user's own commits before it are left alone.
+// The identities come from `git log` through Git.identitiesIn (`--no-show-signature`),
+// the parents from Git.firstParentsIn.
 // Where the branch pushes may have no remote-tracking ref at all; then the range can
 // hold published commits, and the rebase is offered only for when it has none of
 // them (push-destination.ts, ADR-025).
@@ -19,68 +20,75 @@ import { shellWord } from './guard/check.ts';
 export interface UnpushedCommit {
   readonly authorEmail: string;
   readonly committerEmail: string;
+  /** Short hash of the first parent; null for a root commit. */
+  readonly parent: string | null;
 }
 
 /** `branch` is null on a detached HEAD: nothing to check. A failed `commits` is unknown, not clean. */
 export interface UnpushedFact {
   readonly branch: string | null;
   readonly commits: Result<readonly UnpushedCommit[]>;
-  /** `git rebase` target: a short sha, or `--root`. Null when there is no range to rebase. */
-  readonly rebaseBase: string | null;
   /** Where the branch pushes, when no remote-tracking ref says what it already has. */
   readonly unknown: UnknownDestination | null;
 }
 
 const ADDRESS_CAP = 3;
-const AMEND = '--exec "git commit --amend --no-edit --reset-author --allow-empty"';
+/** The one re-author command: the advice prints it, and `repown reauthor` runs it. */
+export const AMEND_COMMAND = 'git commit --amend --no-edit --reset-author --allow-empty';
+const AMEND = '--exec "' + AMEND_COMMAND + '"';
 
 export async function readUnpushed(git: Git): Promise<UnpushedFact> {
   const head = await git.currentBranch();
   if (head?.kind !== 'branch') return quiet(null);
   const commits = await commitsOf(git);
-  if (!commits.ok || commits.value.length === 0) return { branch: head.name, commits, rebaseBase: null, unknown: null };
-  const [base, unknown] = await Promise.all([rebaseBase(git), unknownDestination(git, head.name)]);
-  return { branch: head.name, commits, rebaseBase: base, unknown };
+  if (!commits.ok || commits.value.length === 0) return { branch: head.name, commits, unknown: null };
+  return { branch: head.name, commits, unknown: await unknownDestination(git, head.name) };
 }
 
 function quiet(branch: string | null): UnpushedFact {
-  return { branch, commits: ok([]), rebaseBase: null, unknown: null };
-}
-
-/** Parent of the oldest unpushed commit, or `--root` when that commit has none. */
-async function rebaseBase(git: Git): Promise<string | null> {
-  const oldest = await git.oldestIn(['HEAD', '--not', '--remotes']);
-  if (!oldest) return null;
-  return (await git.parentShort(oldest)) ?? '--root';
+  return { branch, commits: ok([]), unknown: null };
 }
 
 /** No commit yet is an empty list. A log git could not print stays an error. */
 async function commitsOf(git: Git): Promise<Result<readonly UnpushedCommit[]>> {
   if (!await git.hasCommit('HEAD')) return ok([]);
-  const found = await git.identitiesIn(['HEAD', '--not', '--remotes']);
+  const range = ['HEAD', '--not', '--remotes'];
+  const [found, parents] = await Promise.all([git.identitiesIn(range), git.firstParentsIn(range)]);
   if (!found.ok) return found;
-  return ok(found.value.map(brief));
+  if (!parents.ok) return parents;
+  return ok(found.value.map((commit) => brief(commit, parents.value.get(commit.sha) ?? null)));
 }
 
-function brief(commit: CommitIdentity): UnpushedCommit {
-  return { authorEmail: commit.authorEmail, committerEmail: commit.committerEmail };
+function brief(commit: CommitIdentity, parent: string | null): UnpushedCommit {
+  return { authorEmail: commit.authorEmail, committerEmail: commit.committerEmail, parent };
 }
 
 /**
  * Lines to show. Empty when there is nothing to say. The first is the fact; any other is how
- * to fix it. `account` is what to pin again to count again.
+ * to fix it. `account` is what to pin again to count again. `guarded` false: the guard is off, so
+ * the first line says they push as they are rather than that the guard will refuse them.
  */
-export function unpushedLines(fact: UnpushedFact, email: string, account: string): string[] {
+export function unpushedLines(fact: UnpushedFact, email: string, account: string, guarded = true): string[] {
   if (fact.branch === null) return [];
   if (!fact.commits.ok) return [unread(fact.branch, fact.commits.error)];
   const found = collect(fact.commits.value, fold(email));
   if (found.count === 0) return [];
-  return [sentence(fact.branch, found), ...advice(fact, found.count, account)];
+  return [sentence(fact.branch, found, guarded), ...advice(fact, found, account)];
+}
+
+/** How many unpushed commits carry an address other than `email`. Zero when they could not be read. */
+export function foreignCount(fact: UnpushedFact, email: string): number {
+  return fact.commits.ok ? collect(fact.commits.value, fold(email)).count : 0;
+}
+
+/** The addresses other than `email` on those commits, as they appear. Empty when they could not be read. */
+export function foreignAddresses(fact: UnpushedFact, email: string): readonly string[] {
+  return fact.commits.ok ? collect(fact.commits.value, fold(email)).addresses : [];
 }
 
 /** Behind an unknown destination the rebase is right only when it has none of these commits. */
-function advice(fact: UnpushedFact, count: number, account: string): string[] {
-  const rebase = reauthorLine(count, fact.rebaseBase);
+function advice(fact: UnpushedFact, found: Found, account: string): string[] {
+  const rebase = reauthorLine(found);
   if (!fact.unknown) return rebase;
   const holder = holderOf(fact.unknown);
   return [unknownLine(fact.unknown, account), ...rebase.map((line) => 'if ' + holder + ' has none of them, ' + line)];
@@ -126,33 +134,48 @@ function copyable(word: string): boolean {
   return !word.startsWith('-');
 }
 
-function reauthorLine(count: number, base: string | null): string[] {
-  if (!base) return [];
-  const them = count === 1 ? 'it' : 'them';
-  return ['re-author ' + them + ': git rebase ' + base + ' ' + AMEND + ', or pin that address'];
+/** Pinning is an alternative only when one address made them all. */
+function reauthorLine(found: Found): string[] {
+  const them = found.count === 1 ? 'it' : 'them';
+  const pin = found.addresses.length === 1 ? ', or pin that address' : '';
+  return ['re-author ' + them + ': git rebase ' + found.base + ' ' + AMEND + pin];
 }
 
 interface Found {
   readonly count: number;
   readonly addresses: readonly string[];
+  /** Parent of the oldest foreign commit (git log lists newest first), or `--root`. */
+  readonly base: string;
 }
 
 function collect(commits: readonly UnpushedCommit[], wanted: string): Found {
   const foreign = commits.filter((commit) => !own(commit, wanted));
-  return { count: foreign.length, addresses: distinct(foreign, wanted) };
+  return { count: foreign.length, addresses: distinct(foreign, wanted), base: foreign.at(-1)?.parent ?? '--root' };
 }
 
-function own(commit: UnpushedCommit, wanted: string): boolean {
+type Identity = Pick<UnpushedCommit, 'authorEmail' | 'committerEmail'>;
+
+/** Author and committer are both `email`, in any case. */
+export function isOwn(commit: Identity, email: string): boolean {
+  return own(commit, fold(email));
+}
+
+/** The addresses other than `email` on these commits, each once, as first spelled. */
+export function otherAddresses(commits: readonly Identity[], email: string): string[] {
+  return distinct(commits, fold(email));
+}
+
+function own(commit: Identity, wanted: string): boolean {
   return fold(commit.authorEmail) === wanted && fold(commit.committerEmail) === wanted;
 }
 
-function distinct(commits: readonly UnpushedCommit[], wanted: string): string[] {
+function distinct(commits: readonly Identity[], wanted: string): string[] {
   const seen = new Map<string, string>();
   for (const address of commits.flatMap(both)) remember(seen, address, wanted);
   return [...seen.values()];
 }
 
-function both(commit: UnpushedCommit): string[] {
+function both(commit: Identity): string[] {
   return [commit.authorEmail, commit.committerEmail];
 }
 
@@ -166,12 +189,13 @@ function fold(address: string): string {
   return address.toLowerCase();
 }
 
-function sentence(branch: string, found: Found): string {
-  const noun = found.count === 1 ? '1 commit' : found.count + ' commits';
-  const verb = found.count === 1 ? 'is' : 'are';
-  const them = found.count === 1 ? 'it' : 'them';
-  return noun + ' on ' + show(branch) + ' not on any remote ' + verb + ' by ' +
-    list(found.addresses) + '; the guard will refuse ' + them;
+function sentence(branch: string, found: Found, guarded: boolean): string {
+  const one = found.count === 1;
+  const noun = one ? '1 commit' : found.count + ' commits';
+  const guard = guarded ? 'the guard will refuse ' + (one ? 'it' : 'them')
+    : 'the guard is off, so ' + (one ? 'it pushes as it is' : 'they push as they are');
+  return noun + ' on ' + show(branch) + ' not on any remote ' + (one ? 'is' : 'are') + ' by ' +
+    list(found.addresses) + '; ' + guard;
 }
 
 function list(addresses: readonly string[]): string {

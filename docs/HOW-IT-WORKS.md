@@ -213,7 +213,7 @@ sequenceDiagram
 | Repo owned by an organisation | 🟡 prints the line that allows it ([card 5](#5-check-where-you-are)) |
 | gh is still the credential helper | 🟡 `fix: repown fix` |
 | No stored credential yet | the first push signs in once ([card 6](#6-commit-and-first-push)) |
-| Unpushed commits by another address | 🟡 `N commits on <branch> not on any remote are by <addresses>; the guard will refuse them`, then `re-author it` (one commit) or `re-author them` (more): `git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"`, or `git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when that commit has no parent, or pin that address. `<base>` is the short hash of the parent of the oldest of those commits. Up to three addresses, then `and N more`. Exit code unchanged. A detached HEAD says nothing. If those commits can't be read, the warning says so and gives no rebase command. Where no remote-tracking ref reaches the branch's push destination (the remote `git push` with no arguments uses), a line comes first and the rebase becomes conditional. A remote never fetched, or empty, or whose tracking refs can't be read: `origin has no remote-tracking refs, so some of these may already be on it (the guard skips any already on the branch you push to): git fetch origin, then repown use <account> to count again`, then `if origin has none of them, re-author them: …`. A remote that pushes to another URL than it fetches from: `origin pushes to another URL than it fetches from, …`. A URL: `this branch pushes to a URL, not a remote, …`, with `git config --local <key> <remote>` and a fetch when a remote has that host and path, and nothing to copy otherwise; the URL is not printed. A name with no remote: `this branch pushes to "<name>", which is not a remote here, …`. Those three continue `if it has none of them, re-author …`. A name starting with `-` gets no command ([ADR-025](decisions/ADR-025-unpushed-advice-behind-an-unknown-destination.md)) |
+| Unpushed commits by another address | 🟡 `N commits on <branch> not on any remote are by <addresses>; the guard will refuse them`, then `re-author it` (one commit) or `re-author them` (more): `git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"`, or `git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when that commit has no parent, or pin that address (said only when one address made them all). `<base>` is the short hash of the parent of the oldest of those commits by another address, so your own commits before it are left alone. Up to three addresses, then `and N more`. Exit code unchanged. A detached HEAD says nothing. If those commits can't be read, the warning says so and gives no rebase command. Where no remote-tracking ref reaches the branch's push destination (the remote `git push` with no arguments uses), a line comes first and the rebase becomes conditional. A remote never fetched, or empty, or whose tracking refs can't be read: `origin has no remote-tracking refs, so some of these may already be on it (the guard skips any already on the branch you push to): git fetch origin, then repown use <account> to count again`, then `if origin has none of them, re-author them: …`. A remote that pushes to another URL than it fetches from: `origin pushes to another URL than it fetches from, …`. A URL: `this branch pushes to a URL, not a remote, …`, with `git config --local <key> <remote>` and a fetch when a remote has that host and path, and nothing to copy otherwise; the URL is not printed. A name with no remote: `this branch pushes to "<name>", which is not a remote here, …`. Those three continue `if it has none of them, re-author …`. A name starting with `-` gets no command ([ADR-025](decisions/ADR-025-unpushed-advice-behind-an-unknown-destination.md)) |
 
 </details>
 
@@ -313,6 +313,7 @@ ready: commits and pushes use octocat · gh: optional (see the note above)
 | 🔴 `gh is the git credential helper` | only gh's active account can push | `repown fix` |
 | 🟡 `no credential helper is set` / `cannot tell whether it honours` | a GitHub https clone, and the helper isn't Git Credential Manager | `repown doctor` ([card 1](#1-set-up-the-machine)) |
 | NOTE `gh active as "…"` | the gh CLI would act as another account; git pushes are unaffected. Printed after the identity line, and not counted as a warning | `gh auth switch -u <account>` when that account is signed in to gh; `repown use <account> --gh` when it is not |
+| 🟡 `push …` (first among the warnings) | something will stop the next push: commits by another address the guard will refuse (no remote has them, or another remote has them but the destination lacks them), a sign-in in the push URL, an identity or token variable in this shell, `author.email` in config, a destination owner (said once, by the `origin` row when that fires), a diverged branch, a detached HEAD. Read only when status finds no problem; a missing upstream stays in the `upstream` field. With the guard off, what only the guard would refuse (commits by another address, an owner, `GH_TOKEN`) says `the guard is off, so …`, counts as a warning, and the clone is still `ready` | the line under it: the `git rebase` advice (or `repown reauthor`), `git config --unset …`, unset the variable, `git pull --rebase`; a sign-in in the push URL: `repown setup --repoint` ([card 8](#8-push-refused-and-the-fix)) |
 | 🟡 `gh could not be queried` | who `gh pr create` acts as is unknown | `gh auth status` |
 | 🟡 `origin belongs to "octo-org"` | an organisation repository | `git config --local --add repown.allowOwner octo-org` |
 | 🟡 `guard off` | pushes are not checked | `repown guard on` |
@@ -335,7 +336,9 @@ host's credentials are pinned, or `ready: commits use <account>; pushes use this
 host's own sign-in` where they are not (Azure DevOps, a local path, or any other
 remote repown does not pin). ` · N warning(s)` follows when there are warnings;
 the NOTE is not in that count. When the NOTE is the only finding, the line is
-` · gh: optional (see the note above)`. With a problem it ends with a count
+` · gh: optional (see the note above)`. When something will stop the next push, it ends
+`the next push will fail: <the first> (and N more above)` instead, and still exits 0
+([ADR-026](decisions/ADR-026-setup-says-what-blocks-the-next-push.md)). With a problem it ends with a count
 (`1 problem, 2 warnings`), adding `: run repown setup` when an identity problem
 is among them. A gh query that could not be run stays a warning. On Windows the
 clone path uses backslashes; elsewhere it is shown as git printed it
@@ -456,7 +459,7 @@ Override this one push with: git push --no-verify
 
 | 🔴 Refusal | Typical cause | Fix |
 | --- | --- | --- |
-| **foreign commit**, yours | committed before pinning, or by an IDE with its own identity | `re-author it` or `re-author them`: `git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"` (`git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when that commit has no parent), or pin that address; then push again. If the warning says the remote has no remote-tracking refs, `git fetch` it first: the guard only refuses what the remote doesn't have |
+| **foreign commit**, yours | committed before pinning, or by an IDE with its own identity | `re-author it` or `re-author them`: `git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"` (`git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when that commit has no parent), or pin that address; then push again. If the warning says the remote has no remote-tracking refs, `git fetch` it first: the guard only refuses what the remote doesn't have. Or let repown do it: `repown reauthor` fetches, then rewrites only what no remote has, from the oldest commit by another address on: your own commits after it are rewritten too, with their author dates reset. It keeps `refs/repown/backup/<branch>/<time>` (never removed: `git update-ref -d` it when done), prints the undo (`git reset --keep <backup>`) and never pushes. It refuses rather than guesses, for example on a merge in that range, uncommitted changes, identity variables, or a destination it can't fetch ([ADR-026](decisions/ADR-026-setup-says-what-blocks-the-next-push.md)) |
 | **foreign commit**, a teammate's | cherry-picked, rebased or fetched from their fork, and not on the remote yet | let them push it, then pull; don't re-author their work ([card 9](#9-a-teammate-without-repown)) |
 | **wrong owner** `push goes to "…"` | an organisation repository, or the wrong remote | organisation: `git config --local --add repown.allowOwner octo-org` |
 | **env** `GH_TOKEN is set` | a token or email variable overrides the identity | unset it, then push again |
@@ -695,26 +698,30 @@ never suggested.
 | Where it's hosted, and your name and email as commits show them (on GitHub, with where to find your noreply address; this machine's default is shown, never filled in) | the login is new: "a new account", or one picked from the logins already seen | `accounts add <account> --name --email --host` |
 | Also make this account gh's active account? (default No) | a GitHub clone (or one whose origin isn't a URL), gh knows the account, another is active. Recommended does not ask this when the clone is already pinned to that account: it answers No, and the review names the command (`gh auth switch -u <account>`, or `repown use <account> --gh` when gh does not list it) | `use --gh` |
 | Sign in to gh as that account too? (default No) | the same, except gh does not know the account. Yes opens a browser; gh then acts as that account in every terminal. The line under it names gh's active account, or says gh isn't signed in. Recommended skips it the same way when the clone is already pinned to that account | `use --gh` |
+| Push through origin instead of the URL set for this branch? (default Yes) | the branch pushes to a URL (from `branch.<name>.pushRemote`, `remote.pushDefault` or `branch.<name>.remote`) naming the same host and path as a remote here. A URL there can carry its own sign-in and is never fetched. The review shows the key and the remote, never the URL, and so does the run's "changed in this clone" (`(a URL) -> origin`). The flag is `--repoint` | `git config --local <key> <remote>` |
+| Fetch origin first? (default Yes) | some unpushed commits are by another address, and the push destination is a remote with no remote-tracking refs (or becomes one by the step above). A clean clone never fetches. Prompts are off, as for `repown reauthor`; a failure prints `WARN fetch could not fetch origin (…)`, the destination stays unknown, and the rest of the steps run. The flag is `--fetch` | `git fetch <remote>` |
 | This repository belongs to "octo-org". Let this clone push to it? (default Yes) | origin's owner isn't the account, and isn't allowed yet | `git config --local --add repown.allowOwner <owner>` |
 | Turn on the push guard? (default Yes) | the guard is off, no other tool owns the hook, and `core.hooksPath` doesn't redirect hooks | `guard on` |
 | Push branches without -u? (default Yes) | git is 2.37.0 or newer, and `push.autoSetupRemote` is not already true in any scope. The flag is `--auto-upstream`. On older git, or when `git --version` cannot be read, this is not asked and the review notes `git push -u origin <branch>` (the current branch, or `<branch>` when HEAD is detached) | `git config --local push.autoSetupRemote true` |
 | Stop gh answering git's sign-in requests? (whole machine, default No) | a GitHub clone, gh is the helper, and `fix` finds its entries. Still asked in Recommended | `fix --yes` |
+| Re-author your unpushed commits by old@example.invalid as octocat? (default No) | some unpushed commits carry an address other than the account's. Still asked in Recommended: only you know whether you made them. The step runs last, so every other step has run by then; a refusal (a merge in the range, uncommitted changes, a destination it can't fetch) stops setup with exit 1, and the clone keeps its commits. The flag is `--reauthor`, and with `--no-input` it is the confirmation (`reauthor --yes`), as `--fix` is for `fix --yes` | `reauthor --yes` |
 
 **Recommended** answers Yes, and does not ask, the questions that only change this
-clone and need nothing only the user knows: turn the guard on, and push branches
-without `-u`. It also switches gh, without asking, when gh already lists the account
+clone and need nothing only the user knows: push through the remote instead of a URL,
+fetch the destination first, turn the guard on, and push branches without `-u`. It also switches gh, without asking, when gh already lists the account
 and this clone is not already pinned to it. Each of those is still a step in the
 review, and Change an answer can open it. When the clone is already pinned to the
 chosen account, Recommended does not ask about gh and answers No, so the review
 names the command (`If you use gh here: …`). It still asks for the account, and for a new account
 the host, name and email. It always asks, default Yes, when origin belongs to
 someone other than the account. It still asks, default No, when signing in to gh
-would open a browser and the clone is not already pinned to that account, and when
-`fix` would change the whole machine. **Step by step** asks every question. After Run, before each command, it shows what that step changes (the config
+would open a browser and the clone is not already pinned to that account, when
+`fix` would change the whole machine, and whether to re-author commits by another
+address. **Step by step** asks every question. After Run, before each command, it shows what that step changes (the config
 keys and values, or the gh action), why (the step's own sentence), and the command, then
-asks `Run this step?` with Yes / Skip / Stop. Enter is Yes, except for `fix`, where Enter
-is Skip: that step changes the whole machine, the same reason the review's Enter is
-Decline when `fix` is one of the steps. Skip leaves that step unchanged and continues.
+asks `Run this step?` with Yes / Skip / Stop. Enter is Yes, except for `fix` and
+`reauthor`, where Enter is Skip: one changes the whole machine and the other rewrites
+commits, the same reason the review's Enter is Decline when either is one of the steps. Skip leaves that step unchanged and continues.
 Stop, or Esc, runs nothing further and lists the steps that were not run.
 `--no-input` does not use Recommended's answers: a question not given as a flag
 is No. `--step-by-step --no-input` exits 2.
@@ -755,7 +762,9 @@ and Recommended's answers. **Done** changes nothing (exit 0). **Use another acco
 continues at the account question, in Recommended; Back returns to this screen.
 **Sign in to gh as `<account>`** is offered only when gh acts as another account. It
 reviews one step, `repown use <account> --gh`. When gh already lists the account, the
-option is **Make `<account>` gh's active account**. **Change an answer** is not on this
+option is **Make `<account>` gh's active account**. **Re-author them as `<account>`** is
+offered only when unpushed commits carry another address; it reviews one step,
+`repown reauthor --yes`, whose Enter is Decline. **Change an answer** is not on this
 first screen. Step by step can still reach the same screen after its questions, and
 then Change an answer is there.
 
@@ -878,7 +887,7 @@ OK    upstream   branches without an upstream push without -u in this clone
 
 The last line is only when gh still acts as someone else and the review did not already say so. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh   (signs <account> in to gh)`. The review says the same thing (`gh still acts as <active>, so gh pr create here would act as that account (git pushes are unaffected). If you use gh here: gh auth switch -u <account>.` when gh already lists it, otherwise `If you use gh here: repown use <account> --gh (signs <account> in to gh).`), and that run does not print it again. With `--no-input` there is no review, so the line after the run is the one place it appears. The first push's sign-in is said by `use` when `use` runs. When the pin is left out and Git Credential Manager's store was read and does not list the account, the review says `No stored credential for <account> yet: the first push signs in once (your browser opens).`
 
-`changed in this clone:` is what this run wrote in the clone, read before the first step and again after it (also after Stop, or after a step fails). A key that was unset is `(added)`; one that is gone is `old -> (removed)`. A key that did not change is left out. `repown.allowOwner` lists the values added or removed. The guard is `push guard: off -> on`. Only these config values are shown, never what a credential helper prints. When nothing in the clone changed, that block is the one line `nothing changed in this clone`. A settled clone whose pin was left out still says `done: this clone is set up for <account>`.
+`changed in this clone:` is what this run wrote in the clone, read before the first step and again after it (also after Stop, or after a step fails). A key that was unset is `(added)`; one that is gone is `old -> (removed)`. A key that did not change is left out. `repown.allowOwner` lists the values added or removed. The guard is `push guard: off -> on`. Only these config values are shown, never what a credential helper prints. When nothing in the clone changed, that block is the one line `nothing changed in this clone`. A settled clone whose pin was left out still says `done: this clone is set up for <account>`. `done` needs nothing left in the way of the next push, read again after the run: otherwise the line is `set up for <account>; the next push will fail: <first blocker> (and N more below)`, followed by each blocker's lines, and the exit code is unchanged ([ADR-026](decisions/ADR-026-setup-says-what-blocks-the-next-push.md)). The blockers: commits by another address the guard will refuse (also those another remote has but the push destination lacks), a sign-in carried by the push path (named by config key, never shown), `GIT_AUTHOR_EMAIL` / `GIT_COMMITTER_EMAIL` / `GH_TOKEN` / `GITHUB_TOKEN` set, `author.email` / `committer.email` in config, a destination owner the guard refuses, a branch diverged from its tracked ref on the destination, no upstream where a plain `git push` needs one, and a detached HEAD. The review lists them first among its notes.
 
 Recording an account is not in the clone. That run adds a separate section:
 
@@ -929,7 +938,7 @@ Skip does not run that step. The closing lines name every skipped step, and say 
 
 Stop, or Esc, prints `not run:` and the commands that did not get their turn. Exit 130.
 
-**Already set up:** run it again in a clone that needs nothing.
+**Already set up:** run it again in a clone that needs nothing. If something would still make the next push fail, `Nothing needs to change.` becomes `Its settings need no change, but the next push will fail:` and the blockers follow.
 
 ```
 ◇  This clone is already set up ─────────────────────────────────────╮
@@ -957,7 +966,9 @@ Stop, or Esc, prints `not run:` and the commands that did not get their turn. Ex
 **Done** writes nothing. **Use another account** asks which account, then the rest of
 Recommended. When gh acts as someone else, a third option is **Sign in to gh as
 octocat** (or **Make octocat gh's active account** when gh already lists it). Choosing
-it reviews `repown use octocat --gh` and nothing else. The box then says
+it reviews `repown use octocat --gh` and nothing else. With unpushed commits by another
+address, **Re-author them as octocat** is offered too, and reviews `repown reauthor --yes`
+alone. The box then says
 `If you use gh here, choose "Sign in to gh as octocat" below.`
 (or `Make octocat gh's active account` when gh already lists it).
 The `upstream` line is the tracked ref (for example `origin/main`) when there is

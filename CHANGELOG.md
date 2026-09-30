@@ -7,6 +7,12 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+### Added
+
+- `repown reauthor [--yes]`: gives this branch's unpushed commits by another address the pinned identity. It fetches the push destination first, rewrites only commits no remote has (from the oldest one by another address), refuses on a merge in that range, uncommitted changes, identity overrides or a destination it can't fetch, runs without hooks, keeps a backup ref, prints the undo, and never pushes (ADR-026).
+- `repown setup --repoint` and `--fetch`, which Recommended answers Yes where they apply. Repoint: where the branch pushes to a URL naming the same repository as a remote, setup points it back at that remote (`git config --local <key> <remote>`); the URL, which can carry a token, is never printed. Fetch: where commits by another address wait behind a remote never fetched, setup fetches it first (prompts off), so the count and the rebase advice are right; a failed fetch is a warning (ADR-026).
+- `repown setup --reauthor`: where unpushed commits carry another address, setup asks (default No, in Recommended too) whether to re-author them as the account, and runs `repown reauthor --yes` as its last step. Like `fix`, Enter at the review is Decline and at the step is Skip. An already set-up clone offers **Re-author them** on its first screen (ADR-026).
+
 ### Fixed
 
 - `repown use` and setup's review no longer advise `git rebase --root` for commits a
@@ -15,6 +21,12 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   remote, they say so, say how to fetch and count again where there is a remote to fetch,
   and offer the rebase only for when the destination has none of those commits. The URL
   is never printed (ADR-025).
+- `repown setup` no longer says `done` when the next push would fail. It names what is in the way, first among the review's notes, on the already-set-up screen, and in its closing line (`set up for <account>; the next push will fail: …`): commits the guard will refuse, a sign-in in the push URL, identity or token variables, `author.email` in config, a destination owner, a diverged branch, a missing upstream, a detached HEAD (ADR-026).
+- With the guard off, setup and status still name commits by another address, a destination owner and `GH_TOKEN`, but as a warning (`the guard is off, so …`): they no longer stop `done` or `ready` (ADR-026).
+- `repown status` no longer says `ready` when the next push would fail. It prints what is in the way first among its warnings (`WARN push`), and ends `the next push will fail: …`; the exit code is unchanged (ADR-026).
+- The re-author advice says `or pin that address` only when one address made them all.
+- The suggested `git rebase` starts at the parent of the oldest commit by another address,
+  not the oldest unpushed one, so your own commits before it are never rewritten.
 
 ## [0.3.0] - 2026-09-29
 

@@ -11,7 +11,9 @@
 // All three are printed, because the one that is invisible is the one that
 // catches people out. gh's active account is a note: it never affects the push.
 // A gh that could not be queried stays a warning, because that answer is unknown.
-// This reports; it changes nothing.
+// What would stop the next push (blockers.ts, the list setup reads too) comes first among
+// the warnings, and `ready:` is said only without it (ADR-026). It is still a warning:
+// the exit code is unchanged (ADR-020). This reports; it changes nothing.
 
 import { inspectRepo, inspectAuth, activeAccountLabel, type RepoState, type AuthState } from '../core/inspect.ts';
 import { isPinned } from '../core/identity.ts';
@@ -23,6 +25,10 @@ import { join } from 'node:path';
 import { gitFor, type Args } from '../ui/args.ts';
 import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
+import { printable } from '../ui/format.ts';
+import { blockers, type Blocker } from '../core/blockers.ts';
+import { readPushFacts } from '../core/push-state.ts';
+import { readUnpushed } from '../core/unpushed.ts';
 
 export default {
   summary: 'this clone\'s and this machine\'s settings, and what to fix (bare `repown` when output isn\'t a terminal)',
@@ -40,10 +46,12 @@ export default {
 
     await summary(repo, auth, registry);
     const problems = collectProblems(repo, auth);
-    const warnings = await reportWarnings(repo, auth, registry);
+    const account = accountShown(repo, registry);
+    const found = problems.length === 0 ? await pushBlockers(repo, account) : [];
+    const warnings = await reportWarnings(repo, auth, registry, found);
     const code = verdict(repo, auth, problems);
     const ghNote = printGhNote(pinnedAccount(repo), auth);
-    closeStatus({ repo, problems, warnings, account: accountShown(repo, registry), ghNote });
+    closeStatus({ repo, problems, warnings, blockers: found, account, ghNote });
     return code;
   },
 } satisfies Command;
@@ -192,20 +200,47 @@ function matchesRecord(repo: RepoState, entry: Account): boolean {
 
 interface Problem { readonly what: string; readonly fix: string; }
 
+/** Read only when status finds no problem: otherwise the problem comes first. */
+async function pushBlockers(repo: RepoState, account: string): Promise<Blocker[]> {
+  const facts = await readPushFacts(repo.git, await readUnpushed(repo.git));
+  const guarded = repo.guard !== 'off' || repo.hook?.redirected === true;
+  // The upstream field already says how to push a branch without one: not a warning here.
+  return blockers(facts, { email: repo.identity.email ?? '', account, autoUpstream: true, guarded });
+}
+
+/** First among the warnings. An owner the origin warning names is not said twice. */
+function printBlockers(found: readonly Blocker[], ownerWarned: boolean): void {
+  for (const blocker of found) {
+    if (blocker.kind === 'owner' && ownerWarned) continue;
+    const [first = '', ...rest] = blocker.lines;
+    out.warn('push', printable(first));
+    for (const line of rest) out.detail(printable(line));
+  }
+}
+
 interface StatusEnd {
   readonly repo: RepoState;
   readonly problems: readonly Problem[];
+  readonly blockers: readonly Blocker[];
   readonly warnings: readonly string[];
   readonly account: string;
   readonly ghNote: boolean;
 }
 
 function closeStatus(end: StatusEnd): void {
-  const line = end.problems.length === 0
-    ? readyLine(end.repo, end.account, end.warnings, end.ghNote)
-    : tally(end.problems.length, end.warnings.length) + setupHint(end.repo);
   out.note('');
-  out.note(line);
+  out.note(closingLine(end));
+}
+
+function closingLine(end: StatusEnd): string {
+  if (end.problems.length > 0) return tally(end.problems.length, end.warnings.length) + setupHint(end.repo);
+  const blocking = end.blockers.filter((blocker) => blocker.blocks);
+  const [first] = blocking;
+  // What blocks nothing (the guard is off) is still a warning, and counted as one.
+  const quiet = end.blockers.filter((blocker) => !blocker.blocks).map(() => 'push');
+  if (!first) return readyLine(end.repo, end.account, [...quiet, ...end.warnings], end.ghNote);
+  const more = blocking.length > 1 ? ' (and ' + (blocking.length - 1) + ' more above)' : '';
+  return 'the next push will fail: ' + printable(first.summary) + more;
 }
 
 const GH_OPTIONAL = ' · gh: optional (see the note above)';
@@ -260,10 +295,12 @@ export function identityProblems(repo: RepoState): Problem[] {
   }];
 }
 
-async function reportWarnings(repo: RepoState, auth: AuthState, registry: LoadedRegistry): Promise<readonly string[]> {
+async function reportWarnings(repo: RepoState, auth: AuthState, registry: LoadedRegistry, found: readonly Blocker[]): Promise<readonly string[]> {
   const tags = ['origin', 'account', 'guard', 'submodule', 'helper', 'gh'] as const;
+  const foreignOwner = await originForeign(repo);
+  printBlockers(found, foreignOwner);
   const fired = [
-    await ownerWarning(repo),
+    foreignOwner && ownerWarning(repo),
     accountWarning(repo, registry),
     guardWarning(repo),
     submoduleWarning(repo),
@@ -320,9 +357,13 @@ function submoduleWarning(repo: RepoState): boolean {
  * An organisation is never an account name, so a bare owner-vs-account
  * comparison warns on every org repository -- which is most of them at work.
  */
-async function ownerWarning(repo: RepoState): Promise<boolean> {
+async function originForeign(repo: RepoState): Promise<boolean> {
   const allowed = await allowedOwners(repo.git, repo.identity.owner ?? repo.identity.account);
-  if (!repo.owner || allowed.length === 0 || allowed.includes(repo.owner.toLowerCase())) return false;
+  return !!repo.owner && allowed.length > 0 && !allowed.includes(repo.owner.toLowerCase());
+}
+
+function ownerWarning(repo: RepoState): boolean {
+  if (!repo.owner) return false;
   out.warn('origin', 'origin belongs to "' + repo.owner + '", which is not an owner this clone pushes to.');
   out.detail('if that is an organisation you belong to:');
   out.detail('  git config --local --add repown.allowOwner ' + shellWord(repo.owner));

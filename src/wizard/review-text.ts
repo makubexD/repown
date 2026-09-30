@@ -16,9 +16,9 @@ export const PICK_QUESTION = 'Which answer do you want to change?';
 export const BACK_TO_REVIEW = 'Back to the review';
 export const RUN_THIS_STEP = 'Run this step?';
 
-/** Yes, unless the command changes the whole machine: that needs a deliberate yes, as in the review. */
+/** Yes, unless the command changes the whole machine or rewrites commits: that needs a deliberate yes, as in the review. */
 export function stepDefault(command: string): 'yes' | 'skip' {
-  return changesMachine(command) ? 'skip' : 'yes';
+  return needsDeliberateYes(command) ? 'skip' : 'yes';
 }
 
 export function stepOptions(): Array<{ value: StepChoice; label: string }> {
@@ -34,8 +34,9 @@ export function stepConfirmLines(brief: { readonly changes: readonly string[]; r
   return [...brief.changes, '', brief.why, '> ' + brief.command];
 }
 
-function changesMachine(command: string): boolean {
-  return command.startsWith('repown fix');
+/** `fix` changes the whole machine; `reauthor` rewrites commits. */
+function needsDeliberateYes(command: string): boolean {
+  return command.startsWith('repown fix') || command.startsWith('repown reauthor');
 }
 
 /** A settled clone's verdict: its settings are right; the notes say what else is not (ADR-026). */
@@ -118,10 +119,10 @@ function settledOptions(review: Review): ReviewOption[] {
 }
 
 /**
- * The choice Enter takes: the first, unless a step changes the whole machine
- * (`fix`), which, like its own question, needs a deliberate yes.
+ * The choice Enter takes: the first, unless a step changes the whole machine or rewrites commits
+ * (`fix`, `reauthor`), which, like its own question, needs a deliberate yes.
  */
 export function reviewDefault(review: Review): ReviewOption['value'] {
-  const machineWide = review.steps.some((step) => changesMachine(step.command));
-  return !review.settled && machineWide ? 'decline' : reviewOptions(review)[0]!.value;
+  const deliberate = review.steps.some((step) => needsDeliberateYes(step.command));
+  return !review.settled && deliberate ? 'decline' : reviewOptions(review)[0]!.value;
 }

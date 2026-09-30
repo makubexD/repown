@@ -10,7 +10,7 @@
 import { ghAdvice, upstreamText } from '../commands/status.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { shellWord } from '../core/guard/check.ts';
-import { foreignCount, type UnpushedFact } from '../core/unpushed.ts';
+import { foreignAddresses, foreignCount, type UnpushedFact } from '../core/unpushed.ts';
 import type { PushFacts } from '../core/push-state.ts';
 import { blockers, type Blocker } from './blockers.ts';
 import type { Account } from '../core/registry.ts';
@@ -234,7 +234,29 @@ function choiceSteps(ctx: SetupContext): Step<SetupContext>[] {
       hint: 'undo any time: gh auth setup-git', initial: () => false, when: () => ctx.fixLines !== null,
       detail: () => 'gh answers git\'s sign-in requests with its active account only, so clones of your other accounts ' +
         'get password prompts. Yes hands that job back to Git Credential Manager, for every repository on this machine' },
+    reauthorStep(ctx),
   ];
+}
+
+/** Never answered by Recommended: only the user knows whether they made those commits. */
+function reauthorStep(ctx: SetupContext): Step<SetupContext> {
+  return {
+    id: 'reauthor', kind: 'confirm', flag: '--reauthor', initial: () => false,
+    message: (answers) => 'Re-author your unpushed commits by ' + printable(othersOf(answers, ctx).join(', ')) +
+      ' as ' + printable(accountOf(answers)) + '?',
+    hint: 'only if you made them: they get this account\'s name and email. repown fetches first, rewrites only ' +
+      'what no remote has, keeps a backup, and never pushes',
+    when: (answers) => reauthorOffered(answers, ctx),
+  };
+}
+
+/** Some unpushed commits carry an address other than the chosen account's. */
+export function reauthorOffered(answers: Answers, ctx: SetupContext): boolean {
+  return othersOf(answers, ctx).length > 0;
+}
+
+function othersOf(answers: Answers, ctx: SetupContext): readonly string[] {
+  return foreignAddresses(ctx.unpushed, emailOf(answers, ctx) ?? '');
 }
 
 /** Labels for a newcomer; the providers' own labels stay as `repown` prints them elsewhere. */
@@ -539,6 +561,7 @@ export function planCommands(answers: Answers, ctx: SetupContext): PlannedComman
     useArgv(answers, ctx),
     answers['guard'] === true ? ['guard', 'on', ...cwd] : null,
     upstreamArgv(answers, ctx),
+    answers['reauthor'] === true && reauthorOffered(answers, ctx) ? ['reauthor', '--yes', ...cwd] : null,
   ];
   return planned.filter((argv): argv is readonly string[] => argv !== null).map((argv) => ({ argv, what: whatOf(argv, answers, ctx) }));
 }
@@ -598,6 +621,7 @@ function whatOf(argv: readonly string[], answers: Answers, ctx: SetupContext): s
   if (argv[0] === 'git') return gitWhat(argv, ctx);
   if (argv[0] === 'fix') return 'Stop gh answering git\'s sign-in requests (whole machine)';
   if (argv[0] === 'guard') return 'Turn on the push guard: each push is checked first';
+  if (argv[0] === 'reauthor') return 'Re-author your unpushed commits by other addresses as ' + account + ' (a backup is kept; nothing is pushed)';
   if (answers['gh'] === true) return ghWhat(account, ctx);
   return 'Pin this clone to ' + account + (ctx.credentialPinned ? ': its commit name, email and push sign-in' : ': its commit name and email');
 }
@@ -873,6 +897,7 @@ export function changesOf(argv: readonly string[], answers: Answers, ctx: SetupC
   if (argv[0] === 'git') return [gitChange(argv)];
   if (argv[0] === 'fix') return fixChanges(ctx);
   if (argv[0] === 'guard') return [guardChange(ctx)];
+  if (argv[0] === 'reauthor') return [reauthorChange(answers, ctx)];
   return useChanges(argv, answers, ctx);
 }
 
@@ -900,6 +925,12 @@ function gitChange(argv: readonly string[]): string {
   if (step === 'fetch') return 'refs/remotes/' + argv.at(-1) + '/*: updated from ' + argv.at(-1) + ' (none of your branches move)';
   if (step === 'upstream') return 'push.autoSetupRemote = true';
   return 'repown.allowOwner += ' + (argv.at(-1) ?? '');
+}
+
+function reauthorChange(answers: Answers, ctx: SetupContext): string {
+  const branch = ctx.unpushed.branch ?? 'this branch';
+  return branch + ': unpushed commits by ' + othersOf(answers, ctx).join(', ') + ' get ' + (emailOf(answers, ctx) ?? '') +
+    '; the original stays at refs/repown/backup/' + branch + '/<time>';
 }
 
 function fixChanges(ctx: SetupContext): string[] {

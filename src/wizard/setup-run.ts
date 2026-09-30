@@ -16,10 +16,11 @@ import * as out from '../ui/format.ts';
 import { useColour } from '../ui/format.ts';
 import useCommand, { NEXT_GUARD } from '../commands/use.ts';
 import fixCommand from '../commands/fix.ts';
+import reauthorCommand from '../commands/reauthor.ts';
 import guardGroup from '../commands/guard.ts';
 import accountsGroup from '../commands/accounts.ts';
 import { wizard, refusedGiven, CANCEL, type Answers, type Prompter, type StepChoice } from './engine.ts';
-import { setupFlow, planCommands, formatCommand, fetchTarget, gitStepOf, briefOf, missingFlags, printable, dropFixPrefix, NEW_ACCOUNT, accountOf, pinUnchanged, ghNoted, type PlannedCommand, type SetupContext } from './setup-flow.ts';
+import { setupFlow, planCommands, formatCommand, fetchTarget, gitStepOf, reauthorOffered, briefOf, missingFlags, printable, dropFixPrefix, NEW_ACCOUNT, accountOf, pinUnchanged, ghNoted, type PlannedCommand, type SetupContext } from './setup-flow.ts';
 import { cloneChangeLines, machineChangeLines, readCloneSnapshot, type CloneSnapshot } from './setup-changes.ts';
 import { readContext, readRegistry, type ReadOptions } from './setup-context.ts';
 import { plainPrompter } from './plain.ts';
@@ -143,8 +144,8 @@ function modeOf(args: Args, answers: Answers): Result<Answers> {
   return ok(answers);
 }
 
-const CONFIRM_FLAGS = ['gh', 'guard', 'fix', 'repoint', 'fetch'] as const;
-const CONFIRM_DEFAULTS = ['gh', 'allowOwner', 'guard', 'fix', 'upstream', 'repoint', 'fetch'] as const;
+const CONFIRM_FLAGS = ['gh', 'guard', 'fix', 'repoint', 'fetch', 'reauthor'] as const;
+const CONFIRM_DEFAULTS = ['gh', 'allowOwner', 'guard', 'fix', 'upstream', 'repoint', 'fetch', 'reauthor'] as const;
 
 /** A passed flag is Yes. With --no-input, a confirm that was not passed is No, not Recommended's Yes. */
 function applyConfirms(args: Args, answers: Answers): void {
@@ -165,7 +166,7 @@ function usage(message: string): number {
 function needsTerminal(given: Answers, recorded: Recorded): number {
   out.fail('setup', 'needs a terminal to ask its questions.');
   out.detail('without one, give the answers as flags and add --no-input:');
-  out.detail('  repown setup <account> [--name "..." --email "..."] [--gh] [--allow-owner <owner>] [--guard] [--auto-upstream] [--fix] [--repoint] [--fetch] --no-input');
+  out.detail('  repown setup <account> [--name "..." --email "..."] [--gh] [--allow-owner <owner>] [--guard] [--auto-upstream] [--fix] [--repoint] [--fetch] [--reauthor] --no-input');
   const missing = missingFlags(given, recorded);
   if (missing.length > 0) out.detail('still needed: ' + missing.join(', '));
   return 2;
@@ -203,6 +204,10 @@ function dropInapplicable(answers: Answers, ctx: SetupContext): void {
   if (answers['fetch'] === true && fetchTarget(answers, ctx) === null) {
     out.detail('--fetch: no commit by another address waits behind a remote this clone has never fetched, so there is nothing to fetch');
     answers['fetch'] = false;
+  }
+  if (answers['reauthor'] === true && !reauthorOffered(answers, ctx)) {
+    out.detail('--reauthor: no unpushed commit here is by another address, so there is nothing to re-author');
+    answers['reauthor'] = false;
   }
 }
 
@@ -508,18 +513,22 @@ async function withoutLine<T>(hidden: string, run: () => Promise<T>): Promise<T>
 
 async function runOne(argv: readonly string[], git: Git): Promise<number> {
   if (argv[0] === 'git') return gitLine(argv, git);
-  const [command, rest] = commandFor(argv);
+  const found = commandFor(argv);
+  if (!found) { out.fail('setup', 'could not run ' + formatCommand(argv) + ': not a step setup plans'); return 2; }
+  const [command, rest] = found;
   const parsed = parseArgs(rest, specFor(command));
   if (!parsed.ok) { out.fail('setup', 'could not run ' + formatCommand(argv) + ': ' + parsed.error); return 2; }
   return command.run(parsed.value);
 }
 
-/** The Command a planned argv names, and the arguments after its name. */
-function commandFor(argv: readonly string[]): [Command, readonly string[]] {
+/** The Command a planned argv names, and the arguments after its name; null for anything else. */
+function commandFor(argv: readonly string[]): [Command, readonly string[]] | null {
   if (argv[0] === 'use') return [useCommand, argv.slice(1)];
   if (argv[0] === 'fix') return [fixCommand, argv.slice(1)];
-  if (argv[0] === 'guard') return [guardGroup.actions['on']!, argv.slice(2)];
-  return [accountsGroup.actions['add']!, argv.slice(2)];
+  if (argv[0] === 'reauthor') return [reauthorCommand, argv.slice(1)];
+  if (argv[0] === 'guard' && argv[1] === 'on') return [guardGroup.actions['on']!, argv.slice(2)];
+  if (argv[0] === 'accounts' && argv[1] === 'add') return [accountsGroup.actions['add']!, argv.slice(2)];
+  return null;
 }
 
 /** A planned git line, each by its own case. None shells out past the Git wrapper. */

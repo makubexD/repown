@@ -53,6 +53,10 @@ problem".
     `reauthor` does. A failure is a warning and the destination stays unknown: the other steps
     still run. The guard stays offline ([ADR-004](ADR-004-destination-owner.md): no network call in the push path); setup already uses the
     network for gh's sign-in ([ADR-019](ADR-019-repown-signs-accounts-in-to-gh.md)).
+- **Setup asks before it re-authors** (`--reauthor`): only where unpushed commits carry another
+  address, default No and never filled in by Recommended, since only the user knows whether they
+  made them. It runs `repown reauthor --yes` last, so a refusal skips no other step; like `fix`,
+  Enter at the review is Decline and at the step is Skip.
 - **`repown reauthor` rewrites, only when asked.** ADR-013 turned rewriting down as destructive
   and the owner's call; the owner now makes that call with one command, and repown makes the
   rewrite as narrow as it can be:

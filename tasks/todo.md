@@ -1,6 +1,6 @@
 # Tasks: setup leaves the clone push-ready
 
-Status: Phase 4 build, Task 7 next (⚠: wait for a go). Full-suite run pending since T4 (stopped for low memory)
+Status: Phase 4 build, Task 8 next. Full-suite run pending since T4 (stopped for low memory)
 
 - [x] Phase 1 clarify (audit WIZ-1..10, newcomer walk s1–s9, research; scope: detect + fix + opt-in re-author)
 - [x] Phase 2 spec (SPEC.md approved; command name `repown reauthor`)
@@ -68,7 +68,7 @@ Writes git config; uses the network.
 - Files: `src/wizard/setup-flow.ts`, `src/wizard/setup-run.ts`, `src/commands/setup.ts`, tests
 - Docs: README (setup flags), CONFIGURATION (scripts and CI), HOW-IT-WORKS card 13, CHANGELOG
 
-## Task 7 ⚠ — Setup's opt-in re-author step
+## Task 7 ⚠ — Setup's opt-in re-author step [x]
 Runs `repown reauthor --yes` from the wizard.
 - Acceptance: asked in both modes, default No, only with foreign unpushed commits; `--reauthor`;
   runs after fetch and repoint; field case played end to end: Yes → closing `done` and the push

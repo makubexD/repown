@@ -78,6 +78,11 @@ export function foreignCount(fact: UnpushedFact, email: string): number {
   return fact.commits.ok ? collect(fact.commits.value, fold(email)).count : 0;
 }
 
+/** The addresses other than `email` on those commits, as they appear. Empty when they could not be read. */
+export function foreignAddresses(fact: UnpushedFact, email: string): readonly string[] {
+  return fact.commits.ok ? collect(fact.commits.value, fold(email)).addresses : [];
+}
+
 /** Behind an unknown destination the rebase is right only when it has none of these commits. */
 function advice(fact: UnpushedFact, found: Found, account: string): string[] {
   const rebase = reauthorLine(found);

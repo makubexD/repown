@@ -115,6 +115,7 @@ repown                 # in a terminal: starts the guided setup of this clone
    | Turn the guard on? | Answers Yes without asking | Asked | `--guard` |
    | Push branches without -u? Only on git 2.37+. It sets `push.autoSetupRemote` in this clone only; the guard still checks that first push. | Answers Yes without asking | Asked, default Yes | `--auto-upstream` |
    | gh. "Switch gh too" makes `gh pr create` match. | Switches without asking when gh already lists the account and the clone is not already pinned to it. A sign-in, which opens a browser, is asked, default No. Skips the question when the clone is already pinned to that account. | Asked | `--gh` |
+   | Re-author your unpushed commits by another address as this account? Only if you made them. It runs last, as `repown reauthor --yes`: it fetches first, rewrites only what no remote has, keeps a backup, and never pushes. | Asked, default No. Enter at the review is Decline when this is a step. | Asked, default No; Enter at the step is Skip | `--reauthor` |
    | Take git's sign-ins back from gh? Machine-wide. | Asked, default No. Answer Yes if `repown doctor` said gh is the helper, or pushes from your other account's clones fail. | Asked, default No | `--fix` |
 
    Step by step asks every question: `--step-by-step`.

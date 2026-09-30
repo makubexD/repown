@@ -701,6 +701,7 @@ never suggested.
 | Turn on the push guard? (default Yes) | the guard is off, no other tool owns the hook, and `core.hooksPath` doesn't redirect hooks | `guard on` |
 | Push branches without -u? (default Yes) | git is 2.37.0 or newer, and `push.autoSetupRemote` is not already true in any scope. The flag is `--auto-upstream`. On older git, or when `git --version` cannot be read, this is not asked and the review notes `git push -u origin <branch>` (the current branch, or `<branch>` when HEAD is detached) | `git config --local push.autoSetupRemote true` |
 | Stop gh answering git's sign-in requests? (whole machine, default No) | a GitHub clone, gh is the helper, and `fix` finds its entries. Still asked in Recommended | `fix --yes` |
+| Re-author your unpushed commits by old@example.invalid as octocat? (default No) | some unpushed commits carry an address other than the account's. Still asked in Recommended: only you know whether you made them. The step runs last, so its refusals (a merge in the range, uncommitted changes, a destination it can't fetch) skip nothing else. The flag is `--reauthor` | `reauthor --yes` |
 
 **Recommended** answers Yes, and does not ask, the questions that only change this
 clone and need nothing only the user knows: push through the remote instead of a URL,
@@ -711,12 +712,13 @@ chosen account, Recommended does not ask about gh and answers No, so the review
 names the command (`If you use gh here: …`). It still asks for the account, and for a new account
 the host, name and email. It always asks, default Yes, when origin belongs to
 someone other than the account. It still asks, default No, when signing in to gh
-would open a browser and the clone is not already pinned to that account, and when
-`fix` would change the whole machine. **Step by step** asks every question. After Run, before each command, it shows what that step changes (the config
+would open a browser and the clone is not already pinned to that account, when
+`fix` would change the whole machine, and whether to re-author commits by another
+address. **Step by step** asks every question. After Run, before each command, it shows what that step changes (the config
 keys and values, or the gh action), why (the step's own sentence), and the command, then
-asks `Run this step?` with Yes / Skip / Stop. Enter is Yes, except for `fix`, where Enter
-is Skip: that step changes the whole machine, the same reason the review's Enter is
-Decline when `fix` is one of the steps. Skip leaves that step unchanged and continues.
+asks `Run this step?` with Yes / Skip / Stop. Enter is Yes, except for `fix` and
+`reauthor`, where Enter is Skip: one changes the whole machine and the other rewrites
+commits, the same reason the review's Enter is Decline when either is one of the steps. Skip leaves that step unchanged and continues.
 Stop, or Esc, runs nothing further and lists the steps that were not run.
 `--no-input` does not use Recommended's answers: a question not given as a flag
 is No. `--step-by-step --no-input` exits 2.

@@ -18,7 +18,7 @@ import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Rev
 import { setupFlow, planCommands, formatCommand, gitStepOf, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext } from '../src/wizard/setup-flow.ts';
 import { pinWrites } from '../src/core/identity.ts';
 import { plainPrompter } from '../src/wizard/plain.ts';
-import { reviewLines } from '../src/wizard/review-text.ts';
+import { reviewLines, reviewDefault } from '../src/wizard/review-text.ts';
 import { gitSupportsAutoUpstream } from '../src/core/version.ts';
 import { SETUP_NOTE } from '../src/commands/start.ts';
 import { runSetup } from '../src/wizard/setup-run.ts';
@@ -1165,7 +1165,8 @@ function home(): Home {
   const registry = mkdtempSync(join(tmpdir(), 'repown-registry-'));
   const saved = process.env['REPOWN_CONFIG_DIR'];
   process.env['REPOWN_CONFIG_DIR'] = registry;
-  box.git('commit', '-q', '--allow-empty', '-m', 'base');
+  // By the account most tests pin, so the clone has no commit by another address unless a test makes one.
+  box.git('-c', 'user.name=Octo Cat', '-c', 'user.email=octocat@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'base');
   return { box, registry, dispose: () => {
     if (saved === undefined) delete process.env['REPOWN_CONFIG_DIR']; else process.env['REPOWN_CONFIG_DIR'] = saved;
     rmSync(registry, { recursive: true, force: true });
@@ -2028,7 +2029,7 @@ describe('S18 after a setup run', () => {
     at.box.git('config', '--local', 'push.autoSetupRemote', 'true');
     const base = scripted([
       ['mode', 'step'], ['account', NEW_ACCOUNT], ['newAccount', 'octo-work'], ['host', 'github'],
-      ['name', 'Octo Work'], ['email', 'work@example.invalid'], ['guard', false], ['review', 'run'],
+      ['name', 'Octo Work'], ['email', 'work@example.invalid'], ['guard', false], ['reauthor', false], ['review', 'run'],
       ['step', 'yes'], ['step', 'yes'],
     ]);
     const prompter: Prompter = {
@@ -2324,6 +2325,47 @@ describe('setup: point the branch back at its remote, fetch the destination firs
   });
 });
 
+describe('setup: re-author the commits by another address, only when asked', () => {
+  const theirs = { authorEmail: 'old@example.invalid', committerEmail: 'old@example.invalid', parent: 'abc1234' };
+  const foreignCtx = (overrides: Partial<SetupContext> = {}): SetupContext =>
+    context({ unpushed: { branch: 'main', commits: ok([theirs]), unknown: null }, ...overrides });
+  const asked = (ctx: SetupContext, answers: Answers): string[] =>
+    setupFlow(ctx).steps.filter((step) => step.when?.(answers, ctx) ?? true).map((step) => step.id);
+
+  test('asked in both modes, default No, and only with commits by another address', () => {
+    const ctx = foreignCtx();
+    const step = setupFlow(ctx).steps.find((candidate) => candidate.id === 'reauthor');
+    assert.equal(step?.auto, undefined, 'Recommended asks it: it never answers Yes itself');
+    assert.equal(step?.initial?.({}, ctx), false);
+    assert.ok(asked(ctx, { mode: 'recommended', account: 'octocat' }).includes('reauthor'));
+    assert.ok(asked(ctx, { mode: 'step', account: 'octocat' }).includes('reauthor'));
+    assert.equal(asked(context(), { mode: 'step', account: 'octocat' }).includes('reauthor'), false);
+    const mine = context({ unpushed: { branch: 'main', commits: ok([{ ...theirs, authorEmail: 'octocat@example.invalid', committerEmail: 'octocat@example.invalid' }]), unknown: null } });
+    assert.equal(asked(mine, { mode: 'step', account: 'octocat' }).includes('reauthor'), false);
+  });
+
+  test('Yes runs `reauthor --yes` last, after the pin, the guard and a fetch; No leaves it out', () => {
+    const ctx = foreignCtx({ unpushed: { branch: 'main', commits: ok([theirs]), unknown: { kind: 'remote', name: 'origin' } }, cwd: 'repo' });
+    const answers = setupFlow(ctx).fill!({ mode: 'recommended', account: 'octocat', reauthor: true }, ctx);
+    const argv = planCommands(answers, ctx).map((command) => command.argv);
+    assert.deepEqual(argv.at(-1), ['reauthor', '--yes', '--cwd=repo']);
+    assert.deepEqual(argv[0], ['git', '-C', 'repo', 'fetch', 'origin']);
+    const no = setupFlow(ctx).fill!({ mode: 'recommended', account: 'octocat', reauthor: false }, ctx);
+    assert.equal(planCommands(no, ctx).some((command) => command.argv[0] === 'reauthor'), false);
+  });
+
+  test('rewriting history needs a deliberate yes: Enter is Decline at the review and Skip at the step', () => {
+    const ctx = foreignCtx();
+    const answers = setupFlow(ctx).fill!({ mode: 'recommended', account: 'octocat', reauthor: true }, ctx);
+    const shown = setupFlow(ctx).review(answers, ctx);
+    assert.equal(reviewDefault(shown), 'decline');
+    const planned = planCommands(answers, ctx).find((command) => command.argv[0] === 'reauthor')!;
+    const brief = briefOf(planned, answers, ctx);
+    assert.equal(brief.initial, 'skip');
+    assert.match(brief.changes.join('\n'), /old@example\.invalid .*octocat@example\.invalid.*refs\/repown\/backup\//);
+  });
+});
+
 describe('repown setup: repoint and fetch, in a real clone', () => {
   let at: Home;
   beforeEach(() => { at = home(); record(at, 'octocat', 'octocat@example.invalid'); });
@@ -2367,6 +2409,39 @@ describe('repown setup: repoint and fetch, in a real clone', () => {
     assert.equal(run.status, 0, run.stderr);
     assert.match(run.stderr, /--fetch: /);
     assert.doesNotMatch(run.stderr, /> git fetch/);
+  });
+
+  test('the field case, re-authored: the closing line says done and the push passes the guard', () => {
+    unfetchedOrigin();
+    const run = repown(['setup', 'octocat', '--fetch', '--guard', '--auto-upstream', '--reauthor', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /> repown reauthor --yes/);
+    assert.match(run.stderr, /done: this clone is set up for octocat/);
+    assert.equal(at.box.git('log', '-1', '--format=%ae|%ce'), 'octocat@example.invalid|octocat@example.invalid');
+    const push = spawnSync('git', ['push', 'origin', 'HEAD:main'], { cwd: at.box.dir, encoding: 'utf8', env: process.env });
+    assert.equal(push.status, 0, push.stderr);
+  });
+
+  test('the field case, not re-authored: the closing line names the commits the guard will refuse', () => {
+    unfetchedOrigin();
+    const run = repown(['setup', 'octocat', '--fetch', '--guard', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.doesNotMatch(run.stderr, /repown reauthor/);
+    assert.match(run.stderr, /set up for octocat; the next push will fail: 1 commit by another address/);
+    const push = spawnSync('git', ['push', 'origin', 'HEAD:main'], { cwd: at.box.dir, encoding: 'utf8', env: process.env });
+    assert.notEqual(push.status, 0, 'the guard refuses it');
+  });
+
+  test('--reauthor with nothing by another address says so and rewrites nothing', () => {
+    const path = join(at.box.dir, '..', 'origin.git');
+    at.box.git('init', '-q', '--bare', path);
+    at.box.git('remote', 'add', 'origin', path);
+    at.box.git('push', '-q', '-u', 'origin', 'HEAD:main');
+    const before = at.box.git('rev-parse', 'HEAD');
+    const run = repown(['setup', 'octocat', '--reauthor', '--no-input'], at.box.dir);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /--reauthor: /);
+    assert.equal(at.box.git('rev-parse', 'HEAD'), before);
   });
 
   test('--repoint points the branch back at its remote, and nothing prints the URL', () => {

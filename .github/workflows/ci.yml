@@ -23,7 +23,7 @@ name: CI
 # Measurement only: Opus runs once with this set to '1' and once without,
 # then removes whichever loses.
 env:
-  WIN_TEMP_TWEAK: '1'
+  WIN_TEMP_TWEAK: '0'
 
 on:
   push:

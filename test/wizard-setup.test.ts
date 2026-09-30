@@ -85,6 +85,7 @@ function onBranch(emails: readonly string[], rebaseBase = 'abc1234'): SetupConte
     branch: 'main',
     commits: ok(emails.map((address) => ({ authorEmail: address, committerEmail: address }))),
     rebaseBase,
+    unknown: null,
   };
 }
 
@@ -765,7 +766,7 @@ describe('setup flow', () => {
   });
 
   test('S19 a committer who is not the author counts, and case does not', () => {
-    const mixed = context({ unpushed: { branch: 'main', rebaseBase: 'abc1234', commits: ok([
+    const mixed = context({ unpushed: { branch: 'main', rebaseBase: 'abc1234', unknown: null, commits: ok([
       { authorEmail: 'octocat@example.invalid', committerEmail: 'Other@example.invalid' },
       { authorEmail: 'other@example.invalid', committerEmail: 'octocat@example.invalid' },
     ]) } });
@@ -778,14 +779,47 @@ describe('setup flow', () => {
     assert.match(reviewNotes(capped), /5 commits on main not on any remote are by a@example\.invalid, b@example\.invalid, c@example\.invalid and 2 more/);
   });
 
+  test('ADR-025 behind a remote with no tracking refs the review says to fetch, and the rebase is conditional', () => {
+    const unknown = { kind: 'remote', name: 'my fork' } as const;
+    const notes = reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid'], '--root'), unknown } }));
+    assert.match(notes, /my fork has no remote-tracking refs, so some of these may already be on it \(the guard skips any already on the branch you push to\): git fetch 'my fork', then repown use octocat to count again/);
+    assert.match(notes, /if my fork has none of them, re-author it: git rebase --root /);
+    assert.doesNotMatch(notes, /^\s*re-author/m);
+  });
+
+  test('ADR-025 a name git would read as an option gets no command, and hidden text is shown', () => {
+    const dashed = { kind: 'remote', name: '--upload-pack=touch x' } as const;
+    const notes = reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: dashed } }));
+    assert.match(notes, /--upload-pack=touch x has no remote-tracking refs, so some of these may already be on it \(the guard skips any already on the branch you push to\)/);
+    assert.doesNotMatch(notes, /git fetch/);
+    const url = { kind: 'url', key: 'branch.main.remote', remote: '-o' } as const;
+    assert.doesNotMatch(reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: url } })), /git config|git fetch/);
+    const bidi = { kind: 'remote', name: 'fork\u202egnp.exe\u200b' } as const;
+    assert.match(reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: bidi } })), /git fetch 'fork\?gnp\.exe\?'/);
+  });
+
+  test('ADR-025 remotes that could not be read are unknown, not "none"', () => {
+    const notes = reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: { kind: 'unread' } } }));
+    assert.match(notes, /the remotes could not be read, so some of these may already be on one \(the guard skips any already on the branch you push to\)/);
+    assert.match(notes, /if it has none of them, re-author it: /);
+  });
+
+  test('ADR-025 a branch that pushes to a URL no remote has gets no fix command, and no URL', () => {
+    const unknown = { kind: 'url', key: 'branch.main.remote', remote: null } as const;
+    const notes = reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown } }));
+    assert.match(notes, /this branch pushes to a URL, not a remote, so some of these may already be there \(the guard skips any already on the branch you push to\)/);
+    assert.doesNotMatch(notes, /git config --local branch\.main\.remote|git fetch/);
+    assert.match(notes, /if it has none of them, re-author it: git rebase abc1234 /);
+  });
+
   test('S19 a log that could not be read is a note, and a detached HEAD is not', () => {
-    const broken = context({ unpushed: { branch: 'feature', commits: err('git log failed'), rebaseBase: null } });
+    const broken = context({ unpushed: { branch: 'feature', commits: err('git log failed'), rebaseBase: null, unknown: null } });
     const notes = reviewNotes(broken);
     assert.match(notes, /commits on feature not on any remote could not be read \(git log failed\), so repown can't say whether the guard will refuse them/);
     assert.doesNotMatch(notes, /re-author|are by/);
-    const detached = context({ unpushed: { branch: null, commits: ok([]), rebaseBase: null } });
+    const detached = context({ unpushed: { branch: null, commits: ok([]), rebaseBase: null, unknown: null } });
     assert.doesNotMatch(reviewNotes(detached), /not on any remote/);
-    const hidden = context({ unpushed: { branch: 'main', rebaseBase: 'abc1234', commits: ok([
+    const hidden = context({ unpushed: { branch: 'main', rebaseBase: 'abc1234', unknown: null, commits: ok([
       { authorEmail: 'bad\x1b@example.invalid', committerEmail: 'octocat@example.invalid' },
     ]) } });
     assert.doesNotMatch(reviewNotes(hidden), /\x1b/);

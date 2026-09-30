@@ -7,6 +7,15 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- `repown use` and setup's review no longer advise `git rebase --root` for commits a
+  never-fetched remote may already have. Where the branch's push destination has no
+  remote-tracking refs, pushes elsewhere than it fetches from, or is a URL or a name with no
+  remote, they say so, say how to fetch and count again where there is a remote to fetch,
+  and offer the rebase only for when the destination has none of those commits. The URL
+  is never printed (ADR-025).
+
 ## [0.3.0] - 2026-09-29
 
 ### Changed

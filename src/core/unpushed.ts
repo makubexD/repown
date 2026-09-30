@@ -5,11 +5,16 @@
 // `git rebase` onto the parent of the oldest of those commits (`--root` when it
 // has none). The identities come from `git log` through Git.identitiesIn
 // (`--no-show-signature`). The base is `rev-list` and `rev-parse` on Git.
+// Where the branch pushes may have no remote-tracking ref at all; then the range can
+// hold published commits, and the rebase is offered only for when it has none of
+// them (push-destination.ts, ADR-025).
 // scan's address totals are a different question: every ref, counts only, and
 // setup loads them only for the guard question.
 
 import type { CommitIdentity, Git } from './git.ts';
 import { ok, type Result } from './result.ts';
+import { unknownDestination, type UnknownDestination } from './push-destination.ts';
+import { shellWord } from './guard/check.ts';
 
 export interface UnpushedCommit {
   readonly authorEmail: string;
@@ -22,6 +27,8 @@ export interface UnpushedFact {
   readonly commits: Result<readonly UnpushedCommit[]>;
   /** `git rebase` target: a short sha, or `--root`. Null when there is no range to rebase. */
   readonly rebaseBase: string | null;
+  /** Where the branch pushes, when no remote-tracking ref says what it already has. */
+  readonly unknown: UnknownDestination | null;
 }
 
 const ADDRESS_CAP = 3;
@@ -31,12 +38,13 @@ export async function readUnpushed(git: Git): Promise<UnpushedFact> {
   const head = await git.currentBranch();
   if (head?.kind !== 'branch') return quiet(null);
   const commits = await commitsOf(git);
-  if (!commits.ok || commits.value.length === 0) return { branch: head.name, commits, rebaseBase: null };
-  return { branch: head.name, commits, rebaseBase: await rebaseBase(git) };
+  if (!commits.ok || commits.value.length === 0) return { branch: head.name, commits, rebaseBase: null, unknown: null };
+  const [base, unknown] = await Promise.all([rebaseBase(git), unknownDestination(git, head.name)]);
+  return { branch: head.name, commits, rebaseBase: base, unknown };
 }
 
 function quiet(branch: string | null): UnpushedFact {
-  return { branch, commits: ok([]), rebaseBase: null };
+  return { branch, commits: ok([]), rebaseBase: null, unknown: null };
 }
 
 /** Parent of the oldest unpushed commit, or `--root` when that commit has none. */
@@ -58,17 +66,64 @@ function brief(commit: CommitIdentity): UnpushedCommit {
   return { authorEmail: commit.authorEmail, committerEmail: commit.committerEmail };
 }
 
-/** Lines to show. Empty when there is nothing to say. The first is the fact; any other is how to fix it. */
-export function unpushedLines(fact: UnpushedFact, email: string): string[] {
+/**
+ * Lines to show. Empty when there is nothing to say. The first is the fact; any other is how
+ * to fix it. `account` is what to pin again to count again.
+ */
+export function unpushedLines(fact: UnpushedFact, email: string, account: string): string[] {
   if (fact.branch === null) return [];
   if (!fact.commits.ok) return [unread(fact.branch, fact.commits.error)];
-  return foreignLines(fact.branch, fact.commits.value, email, fact.rebaseBase);
+  const found = collect(fact.commits.value, fold(email));
+  if (found.count === 0) return [];
+  return [sentence(fact.branch, found), ...advice(fact, found.count, account)];
 }
 
-function foreignLines(branch: string, commits: readonly UnpushedCommit[], email: string, base: string | null): string[] {
-  const found = collect(commits, fold(email));
-  if (found.count === 0) return [];
-  return [sentence(branch, found), ...reauthorLine(found.count, base)];
+/** Behind an unknown destination the rebase is right only when it has none of these commits. */
+function advice(fact: UnpushedFact, count: number, account: string): string[] {
+  const rebase = reauthorLine(count, fact.rebaseBase);
+  if (!fact.unknown) return rebase;
+  const holder = holderOf(fact.unknown);
+  return [unknownLine(fact.unknown, account), ...rebase.map((line) => 'if ' + holder + ' has none of them, ' + line)];
+}
+
+function holderOf(unknown: UnknownDestination): string {
+  return unknown.kind === 'remote' || unknown.kind === 'pushurl' ? show(unknown.name) : 'it';
+}
+
+/** The guard excludes what the pushed branch's remote tip has, not everything the remote holds. */
+const GUARD = ' (the guard skips any already on the branch you push to)';
+const THERE = ', so some of these may already be there' + GUARD;
+
+function unknownLine(unknown: UnknownDestination, account: string): string {
+  switch (unknown.kind) {
+    case 'remote': return trackingLine(unknown.name, account);
+    case 'pushurl': return show(unknown.name) + ' pushes to another URL than it fetches from' + THERE;
+    case 'url': return urlLine(unknown.key, unknown.remote, account);
+    case 'unnamed': return 'this branch pushes to "' + show(unknown.name) + '", which is not a remote here' + THERE;
+    case 'unread': return 'the remotes could not be read, so some of these may already be on one' + GUARD;
+  }
+}
+
+function trackingLine(name: string, account: string): string {
+  const lead = show(name) + ' has no remote-tracking refs, so some of these may already be on it' + GUARD;
+  if (!copyable(name)) return lead;
+  return lead + ': git fetch ' + shellWord(show(name)) + ', ' + recount(account);
+}
+
+function urlLine(key: string, remote: string | null, account: string): string {
+  const lead = 'this branch pushes to a URL, not a remote' + THERE;
+  if (!remote || !copyable(remote)) return lead;
+  const word = shellWord(show(remote));
+  return lead + ': git config --local ' + shellWord(show(key)) + ' ' + word + ', git fetch ' + word + ', ' + recount(account);
+}
+
+function recount(account: string): string {
+  return 'then repown use ' + shellWord(show(account)) + ' to count again';
+}
+
+/** Quoting keeps a shell from splitting a word, not git from reading `-x` as an option. */
+function copyable(word: string): boolean {
+  return !word.startsWith('-');
 }
 
 function reauthorLine(count: number, base: string | null): string[] {
@@ -131,8 +186,11 @@ function unread(branch: string, error: string): string {
     show(error) + '), so repown can\'t say whether the guard will refuse them';
 }
 
-/** Control characters could redraw the terminal around a line taken from a commit. */
+/**
+ * Control characters could redraw the terminal around a line taken from a commit, and
+ * bidi or zero-width ones make a copyable command read differently from what it pastes.
+ */
 function show(text: string): string {
-  const cleaned = text.replace(/[\x00-\x1f\x7f-\x9f]/g, '?');
+  const cleaned = text.replace(/[\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2066-\u2069\u2028\u2029\ufeff]/g, '?');
   return cleaned.length > 0 ? cleaned : '(none)';
 }

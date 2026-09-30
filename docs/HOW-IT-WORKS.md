@@ -213,7 +213,7 @@ sequenceDiagram
 | Repo owned by an organisation | 🟡 prints the line that allows it ([card 5](#5-check-where-you-are)) |
 | gh is still the credential helper | 🟡 `fix: repown fix` |
 | No stored credential yet | the first push signs in once ([card 6](#6-commit-and-first-push)) |
-| Unpushed commits by another address | 🟡 `N commits on <branch> not on any remote are by <addresses>; the guard will refuse them`, then `re-author it` (one commit) or `re-author them` (more): `git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"`, or `git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when that commit has no parent, or pin that address. `<base>` is the short hash of the parent of the oldest of those commits. Up to three addresses, then `and N more`. Exit code unchanged. A detached HEAD says nothing. If those commits can't be read, the warning says so and gives no rebase command |
+| Unpushed commits by another address | 🟡 `N commits on <branch> not on any remote are by <addresses>; the guard will refuse them`, then `re-author it` (one commit) or `re-author them` (more): `git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"`, or `git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when that commit has no parent, or pin that address. `<base>` is the short hash of the parent of the oldest of those commits. Up to three addresses, then `and N more`. Exit code unchanged. A detached HEAD says nothing. If those commits can't be read, the warning says so and gives no rebase command. Where no remote-tracking ref reaches the branch's push destination (the remote `git push` with no arguments uses), a line comes first and the rebase becomes conditional. A remote never fetched, or empty, or whose tracking refs can't be read: `origin has no remote-tracking refs, so some of these may already be on it (the guard skips any already on the branch you push to): git fetch origin, then repown use <account> to count again`, then `if origin has none of them, re-author them: …`. A remote that pushes to another URL than it fetches from: `origin pushes to another URL than it fetches from, …`. A URL: `this branch pushes to a URL, not a remote, …`, with `git config --local <key> <remote>` and a fetch when a remote has that host and path, and nothing to copy otherwise; the URL is not printed. A name with no remote: `this branch pushes to "<name>", which is not a remote here, …`. Those three continue `if it has none of them, re-author …`. A name starting with `-` gets no command ([ADR-025](decisions/ADR-025-unpushed-advice-behind-an-unknown-destination.md)) |
 
 </details>
 
@@ -416,8 +416,9 @@ flowchart TD
 🟢 These always pass:
 - your own commits, on a new branch or an existing one;
 - deleting a branch, since it publishes nothing;
-- re-pushing commits already on one of that remote's branches, as of your last fetch:
-  pulled work, merged branches.
+- re-pushing commits already on the branch you push to (its tip, when this clone has that
+  commit) or on one of that remote's branches as of your last fetch: pulled work, merged
+  branches.
 
 - **Stop at once:** `env`, `not pinned`.
 - **Reported together,** so one push shows everything to fix: wrong owner, tagger, foreign
@@ -436,7 +437,9 @@ commits. Nothing leaves until you fix it, or skip the check once. Before that pu
 `repown use` warns and `repown setup`'s review notes the same fact, including in
 Recommended mode, when the current branch has commits no remote has by another
 address. Neither rewrites them. If those commits can't be read, that is said
-rather than treated as clean ([card 3](#3-pin-a-clone)).
+rather than treated as clean ([card 3](#3-pin-a-clone)). Where no remote-tracking ref
+reaches the branch's push destination, their count can be higher than what the guard
+refuses, and they say so.
 
 <details><summary>Show how</summary>
 
@@ -453,7 +456,7 @@ Override this one push with: git push --no-verify
 
 | 🔴 Refusal | Typical cause | Fix |
 | --- | --- | --- |
-| **foreign commit**, yours | committed before pinning, or by an IDE with its own identity | `re-author it` or `re-author them`: `git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"` (`git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when that commit has no parent), or pin that address; then push again |
+| **foreign commit**, yours | committed before pinning, or by an IDE with its own identity | `re-author it` or `re-author them`: `git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"` (`git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when that commit has no parent), or pin that address; then push again. If the warning says the remote has no remote-tracking refs, `git fetch` it first: the guard only refuses what the remote doesn't have |
 | **foreign commit**, a teammate's | cherry-picked, rebased or fetched from their fork, and not on the remote yet | let them push it, then pull; don't re-author their work ([card 9](#9-a-teammate-without-repown)) |
 | **wrong owner** `push goes to "…"` | an organisation repository, or the wrong remote | organisation: `git config --local --add repown.allowOwner octo-org` |
 | **env** `GH_TOKEN is set` | a token or email variable overrides the identity | unset it, then push again |

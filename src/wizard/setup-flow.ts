@@ -655,7 +655,7 @@ function extraNotes(answers: Answers, ctx: SetupContext): string[] {
 function unpushedNote(answers: Answers, ctx: SetupContext): string[] {
   const email = emailOf(answers, ctx) ?? '';
   if (!email && ctx.unpushed.commits.ok) return [];
-  return unpushedLines(ctx.unpushed, email);
+  return unpushedLines(ctx.unpushed, email, accountOf(answers));
 }
 
 /** Old git, or a version that could not be read: say the push the question would have replaced. */

@@ -257,7 +257,7 @@ async function switchCli(account: string): Promise<void> {
 
 /** Everything that is now true but not yet right. Warnings, never refusals. */
 async function reportConcerns(account: string, repo: RepoState, email: string): Promise<void> {
-  await reportUnpushed(repo, email);
+  await reportUnpushed(repo, email, account);
   if (repo.credentialKeys.length === 0 && repo.url) {
     out.warn('host', repo.provider.label + ' credentials are not pinned by repown.');
     out.detail('commits are pinned and the guard still runs; only credential');
@@ -272,8 +272,8 @@ async function reportConcerns(account: string, repo: RepoState, email: string): 
 }
 
 /** A warning only. Rewriting the commits stays the owner's call (ADR-013). */
-async function reportUnpushed(repo: RepoState, email: string): Promise<void> {
-  const [first, ...rest] = unpushedLines(await readUnpushed(repo.git), email);
+async function reportUnpushed(repo: RepoState, email: string, account: string): Promise<void> {
+  const [first, ...rest] = unpushedLines(await readUnpushed(repo.git), email, account);
   if (!first) return;
   out.warn('commits', first);
   for (const line of rest) out.detail(line);

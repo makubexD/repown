@@ -1,6 +1,6 @@
 # ADR-020: Setup leaves the clone ready to work, in one of two modes
 
-**Status:** Accepted. Superseded in part by [ADR-022](ADR-022-set-up-clone-opens-on-settled-screen.md): a settled clone opens on the already-set-up screen before the mode question, and Recommended no longer switches gh when the clone is already pinned to that account.
+**Status:** Accepted. Superseded in part by [ADR-022](ADR-022-set-up-clone-opens-on-settled-screen.md): a settled clone opens on the already-set-up screen before the mode question, and Recommended no longer switches gh when the clone is already pinned to that account. The unpushed-commit advice is narrowed by [ADR-025](ADR-025-unpushed-advice-behind-an-unknown-destination.md): where no remote-tracking ref reaches the push destination, the rebase is conditional.
 
 ## Context
 

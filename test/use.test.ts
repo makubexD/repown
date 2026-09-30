@@ -5,7 +5,7 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ghAction, ghCredentialAnswer, announceLogin, reportActive } from '../src/commands/use.ts';
 import type { AuthState } from '../src/core/inspect.ts';
@@ -239,6 +239,116 @@ describe('repown use warns about unpushed commits by another address (S19)', () 
     assert.doesNotMatch(run.stderr, /are by|re-author/);
   });
 });
+
+// Where this branch pushes, when no remote-tracking ref says what it already has: HEAD
+// --not --remotes then counts commits that may be published, and a rebase from that base
+// would rewrite them. Nothing offline tells an empty remote from an unfetched one, so the
+// rebase is offered only for the case where it is right (ADR-025).
+describe('repown use when the branch pushes where no tracking ref reaches (ADR-025)', () => {
+  let box: Sandbox;
+  beforeEach(() => { box = sandbox(); });
+  afterEach(() => box.dispose());
+
+  const RECOUNT = 'then repown use octocat to count again';
+  const GUARD = ' (the guard skips any already on the branch you push to)';
+  const UNKNOWN = 'origin has no remote-tracking refs, so some of these may already be on it' + GUARD + ': git fetch origin, ' + RECOUNT;
+
+  test('a remote never fetched: fetch first, and the rebase only if it has none of them', async () => {
+    const published = publishedThenLocal(box);
+    const run = await runUse(box);
+    assert.equal(run.code, 0, run.stderr);
+    assert.match(run.stderr, /2 commits on main not on any remote are by other@example\.invalid/);
+    assert.match(run.stderr, new RegExp(escapeRe(UNKNOWN)));
+    assert.match(run.stderr, new RegExp(escapeRe('if origin has none of them, ' + reauthor('them', '--root'))));
+    assert.doesNotMatch(run.stderr, /^\s+re-author/m);
+    box.git('fetch', '-q', 'origin');
+    const fetched = await runUse(box);
+    assert.match(fetched.stderr, /1 commit on main not on any remote is by other@example\.invalid/);
+    assert.match(fetched.stderr, new RegExp('^\\s+' + escapeRe(reauthor('it', box.git('rev-parse', '--short', published))), 'm'));
+    assert.doesNotMatch(fetched.stderr, /remote-tracking|has none of them/);
+  });
+
+  test('a fetch that failed changes nothing', async () => {
+    publishedThenLocal(box);
+    rmSync(remoteDir(box), { recursive: true, force: true });
+    assert.throws(() => box.git('fetch', '-q', 'origin'));
+    const run = await runUse(box);
+    assert.match(run.stderr, new RegExp(escapeRe(UNKNOWN)));
+    assert.doesNotMatch(run.stderr, /^\s+re-author/m);
+  });
+
+  test('a branch whose remote is a URL is pointed at the remote with that URL, which is not printed', async () => {
+    publishedThenLocal(box);
+    box.git('config', 'remote.origin.url', 'https://github.com/octocat/hello.git');
+    box.git('config', 'branch.main.remote', 'https://octocat:secret-token@github.com/octocat/hello');
+    const run = await runUse(box);
+    assert.match(run.stderr, new RegExp(escapeRe(
+      'this branch pushes to a URL, not a remote, so some of these may already be there' + GUARD + ': ' +
+      'git config --local branch.main.remote origin, git fetch origin, ' + RECOUNT)));
+    assert.match(run.stderr, new RegExp(escapeRe('if it has none of them, ' + reauthor('them', '--root'))));
+    assert.doesNotMatch(run.stderr, /secret-token|octocat\/hello/);
+  });
+
+  test('the push remote decides, not origin', async () => {
+    publishedThenLocal(box);
+    box.git('fetch', '-q', 'origin');
+    box.git('remote', 'add', 'fork', remoteDir(box));
+    box.git('config', 'branch.main.pushRemote', 'fork');
+    const run = await runUse(box);
+    assert.match(run.stderr, /fork has no remote-tracking refs, so some of these may already be on it/);
+    assert.match(run.stderr, /if fork has none of them, re-author it: git rebase /);
+  });
+
+  test('an empty remote stays unknown after a fetch; the rebase it needs is still offered', async () => {
+    box.git('init', '-q', '--bare', remoteDir(box));
+    box.git('remote', 'add', 'origin', remoteDir(box));
+    box.git('fetch', '-q', 'origin');
+    commitAs(box, THEIRS, 'first');
+    commitAs(box, THEIRS, 'second');
+    const run = await runUse(box);
+    assert.match(run.stderr, new RegExp(escapeRe('if origin has none of them, ' + reauthor('them', '--root'))));
+  });
+
+  test('a remote that pushes to another URL than it fetches from is unknown, however fetched', async () => {
+    publishedThenLocal(box);
+    box.git('fetch', '-q', 'origin');
+    box.git('config', 'remote.origin.pushurl', 'https://github.com/octocat/fork.git');
+    const run = await runUse(box);
+    assert.match(run.stderr, new RegExp(escapeRe('origin pushes to another URL than it fetches from, so some of these may already be there' + GUARD)));
+    assert.match(run.stderr, /if origin has none of them, re-author it: git rebase /);
+    assert.doesNotMatch(run.stderr, /octocat\/fork/);
+  });
+
+  test('a branch remote that names no configured remote says so, not "a URL"', async () => {
+    publishedThenLocal(box);
+    box.git('config', 'branch.main.remote', 'orign');
+    const run = await runUse(box);
+    assert.match(run.stderr, new RegExp(escapeRe('this branch pushes to "orign", which is not a remote here, so some of these may already be there' + GUARD)));
+    assert.doesNotMatch(run.stderr, /a URL/);
+  });
+
+  test('one remote not named origin, and nothing configured: git push has no destination, so the advice is unchanged', async () => {
+    publishedThenLocal(box);
+    box.git('remote', 'rename', 'origin', 'up');
+    const run = await runUse(box);
+    assert.match(run.stderr, new RegExp('^\\s+' + escapeRe(reauthor('them', '--root')), 'm'));
+    assert.doesNotMatch(run.stderr, /remote-tracking|has none of them/);
+  });
+});
+
+function remoteDir(box: Sandbox): string {
+  return join(box.dir, '..', 'remote.git');
+}
+
+/** One commit pushed to a bare `origin` by path, so no tracking ref records it; then one local. */
+function publishedThenLocal(box: Sandbox): string {
+  const published = commitAs(box, THEIRS, 'published');
+  box.git('init', '-q', '--bare', remoteDir(box));
+  box.git('push', '-q', remoteDir(box), 'HEAD:refs/heads/main');
+  box.git('remote', 'add', 'origin', remoteDir(box));
+  commitAs(box, THEIRS, 'local only');
+  return published;
+}
 
 /** First commit is an empty one (there is no tree yet); the rest are commit-tree, then on HEAD. */
 function commitAs(box: Sandbox, author: string, message: string, committer = author): string {

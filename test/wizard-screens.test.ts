@@ -617,6 +617,44 @@ describe('start screen, played with key presses', () => {
     });
   });
 
+  test('H21: Remove an account asks which, then to confirm, runs accounts remove, and the menu comes back one fewer', async () => {
+    await withProjects(async (root) => {
+      const two = '{"accounts":{"octocat":{"name":"Octo Cat","email":"octocat@example.invalid"},' +
+        '"octo-work":{"name":"Octo Work","email":"octo-work@example.invalid"}}}\n';
+      mkdirSync(dirname(registryPath()), { recursive: true });
+      writeFileSync(registryPath(), two);
+      // Menu: Record, Remove, Check, Help, Quit. Accounts: octo-work, octocat, Back. Confirm: Remove, Back.
+      const run = await play((prompter) => runHome({ prompter, cwd: root }), [
+        [down, enter], [down, enter], [enter], [up, enter],
+      ], { patience: 20_000 });
+      assert.equal(run.result, 0, run.screen + run.stderr);
+      assert.match(run.screen, /Which account\?/);
+      assert.match(run.screen, /Octo Cat <octocat@example\.invalid>/);
+      assert.match(run.screen.replace(/\n│ {2}/g, ' '), /clones pinned to octocat keep their settings and the push guard; repown use octocat needs it recorded again/);
+      assert.match(run.screen, /└ {2}\$ repown accounts remove octocat/);
+      assert.match(run.stdout, /OK\s+accounts\s+removed octocat/);
+      const frames = run.screen.split('repown · not a clone:');
+      assert.equal(frames.length, 3, run.screen);
+      assert.match(frames[2]!, /Accounts {3}1 recorded: octo-work/);
+      assert.doesNotMatch(readFileSync(registryPath(), 'utf8'), /"octocat"/);
+    });
+  });
+
+  test('H21b: Back from the account list and from the confirm returns to the menu; Esc then exits 130 with nothing removed', async () => {
+    await withProjects(async (root) => {
+      const one = '{"accounts":{"octocat":{"name":"Octo Cat","email":"octocat@example.invalid"}}}\n';
+      mkdirSync(dirname(registryPath()), { recursive: true });
+      writeFileSync(registryPath(), one);
+      const run = await play((prompter) => runHome({ prompter, cwd: root }), [
+        [down, enter], [down, enter], [down, enter], [enter], [down, enter], [esc],
+      ], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen);
+      assert.equal((run.screen.match(/Which account\?/g) ?? []).length >= 2, true, run.screen);
+      assert.doesNotMatch(run.screen, /\$ repown accounts remove/);
+      assert.equal(readFileSync(registryPath(), 'utf8'), one);
+    });
+  });
+
   test('H17: a login already recorded, in any case, is refused with the words setup uses', async () => {
     await withProjects(async (root) => {
       mkdirSync(dirname(registryPath()), { recursive: true });

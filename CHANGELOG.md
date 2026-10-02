@@ -7,6 +7,11 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+### Added
+- The start screen's **Remove an account**: pick a recorded account, read what stays
+  (pinned clones keep their settings and the push guard), confirm, and it runs
+  `repown accounts remove`; the menu then comes back without it (ADR-028).
+
 ### Changed
 - The wizard (`repown setup`, and bare `repown` in a terminal) is easier to read in colour,
   with nothing to set: the title is a cyan badge, each summary value is bold cyan, the

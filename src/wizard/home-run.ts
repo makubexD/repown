@@ -1,7 +1,7 @@
 // The start screen: a summary of this folder, then one menu. Each action prints
 // the command it stands for and runs that command's own run(). Loaded only
 // through the runner start.ts returns, so a typed command never imports it.
-// Once fix, doctor or accounts add has run, failed or not, the screen opens again (ADR-028).
+// Once fix, doctor, accounts add or accounts remove has run, failed or not, the screen opens again (ADR-028).
 //
 // Quit exits 0. Esc and Ctrl-C exit 130, the same cancel setup uses. Neither writes.
 
@@ -16,8 +16,8 @@ import * as out from '../ui/format.ts';
 import { renderTopHelp } from '../ui/help.ts';
 import { CANCEL, runFlow, type Pass, type Prompter } from './engine.ts';
 import { readHome, type HomeState } from './home-context.ts';
-import { BACK as HOME_BACK, MENU, commandFor, homeNote, listedClones, menuItems, summaryLines } from './home-flow.ts';
-import { BACK_LABEL, BUSY, CANCELLED, QUIT, WHAT_NEXT, WHICH_CLONE, homeTitle } from './home-text.ts';
+import { BACK as HOME_BACK, MENU, accountChoices, commandFor, homeNote, listedClones, menuItems, summaryLines } from './home-flow.ts';
+import { BACK_LABEL, BUSY, CANCELLED, QUIT, WHAT_NEXT, WHICH_ACCOUNT, WHICH_CLONE, homeTitle, removeLabel, removeNote, removeQuestion } from './home-text.ts';
 import { formatCommand, loginStep, newAccountOf, printable, profileSteps, signedInLogins, type AccountContext } from './setup-flow.ts';
 import { Git } from '../core/git.ts';
 import { inspectAuth } from '../core/inspect.ts';
@@ -81,7 +81,7 @@ async function chooseNext(prompter: Prompter, home: HomeState, deps: HomeRunDeps
   }
 }
 
-/** Setup, help and Quit end the screen; once fix, doctor or accounts add has run, it comes back. */
+/** Setup, help and Quit end the screen; once fix, doctor, accounts add or remove has run, it comes back. */
 async function dispatchChoice(picked: string, prompter: Prompter, home: HomeState, deps: HomeRunDeps): Promise<number | null | typeof AGAIN> {
   if (picked === MENU.quit) return finish(prompter, QUIT, 0);
   if (picked === MENU.help) return showTopHelp(prompter);
@@ -89,6 +89,7 @@ async function dispatchChoice(picked: string, prompter: Prompter, home: HomeStat
   if (picked === MENU.fix) return again(runOwn(prompter, fixCommand, [], commandFor({ kind: 'fix' })));
   if (picked === MENU.doctor) return again(runOwn(prompter, doctorCommand, [], commandFor({ kind: 'doctor' })));
   if (picked === MENU.account) return recordAccount(prompter, home, deps);
+  if (picked === MENU.remove) return removeAccount(prompter, home);
   return finish(prompter, QUIT, 0);
 }
 
@@ -119,6 +120,20 @@ async function recordAccount(prompter: Prompter, home: HomeState, deps: HomeRunD
   if (walk.status === 'opening') return null;
   const argv = commandFor({ kind: 'account', ...newAccountOf(walk.answers, ctx) });
   return again(runOwn(prompter, accountsGroup.actions['add']!, argv.slice(2), argv));
+}
+
+/** Which account, then a confirm that says what stays; Back from either returns to the menu. */
+async function removeAccount(prompter: Prompter, home: HomeState): Promise<number | null | typeof AGAIN> {
+  const login = await prompter.choose(WHICH_ACCOUNT, [...accountChoices(home), { value: HOME_BACK, label: BACK_LABEL }]);
+  if (login === CANCEL) return finish(prompter, CANCELLED, CANCELLED_CODE);
+  if (login === HOME_BACK) return null;
+  const shown = printable(login);
+  showLines(prompter, [removeNote(shown)]);
+  const sure = await prompter.choose(removeQuestion(shown), [{ value: MENU.remove, label: removeLabel(shown) }, { value: HOME_BACK, label: BACK_LABEL }]);
+  if (sure === CANCEL) return finish(prompter, CANCELLED, CANCELLED_CODE);
+  if (sure === HOME_BACK) return null;
+  const argv = commandFor({ kind: 'remove', login });
+  return again(runOwn(prompter, accountsGroup.actions['remove']!, argv.slice(2), argv));
 }
 
 /** The command has said how it went, in its own output; the start screen opens again. */

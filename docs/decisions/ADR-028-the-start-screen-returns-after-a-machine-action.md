@@ -68,3 +68,9 @@ before.
   in), and it says nothing when neither gh nor GCM can be read or lists anyone. Setup uses
   the sign-ins it already read; the start screen reads them only when the name question
   first asks. A typed `repown accounts add` doesn't say it.
+- **2026-10-02, as extended: Remove an account.** The menu offers it after Record an
+  account once an account is recorded and every registry entry reads. It asks which account,
+  says that pinned clones keep their settings and the guard, asks to confirm (Back from either
+  returns to the menu), then runs `accounts remove`'s own `run()`; the screen comes back
+  like the other machine-level actions. A typed `repown accounts remove` is unchanged, with
+  no confirm.

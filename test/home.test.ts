@@ -10,7 +10,7 @@ import { ok } from '../src/core/result.ts';
 import { registryPath } from '../src/core/registry.ts';
 import { CANCEL, type Prompter } from '../src/wizard/engine.ts';
 import { readHome, type HomeState } from '../src/wizard/home-context.ts';
-import { commandFor, homeNote, listedClones, menuItems, summaryLines } from '../src/wizard/home-flow.ts';
+import { accountChoices, commandFor, homeNote, listedClones, menuItems, summaryLines } from '../src/wizard/home-flow.ts';
 import { runHome } from '../src/wizard/home-run.ts';
 import { formatCommand, printable } from '../src/wizard/setup-flow.ts';
 import { displayPath } from '../src/ui/format.ts';
@@ -74,6 +74,7 @@ describe('start screen', () => {
     assert.deepEqual(menuItems(home).map((item) => item.label), [
       'Record an account', 'Check this machine', 'Show help', 'Quit',
     ]);
+    assert.deepEqual(accountChoices(home), []);
   });
 
   test('H9: dot-directories, node_modules, AppData on Windows, and depth 3 are skipped', async () => {
@@ -110,6 +111,25 @@ describe('start screen', () => {
     const labels = menuItems(home).map((item) => item.label);
     assert.ok(labels.includes('Set up a clone found here'));
     assert.ok(labels.includes('Record an account'));
+    assert.equal(labels.includes('Remove an account'), false, 'accounts remove would refuse to rewrite a file it cannot fully read');
+  });
+
+  test('Remove an account follows Record an account once one is recorded, and lists them with name and email', async () => {
+    writeRegistry(JSON.stringify({ accounts: {
+      octocat: { name: 'Octo Cat', email: 'octocat@example.invalid' },
+      'octo-work': { name: 'Octo Work', email: 'octo-work@example.invalid' },
+    } }));
+    const home = await readHome(root);
+    assert.deepEqual(menuItems(home).map((item) => item.label), [
+      'Record an account', 'Remove an account', 'Check this machine', 'Show help', 'Quit',
+    ]);
+    assert.equal(menuItems(home).find((item) => item.label === 'Remove an account')?.hint, 'repown accounts remove');
+    assert.deepEqual(accountChoices(home), [
+      { value: 'octo-work', label: 'octo-work', hint: 'Octo Work <octo-work@example.invalid>' },
+      { value: 'octocat', label: 'octocat', hint: 'Octo Cat <octocat@example.invalid>' },
+    ]);
+    const none = await readHome(join(root, '..'));
+    assert.ok(menuItems(none).some((item) => item.label === 'Remove an account'), 'the registry is the machine\'s, wherever this runs');
   });
 
   test('a registry with only unreadable entries does not say none recorded', async () => {
@@ -217,6 +237,12 @@ describe('start screen commands', () => {
     assert.deepEqual(dash.slice(-2), ['--', '-h']);
     assert.match(formatCommand(dash), / "--" -h$/);
     assert.deepEqual(commandFor({ kind: 'doctor' }), ['doctor']);
+    const remove = commandFor({ kind: 'remove', login: 'octocat' });
+    assert.deepEqual(remove, ['accounts', 'remove', '--', 'octocat']);
+    assert.equal(formatCommand(remove), 'repown accounts remove octocat');
+    const removed = parseArgs(remove.slice(2), specFor(accountsGroup.actions['remove']!));
+    assert.ok(removed.ok && removed.value.positional[0] === 'octocat', 'accounts remove accepts the argv the start screen builds');
+    assert.equal(formatCommand(commandFor({ kind: 'remove', login: '-h' })), 'repown accounts remove "--" -h');
   });
 });
 

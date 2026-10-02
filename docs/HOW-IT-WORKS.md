@@ -1009,8 +1009,11 @@ flowchart TD
   LIST -->|"← Back"| MENU
   MENU -->|gh is the helper| FIX["Stop gh serving credentials"]
   MENU --> ADD["Record an account"]
+  MENU -->|an account is recorded| REM["Remove an account"]
+  REM --> WHICH["which account, then confirm"]
+  WHICH -->|"← Back"| MENU
   MENU --> DOC["Check this machine"]
-  FIX & ADD & DOC -->|"the command runs, then"| HOME
+  FIX & ADD & WHICH & DOC -->|"the command runs, then"| HOME
   MENU --> SH["Show help, exit 0"]
   MENU --> QUIT["Quit, exit 0"]
   MENU -->|Esc or Ctrl-C| ESC["exit 130, nothing changed"]
@@ -1036,6 +1039,7 @@ setting ([ADR-027](decisions/ADR-027-the-wizard-decorates-only-where-it-draws-co
 │  ● Set up a clone found here (2 not set up)
 │  ○ Stop gh serving credentials
 │  ○ Record an account
+│  ○ Remove an account
 │  ○ Check this machine
 │  ○ Show help
 │  ○ Quit
@@ -1056,9 +1060,10 @@ What next?
   1) Set up a clone found here  -- 2 not set up
   2) Stop gh serving credentials  -- repown fix
   3) Record an account  -- repown accounts add
-  4) Check this machine  -- repown doctor
-  5) Show help
-  6) Quit
+  4) Remove an account  -- repown accounts remove
+  5) Check this machine  -- repown doctor
+  6) Show help
+  7) Quit
   choice [1]: 
 ```
 
@@ -1212,9 +1217,27 @@ the guard) pastes the same into sh, bash, dash, zsh, fish, PowerShell and cmd: a
 treats specially stays bare, anything else is in double quotes, and only a value with `$`, a
 backtick, `"`, `%`, `!` or an escaping backslash keeps POSIX single quotes, which cmd can't read.
 
+**Remove an account** is offered once an account is recorded, and only when every entry
+in the registry reads (`accounts remove` refuses to rewrite a file it can't fully read).
+It asks `Which account?` (each login with its `name <email>`, and `← Back`), then says
+what stays and asks to confirm:
+
+```
+│  clones pinned to octocat keep their settings and the push guard;
+│  repown use octocat needs it recorded again
+│
+◆  Remove octocat from this machine?
+│  ● Remove octocat
+│  ○ ← Back
+```
+
+`← Back` from either returns to the menu; the frame then closes on
+`$ repown accounts remove octocat`. Only the registry entry goes: a clone pinned to it keeps
+its settings and the guard, and `repown status` there says `not in this machine's registry`.
+
 Each of those runs that command's own `run()`, after the frame closes on the command.
 On a plain terminal the closing line is that same command on its own line. After
-**Record an account**, **Check this machine** or **Stop gh serving credentials**, the
+**Record an account**, **Remove an account**, **Check this machine** or **Stop gh serving credentials**, the
 start screen opens again once that command has run, whether or not it succeeded, with the
 folder read afresh, so the summary shows the change
 ([ADR-028](decisions/ADR-028-the-start-screen-returns-after-a-machine-action.md)).

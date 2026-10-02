@@ -235,8 +235,10 @@ then commit and push.
 
 The start screen lists the accounts on this machine and the clones it found, then offers
 the next command. The summary is in the frame. Picking a command closes the frame with
-that command (Record an account first asks the login, host, name and email in it). Nothing changes until you pick one. After recording an account, checking
-the machine or stopping gh, it comes back with a fresh summary.
+that command (Record an account first asks the login, host, name and email in it; Remove
+an account asks which, then to confirm). Nothing changes until you pick one. After
+recording or removing an account, checking the machine or stopping gh, it comes back with
+a fresh summary.
 
 **Who is this clone?** `repown status` prints:
 

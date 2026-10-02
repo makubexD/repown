@@ -363,14 +363,14 @@ describe('repown setup, played with key presses', () => {
     const plain = screen.replace(/\n│\s*/g, ' ');
     assert.match(plain, /repown\.allowOwner \+= octo-org/);
     assert.match(plain, /Let this clone push to octo-org's repositories/);
-    assert.match(plain, /> git config --local --add repown\.allowOwner octo-org/);
+    assert.match(plain, /\$ git config --local --add repown\.allowOwner octo-org/);
     assert.match(plain, /user\.name = Octo Cat/);
     assert.match(plain, /user\.email = octocat@example\.invalid/);
     assert.match(plain, /user\.useConfigOnly = true/);
     assert.match(plain, /repown\.account = octocat/);
     assert.match(plain, /credential\.https:\/\/github\.com\.username = octocat/);
     assert.match(plain, /Pin this clone to octocat: its commit name, email and push sign-in/);
-    assert.match(plain, /> repown use octocat/);
+    assert.match(plain, /\$ repown use octocat/);
     assert.match(plain, /pre-push hook: \/work\/project\/\.git\/hooks\/pre-push runs repown guard check/);
     assert.match(screen, /Run this step\?/);
     assert.match(screen, /Yes/);
@@ -493,9 +493,9 @@ describe('start screen, played with key presses', () => {
       cloneAt(root, 'need');
       const run = await play((prompter) => runHome({ prompter, cwd: root }), [[enter], [enter], [esc]], { patience: 30_000 });
       assert.equal(run.result, 130, run.screen + run.stderr);
-      assert.match(run.screen, /└ {2}> repown setup --cwd /);
+      assert.match(run.screen, /└ {2}\$ repown setup --cwd /);
       assert.match(run.screen, /need/);
-      const commandAt = run.screen.search(/└ {2}> repown setup --cwd /);
+      const commandAt = run.screen.search(/└ {2}\$ repown setup --cwd /);
       const setupAt = run.screen.search(/┌ {2}repown setup\b/);
       assert.ok(commandAt >= 0 && setupAt > commandAt, run.screen);
       assert.match(run.screen, /How should setup work\?/);
@@ -519,7 +519,7 @@ describe('start screen, played with key presses', () => {
     await withProjects(async (root) => {
       const run = await play((prompter) => runHome({ prompter, cwd: root }), [[down, down, enter]], { patience: 20_000 });
       assert.equal(run.result, 0, run.screen + run.stdout);
-      assert.match(run.screen, /└ {2}> repown --help/);
+      assert.match(run.screen, /└ {2}\$ repown --help/);
       assert.match(run.stdout, /repown <command>/);
       assert.match(run.stdout, /setup\s+guided setup/);
     });
@@ -541,7 +541,7 @@ describe('start screen, played with key presses', () => {
       const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST }), [
         [enter], [...typed('-h'), enter], [enter], [enter], [enter], [up, enter],
       ], { patience: 20_000 });
-      assert.match(run.screen, /> repown accounts add --name "Octo Cat" --email octocat@example\.invalid "--" -h/, run.screen + run.stderr);
+      assert.match(run.screen, /\$ repown accounts add --name "Octo Cat" --email octocat@example\.invalid "--" -h/, run.screen + run.stderr);
       assert.equal(run.result, 0, run.stderr);
       assert.match(readFileSync(registryPath(), 'utf8'), /"-h"/);
     });
@@ -560,7 +560,7 @@ describe('start screen, played with key presses', () => {
       for (const question of ["The account's user name", 'Where is this account hosted?', 'Your name, as your commits show it', 'Your email, as your commits show it']) {
         assert.ok(run.screen.includes(question), question + '\n' + run.screen);
       }
-      assert.match(run.screen, /└ {2}> repown accounts add octocat --name "Octo Cat" --email octocat@example\.invalid/);
+      assert.match(run.screen, /└ {2}\$ repown accounts add octocat --name "Octo Cat" --email octocat@example\.invalid/);
       assert.doesNotMatch(run.stderr, /Commit name|Commit email/, 'no prompt is left for accounts add');
       assert.match(run.stdout, /OK\s+accounts\s+octocat {2}Octo Cat <octocat@example\.invalid>/);
       assert.match(readFileSync(registryPath(), 'utf8'), /"octocat"/);
@@ -591,8 +591,8 @@ describe('start screen, played with key presses', () => {
     await withProjects(async (root) => {
       const quit = await play((prompter) => runHome({ prompter, cwd: root }), [[down, enter], [up, enter]], { patience: 30_000 });
       assert.equal(quit.result, 0, quit.screen + quit.stderr);
-      assert.match(quit.screen, /└ {2}> repown doctor/);
-      const after = quit.screen.split('> repown doctor').at(-1) ?? '';
+      assert.match(quit.screen, /└ {2}\$ repown doctor/);
+      const after = quit.screen.split('$ repown doctor').at(-1) ?? '';
       assert.match(after, /repown · not a clone:[\s\S]*What next\?/, quit.screen);
       assert.match(after, /└ {2}Quit/);
       const cancelled = await play((prompter) => runHome({ prompter, cwd: root }), [[down, enter], [esc]], { patience: 30_000 });

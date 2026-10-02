@@ -84,13 +84,13 @@ describe('a clean clone keeps its setup and status output', () => {
     assert.equal(run.status, 0, run.stderr);
     assert.equal(run.stderr,
       '       step 1 of 4: Record the account octocat on this machine: octocat@example.invalid\n' +
-      '       > repown accounts add octocat --name "Octo Cat" --email octocat@example.invalid\n\n' +
+      '       $ repown accounts add octocat --name "Octo Cat" --email octocat@example.invalid\n\n' +
       '       step 2 of 4: Pin this clone to octocat: its commit name and email\n' +
-      '       > repown use octocat\n\n' +
+      '       $ repown use octocat\n\n' +
       '       step 3 of 4: Turn on the push guard: each push is checked first\n' +
-      '       > repown guard on\n\n' +
+      '       $ repown guard on\n\n' +
       '       step 4 of 4: Push branches without -u: the first push sets the upstream (this clone only)\n' +
-      '       > git config --local push.autoSetupRemote true\n\n' +
+      '       $ git config --local push.autoSetupRemote true\n\n' +
       '       done: this clone is set up for octocat\n' +
       '       changed in this clone:\n' +
       '         user.name: Sandbox -> Octo Cat\n' +

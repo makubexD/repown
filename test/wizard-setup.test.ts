@@ -1107,7 +1107,7 @@ describe('setup flow', () => {
     assert.equal(yes.choice, 'yes');
     assert.match(yes.shown, /user\.name = Octo Cat/);
     assert.match(yes.shown, /Pin this clone to octocat: its commit name, email and push sign-in/);
-    assert.match(yes.shown, /> repown use octocat/);
+    assert.match(yes.shown, /\$ repown use octocat/);
     assert.match(yes.shown, /Run this step\?/);
     assert.match(yes.shown, /1\) Yes/);
     assert.match(yes.shown, /2\) Skip/);
@@ -1733,7 +1733,7 @@ describe('repown setup, on a terminal (scripted)', () => {
     assert.deepEqual(seen.confirms, []);
     assert.match(localConfig(at), /account = octocat/);
     assert.ok(existsSync(hook(at)));
-    assert.match(seen.stderr, /> repown use octocat/);
+    assert.match(seen.stderr, /\$ repown use octocat/);
     assert.match(seen.stderr, /done: this clone is set up for octocat$/m);
     assert.doesNotMatch(seen.stderr, /skipped:/);
   });
@@ -2426,7 +2426,7 @@ describe('repown setup: repoint and fetch, in a real clone', () => {
     const run = repown(['setup', 'octocat', '--fetch', '--no-input'], at.box.dir);
     assert.equal(run.status, 0, run.stderr);
     assert.match(run.stderr, /step 1 of \d: Fetch origin/);
-    assert.match(run.stderr, /> git fetch origin/);
+    assert.match(run.stderr, /\$ git fetch origin/);
     assert.notEqual(tracking(), '');
   });
 
@@ -2443,14 +2443,14 @@ describe('repown setup: repoint and fetch, in a real clone', () => {
     const run = repown(['setup', 'octocat', '--fetch', '--no-input'], at.box.dir);
     assert.equal(run.status, 0, run.stderr);
     assert.match(run.stderr, /--fetch: /);
-    assert.doesNotMatch(run.stderr, /> git fetch/);
+    assert.doesNotMatch(run.stderr, /\$ git fetch/);
   });
 
   test('the field case, re-authored: the closing line says done and the push passes the guard', () => {
     unfetchedOrigin();
     const run = repown(['setup', 'octocat', '--fetch', '--guard', '--auto-upstream', '--reauthor', '--no-input'], at.box.dir);
     assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stderr, /> repown reauthor --yes/);
+    assert.match(run.stderr, /\$ repown reauthor --yes/);
     assert.match(run.stderr, /done: this clone is set up for octocat/);
     assert.equal(at.box.git('log', '-1', '--format=%ae|%ce'), 'octocat@example.invalid|octocat@example.invalid');
     const push = spawnSync('git', ['push', 'origin', 'HEAD:main'], { cwd: at.box.dir, encoding: 'utf8', env: process.env });
@@ -2496,7 +2496,7 @@ describe('repown setup: repoint and fetch, in a real clone', () => {
     const run = repown(['setup', 'octocat', '--repoint', '--no-input'], at.box.dir);
     assert.equal(run.status, 0, run.stderr);
     assert.equal(at.box.git('config', 'branch.main.remote'), 'origin');
-    assert.match(run.stderr, /> git config --local branch\.main\.remote origin/);
+    assert.match(run.stderr, /\$ git config --local branch\.main\.remote origin/);
     assert.match(run.stderr, /branch\.main\.remote: \(a URL\) -> origin/);
     assert.doesNotMatch(run.stdout + run.stderr, /ghp_secret|octocat:/);
   });

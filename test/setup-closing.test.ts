@@ -50,7 +50,7 @@ describe('setup closes on what still blocks the next push', () => {
   test('with colour, done leads with a green check and each command is cyan', () => {
     const run = setup(FIRST, COLOUR);
     assert.match(run.stderr, /\x1b\[32m✔\x1b\[0m done: this clone is set up for octocat\n/);
-    assert.match(run.stderr, /\x1b\[36m> repown use octocat[^\n]*\x1b\[0m\n/);
+    assert.match(run.stderr, /\x1b\[36m\$ repown use octocat[^\n]*\x1b\[0m\n/);
   });
 
   test('with colour, a blocked closing line leads with a yellow triangle', () => {

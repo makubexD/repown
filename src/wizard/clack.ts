@@ -11,7 +11,7 @@ import { styleText } from 'node:util';
 import * as p from '@clack/prompts';
 import { BACK, CANCEL, type Asked, type Choice, type Drawn, type Prompter, type Reply, type Review, type ReviewChoice, type StepChoice, type StepConfirm } from './engine.ts';
 import { BACK_WORD, type Streams } from './plain.ts';
-import { BACK_TO_REVIEW, PICK_QUESTION, RUN_THIS_STEP, labelOf, reviewDefault, reviewLines, reviewOptions, reviewQuestion, stepConfirmLines, stepOptions, textWidth, wrap } from './review-text.ts';
+import { BACK_TO_REVIEW, COMMAND_MARK, PICK_QUESTION, RUN_THIS_STEP, labelOf, reviewDefault, reviewLines, reviewOptions, reviewQuestion, stepConfirmLines, stepOptions, textWidth, wrap } from './review-text.ts';
 
 /** A value no real choice can have. */
 const GO_BACK = '\u0000back';
@@ -43,9 +43,9 @@ function badge(title: string): string {
   return styled === padded ? title : styled;
 }
 
-/** A `> command` hand-over line cyan; any other closing line as it is. */
+/** A `$ command` hand-over line cyan; any other closing line as it is. */
 function commandOr(message: string): string {
-  return message.startsWith('> ') ? styleText('cyan', message) : message;
+  return message.startsWith(COMMAND_MARK) ? styleText('cyan', message) : message;
 }
 
 function askDrawn(step: Drawn, asked: Asked, io: Io): Promise<Reply> {
@@ -157,12 +157,12 @@ function logLines(io: Io, lines: readonly string[]): void {
 }
 
 /**
- * One shown line, wrapped, then styled: a label's value bold cyan, a `> command` cyan.
+ * One shown line, wrapped, then styled: a label's value bold cyan, a `$ command` cyan.
  * Styling after wrapping keeps every line as wide as it is without colour (ADR-027).
  */
 function accented(text: string, width: number): string[] {
   const rows = wrap(text, width);
-  if (text.startsWith('> ')) return rows.map((row) => styleText('cyan', row));
+  if (text.startsWith(COMMAND_MARK)) return rows.map((row) => styleText('cyan', row));
   const label = labelOf(text);
   return rows.map((row, index) => accentLine(row, index === 0 ? label : ' '.repeat(label.length)));
 }

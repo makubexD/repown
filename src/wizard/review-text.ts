@@ -29,9 +29,15 @@ export function stepOptions(): Array<{ value: StepChoice; label: string }> {
   ];
 }
 
+/**
+ * What starts a command line drawn to copy. Not `>`: pasted whole, that is a redirect in
+ * every shell and leaves a file named `repown`; `$` there is only a harmless error.
+ */
+export const COMMAND_MARK = '$ ';
+
 /** What a step changes, why, and the command, in that order. */
 export function stepConfirmLines(brief: { readonly changes: readonly string[]; readonly why: string; readonly command: string }): string[] {
-  return [...brief.changes, '', brief.why, '> ' + brief.command];
+  return [...brief.changes, '', brief.why, COMMAND_MARK + brief.command];
 }
 
 /** `fix` changes the whole machine; `reauthor` rewrites commits. */

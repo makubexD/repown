@@ -19,6 +19,7 @@ import { readHome, type HomeState } from './home-context.ts';
 import { BACK as HOME_BACK, MENU, commandFor, homeNote, listedClones, menuItems, summaryLines } from './home-flow.ts';
 import { BACK_LABEL, BUSY, CANCELLED, QUIT, WHAT_NEXT, WHICH_CLONE, homeTitle } from './home-text.ts';
 import { formatCommand, loginStep, newAccountOf, printable, profileSteps, type AccountContext } from './setup-flow.ts';
+import { COMMAND_MARK } from './review-text.ts';
 import { suggester } from './setup-context.ts';
 import { choosePrompter, runSetup } from './setup-run.ts';
 
@@ -154,7 +155,7 @@ function showLines(prompter: Prompter, lines: readonly string[]): void {
 
 /** Closes the start screen's frame on the command it hands over to. */
 function handOver(prompter: Prompter, argv: readonly string[]): void {
-  const line = '> ' + formatCommand(argv);
+  const line = COMMAND_MARK + formatCommand(argv);
   if (prompter.outro) prompter.outro(line);
   else out.detail(line);
 }

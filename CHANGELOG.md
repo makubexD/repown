@@ -28,6 +28,8 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 - `repown accounts add` prints its suggested next command, `repown use <account>`, in
   cyan where stdout has colour, and exactly as before where it has none (ADR-027's rule).
 
+- Commands setup and the start screen draw to copy start with `$ ` instead of `> `: pasted
+  whole, `>` was a redirect in every shell and left an empty file named `repown` (ADR-027).
 - After Record an account, Check this machine or Stop gh serving credentials, the start
   screen comes back with a fresh summary instead of exiting; Quit, Esc or Ctrl-C leave it
   (ADR-028).

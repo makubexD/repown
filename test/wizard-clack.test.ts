@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { PassThrough } from 'node:stream';
 import { clackPrompter } from '../src/wizard/clack.ts';
 import { BACK, CANCEL, type Drawn, type Prompter } from '../src/wizard/engine.ts';
-import { labelOf, wrap } from '../src/wizard/review-text.ts';
+import { COMMAND_MARK, labelOf, stepConfirmLines, wrap } from '../src/wizard/review-text.ts';
 
 const ENTER = '\r';
 const DOWN = '\x1b[B';
@@ -108,10 +108,10 @@ test('with colour the title is a badge, a label\'s value is bold cyan and a comm
   withColour(() => {
     const title = drawn((prompter) => prompter.intro?.('repown setup'));
     assert.match(title, /\x1b\[46m.*repown setup/);
-    const lines = ['Accounts   1 recorded: octocat', 'plain words stay as they are', '> repown use octocat'];
+    const lines = ['Accounts   1 recorded: octocat', 'plain words stay as they are', '$ repown use octocat'];
     const shown = drawn((prompter) => prompter.show?.(lines));
     assert.match(shown, /Accounts {3}\x1b\[1m\x1b\[36m1 recorded: octocat/);
-    assert.match(shown, /\x1b\[36m> repown use octocat/);
+    assert.match(shown, /\x1b\[36m\$ repown use octocat/);
     assert.doesNotMatch(shown, /\x1b\[[0-9;]*mplain words/);
     const plain = shown.replace(ANSI, '');
     for (const text of lines) assert.ok(plain.includes(text), plain);
@@ -149,7 +149,7 @@ test('labelOf names the column wrap hangs under, and nothing for a numbered or i
 });
 
 test('a wrapped command is cyan on every row', () => {
-  const command = '> repown use octocat --name="Octo Cat" --email=octocat@users.noreply.example.invalid --guard --auto-upstream';
+  const command = '$ repown use octocat --name="Octo Cat" --email=octocat@users.noreply.example.invalid --guard --auto-upstream';
   let coloured = '';
   withColour(() => { coloured = drawn((prompter) => prompter.show?.([command])); });
   const rows = coloured.split('\n').filter((row) => /octocat|guard|upstream/.test(row));
@@ -159,9 +159,15 @@ test('a wrapped command is cyan on every row', () => {
 
 test('the start screen\'s hand-over line closes the frame in cyan; a plain closing line is not styled', () => {
   withColour(() => {
-    assert.match(drawn((prompter) => prompter.outro?.('> repown setup --cwd code')), /\x1b\[36m> repown setup --cwd code/);
+    assert.match(drawn((prompter) => prompter.outro?.('$ repown setup --cwd code')), /\x1b\[36m\$ repown setup --cwd code/);
+    assert.doesNotMatch(drawn((prompter) => prompter.outro?.('> repown setup')), /\x1b\[36m/, '> is no longer the mark');
     assert.doesNotMatch(drawn((prompter) => prompter.outro?.('Running the commands')), /\x1b\[36m/);
   });
+});
+
+test('a command drawn to copy starts with $, which pasted whole is a harmless error, never a redirect', () => {
+  assert.equal(COMMAND_MARK, '$ ');
+  assert.equal(stepConfirmLines({ changes: ['a change'], why: 'why', command: 'repown fix' }).at(-1), '$ repown fix');
 });
 
 /** No sign of a Unicode terminal: clack then draws its ASCII frame (Windows needs every signal unset, elsewhere TERM=linux). */

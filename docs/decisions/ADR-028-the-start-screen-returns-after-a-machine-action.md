@@ -1,4 +1,4 @@
-# ADR-028: The start screen returns to its menu after a machine-level action
+# ADR-028: The start screen returns to its menu after a machine-level action, and asks a new account in its frame; an unknown login is named, never refused
 
 **Status:** Accepted. Supersedes in part [ADR-024](ADR-024-bare-repown-outside-a-clone-opens-a-start-screen.md):
 what happens after an action, and how Record an account asks.
@@ -30,6 +30,11 @@ before.
 - **Record an account asks setup's own new-account questions in the frame** (login,
   host, name, email, with Back), then runs `accounts add` with every answer as a flag,
   so no bare prompt follows the frame. A login already recorded is refused, as in setup.
+- **A login github.com doesn't know, or that is an organisation, is named, never refused.**
+  Only gh's own `(HTTP 404)` on a failed lookup means "no such account"; offline, a refused
+  lookup (403) or no gh is unknown and says nothing. In setup and on the start screen the
+  sentence leads the name question's detail, so Back can fix a typo before anything is
+  recorded; a typed `repown accounts add` that asks prints it as a `WARN` and records anyway.
 - Each action is still the command's own `run()`, printed first as the command it stands
   for (ADR-024).
 
@@ -40,6 +45,8 @@ before.
 | Keep ending after every action (ADR-024) | The summary is stale at once, and a second account means starting again. |
 | Return to the menu without re-reading | Shows the old summary: "2 recorded" right after recording a third. |
 | Quit exits with the last action's code | Quit is a choice, not a failure; the failure was already shown, and a script never reaches this screen (it needs a terminal on every stream). |
+| Refuse a login GitHub doesn't know | An enterprise host, a renamed account or no network would block recording; the host's answer is advice. |
+| After a 404, note it and ask the login again, accepting the same login typed twice | Chosen against while building: the name question comes next anyway, Back reaches the login from there, and setup gets the same sentence with no new loop. |
 | Return after setup too | Setup ends on its own closing line (done, or what blocks the next push); a menu after it buries that. |
 
 ## Consequences

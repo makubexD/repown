@@ -1014,6 +1014,9 @@ flowchart TD
 
 With colour on, the screen looks like this. The summary is inside the frame, and there
 is no blank line before **What next?**. The highlighted row shows its hint in parentheses.
+The title is a cyan badge, each summary value is bold cyan, and commands are cyan. Where
+Windows can't draw Unicode (its legacy console), clack draws `T | * >` in place of
+`┌ │ ◆ ●`. No variable needs setting ([ADR-027](decisions/ADR-027-the-wizard-decorates-only-where-it-draws-colour.md)).
 
 ```
 ┌  repown · not a clone: /home/octocat/code

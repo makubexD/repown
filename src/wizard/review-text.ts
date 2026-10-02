@@ -46,8 +46,8 @@ function settledVerdict(review: Review): string {
 
 /**
  * The body of the review, line by line, wrapped to `width`. `command` styles each
- * command line (dimmed where the prompter can draw colour), so the plain words stay
- * the eye's first stop.
+ * command line (cyan where the prompter can draw colour, ADR-027), so a command never
+ * reads as one of the plain words around it.
  */
 export function reviewLines(review: Review, width = Infinity, command: (text: string) => string = (text) => text): string[] {
   const words = (text: string): string[] => wrap(text, width);
@@ -72,13 +72,21 @@ export function textWidth(columns: number | undefined, margin: number): number {
   return Math.max(24, Math.min(MAX_WIDTH, (columns ?? 80) - margin));
 }
 
+/** A `label   value` line's label column: one or two words, then two spaces or more. */
+const LABEL = String.raw`\S+(?: \S+)? {2,}`;
+
+/** The label column of a `label   value` line, padding included; '' for any other line. */
+export function labelOf(text: string): string {
+  return new RegExp('^' + LABEL + '(?=\\S)').exec(text)?.[0] ?? '';
+}
+
 /**
  * One line, wrapped at spaces to `width`. Continuation lines line up under the text:
  * past any indent, a "1. " step number, or a "label   " column.
  */
 export function wrap(text: string, width: number): string[] {
   if (text.length <= width) return [text];
-  const hang = ' '.repeat(/^\s*(?:\d+\. |\S+(?: \S+)? {2,})?/.exec(text)![0].length);
+  const hang = ' '.repeat(new RegExp('^\\s*(?:\\d+\\. |' + LABEL + ')?').exec(text)![0].length);
   const lines: string[] = [];
   let line = '';
   for (const word of text.split(/(?<=\S) (?=\S)/)) {

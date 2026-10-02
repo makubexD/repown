@@ -71,7 +71,7 @@ async function add(args: Args): Promise<number> {
 
   out.pass('accounts', account + '  ' + name + ' <' + email + '>');
   out.line();
-  out.line('  Use it in any clone:  repown use ' + account);
+  out.line('  Use it in any clone:  ' + out.accent(process.stdout, 'repown use ' + account));
   out.line();
   return 0;
 }

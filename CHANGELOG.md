@@ -10,7 +10,7 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 ### Changed
 - The wizard (`repown setup`, and bare `repown` in a terminal) is easier to read in colour,
   with nothing to set: the title is a cyan badge, each summary value is bold cyan, the
-  commands setup shows and runs are cyan, and setup's closing line leads with a green ✔ (done) or a yellow ▲ (the next push
+  commands setup shows and runs, and the `repown use <account>` that `accounts add` suggests, are cyan, and setup's closing line leads with a green ✔ (done) or a yellow ▲ (the next push
   will fail). On a terminal that can't draw Unicode (Windows' console without a known terminal, or
   the Linux console), the marks are `+` and `!`. Without colour (a
   pipe, a log, `NO_COLOR`), the output is exactly as before

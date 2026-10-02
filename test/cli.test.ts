@@ -277,6 +277,18 @@ describe('`accounts remove`, and `accounts rm` (hidden alias) reaching the same 
     assert.match(run(['accounts', 'rm', 'octocat']).stdout, /removed octocat/);
   });
 
+  test('the next command after `accounts add` is cyan where stdout has colour, and exactly as before where not', () => {
+    const plain: NodeJS.ProcessEnv = { ...process.env, REPOWN_CONFIG_DIR: configDir, NO_COLOR: '1' };
+    delete plain['FORCE_COLOR'];
+    const add = ['accounts', 'add', 'octocat', '--name', 'Octo Cat', '--email', 'octocat@example.invalid'];
+    const piped = spawnSync(process.execPath, [CLI, ...add], { env: plain, encoding: 'utf8' });
+    assert.match(piped.stdout, /^ {2}Use it in any clone: {2}repown use octocat$/m);
+    assert.doesNotMatch(piped.stdout, /\x1b\[/);
+    const coloured = { ...process.env, REPOWN_CONFIG_DIR: configDir, FORCE_COLOR: '1', TERM: 'xterm-256color' };
+    const shown = spawnSync(process.execPath, [CLI, ...add], { env: coloured, encoding: 'utf8' });
+    assert.match(shown.stdout, /^ {2}Use it in any clone: {2}\x1b\[36mrepown use octocat\x1b\[0m$/m);
+  });
+
   test('help advertises `remove`, never the `rm` alias', () => {
     const run = repown(['help', 'accounts']);
     assert.match(run.stdout, /^ {4}remove\s/m);

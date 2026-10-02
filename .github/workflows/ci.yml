@@ -115,6 +115,12 @@ jobs:
 
       - run: npm ci
 
+      # test/paste.test.ts runs printed commands through every shell it finds; Linux is
+      # where zsh and fish are measured (macOS has zsh, Windows has cmd and PowerShell).
+      - name: Install zsh and fish for the paste test
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh fish
+
       - name: Typecheck and build
         run: npm run build
 

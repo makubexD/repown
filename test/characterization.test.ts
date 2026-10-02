@@ -84,7 +84,7 @@ describe('a clean clone keeps its setup and status output', () => {
     assert.equal(run.status, 0, run.stderr);
     assert.equal(run.stderr,
       '       step 1 of 4: Record the account octocat on this machine: octocat@example.invalid\n' +
-      "       > repown accounts add octocat --name 'Octo Cat' --email octocat@example.invalid\n\n" +
+      '       > repown accounts add octocat --name "Octo Cat" --email octocat@example.invalid\n\n' +
       '       step 2 of 4: Pin this clone to octocat: its commit name and email\n' +
       '       > repown use octocat\n\n' +
       '       step 3 of 4: Turn on the push guard: each push is checked first\n' +

@@ -241,7 +241,7 @@ describe('guard check', () => {
   test('D1 the suggested allowOwner command quotes an owner the shell would interpret', async () => {
     const sha = commitAs(OURS, 'ours');
     const refusals = await push(sha, 'refs/heads/feat/x', 'https://github.com/x%3B%20curl%20evil/r.git');
-    assert.ok(refusals[0]!.detail.some((row) => row.endsWith("repown.allowOwner 'x; curl evil'")));
+    assert.ok(refusals[0]!.detail.some((row) => row.endsWith('repown.allowOwner "x; curl evil"')));
   });
 
   test('D  a push to someone else’s repository is REFUSED', async () => {

@@ -541,7 +541,7 @@ describe('start screen, played with key presses', () => {
       const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST }), [
         [enter], [...typed('-h'), enter], [enter], [enter], [enter], [up, enter],
       ], { patience: 20_000 });
-      assert.match(run.screen, /> repown accounts add --name 'Octo Cat' --email octocat@example\.invalid -- -h/, run.screen + run.stderr);
+      assert.match(run.screen, /> repown accounts add --name "Octo Cat" --email octocat@example\.invalid "--" -h/, run.screen + run.stderr);
       assert.equal(run.result, 0, run.stderr);
       assert.match(readFileSync(registryPath(), 'utf8'), /"-h"/);
     });
@@ -560,7 +560,7 @@ describe('start screen, played with key presses', () => {
       for (const question of ["The account's user name", 'Where is this account hosted?', 'Your name, as your commits show it', 'Your email, as your commits show it']) {
         assert.ok(run.screen.includes(question), question + '\n' + run.screen);
       }
-      assert.match(run.screen, /└ {2}> repown accounts add octocat --name 'Octo Cat' --email octocat@example\.invalid/);
+      assert.match(run.screen, /└ {2}> repown accounts add octocat --name "Octo Cat" --email octocat@example\.invalid/);
       assert.doesNotMatch(run.stderr, /Commit name|Commit email/, 'no prompt is left for accounts add');
       assert.match(run.stdout, /OK\s+accounts\s+octocat {2}Octo Cat <octocat@example\.invalid>/);
       assert.match(readFileSync(registryPath(), 'utf8'), /"octocat"/);

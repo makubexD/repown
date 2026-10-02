@@ -95,6 +95,11 @@ with an installed repown.
   plays it as a newcomer would, pressing arrows, Enter, typed text and Esc on the real
   screens (`play()` in [test/setup-fixtures.ts](test/setup-fixtures.ts)), in one scenario
   per situation. Add one for a new situation.
+- **Printing a command to copy?** Build each word with `shellWord` (or the whole line with
+  `formatCommand`). [test/paste.test.ts](test/paste.test.ts) runs printed lines through every
+  shell it finds (sh, bash, dash, zsh, fish, PowerShell 7, Windows PowerShell, cmd) against
+  probes shaped like npm's `repown`, `repown.cmd` and `repown.ps1`; a shell that isn't
+  installed is skipped. CI installs zsh and fish on Linux, so each is measured somewhere.
 - **Before you push:** `npm test` and `npm run build` (the build is also the type check;
   there is no linter). CI repeats both on Linux, Windows and macOS, so watch path
   separators and line endings.

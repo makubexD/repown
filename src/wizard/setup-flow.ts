@@ -724,18 +724,21 @@ function allowOwnerLine(ctx: SetupContext): string[] {
 
 /**
  * The command as you would type it: the account where it reads naturally, options
- * as `--name value`, and `--host github` left out because it's the default.
+ * as `--name value`, and `--host github` left out because it's the default. A `--`
+ * before a dashed account is quoted: PowerShell drops a bare one from the `$args` of
+ * the `repown.ps1` npm installs.
  */
 export function formatCommand(argv: readonly string[]): string {
   if (argv[0] === 'git') return printable(argv.map(shellWord).join(' '));
   const end = argv.indexOf('--');
   const head = end < 0 ? argv : argv.slice(0, end);
   const positional = end < 0 ? [] : argv.slice(end + 1);
-  const path = head.filter((token) => !token.startsWith('-'));
-  const options = head.filter((token) => token.startsWith('-') && token !== '--host=github').flatMap(splitOption);
   const dashed = positional.some((value) => value.startsWith('-'));
-  const words = dashed ? [...path, ...options, '--', ...positional] : [...path, ...positional, ...options];
-  return printable(['repown', ...words.map(shellWord)].join(' '));
+  const path = head.filter((token) => !token.startsWith('-')).map(shellWord);
+  const options = head.filter((token) => token.startsWith('-') && token !== '--host=github').flatMap(splitOption).map(shellWord);
+  const accounts = positional.map(shellWord);
+  const words = dashed ? [...path, ...options, '"--"', ...accounts] : [...path, ...accounts, ...options];
+  return printable(['repown', ...words].join(' '));
 }
 
 /** Setup's own importers read it from here; the one definition is in the output helpers. */

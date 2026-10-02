@@ -1149,7 +1149,7 @@ frame in that clone. Setup's exit code is repown's. The line about starting setu
 only for bare `repown` inside a clone ([card 5](#5-check-where-you-are)).
 
 ```
-└  > repown setup --cwd '/home/octocat/code/need'
+└  > repown setup --cwd /home/octocat/code/need
 
 ┌  repown setup
 │
@@ -1157,7 +1157,7 @@ only for bare `repown` inside a clone ([card 5](#5-check-where-you-are)).
 ```
 
 On a plain terminal the command is its own line:
-`> repown setup --cwd '/home/octocat/code/need'`.
+`> repown setup --cwd /home/octocat/code/need`.
 
 **Stop gh serving credentials** closes the frame with `└  > repown fix`, then runs
 `repown fix`, which asks its own confirmation.
@@ -1188,11 +1188,17 @@ so Back can fix the login before anything is recorded (an organisation reads
 runs `repown accounts add` with every answer as a flag, so nothing more is asked:
 
 ```
-└  > repown accounts add octocat --name 'Octo Cat' --email '1234+octocat@users.noreply.github.com'
+└  > repown accounts add octocat --name "Octo Cat" --email 1234+octocat@users.noreply.github.com
 ```
 
 A login that starts with a dash is passed after `--`, so it stays the account name:
-`repown accounts add --name 'Octo Cat' --email … -- -h`.
+`repown accounts add --name "Octo Cat" --email … "--" -h`. The `--` is quoted because
+PowerShell drops a bare one before `repown.ps1` (what npm installs) sees it.
+
+Every command repown prints to copy (here, in setup, and in the advice of `status`, `use` and
+the guard) pastes the same into sh, bash, dash, zsh, fish, PowerShell and cmd: a word no shell
+treats specially stays bare, anything else is in double quotes, and only a value with `$`, a
+backtick, `"`, `%`, `!` or an escaping backslash keeps POSIX single quotes, which cmd can't read.
 
 Each of those runs that command's own `run()`, after the frame closes on the command.
 On a plain terminal the closing line is that same command on its own line. After

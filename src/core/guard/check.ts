@@ -298,7 +298,16 @@ function redacted(raw: string): string {
   return raw.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/]*@/i, '$1***@');
 }
 
-/** An owner comes from the URL, so a suggested command must quote it for the shell. */
+/**
+ * A word of a command printed to copy, as sh, bash, dash, zsh, fish, PowerShell and cmd all
+ * read it (test/paste.test.ts runs each). Bare when no shell treats any of it specially (a
+ * leading `@` is a PowerShell splat). Otherwise double quotes, unless they would expand or
+ * end early somewhere: `$` and a backtick (POSIX, PowerShell), `%` and `!` (cmd), a curly
+ * double quote (PowerShell), or a backslash that escapes (`\\`, or one before the closing
+ * quote). Those keep POSIX single quotes, which cmd can't read.
+ */
 export function shellWord(value: string): string {
-  return /^[\w.@-]+$/.test(value) ? value : "'" + value.replace(/'/g, "'\\''") + "'";
+  if (/^[\w./-][\w.@+/:-]*$/.test(value)) return value;
+  if (!/["$`%!“”„]|\\\\|\\$/.test(value)) return '"' + value + '"';
+  return "'" + value.replace(/'/g, "'\\''") + "'";
 }

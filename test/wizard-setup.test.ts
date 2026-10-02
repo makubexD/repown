@@ -296,7 +296,7 @@ describe('setup flow', () => {
 
   test('a value that starts with a dash stays attached to its option in the shown command', () => {
     assert.equal(formatCommand(['accounts', 'add', '--name=-dash', '--email=a@example.invalid', '--host=github', '--', 'octocat']),
-      "repown accounts add octocat '--name=-dash' --email a@example.invalid");
+      'repown accounts add octocat "--name=-dash" --email a@example.invalid');
   });
 
   test('every shown command parses back to the argv that runs', async () => {
@@ -318,8 +318,8 @@ describe('setup flow', () => {
 
   test('the equivalent commands are shown quoted, the way you would type them', () => {
     assert.equal(formatCommand(['accounts', 'add', '--name=Octo Cat', '--email=a@example.invalid', '--host=github', '--', 'octocat']),
-      "repown accounts add octocat --name 'Octo Cat' --email a@example.invalid");
-    assert.equal(formatCommand(['use', '--gh', '--', '-odd']), 'repown use --gh -- -odd');
+      'repown accounts add octocat --name "Octo Cat" --email a@example.invalid');
+    assert.equal(formatCommand(['use', '--gh', '--', '-odd']), 'repown use --gh "--" -odd');
     assert.equal(formatCommand(['git', 'config', '--local', '--add', 'repown.allowOwner', 'octo-org']),
       'git config --local --add repown.allowOwner octo-org');
   });
@@ -811,7 +811,7 @@ describe('setup flow', () => {
   test('ADR-025 behind a remote with no tracking refs the review says to fetch, and the rebase is conditional', () => {
     const unknown = { kind: 'remote', name: 'my fork' } as const;
     const notes = reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid'], '--root'), unknown } }));
-    assert.match(notes, /my fork has no remote-tracking refs, so some of these may already be on it \(the guard skips any already on the branch you push to\): git fetch 'my fork', then repown use octocat to count again/);
+    assert.match(notes, /my fork has no remote-tracking refs, so some of these may already be on it \(the guard skips any already on the branch you push to\): git fetch "my fork", then repown use octocat to count again/);
     assert.match(notes, /if my fork has none of them, re-author it: git rebase --root /);
     assert.doesNotMatch(notes, /^\s*re-author/m);
   });
@@ -824,7 +824,7 @@ describe('setup flow', () => {
     const url = { kind: 'url', key: 'branch.main.remote', remote: '-o' } as const;
     assert.doesNotMatch(reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: url } })), /git config|git fetch/);
     const bidi = { kind: 'remote', name: 'fork\u202egnp.exe\u200b' } as const;
-    assert.match(reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: bidi } })), /git fetch 'fork\?gnp\.exe\?'/);
+    assert.match(reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: bidi } })), /git fetch "fork\?gnp\.exe\?"/);
   });
 
   test('ADR-025 remotes that could not be read are unknown, not "none"', () => {
@@ -1146,10 +1146,10 @@ function wording(text: string | ((answers: Answers, ctx: SetupContext) => string
   return typeof text === 'function' ? text(answers, ctx) : text;
 }
 
-/** A POSIX shell's word splitting, for the single-quoted words formatCommand produces. */
+/** A POSIX shell's word splitting, for the quoted words formatCommand produces. */
 function shellSplit(line: string): string[] {
-  return [...line.matchAll(/'((?:[^']|'\\'')*)'|(\S+)/g)].map((match) =>
-    match[1] !== undefined ? match[1].replaceAll("'\\''", "'") : match[2]!);
+  return [...line.matchAll(/'((?:[^']|'\\'')*)'|"([^"]*)"|(\S+)/g)].map((match) =>
+    match[1] !== undefined ? match[1].replaceAll("'\\''", "'") : match[2] ?? match[3]!);
 }
 
 // ---------------------------------------------------------------- the command

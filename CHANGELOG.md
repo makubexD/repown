@@ -33,6 +33,12 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   (ADR-028).
 
 ### Fixed
+- Commands repown prints to copy paste correctly in cmd and PowerShell as well as POSIX shells:
+  a value with a space or an apostrophe is in double quotes (`--name "Octo Cat"`, on every OS),
+  a GitHub noreply address and a URL are no longer quoted, a leading `@` is quoted (PowerShell
+  read it as a splat), and the `--` before a dashed login is `"--"` (PowerShell dropped a bare
+  one). Only a value with `$`, a backtick, `"`, `%`, `!` or an escaping backslash keeps single
+  quotes.
 - On a terminal that can't draw Unicode (classic Windows cmd), a text question's hint lines drew
   a `│` beside a gutter of `|`. They now use the same bar as the rest of the frame.
 - "type < to go back" no longer breaks across two lines; when it doesn't fit after the hint, it

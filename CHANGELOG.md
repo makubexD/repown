@@ -28,6 +28,9 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 - `repown accounts add` prints its suggested next command, `repown use <account>`, in
   cyan where stdout has colour, and exactly as before where it has none (ADR-027's rule).
 
+- A question's note (this clone's current account, what the history holds, what GitHub said
+  about a login) is drawn inside that question, under its hint, instead of as a separate
+  line above it that read as part of the previous answer. Plain prompts already did this.
 - Commands setup and the start screen draw to copy start with `$ ` instead of `> `: pasted
   whole, `>` was a redirect in every shell and left an empty file named `repown` (ADR-027).
 - After Record an account, Check this machine or Stop gh serving credentials, the start

@@ -828,11 +828,10 @@ The questions it did not ask are still steps.
 ◇  How should setup work?
 │  Step by step
 │
-●  right now this clone isn't pinned to any account
-│
 ◇  Which account should this clone belong to?
 │  commits made here carry its name and email; on GitHub, pushes from
 │  here also sign in as it
+│  right now this clone isn't pinned to any account
 │  octocat
 │
 ◇  This repository belongs to "octo-org". Let this clone push to it?
@@ -841,12 +840,11 @@ The questions it did not ask are still steps.
 │  clone only
 │  Yes
 │
-●  only your email address is in this repository's commits
-│
 ◇  Turn on the push guard?
 │  before each push, it checks that every commit is yours and goes to
 │  the right place, and stops the push if not; turn it off any time:
 │  repown guard off
+│  only your email address is in this repository's commits
 │  Yes
 │
 ◇  Push branches without -u?
@@ -1175,12 +1173,16 @@ still exits 130. An empty login is `a value is required`. Anything outside lette
 digits and `. _ @ -` is `use letters, digits and . _ @ - only`. A login already
 recorded, in any case, is `"octocat" is already recorded on this machine: use it by
 that name`. When github.com has no account by that login (a typo), or it is an
-organisation, the name question says so first, before this machine's default name if
-there is one:
+organisation, the name question says so first, under its hint and before this machine's
+default name if there is one:
 
 ```
-●  github.com has no account named octocatt: check the spelling; not this machine's
-│  default name (Octo Cat), unless this account uses it
+◆  Your name, as your commits show it
+│  e.g. Octo Cat; anyone who can see the repository sees it
+│  github.com has no account named octocatt: check the spelling; not
+│  this machine's default name (Octo Cat), unless this account uses it
+│  type < to go back
+│  octocatt
 ```
 
 so Back can fix the login before anything is recorded (an organisation reads

@@ -211,3 +211,18 @@ test('"type < to go back" is never split across lines; it takes a line of its ow
   assert.match(plain, /^.\s+six seven$/m, plain);
   assert.match(plain, /^.\s+type < to go back$/m, plain);
 });
+
+test('a detail is drawn in its question\'s block, under the hint and before "type < to go back", never above it', async () => {
+  const input = new PassThrough();
+  const output = Object.assign(new PassThrough(), { columns: 80 });
+  let shown = '';
+  output.on('data', (chunk: Buffer) => { shown += chunk.toString(); });
+  press(input, ENTER);
+  await clackPrompter({ input, output }).ask(name, { initial: 'Octo Cat', choices: [], detail: 'GitHub shows no name for octocat', canGoBack: true });
+  const plain = shown.replace(ANSI, '');
+  const at = (text: string): number => plain.indexOf(text);
+  assert.ok(at(name.message) >= 0 && at(name.message) < at('shown on every commit'), plain);
+  assert.ok(at('shown on every commit') < at('GitHub shows no name'), plain);
+  assert.ok(at('GitHub shows no name') < at('type < to go back'), plain);
+  assert.doesNotMatch(plain, /[●•]\s+GitHub shows no name/, 'not a log line of its own');
+});

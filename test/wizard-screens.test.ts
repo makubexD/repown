@@ -578,8 +578,9 @@ describe('start screen, played with key presses', () => {
       const host = run.screen.search(/Where is this account hosted\?/);
       const name = run.screen.search(/Your name, as your commits show it/);
       assert.ok(host >= 0 && name > host, run.screen);
-      assert.match(run.screen.slice(host, name), /github\.com has no account named octocatt: check the spelling/,
-        'the sentence is the name question\'s own detail, drawn after the host question');
+      assert.doesNotMatch(run.screen.slice(host, name), /has no account named/, 'not a line above the name question');
+      assert.match(run.screen.slice(name), /^Your name, as your commits show it\n(?:│[^\n]*\n)*?│ {2}github\.com has no account named octocatt: check the spelling/,
+        'the sentence is in the name question\'s own block, under its hint');
       const afterName = run.screen.slice(name);
       assert.match(afterName, /The account's user name[^\n]*\n(?:│[^\n]*\n)*│ {2}octocatt/,
         'Back from the name, then from the host, is the login question, still holding the login');

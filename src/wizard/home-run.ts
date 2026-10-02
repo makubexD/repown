@@ -1,6 +1,7 @@
 // The start screen: a summary of this folder, then one menu. Each action prints
 // the command it stands for and runs that command's own run(). Loaded only
 // through the runner start.ts returns, so a typed command never imports it.
+// After fix, doctor or recording an account, the screen opens again (ADR-028).
 //
 // Quit exits 0. Esc and Ctrl-C exit 130, the same cancel setup uses. Neither writes.
 
@@ -45,7 +46,17 @@ export async function runHome(deps: HomeRunDeps = {}): Promise<number> {
   }
 }
 
+/** A machine-level action ran: open the start screen again, read afresh (ADR-028). */
+const AGAIN = Symbol('again');
+
 async function openHome(prompter: Prompter, deps: HomeRunDeps): Promise<number> {
+  for (;;) {
+    const code = await homeRound(prompter, deps);
+    if (code !== AGAIN) return code;
+  }
+}
+
+async function homeRound(prompter: Prompter, deps: HomeRunDeps): Promise<number | typeof AGAIN> {
   const cwd = deps.cwd ?? process.cwd();
   prompter.intro?.(homeTitle(printable(cwd)));
   prompter.busy?.(BUSY);
@@ -56,7 +67,7 @@ async function openHome(prompter: Prompter, deps: HomeRunDeps): Promise<number> 
   return chooseNext(prompter, home, deps);
 }
 
-async function chooseNext(prompter: Prompter, home: HomeState, deps: HomeRunDeps): Promise<number> {
+async function chooseNext(prompter: Prompter, home: HomeState, deps: HomeRunDeps): Promise<number | typeof AGAIN> {
   for (;;) {
     const picked = await prompter.choose(WHAT_NEXT, menuItems(home));
     if (picked === CANCEL) return finish(prompter, CANCELLED, CANCELLED_CODE);
@@ -65,12 +76,13 @@ async function chooseNext(prompter: Prompter, home: HomeState, deps: HomeRunDeps
   }
 }
 
-async function dispatchChoice(picked: string, prompter: Prompter, home: HomeState, deps: HomeRunDeps): Promise<number | null> {
+/** Setup, help and Quit end the screen; fix, doctor and a recorded account come back to it. */
+async function dispatchChoice(picked: string, prompter: Prompter, home: HomeState, deps: HomeRunDeps): Promise<number | null | typeof AGAIN> {
   if (picked === MENU.quit) return finish(prompter, QUIT, 0);
   if (picked === MENU.help) return showTopHelp(prompter);
   if (picked === MENU.setup) return pickClone(prompter, home);
-  if (picked === MENU.fix) return runOwn(prompter, fixCommand, [], commandFor({ kind: 'fix' }));
-  if (picked === MENU.doctor) return runOwn(prompter, doctorCommand, [], commandFor({ kind: 'doctor' }));
+  if (picked === MENU.fix) return again(runOwn(prompter, fixCommand, [], commandFor({ kind: 'fix' })));
+  if (picked === MENU.doctor) return again(runOwn(prompter, doctorCommand, [], commandFor({ kind: 'doctor' })));
   if (picked === MENU.account) return recordAccount(prompter, home, deps);
   return finish(prompter, QUIT, 0);
 }
@@ -95,13 +107,19 @@ async function runInClone(prompter: Prompter, cwd: string): Promise<number> {
  * Setup's own questions for a new account (login, host, name, email) in this frame,
  * then `accounts add` with every answer as a flag, so it has nothing left to ask.
  */
-async function recordAccount(prompter: Prompter, home: HomeState, deps: HomeRunDeps): Promise<number | null> {
+async function recordAccount(prompter: Prompter, home: HomeState, deps: HomeRunDeps): Promise<number | null | typeof AGAIN> {
   const ctx = accountContext(home, deps);
   const walk = await runFlow({ steps: [loginStep(ctx), ...profileSteps(ctx)] }, ctx, FIRST_PASS, prompter);
   if (walk.status === 'cancelled') return finish(prompter, CANCELLED, CANCELLED_CODE);
   if (walk.status === 'opening') return null;
   const argv = commandFor({ kind: 'account', ...newAccountOf(walk.answers, ctx) });
-  return runOwn(prompter, accountsGroup.actions['add']!, argv.slice(2), argv);
+  return again(runOwn(prompter, accountsGroup.actions['add']!, argv.slice(2), argv));
+}
+
+/** The command has said how it went, in its own output; the start screen opens again. */
+async function again(ran: Promise<number>): Promise<typeof AGAIN> {
+  await ran;
+  return AGAIN;
 }
 
 function accountContext(home: HomeState, deps: HomeRunDeps): AccountContext {

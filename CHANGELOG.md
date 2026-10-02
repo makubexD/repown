@@ -25,6 +25,10 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   in setup. In setup and on the start screen, the name question first says when github.com
   has no account by that login, so a typo can be fixed before it is recorded.
 
+- After Record an account, Check this machine or Stop gh serving credentials, the start
+  screen comes back with a fresh summary instead of exiting; Quit, Esc or Ctrl-C leave it
+  (ADR-028).
+
 ### Fixed
 - On a terminal that can't draw Unicode (classic Windows cmd), a text question's hint lines drew
   a `│` beside a gutter of `|`. They now use the same bar as the rest of the frame.

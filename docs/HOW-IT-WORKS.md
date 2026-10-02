@@ -1183,7 +1183,11 @@ starts with a dash is passed after `--`, so it stays the account name:
 ```
 
 Each of those runs that command's own `run()`, after the frame closes on the command.
-On a plain terminal the closing line is that same command on its own line. **Quit**
+On a plain terminal the closing line is that same command on its own line. After
+**Record an account**, **Check this machine** or **Stop gh serving credentials**, the
+start screen opens again, with the folder read afresh, so the summary shows the change
+([ADR-028](decisions/ADR-028-the-start-screen-returns-after-a-machine-action.md)).
+Setting up a clone and Show help end it. **Quit**
 exits 0 and prints `Quit`. Esc or Ctrl-C exits 130, the same cancel `repown setup`
 uses, and prints `Cancelled: nothing was changed.` Neither writes anything.
 

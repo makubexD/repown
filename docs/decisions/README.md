@@ -38,6 +38,7 @@ name was free on npm, and is now this package.
 | [025](ADR-025-unpushed-advice-behind-an-unknown-destination.md) | Unpushed-commit advice is conditional where no tracking ref reaches |
 | [026](ADR-026-setup-says-what-blocks-the-next-push.md) | Setup says what blocks the next push, and says done only without it; `repown reauthor` rewrites unpushed commits by another address, when asked |
 | [027](ADR-027-the-wizard-decorates-only-where-it-draws-colour.md) | The wizard decorates only where it draws colour; output without colour is unchanged |
+| [028](ADR-028-the-start-screen-returns-after-a-machine-action.md) | The start screen returns to its menu after a machine-level action |
 
 **Adding one:** create the next number, using the same sections: Status, Context,
 Decision, Alternatives considered, Consequences. Cite it as `ADR-0NN`. Never delete or

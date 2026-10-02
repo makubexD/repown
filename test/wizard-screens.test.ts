@@ -539,7 +539,7 @@ describe('start screen, played with key presses', () => {
   test('a login starting with a dash reaches accounts add as the account', async () => {
     await withProjects(async (root) => {
       const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST }), [
-        [enter], [...typed('-h'), enter], [enter], [enter], [enter],
+        [enter], [...typed('-h'), enter], [enter], [enter], [enter], [up, enter],
       ], { patience: 20_000 });
       assert.match(run.screen, /> repown accounts add --name 'Octo Cat' --email octocat@example\.invalid -- -h/, run.screen + run.stderr);
       assert.equal(run.result, 0, run.stderr);
@@ -550,9 +550,13 @@ describe('start screen, played with key presses', () => {
   test('H15: Record an account asks login, host, name and email in the frame, then runs accounts add with them all', async () => {
     await withProjects(async (root) => {
       const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST }), [
-        [enter], [...typed('octocat'), enter], [enter], [enter], [enter],
+        [enter], [...typed('octocat'), enter], [enter], [enter], [enter], [up, enter],
       ], { patience: 20_000 });
       assert.equal(run.result, 0, run.screen + run.stderr);
+      const frames = run.screen.split('repown · not a clone:');
+      assert.equal(frames.length, 3, 'a second frame opens after the command: ' + run.screen);
+      assert.match(frames[2]!, /Accounts {3}1 recorded: octocat/, 'its summary is read again');
+      assert.match(frames[2]!, /What next\?[\s\S]*Quit/);
       for (const question of ["The account's user name", 'Where is this account hosted?', 'Your name, as your commits show it', 'Your email, as your commits show it']) {
         assert.ok(run.screen.includes(question), question + '\n' + run.screen);
       }
@@ -577,6 +581,19 @@ describe('start screen, played with key presses', () => {
       const afterName = run.screen.slice(name);
       assert.match(afterName, /The account's user name/, 'Back from the name, then from the host, is the login question');
       assert.equal(existsSync(registryPath()), false, 'nothing recorded');
+    });
+  });
+
+  test('H18: after Check this machine the menu comes back; Quit then exits 0, Esc 130', async () => {
+    await withProjects(async (root) => {
+      const quit = await play((prompter) => runHome({ prompter, cwd: root }), [[down, enter], [up, enter]], { patience: 30_000 });
+      assert.equal(quit.result, 0, quit.screen + quit.stderr);
+      assert.match(quit.screen, /└ {2}> repown doctor/);
+      const after = quit.screen.split('> repown doctor').at(-1) ?? '';
+      assert.match(after, /repown · not a clone:[\s\S]*What next\?/, quit.screen);
+      assert.match(after, /└ {2}Quit/);
+      const cancelled = await play((prompter) => runHome({ prompter, cwd: root }), [[down, enter], [esc]], { patience: 30_000 });
+      assert.equal(cancelled.result, 130, cancelled.screen);
     });
   });
 
@@ -714,20 +731,6 @@ async function withProjects(run: (root: string, box: Sandbox) => Promise<void>):
     else process.env['GIT_CEILING_DIRECTORIES'] = saved;
     box.dispose();
   }
-}
-
-/** accounts add asks on a terminal. These screens must reach that ask, not hang in it. */
-function forceNotTTY(): () => void {
-  const streams = [process.stdin, process.stderr];
-  const saved = streams.map((stream) => Object.getOwnPropertyDescriptor(stream, 'isTTY'));
-  for (const stream of streams) Object.defineProperty(stream, 'isTTY', { value: false, configurable: true });
-  return () => {
-    streams.forEach((stream, index) => {
-      const descriptor = saved[index];
-      if (descriptor) Object.defineProperty(stream, 'isTTY', descriptor);
-      else delete (stream as { isTTY?: boolean }).isTTY;
-    });
-  };
 }
 
 function cloneAt(parent: string, name: string): string {

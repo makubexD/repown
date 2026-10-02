@@ -95,8 +95,8 @@ with an installed repown.
   plays it as a newcomer would, pressing arrows, Enter, typed text and Esc on the real
   screens (`play()` in [test/setup-fixtures.ts](test/setup-fixtures.ts)), in one scenario
   per situation. Add one for a new situation.
-- **Printing a command to copy?** Build each word with `shellWord` (or the whole line with
-  `formatCommand`). [test/paste.test.ts](test/paste.test.ts) runs printed lines through every
+- **Printing a command to copy?** Build it with `copyableCommand` (or the whole line with
+  `formatCommand`); a null means no quoting is safe in every shell, so say what to do instead. [test/paste.test.ts](test/paste.test.ts) runs printed lines through every
   shell it finds (sh, bash, dash, zsh, fish, PowerShell 7, Windows PowerShell, cmd) against
   probes shaped like npm's `repown`, `repown.cmd` and `repown.ps1`; a shell that isn't
   installed is skipped. CI installs zsh and fish on Linux, so each is measured somewhere.

@@ -10,7 +10,7 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 ### Added
 - The start screen's **Remove an account**: pick a recorded account, read what stays
   (pinned clones keep their settings and the push guard), confirm, and it runs
-  `repown accounts remove`; the menu then comes back without it (ADR-028).
+  `repown accounts remove`; the menu then comes back, its summary one account fewer (ADR-028, its note).
 
 ### Changed
 - The wizard (`repown setup`, and bare `repown` in a terminal) is easier to read in colour,
@@ -32,11 +32,11 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   is recorded.
 - `repown accounts add` prints its suggested next command, `repown use <account>`, in
   cyan where stdout has colour, and exactly as before where it has none (ADR-027's rule).
-
 - In setup and on the start screen, a new account's name question says when this machine
   is signed in to GitHub (gh, Git Credential Manager) as other accounts only: "signed in as
-  makubexD, not kiefer: if kiefer isn't your account, go back". A login that exists can
-  still be a stranger's, and its noreply address would link your commits to them (ADR-028).
+  octo-work, not octocat: if octocat isn't your account, go back; otherwise the first push
+  asks you to sign in as it". A login that exists can still be a stranger's, and its noreply
+  address would link your commits to them (ADR-028, its note).
 - A new account's name and email questions say where their value came from: "GitHub shows
   no name for octocat, so this is the login" (a stranger's or an empty profile no longer
   passes unnoticed), and "prefilled with the private address GitHub gives octocat" instead
@@ -54,10 +54,15 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 ### Fixed
 - Commands repown prints to copy paste correctly in cmd and PowerShell as well as POSIX shells:
   a value with a space or an apostrophe is in double quotes (`--name "Octo Cat"`, on every OS),
-  a GitHub noreply address and a URL are no longer quoted, a leading `@` is quoted (PowerShell
-  read it as a splat), and the `--` before a dashed login is `"--"` (PowerShell dropped a bare
-  one). Only a value with `$`, a backtick, `"`, `%`, `!` or an escaping backslash keeps single
-  quotes.
+  a GitHub noreply address and a URL are no longer quoted, a leading `@` and a dashed word with
+  `.` or `:` are quoted (PowerShell read them as a splat, or split them), and the `--` before a
+  dashed login is `"--"` (PowerShell dropped a bare one).
+- A value no quoting keeps literal in every shell (`$`, a backtick, `"`, `%`, `!`, a curly double
+  quote, a control character, an escaping backslash) no longer gets a single-quoted command:
+  pasted into PowerShell or cmd, part of it ran as code. A remote's owner made of such text could
+  do that through the guard's, `status`'s or `use`'s allow-owner advice. Repown now says to add
+  it by hand, shows `[value not safe to paste]` in a command it runs itself, and prints the owner
+  with control and bidi characters escaped.
 - On a terminal that can't draw Unicode (classic Windows cmd), a text question's hint lines drew
   a `│` beside a gutter of `|`. They now use the same bar as the rest of the frame.
 - "type < to go back" no longer breaks across two lines; when it doesn't fit after the hint, it

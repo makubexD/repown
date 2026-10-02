@@ -45,8 +45,14 @@ export function homeNote(home: HomeState): string | null {
 }
 
 export function menuItems(home: HomeState): Choice[] {
-  const [record, ...rest] = STANDING;
-  return [...setupItem(home), ...fixItem(home), record!, ...removeItem(home), ...rest];
+  return [...setupItem(home), ...fixItem(home), RECORD, ...removeItem(home), ...AFTER_REMOVE];
+}
+
+/** A recorded account's choice value; prefixed so no login (`back`, say) is ever another choice. */
+const ACCOUNT_VALUE = 'account:';
+
+export function accountOfChoice(value: string): string | null {
+  return value.startsWith(ACCOUNT_VALUE) ? value.slice(ACCOUNT_VALUE.length) : null;
 }
 
 /** The recorded accounts, each with the name and email it commits as. */
@@ -54,7 +60,7 @@ export function accountChoices(home: HomeState): Choice[] {
   if (!home.registry.ok) return [];
   const accounts = home.registry.value.accounts;
   return Object.keys(accounts).sort().map((login) => ({
-    value: login, label: printable(login), hint: printable(accounts[login]!.name + ' <' + accounts[login]!.email + '>'),
+    value: ACCOUNT_VALUE + login, label: printable(login), hint: printable(accounts[login]!.name + ' <' + accounts[login]!.email + '>'),
   }));
 }
 
@@ -113,8 +119,9 @@ function fixItem(home: HomeState): Choice[] {
   return [{ value: MENU.fix, label: STOP_GH, hint: HINT_FIX }];
 }
 
-const STANDING: readonly Choice[] = [
-  { value: MENU.account, label: RECORD_ACCOUNT, hint: HINT_ACCOUNT },
+const RECORD: Choice = { value: MENU.account, label: RECORD_ACCOUNT, hint: HINT_ACCOUNT };
+
+const AFTER_REMOVE: readonly Choice[] = [
   { value: MENU.doctor, label: CHECK_MACHINE, hint: HINT_DOCTOR },
   { value: MENU.help, label: SHOW_HELP },
   { value: MENU.quit, label: QUIT },

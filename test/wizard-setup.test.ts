@@ -327,7 +327,7 @@ describe('setup flow', () => {
   test('control characters are shown escaped, so nothing can redraw the review', () => {
     const shown = formatCommand(['use', '--', 'octo\x1b[2Jcat']);
     assert.doesNotMatch(shown, /\x1b/);
-    assert.match(shown, /\\u001b/);
+    assert.equal(shown, 'repown use [value not safe to paste]', 'no quoting keeps a control character literal, so it is not offered to paste');
     const ctx = context({ owner: 'octo\x1b]0;x\x07org' });
     for (const line of textOf(setupFlow(ctx).review({ account: 'octocat', guard: true }, ctx))) {
       assert.doesNotMatch(line, /[\x00-\x1f\x7f]/);
@@ -2515,27 +2515,30 @@ test('a new account\'s name question first says what GitHub said about the login
 });
 
 test('the name question says when this machine is signed in to GitHub as others, not this login', async () => {
-  const fresh = { account: NEW_ACCOUNT, newAccount: 'kiefer', host: 'github' };
-  const named = { name: 'Kiefer', email: '843102+kiefer@users.noreply.github.com' };
+  const fresh = { account: NEW_ACCOUNT, newAccount: 'octocat', host: 'github' };
+  const named = { name: 'Octo Cat', email: '1234+octocat@users.noreply.github.com' };
   const detail = async (signedIn: readonly string[] | null, suggestion: Suggestion = named, answers: Answers = fresh): Promise<string | undefined> => {
     const ctx = context({ recorded: {}, signedIn: async () => signedIn, suggest: async () => suggestion });
     return stepOf(ctx, 'name').detail?.(answers, ctx);
   };
-  const note = 'signed in as makubexD, octo-work, not kiefer: if kiefer isn\'t your account, go back; otherwise the first push asks you to sign in as it';
-  assert.equal(await detail(['makubexD', 'octo-work']), note);
-  assert.equal(await detail(['makubexD', 'Kiefer']), undefined, 'the login is one of them, in any case');
+  const note = 'signed in as octo-work, octo-org, not octocat: if octocat isn\'t your account, go back; otherwise the first push asks you to sign in as it';
+  assert.equal(await detail(['octo-work', 'octo-org']), note);
+  assert.equal(await detail(['octo-work', 'OctoCat']), undefined, 'the login is one of them, in any case');
   assert.equal(await detail(null), undefined, 'neither gh nor Git Credential Manager could be read');
   assert.equal(await detail([]), undefined, 'signed in as nobody: nothing to compare with');
-  assert.equal(await detail(['makubexD'], { problem: 'github.com has no account named kiefer: check the spelling' }),
-    'github.com has no account named kiefer: check the spelling', 'a missing account says only that');
-  assert.equal(await detail(['makubexD'], {}, { ...fresh, host: 'azdo' }), 'this is the login', 'only GitHub sign-ins are read');
-  assert.equal(await detail(['makubexD'], {}),
-    'signed in as makubexD, not kiefer: if kiefer isn\'t your account, go back; otherwise the first push asks you to sign in as it; this is the login');
+  assert.equal(await detail(['octo-work'], { problem: 'github.com has no account named octocat: check the spelling' }),
+    'github.com has no account named octocat: check the spelling', 'a missing account says only that');
+  assert.equal(await detail(['octo-work'], {}, { ...fresh, host: 'azdo' }), 'this is the login', 'only GitHub sign-ins are read');
+  assert.equal(await detail(['octo-work'], {}),
+    'signed in as octo-work, not octocat: if octocat isn\'t your account, go back; otherwise the first push asks you to sign in as it; this is the login');
+  assert.equal(await detail(['octo-work'], {}, { ...fresh, name: 'Octo Cat' }),
+    'signed in as octo-work, not octocat: if octocat isn\'t your account, go back; otherwise the first push asks you to sign in as it',
+    'back on the question after typing a name: it no longer starts as the login');
 });
 
 test('signedInLogins joins gh\'s and Git Credential Manager\'s accounts, once each, and is null when neither reads', () => {
-  const gh = ok({ accounts: [{ login: 'makubexD', active: true }, { login: 'octo-work', active: false }], active: 'makubexD' });
-  assert.deepEqual(signedInLogins(gh, ok(['MakubexD', 'octocat'])), ['makubexD', 'octo-work', 'octocat']);
+  const gh = ok({ accounts: [{ login: 'octo-org', active: true }, { login: 'octo-work', active: false }], active: 'octo-org' });
+  assert.deepEqual(signedInLogins(gh, ok(['Octo-Org', 'octocat'])), ['octo-org', 'octo-work', 'octocat']);
   assert.deepEqual(signedInLogins(null, ok(['octocat'])), ['octocat']);
   assert.deepEqual(signedInLogins(err('gh auth status failed'), null), null);
   assert.deepEqual(signedInLogins(null, err('no GCM')), null);
@@ -2553,6 +2556,8 @@ test('the name and email questions say where their prefill came from', async () 
     'prefilled with the private address GitHub gives octocat (github.com/settings/emails)']);
   assert.deepEqual(await details({ name: 'Octo Cat', email: noreply }),
     [undefined, 'prefilled with the private address GitHub gives octocat (github.com/settings/emails)']);
+  const [, retyped] = await details({ email: noreply }, { ...fresh, email: 'octocat@example.invalid' });
+  assert.match(retyped ?? '', /^tip:/, 'back on the question after typing an address: it no longer holds the prefill');
   const [offlineName, offlineEmail] = await details({});
   assert.equal(offlineName, 'this is the login');
   assert.match(offlineEmail ?? '', /^tip: to keep your own address private[\s\S]*like 1234\+octocat@users\.noreply\.github\.com$/);

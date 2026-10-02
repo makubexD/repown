@@ -10,7 +10,7 @@
 import { ghAdvice, upstreamText } from '../commands/status.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { isNoreplyAddress } from '../core/hosts/github.ts';
-import { shellWord } from '../core/guard/check.ts';
+import { ALLOW_OWNER_BY_HAND, allowOwnerCommand, shellWord } from '../core/guard/check.ts';
 import { printable } from '../ui/format.ts';
 import { foreignAddresses, foreignCount, type UnpushedFact } from '../core/unpushed.ts';
 import type { PushFacts } from '../core/push-state.ts';
@@ -99,8 +99,9 @@ export function signedInLogins(gh: Result<GhState> | null, stored: Result<readon
   const lists = [gh?.ok ? gh.value.accounts.map((account) => account.login) : null, stored?.ok ? stored.value : null];
   const read = lists.filter((list): list is readonly string[] => list !== null);
   if (read.length === 0) return null;
-  const seen = new Set<string>();
-  return read.flat().filter((login) => !seen.has(login.toLowerCase()) && seen.add(login.toLowerCase()));
+  const byCase = new Map<string, string>();
+  for (const login of read.flat()) if (!byCase.has(login.toLowerCase())) byCase.set(login.toLowerCase(), login);
+  return [...byCase.values()];
 }
 
 /** Read once, before the first question. `supported` is false when the version cannot be read. */
@@ -364,7 +365,7 @@ async function noreplyNote(answers: Answers, ctx: AccountContext): Promise<strin
   if (hostOf(answers, ctx) !== 'github') return undefined;
   const account = printable(accountOf(answers));
   const { email } = await ctx.suggest(accountOf(answers), 'github');
-  if (email && isNoreplyAddress(email)) return 'prefilled with the private address GitHub gives ' + account + ' (github.com/settings/emails)';
+  if (email && isNoreplyAddress(email) && typeof answers['email'] !== 'string') return 'prefilled with the private address GitHub gives ' + account + ' (github.com/settings/emails)';
   return 'tip: to keep your own address private, use the one GitHub gives you, shown at ' +
     'github.com/settings/emails, like 1234+' + account + '@users.noreply.github.com';
 }
@@ -395,7 +396,7 @@ async function notSignedIn(answers: Answers, ctx: AccountContext): Promise<strin
 
 /** Said when the name question starts as the login: no profile name was found. */
 function loginPrefill(answers: Answers, found: Suggestion, ctx: AccountContext): string | null {
-  if (found.name) return null;
+  if (found.name || typeof answers['name'] === 'string') return null;
   const answered = found.email !== undefined && hostOf(answers, ctx) === 'github';
   return answered ? 'GitHub shows no name for ' + printable(accountOf(answers)) + ', so this is the login' : 'this is the login';
 }
@@ -762,22 +763,28 @@ function allowOwnerLine(ctx: SetupContext): string[] {
   return [...gitIn(ctx), 'config', '--local', '--add', 'repown.allowOwner', ctx.owner!];
 }
 
+/** Shown in place of a word no quoting keeps literal in every shell (shellWord): it has run, or will, but don't paste it. */
+export const UNQUOTABLE = '[value not safe to paste]';
+
+function wordOf(value: string): string {
+  return shellWord(value) ?? UNQUOTABLE;
+}
+
 /**
  * The command as you would type it: the account where it reads naturally, options
  * as `--name value`, and `--host github` left out because it's the default. A `--`
- * before a dashed account is quoted: PowerShell drops a bare one from the `$args` of
- * the `repown.ps1` npm installs.
+ * before a dashed account comes out quoted (shellWord).
  */
 export function formatCommand(argv: readonly string[]): string {
-  if (argv[0] === 'git') return printable(argv.map(shellWord).join(' '));
+  if (argv[0] === 'git') return printable(argv.map(wordOf).join(' '));
   const end = argv.indexOf('--');
   const head = end < 0 ? argv : argv.slice(0, end);
   const positional = end < 0 ? [] : argv.slice(end + 1);
   const dashed = positional.some((value) => value.startsWith('-'));
-  const path = head.filter((token) => !token.startsWith('-')).map(shellWord);
-  const options = head.filter((token) => token.startsWith('-') && token !== '--host=github').flatMap(splitOption).map(shellWord);
-  const accounts = positional.map(shellWord);
-  const words = dashed ? [...path, ...options, '"--"', ...accounts] : [...path, ...accounts, ...options];
+  const path = head.filter((token) => !token.startsWith('-')).map(wordOf);
+  const options = head.filter((token) => token.startsWith('-') && token !== '--host=github').flatMap(splitOption).map(wordOf);
+  const accounts = positional.map(wordOf);
+  const words = dashed ? [...path, ...options, wordOf('--'), ...accounts] : [...path, ...accounts, ...options];
   return printable(['repown', ...words].join(' '));
 }
 
@@ -976,8 +983,8 @@ function notes(answers: Answers, ctx: SetupContext): string[] {
   if (guard) lines.push(guard);
   const guarded = answers['guard'] === true || ctx.guard === 'on';
   if (guarded && ownerForeign(account, ctx) && answers['allowOwner'] !== true) {
-    lines.push('Warning: the push guard will refuse pushes to "' + ctx.owner + '". To allow them later: ' +
-      'git config --local --add repown.allowOwner ' + shellWord(ctx.owner!));
+    lines.push('Warning: the push guard will refuse pushes to "' + printable(ctx.owner!) + '". To allow them later: ' +
+      (allowOwnerCommand(ctx.owner!) ?? ALLOW_OWNER_BY_HAND));
   }
   if (ctx.ghIsHelper && answers['fix'] !== true && ctx.credentialPinned) {
     lines.push('Note: gh is still git\'s credential helper, so pushes sign in as gh\'s active account, not ' + account + '.');

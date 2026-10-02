@@ -125,9 +125,11 @@ describe('start screen', () => {
     ]);
     assert.equal(menuItems(home).find((item) => item.label === 'Remove an account')?.hint, 'repown accounts remove');
     assert.deepEqual(accountChoices(home), [
-      { value: 'octo-work', label: 'octo-work', hint: 'Octo Work <octo-work@example.invalid>' },
-      { value: 'octocat', label: 'octocat', hint: 'Octo Cat <octocat@example.invalid>' },
+      { value: 'account:octo-work', label: 'octo-work', hint: 'Octo Work <octo-work@example.invalid>' },
+      { value: 'account:octocat', label: 'octocat', hint: 'Octo Cat <octocat@example.invalid>' },
     ]);
+    writeRegistry(JSON.stringify({ accounts: { back: { name: 'Octo Back', email: 'back@example.invalid' } } }));
+    assert.notEqual(accountChoices(await readHome(root))[0]!.value, 'back', 'an account named back is never the Back choice');
     const none = await readHome(join(root, '..'));
     assert.ok(menuItems(none).some((item) => item.label === 'Remove an account'), 'the registry is the machine\'s, wherever this runs');
   });

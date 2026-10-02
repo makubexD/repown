@@ -11,22 +11,26 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
-import { shellWord } from '../src/core/guard/check.ts';
+import { allowOwnerCommand, copyableCommand, shellWord } from '../src/core/guard/check.ts';
 import { formatCommand } from '../src/wizard/setup-flow.ts';
 
 /** Bare, or in double quotes: every shell reads these back unchanged. */
 const PORTABLE = [
-  'octocat', '843102+kiefer@users.noreply.github.com', 'https://github.com/octo-org/x.git',
-  '0x10', '1kb', '-dash', 'Octo Cat', 'Conan O\'Brien', 'Conan O\u2019Brien', 'Jos\u00e9 N\u00fa\u00f1ez',
-  'C:\\Work Maku\\x', 'a&b|c<d>e', '@octo', 'semi;colon', '*glob*', '~home', '{a,b}', '#hash', '(paren)', 'a=b',
+  'octocat', '1234+octocat@users.noreply.github.com', 'https://github.com/octo-org/x.git',
+  '0x10', '1kb', '-dash', '-a.b', '-a:b', 'Octo Cat', 'Conan O\'Brien', 'Conan O\u2019Brien', 'Jos\u00e9 N\u00fa\u00f1ez',
+  'C:\\Work Dir\\x', 'a&b|c<d>e', '@octo', 'semi;colon', '*glob*', '~home', '{a,b}', '#hash', '(paren)', 'a=b',
 ];
 
-/** Single-quoted: POSIX shells read them back; cmd never does, PowerShell only without a quote inside. */
-const POSIX_ONLY = ['a$b', 'tick`', 'say "hi"', '100%', 'hi!', 'x\\', 'a\\\\b', 'Octo \u201cCat\u201d'];
+/**
+ * No quoting keeps these literal in every shell: single quotes are no quotes in cmd, and
+ * PowerShell reads POSIX's '\'' as the end of the string, so the rest would run as code.
+ */
+const UNQUOTABLE = ['a$b', 'tick`', 'say "hi"', '100%', 'hi!', 'x\\', 'a\\\\b', 'Octo \u201cCat\u201d', '',
+  'line\nbreak', 'x$\';Write-Output PWNED;#', 'x$&echo PWNED&'];
 
 describe('shellWord', () => {
   test('words every shell reads as typed stay bare', () => {
-    for (const word of ['octocat', '843102+kiefer@users.noreply.github.com', 'https://x.example.invalid/a/b.git', '-dash', '--email', './x', '0x10']) {
+    for (const word of ['octocat', '1234+octocat@users.noreply.github.com', 'https://x.example.invalid/a/b.git', '-dash', '--email', './x', '0x10']) {
       assert.equal(shellWord(word), word);
     }
   });
@@ -34,18 +38,25 @@ describe('shellWord', () => {
   test('anything else is double-quoted when the quotes keep it literal everywhere', () => {
     assert.equal(shellWord('Octo Cat'), '"Octo Cat"');
     assert.equal(shellWord('Conan O\'Brien'), '"Conan O\'Brien"');
-    assert.equal(shellWord('C:\\Work Maku\\x'), '"C:\\Work Maku\\x"');
+    assert.equal(shellWord('C:\\Work Dir\\x'), '"C:\\Work Dir\\x"');
     assert.equal(shellWord('@octo'), '"@octo"', 'a leading @ is a PowerShell splat');
     assert.equal(shellWord('a=b'), '"a=b"');
+    assert.equal(shellWord('-a.b'), '"-a.b"', 'PowerShell splits a dashed word at . or :');
+    assert.equal(shellWord('--'), '"--"', 'PowerShell drops a bare -- from the $args of repown.ps1');
   });
 
-  test('what double quotes would expand or end falls back to POSIX single quotes', () => {
-    assert.equal(shellWord('a$b'), '\'a$b\'');
-    assert.equal(shellWord('say "hi"'), '\'say "hi"\'');
-    assert.equal(shellWord('100%'), '\'100%\'');
-    assert.equal(shellWord('x\\'), '\'x\\\'');
-    assert.equal(shellWord('it\'s $x'), '\'it\'\\\'\'s $x\'');
-    assert.equal(shellWord('Octo \u201cCat\u201d'), '\'Octo \u201cCat\u201d\'', 'PowerShell ends a string at a curly double quote');
+  test('a word no quoting keeps literal in every shell is null, and a command holding one is not printed', () => {
+    for (const word of UNQUOTABLE) assert.equal(shellWord(word), null, JSON.stringify(word));
+    assert.equal(copyableCommand(['git', 'fetch', 'origin']), 'git fetch origin');
+    assert.equal(copyableCommand(['git', 'fetch', 'x$&echo PWNED&']), null);
+  });
+
+  test('the allow-owner advice is a command only for an owner it can print as it is', () => {
+    assert.equal(allowOwnerCommand('octo-org'), 'git config --local --add repown.allowOwner octo-org');
+    assert.equal(allowOwnerCommand('x; curl evil'), 'git config --local --add repown.allowOwner "x; curl evil"');
+    assert.equal(allowOwnerCommand('x$\';Write-Output PWNED;#'), null);
+    assert.equal(allowOwnerCommand('-h'), null, 'git would read it as an option');
+    assert.equal(allowOwnerCommand('octo\u202eorg'), null, 'a bidi control would show another owner than the one allowed');
   });
 });
 
@@ -60,7 +71,6 @@ interface Shell {
   readonly name: string;
   /** Runs one line in this shell with `bin` first on PATH; null when the shell isn't here. */
   run(line: string, bin: string): { readonly status: number | null; readonly stdout: string; readonly stderr: string } | null;
-  readonly reads: (word: string) => boolean;
 }
 
 describe('pasting a printed command', () => {
@@ -70,8 +80,8 @@ describe('pasting a printed command', () => {
 
   for (const shell of shells()) {
     test(shell.name + ' reads every word repown prints for it', (t) => {
-      const words = [...PORTABLE, ...POSIX_ONLY].filter(shell.reads);
-      const ran = shell.run('repown ' + words.map(shellWord).join(' '), join(root, binFor(shell.name)));
+      const words = PORTABLE;
+      const ran = shell.run('repown ' + words.map((word) => shellWord(word)).join(' '), join(root, binFor(shell.name)));
       if (ran === null) { t.skip(shell.name + ' is not installed here'); return; }
       assert.equal(ran.status, 0, ran.stderr);
       assert.deepEqual(JSON.parse(ran.stdout.trim()), words);
@@ -106,32 +116,20 @@ function binFor(shell: string): string {
   return shell === 'pwsh' || shell === 'powershell' ? 'ps' : 'posix';
 }
 
-/** Single-quoted words these shells still can't read back; all are POSIX_ONLY. */
-function posixReads(word: string): boolean {
-  // Git for Windows' sh and bash collapse `\\` when they hand arguments to a Windows program.
-  return process.platform !== 'win32' || !word.includes('\\\\');
-}
-
-function powershellReads(name: string, word: string): boolean {
-  if (!shellWord(word).startsWith('\'')) return true;
-  // Windows PowerShell 5.1 drops a `"` inside an argument it passes to a program.
-  return !/['\u2018\u2019\u201a\u201b]/.test(word) && (name === 'pwsh' || !word.includes('"'));
-}
-
 function shells(): Shell[] {
   const posix = (name: string, exe: string | null): Shell => ({
-    name, reads: posixReads,
+    name,
     run: (line, bin) => (exe ? present(exe, ['-c', line], bin) : null),
   });
   const powershell = (name: string): Shell => ({
-    name, reads: (word) => powershellReads(name, word),
+    name,
     run: (line, bin) => present(name, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand',
       Buffer.from(line, 'utf16le').toString('base64')], bin),
   });
   return [
     posix('sh', 'sh'), posix('bash', bashPath()), posix('dash', 'dash'), posix('zsh', 'zsh'), posix('fish', 'fish'),
     powershell('pwsh'), powershell('powershell'),
-    { name: 'cmd', reads: (word) => !shellWord(word).startsWith('\''), run: (line, bin) => cmdRun(line, bin) },
+    { name: 'cmd', run: (line, bin) => cmdRun(line, bin) },
   ];
 }
 

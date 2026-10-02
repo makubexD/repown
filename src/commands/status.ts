@@ -19,7 +19,7 @@ import { inspectRepo, inspectAuth, activeAccountLabel, type RepoState, type Auth
 import { isPinned } from '../core/identity.ts';
 import { loadRegistry, type Account, type Registry } from '../core/registry.ts';
 import type { Result } from '../core/result.ts';
-import { allowedOwners, shellWord } from '../core/guard/check.ts';
+import { ALLOW_OWNER_BY_HAND, allowOwnerCommand, allowedOwners, copyableCommand } from '../core/guard/check.ts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { gitFor, type Args } from '../ui/args.ts';
@@ -364,9 +364,9 @@ async function originForeign(repo: RepoState): Promise<boolean> {
 
 function ownerWarning(repo: RepoState): boolean {
   if (!repo.owner) return false;
-  out.warn('origin', 'origin belongs to "' + repo.owner + '", which is not an owner this clone pushes to.');
+  out.warn('origin', 'origin belongs to "' + out.printable(repo.owner) + '", which is not an owner this clone pushes to.');
   out.detail('if that is an organisation you belong to:');
-  out.detail('  git config --local --add repown.allowOwner ' + shellWord(repo.owner));
+  out.detail('  ' + (allowOwnerCommand(repo.owner) ?? ALLOW_OWNER_BY_HAND));
   return true;
 }
 
@@ -411,8 +411,10 @@ const GH_UNVERIFIED = 'could not be queried, so who `gh pr create` would act as 
 /** `gh auth switch` only works for a login gh already lists, and only in gh's spelling. */
 function ghFix(account: string, auth: GhAuth): string {
   const login = ghReportedLogin(account, auth);
-  if (login !== null) return 'fix: gh auth switch -u ' + login;
-  return 'fix: repown use ' + account + ' --gh   (signs ' + account + ' in to gh)';
+  const shown = out.printable(account);
+  const fix = login !== null ? copyableCommand(['gh', 'auth', 'switch', '-u', login]) : copyableCommand(['repown', 'use', account, '--gh']);
+  if (login !== null) return 'fix: ' + (fix ?? 'gh auth switch to ' + out.printable(login));
+  return 'fix: ' + (fix ?? 'repown use with --gh') + '   (signs ' + shown + ' in to gh)';
 }
 
 function ghReportedLogin(account: string, auth: GhAuth): string | null {

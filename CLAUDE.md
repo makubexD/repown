@@ -129,7 +129,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - `test/wizard-screens.test.ts` plays `repown setup`'s real screens with key presses
   (`play()` in `test/setup-fixtures.ts`), including the opening review and resume from it,
   the start screen (the summary in the frame, the hand-over line, Show help, Back from
-  the login question) and the setup lead inside the frame (F5, F6, F8). Add a scenario
+  the login question, the signed-in note H20, Remove an account H21) and the setup lead inside
+  the frame (F5, F6, F8). Add a scenario
   when a screen changes.
 - `test/home.test.ts` covers the start screen's read, summary lines, menu, and discovery
   (a refused `.git` at any depth, a bare repository that is not walked).
@@ -137,7 +138,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   what prints the gh NOTE on `repown status`.
 - `test/paste.test.ts` runs printed commands through every shell present (sh, bash, dash,
   zsh, fish, pwsh, powershell, cmd) against npm-shaped probes. Build any copyable word with
-  `shellWord` (`src/core/guard/check.ts`), never by hand.
+  `shellWord` or `copyableCommand` (`src/core/guard/check.ts`), never by hand; null means no
+  quoting is safe in every shell, so print no command.
 - `test/cli.test.ts` spawns the real entry point. Keep `guard check --remote "$1" --url "$2"`
   (hooks already on disk) and `--remote="$1" --url="$2"` (new hooks) working.
 - `test/docs.test.ts` checks the README against `repown --help` and `repown help <group>`.

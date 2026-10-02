@@ -1,6 +1,6 @@
 # start-screen gaps, round 2
 
-Status: Phase 5 (review) next.
+Status: Phase 5 fixes done; GATE 5 next.
 
 - [x] 1. Plan: SPEC.md + tasks/todo.md
 - [x] 2. N2 + N2b: portable quoting, "--", paste test across shells, CI zsh/fish

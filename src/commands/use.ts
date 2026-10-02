@@ -24,7 +24,7 @@ import { lookupAccount, saveAccount, type Account } from '../core/registry.ts';
 import {
   ghSwitch, ghLogin, readGhLoginVersion, type GhLoginError, type GhLoginVersion,
 } from '../core/credential/gh.ts';
-import { allowedOwners, shellWord } from '../core/guard/check.ts';
+import { ALLOW_OWNER_BY_HAND, allowOwnerCommand, allowedOwners } from '../core/guard/check.ts';
 import { readUnpushed, unpushedLines } from '../core/unpushed.ts';
 import { ask, interactive } from '../ui/prompt.ts';
 import { flagString, flagBool, gitFor, type Args } from '../ui/args.ts';
@@ -282,9 +282,9 @@ async function reportUnpushed(repo: RepoState, email: string, account: string): 
 async function ownerConcern(account: string, repo: RepoState): Promise<void> {
   if (!repo.owner || repo.owner.toLowerCase() === account.toLowerCase()) return;
   if ((await allowedOwners(repo.git, account)).includes(repo.owner.toLowerCase())) return;
-  out.warn('origin', 'origin belongs to "' + repo.owner + '", not "' + account + '".');
+  out.warn('origin', 'origin belongs to "' + out.printable(repo.owner) + '", not "' + out.printable(account) + '".');
   out.detail('normal for an organisation repository. To stop the guard refusing it:');
-  out.detail('  git config --local --add repown.allowOwner ' + shellWord(repo.owner));
+  out.detail('  ' + (allowOwnerCommand(repo.owner) ?? ALLOW_OWNER_BY_HAND));
 }
 
 async function credentialConcern(account: string, repo: RepoState): Promise<void> {

@@ -71,11 +71,11 @@ without asking ([card 13](HOW-IT-WORKS.md#13-guided-setup)).
 stderr), a start screen. It shows the accounts on this machine (or `could not read`
 and the registry's path, or `N unreadable in <path>: run repown accounts list` when
 the file has entries it cannot read), a line when gh serves git's credentials, and
-the clones found up to 2 levels below. You can set one of those up, stop gh serving credentials, record an
+the clones found up to 2 levels below. You can set one of those up, stop gh serving credentials, record or remove an
 account, check this machine, or show help. The summary is in the frame. The frame
 closes with the command you pick, and then that command runs (Record an account first
-asks the login, host, name and email in the frame). After recording an
-account, checking the machine or stopping gh, the start screen comes back with a fresh
+asks the login, host, name and email in the frame). After recording or
+removing an account, checking the machine or stopping gh, the start screen comes back with a fresh
 summary. Nothing changes until you pick one. Quit exits 0. Esc or Ctrl-C exits 130. With no clones below, it says to `cd` into a clone
 (or `git clone` one), then run `repown`. With stdout redirected it prints the top help
 and exits 0. Without a terminal on stdin or stderr it prints status and exits 1
@@ -99,7 +99,7 @@ recorded yet, on a terminal, `repown setup`, the start screen's Record an accoun
 `repown use` or `repown accounts add` (without both `--name` and `--email`) asks gh for
 its public profile to suggest a name and noreply address. Setup, the start screen and
 `accounts add` also ask whether that login exists and is a user, to warn about a typo or
-an organisation. They read which accounts gh and Git Credential Manager are signed in as
+an organisation. Setup and the start screen read which accounts gh and Git Credential Manager are signed in as
 (gh's own account list, and GCM's store on this machine) to say when the login isn't one
 of them. `repown setup` may also ask GitHub whether origin's owner is a user or an
 organisation.

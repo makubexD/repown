@@ -623,9 +623,9 @@ describe('start screen, played with key presses', () => {
         '"octo-work":{"name":"Octo Work","email":"octo-work@example.invalid"}}}\n';
       mkdirSync(dirname(registryPath()), { recursive: true });
       writeFileSync(registryPath(), two);
-      // Menu: Record, Remove, Check, Help, Quit. Accounts: octo-work, octocat, Back. Confirm: Remove, Back.
+      // Menu: Record, Remove, Check, Help, Quit. Accounts: octo-work, octocat, Back. Confirm: Back, Remove.
       const run = await play((prompter) => runHome({ prompter, cwd: root }), [
-        [down, enter], [down, enter], [enter], [up, enter],
+        [down, enter], [down, enter], [down, enter], [up, enter],
       ], { patience: 20_000 });
       assert.equal(run.result, 0, run.screen + run.stderr);
       assert.match(run.screen, /Which account\?/);
@@ -646,9 +646,10 @@ describe('start screen, played with key presses', () => {
       mkdirSync(dirname(registryPath()), { recursive: true });
       writeFileSync(registryPath(), one);
       const run = await play((prompter) => runHome({ prompter, cwd: root }), [
-        [down, enter], [down, enter], [down, enter], [enter], [down, enter], [esc],
+        [down, enter], [down, enter], [down, enter], [enter], [enter], [esc],
       ], { patience: 20_000 });
       assert.equal(run.result, 130, run.screen);
+      assert.match(run.screen, /Remove octocat from this machine\?\n│ {2}● ← Back/, 'the confirm starts on Back');
       assert.equal((run.screen.match(/Which account\?/g) ?? []).length >= 2, true, run.screen);
       assert.doesNotMatch(run.screen, /\$ repown accounts remove/);
       assert.equal(readFileSync(registryPath(), 'utf8'), one);

@@ -8,7 +8,8 @@
 
 import type { Result } from './result.ts';
 import { unpushedLines, foreignCount, type UnpushedCommit, type UnpushedFact } from './unpushed.ts';
-import { shellWord } from './guard/check.ts';
+import { ALLOW_OWNER_BY_HAND, allowOwnerCommand, copyableCommand } from './guard/check.ts';
+import { printable } from '../ui/format.ts';
 import type { Divergence, PushDestination, PushFacts } from './push-state.ts';
 
 export type { PushFacts } from './push-state.ts';
@@ -129,9 +130,9 @@ function ownerBlocker(destination: PushDestination | null, branch: string, choic
   const guard = choice.guarded ? 'the guard will refuse it' : 'the guard is off, so it pushes there anyway';
   return [{
     kind: 'owner',
-    summary: 'the push goes to "' + destination.owner + '"',
-    lines: [branch + ' pushes to ' + where + ', owned by "' + destination.owner + '", not ' + choice.account +
-      ': ' + guard + '. If you belong there: git config --local --add repown.allowOwner ' + shellWord(destination.owner)],
+    summary: 'the push goes to "' + printable(destination.owner) + '"',
+    lines: [branch + ' pushes to ' + where + ', owned by "' + printable(destination.owner) + '", not ' + choice.account +
+      ': ' + guard + '. If you belong there: ' + (allowOwnerCommand(destination.owner) ?? ALLOW_OWNER_BY_HAND)],
     blocks: choice.guarded,
   }];
 }
@@ -153,8 +154,8 @@ function divergenceBlocker(divergence: Result<Divergence | null>, branch: string
 
 function upstreamBlocker(facts: PushFacts, branch: string, autoUpstream: boolean): Blocker[] {
   if (facts.upstream !== 'missing' || autoUpstream) return [];
-  const remote = shellWord(facts.destination?.remote ?? 'origin');
-  return [{ kind: 'upstream', summary: branch + ' has no upstream', lines: [branch + ' has no upstream: the first push needs git push -u ' + remote + ' ' + shellWord(branch)], blocks: true }];
+  const push = copyableCommand(['git', 'push', '-u', facts.destination?.remote ?? 'origin', branch]) ?? 'git push -u with the remote and this branch';
+  return [{ kind: 'upstream', summary: branch + ' has no upstream', lines: [branch + ' has no upstream: the first push needs ' + push], blocks: true }];
 }
 
 function detachedBlocker(): Blocker {

@@ -15,12 +15,10 @@ import { loadEntries } from '../ui/dispatch.ts';
 import * as out from '../ui/format.ts';
 import { renderTopHelp } from '../ui/help.ts';
 import { CANCEL, runFlow, type Pass, type Prompter } from './engine.ts';
-import { readHome, type HomeState } from './home-context.ts';
-import { BACK as HOME_BACK, MENU, accountChoices, commandFor, homeNote, listedClones, menuItems, summaryLines } from './home-flow.ts';
+import { readHome, readSignedIn, type HomeState } from './home-context.ts';
+import { BACK as HOME_BACK, MENU, accountChoices, accountOfChoice, commandFor, homeNote, listedClones, menuItems, summaryLines } from './home-flow.ts';
 import { BACK_LABEL, BUSY, CANCELLED, QUIT, WHAT_NEXT, WHICH_ACCOUNT, WHICH_CLONE, homeTitle, removeLabel, removeNote, removeQuestion } from './home-text.ts';
-import { formatCommand, loginStep, newAccountOf, printable, profileSteps, signedInLogins, type AccountContext } from './setup-flow.ts';
-import { Git } from '../core/git.ts';
-import { inspectAuth } from '../core/inspect.ts';
+import { formatCommand, loginStep, newAccountOf, printable, profileSteps, type AccountContext } from './setup-flow.ts';
 import { COMMAND_MARK } from './review-text.ts';
 import { suggester } from './setup-context.ts';
 import { choosePrompter, runSetup } from './setup-run.ts';
@@ -124,12 +122,14 @@ async function recordAccount(prompter: Prompter, home: HomeState, deps: HomeRunD
 
 /** Which account, then a confirm that says what stays; Back from either returns to the menu. */
 async function removeAccount(prompter: Prompter, home: HomeState): Promise<number | null | typeof AGAIN> {
-  const login = await prompter.choose(WHICH_ACCOUNT, [...accountChoices(home), { value: HOME_BACK, label: BACK_LABEL }]);
-  if (login === CANCEL) return finish(prompter, CANCELLED, CANCELLED_CODE);
-  if (login === HOME_BACK) return null;
+  const picked = await prompter.choose(WHICH_ACCOUNT, [...accountChoices(home), { value: HOME_BACK, label: BACK_LABEL }]);
+  if (picked === CANCEL) return finish(prompter, CANCELLED, CANCELLED_CODE);
+  const login = accountOfChoice(picked);
+  if (login === null) return null;
   const shown = printable(login);
   showLines(prompter, [removeNote(shown)]);
-  const sure = await prompter.choose(removeQuestion(shown), [{ value: MENU.remove, label: removeLabel(shown) }, { value: HOME_BACK, label: BACK_LABEL }]);
+  // Back first: Enter twice in a row must not remove anything.
+  const sure = await prompter.choose(removeQuestion(shown), [{ value: HOME_BACK, label: BACK_LABEL }, { value: MENU.remove, label: removeLabel(shown) }]);
   if (sure === CANCEL) return finish(prompter, CANCELLED, CANCELLED_CODE);
   if (sure === HOME_BACK) return null;
   const argv = commandFor({ kind: 'remove', login });
@@ -148,11 +148,6 @@ function accountContext(home: HomeState, deps: HomeRunDeps): AccountContext {
     recorded, host: 'github', machineIdentity: home.identity,
     suggest: deps.suggest ?? suggester(), signedIn: deps.signedIn ?? once(() => readSignedIn(home.cwd)),
   };
-}
-
-async function readSignedIn(cwd: string): Promise<string[] | null> {
-  const auth = await inspectAuth(new Git(cwd));
-  return signedInLogins(auth.ghPresent ? auth.gh : null, auth.stored);
 }
 
 function once<T>(read: () => Promise<T>): () => Promise<T> {

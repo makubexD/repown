@@ -791,8 +791,8 @@ The questions it did not ask are still steps.
 
 ```
 ◇  How should setup work?
-│  Recommended fills in the answers that only change this clone; Step by
-│  step asks each one
+│  Recommended fills in the answers that only change this clone; Step
+│  by step asks each one
 │  ● Recommended
 │  ○ Step by step
 │
@@ -1009,7 +1009,7 @@ flowchart TD
   LIST -->|"← Back"| MENU
   MENU -->|gh is the helper| FIX["Stop gh serving credentials"]
   MENU --> ADD["Record an account"]
-  MENU -->|an account is recorded| REM["Remove an account"]
+  MENU -->|"an account is recorded, every entry reads"| REM["Remove an account"]
   REM --> WHICH["which account, then confirm"]
   WHICH -->|"← Back"| MENU
   MENU --> DOC["Check this machine"]
@@ -1074,7 +1074,7 @@ indented two spaces.
 | Line | When | Value |
 | --- | --- | --- |
 | `Accounts` | the registry was read | `none recorded`, or `2 recorded: octo-work, octocat` (the logins, sorted) |
-| `Accounts` | the file has entries repown cannot read | `1 recorded, 1 unreadable in <path>: run repown accounts list`, or, when nothing in it could be read, `1 unreadable in <path>: run repown accounts list`. The menu stays |
+| `Accounts` | the file has entries repown cannot read | `1 recorded, 1 unreadable in <path>: run repown accounts list`, or, when nothing in it could be read, `1 unreadable in <path>: run repown accounts list`. The menu stays, without Remove an account (`accounts remove` won't rewrite a file it can't fully read) |
 | `Accounts` | the registry could not be read | `could not read` and that path. Never `none` |
 | `Helper` | gh's per-host helper entries, the ones `repown fix` removes, are present | `gh serves git's credentials: run repown fix` |
 | `Clones` | clones were found, up to 2 levels below | `3 below this folder: 2 not set up, 1 set up` |
@@ -1174,7 +1174,7 @@ your email address`), where it is hosted (GitHub by default), and the name and e
 commits show. On GitHub they start from a lookup: the profile's name (else the login),
 and the noreply address GitHub gives the account. Each question says where its value
 came from: `GitHub shows no name for octocat, so this is the login` (or `this is the
-login` when GitHub couldn't be asked), and `prefilled with the private address GitHub
+login` on another host, or when GitHub couldn't be asked), and `prefilled with the private address GitHub
 gives octocat (github.com/settings/emails)`; with nothing prefilled the email question
 gives a tip with an example (`like 1234+octocat@users.noreply.github.com`). Where this
 machine has a default name or address, they add `your default git name here is Octo
@@ -1212,10 +1212,14 @@ A login that starts with a dash is passed after `--`, so it stays the account na
 `repown accounts add --name "Octo Cat" --email … "--" -h`. The `--` is quoted because
 PowerShell drops a bare one before `repown.ps1` (what npm installs) sees it.
 
-Every command repown prints to copy (here, in setup, and in the advice of `status`, `use` and
-the guard) pastes the same into sh, bash, dash, zsh, fish, PowerShell and cmd: a word no shell
-treats specially stays bare, anything else is in double quotes, and only a value with `$`, a
-backtick, `"`, `%`, `!` or an escaping backslash keeps POSIX single quotes, which cmd can't read.
+Every command repown prints to copy (here, in setup, and in the advice of `status`, `use`,
+`accounts add` and the guard) pastes the same into sh, bash, dash, zsh, fish, PowerShell and
+cmd: a word no shell treats specially stays bare, anything else is in double quotes. A value
+no quoting keeps literal in all of them (one with `$`, a backtick, `"`, `%`, `!`, a curly
+double quote, a control character or an escaping backslash) gets no command: the advice says
+to do it by hand (`add that owner to repown.allowOwner with git config yourself`), and a
+command repown runs anyway shows `[value not safe to paste]` in its place. Single quotes
+would not do: cmd doesn't read them, and PowerShell runs the rest of POSIX's `'\''` as code.
 
 **Remove an account** is offered once an account is recorded, and only when every entry
 in the registry reads (`accounts remove` refuses to rewrite a file it can't fully read).

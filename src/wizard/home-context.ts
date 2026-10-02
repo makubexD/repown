@@ -5,12 +5,13 @@
 import { readdir } from 'node:fs/promises';
 import { join, relative, resolve, sep } from 'node:path';
 import { Git } from '../core/git.ts';
-import { inspectRepo, type RepoState } from '../core/inspect.ts';
+import { inspectAuth, inspectRepo, type RepoState } from '../core/inspect.ts';
 import { planRepair } from '../core/credential/repair.ts';
 import { loadRegistry, type Registry } from '../core/registry.ts';
 import type { Result } from '../core/result.ts';
 import { identityProblems } from '../commands/status.ts';
 import { CONCURRENCY, discover, mapLimited } from '../commands/scan.ts';
+import { signedInLogins } from './setup-flow.ts';
 
 /** How many levels below this folder the start screen looks. `repown scan` looks further. */
 export const HOME_DEPTH = 2;
@@ -143,4 +144,10 @@ function isClone(clone: HomeClone | null): clone is HomeClone {
 function skipHomeEntry(name: string): boolean {
   if (name.startsWith('.') || name === 'node_modules') return true;
   return process.platform === 'win32' && name.toLowerCase() === 'appdata';
+}
+
+/** The github.com logins gh and Git Credential Manager are signed in as; read only when Record an account asks. */
+export async function readSignedIn(cwd: string): Promise<string[] | null> {
+  const auth = await inspectAuth(new Git(cwd));
+  return signedInLogins(auth.ghPresent ? auth.gh : null, auth.stored);
 }

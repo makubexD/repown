@@ -700,7 +700,7 @@ never suggested.
 | How should setup work? Recommended (default) or Step by step | unless `--step-by-step` is passed, or an `<account>` is given (that uses Recommended and skips this question). Not stored ([ADR-007](decisions/ADR-007-no-profile-store.md), [ADR-020](decisions/ADR-020-setup-leaves-clone-ready.md)). The flag is `--step-by-step` | nothing by itself |
 | Which account should this clone belong to? | an account is recorded, or a GitHub login can already be seen. Default: the one pinned here if it is recorded, else origin's owner when it is recorded and not known to be an organisation, else origin's owner when that owner is a user, else the first other recorded account, else a new account | `use <account>`, after `accounts add` when the login is not recorded |
 | The account's user name (login) | "a new account", or nothing recorded and nothing detected. Starts as origin's owner only when that owner is a user and is not recorded. Refused if already recorded | the `<account>` of `accounts add` |
-| Where it's hosted, and your name and email as commits show them (on GitHub, with where to find your noreply address; this machine's default is shown, never filled in; when github.com has no account by that login, or it is an organisation, the name question says so first) | the login is new: "a new account", or one picked from the logins already seen | `accounts add <account> --name --email --host` |
+| Where it's hosted, and your name and email as commits show them (on GitHub, with where to find your noreply address; this machine's default is shown, never filled in; when github.com has no account by that login, or it is an organisation, the name question says so first; else, when gh or Git Credential Manager is signed in as other github.com accounts only, it says that, and whether the name is just the login) | the login is new: "a new account", or one picked from the logins already seen | `accounts add <account> --name --email --host` |
 | Also make this account gh's active account? (default No) | a GitHub clone (or one whose origin isn't a URL), gh knows the account, another is active. Recommended does not ask this when the clone is already pinned to that account: it answers No, and the review names the command (`gh auth switch -u <account>`, or `repown use <account> --gh` when gh does not list it) | `use --gh` |
 | Sign in to gh as that account too? (default No) | the same, except gh does not know the account. Yes opens a browser; gh then acts as that account in every terminal. The line under it names gh's active account, or says gh isn't signed in. Recommended skips it the same way when the clone is already pinned to that account | `use --gh` |
 | Push through origin instead of the URL set for this branch? (default Yes) | the branch pushes to a URL (from `branch.<name>.pushRemote`, `remote.pushDefault` or `branch.<name>.remote`) naming the same host and path as a remote here. A URL there can carry its own sign-in and is never fetched. The review shows the key and the remote, never the URL, and so does the run's "changed in this clone" (`(a URL) -> origin`). The flag is `--repoint` | `git config --local <key> <remote>` |
@@ -1192,7 +1192,11 @@ default name if there is one:
 ```
 
 so Back can fix the login before anything is recorded (an organisation reads
-`octo-org is an organisation on github.com, not an account you sign in as`). Then it
+`octo-org is an organisation on github.com, not an account you sign in as`). A login
+that exists can still be someone else's: when gh or Git Credential Manager is signed in
+as other github.com accounts only, the name question says `signed in as octo-work, not
+octocat: if octocat isn't your account, go back; otherwise the first push asks you to
+sign in as it` (read on this machine; nothing when neither can be read). Then it
 runs `repown accounts add` with every answer as a flag, so nothing more is asked:
 
 ```

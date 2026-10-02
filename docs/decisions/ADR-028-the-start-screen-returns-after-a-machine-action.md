@@ -56,3 +56,15 @@ before.
 - Leaving the start screen after an action takes one more key: Quit, Esc or Ctrl-C.
 - The exit code no longer reports a failed action on this path; the action's own output
   does. Typed commands (`repown accounts add`, `repown doctor`, `repown fix`) are unchanged.
+
+## Notes
+
+- **2026-10-02, as extended.** On GitHub, when gh or Git Credential Manager is signed in
+  as other github.com accounts only, the name question also says so ("signed in as A, B,
+  not X: if X isn't your account, go back; otherwise the first push asks you to sign in as
+  it"). A login that exists on GitHub can still be someone else's: the noreply address
+  prefilled from it would link your commits to their profile. Like the 404 sentence it is
+  named, never refused (an account not yet signed in is normal: the first push signs it
+  in), and it says nothing when neither gh nor GCM can be read or lists anyone. Setup uses
+  the sign-ins it already read; the start screen reads them only when the name question
+  first asks. A typed `repown accounts add` doesn't say it.

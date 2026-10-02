@@ -15,7 +15,7 @@ import { pathWithoutGh, plainTerminal, sandbox, type Sandbox } from './helpers.t
 import { setupContext as context } from './setup-fixtures.ts';
 import { ok, err } from '../src/core/result.ts';
 import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Review, type ReviewChoice, type StepConfirm } from '../src/wizard/engine.ts';
-import { setupFlow, planCommands, formatCommand, gitStepOf, keptFlags, blockersOf, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext, type Suggestion } from '../src/wizard/setup-flow.ts';
+import { setupFlow, planCommands, formatCommand, gitStepOf, keptFlags, blockersOf, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, signedInLogins, type SetupContext, type Suggestion } from '../src/wizard/setup-flow.ts';
 import { pinWrites } from '../src/core/identity.ts';
 import { plainPrompter } from '../src/wizard/plain.ts';
 import { reviewLines, reviewDefault } from '../src/wizard/review-text.ts';
@@ -2512,6 +2512,34 @@ test('a new account\'s name question first says what GitHub said about the login
     'github.com has no account named octocatt: check the spelling; your default git name here is Octo Work: use it only if this account does too');
   const quiet = context({ recorded: {}, suggest: async () => ({ problem: null }) });
   assert.equal(await stepOf(quiet, 'name').detail?.(fresh, quiet), 'this is the login', 'a lookup that failed says only where the prefill came from');
+});
+
+test('the name question says when this machine is signed in to GitHub as others, not this login', async () => {
+  const fresh = { account: NEW_ACCOUNT, newAccount: 'kiefer', host: 'github' };
+  const named = { name: 'Kiefer', email: '843102+kiefer@users.noreply.github.com' };
+  const detail = async (signedIn: readonly string[] | null, suggestion: Suggestion = named, answers: Answers = fresh): Promise<string | undefined> => {
+    const ctx = context({ recorded: {}, signedIn: async () => signedIn, suggest: async () => suggestion });
+    return stepOf(ctx, 'name').detail?.(answers, ctx);
+  };
+  const note = 'signed in as makubexD, octo-work, not kiefer: if kiefer isn\'t your account, go back; otherwise the first push asks you to sign in as it';
+  assert.equal(await detail(['makubexD', 'octo-work']), note);
+  assert.equal(await detail(['makubexD', 'Kiefer']), undefined, 'the login is one of them, in any case');
+  assert.equal(await detail(null), undefined, 'neither gh nor Git Credential Manager could be read');
+  assert.equal(await detail([]), undefined, 'signed in as nobody: nothing to compare with');
+  assert.equal(await detail(['makubexD'], { problem: 'github.com has no account named kiefer: check the spelling' }),
+    'github.com has no account named kiefer: check the spelling', 'a missing account says only that');
+  assert.equal(await detail(['makubexD'], {}, { ...fresh, host: 'azdo' }), 'this is the login', 'only GitHub sign-ins are read');
+  assert.equal(await detail(['makubexD'], {}),
+    'signed in as makubexD, not kiefer: if kiefer isn\'t your account, go back; otherwise the first push asks you to sign in as it; this is the login');
+});
+
+test('signedInLogins joins gh\'s and Git Credential Manager\'s accounts, once each, and is null when neither reads', () => {
+  const gh = ok({ accounts: [{ login: 'makubexD', active: true }, { login: 'octo-work', active: false }], active: 'makubexD' });
+  assert.deepEqual(signedInLogins(gh, ok(['MakubexD', 'octocat'])), ['makubexD', 'octo-work', 'octocat']);
+  assert.deepEqual(signedInLogins(null, ok(['octocat'])), ['octocat']);
+  assert.deepEqual(signedInLogins(err('gh auth status failed'), null), null);
+  assert.deepEqual(signedInLogins(null, err('no GCM')), null);
+  assert.deepEqual(signedInLogins(ok({ accounts: [], active: null }), null), []);
 });
 
 test('the name and email questions say where their prefill came from', async () => {

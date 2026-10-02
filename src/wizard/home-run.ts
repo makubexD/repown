@@ -18,7 +18,9 @@ import { CANCEL, runFlow, type Pass, type Prompter } from './engine.ts';
 import { readHome, type HomeState } from './home-context.ts';
 import { BACK as HOME_BACK, MENU, commandFor, homeNote, listedClones, menuItems, summaryLines } from './home-flow.ts';
 import { BACK_LABEL, BUSY, CANCELLED, QUIT, WHAT_NEXT, WHICH_CLONE, homeTitle } from './home-text.ts';
-import { formatCommand, loginStep, newAccountOf, printable, profileSteps, type AccountContext } from './setup-flow.ts';
+import { formatCommand, loginStep, newAccountOf, printable, profileSteps, signedInLogins, type AccountContext } from './setup-flow.ts';
+import { Git } from '../core/git.ts';
+import { inspectAuth } from '../core/inspect.ts';
 import { COMMAND_MARK } from './review-text.ts';
 import { suggester } from './setup-context.ts';
 import { choosePrompter, runSetup } from './setup-run.ts';
@@ -33,6 +35,8 @@ export interface HomeRunDeps {
   readonly read?: (cwd: string) => Promise<HomeState>;
   /** Tests pass a fake profile lookup. Production asks the host, once per login. */
   readonly suggest?: AccountContext['suggest'];
+  /** Tests pass fixed sign-ins. Production reads gh and GCM once, when the name question first asks. */
+  readonly signedIn?: AccountContext['signedIn'];
 }
 
 /** The account questions from the top. Back from the login returns to the menu, as `opening`. */
@@ -125,7 +129,20 @@ async function again(ran: Promise<number>): Promise<typeof AGAIN> {
 
 function accountContext(home: HomeState, deps: HomeRunDeps): AccountContext {
   const recorded = home.registry.ok ? home.registry.value.accounts : {};
-  return { recorded, host: 'github', machineIdentity: home.identity, suggest: deps.suggest ?? suggester() };
+  return {
+    recorded, host: 'github', machineIdentity: home.identity,
+    suggest: deps.suggest ?? suggester(), signedIn: deps.signedIn ?? once(() => readSignedIn(home.cwd)),
+  };
+}
+
+async function readSignedIn(cwd: string): Promise<string[] | null> {
+  const auth = await inspectAuth(new Git(cwd));
+  return signedInLogins(auth.ghPresent ? auth.gh : null, auth.stored);
+}
+
+function once<T>(read: () => Promise<T>): () => Promise<T> {
+  let kept: Promise<T> | undefined;
+  return () => (kept ??= read());
 }
 
 async function runOwn(prompter: Prompter, command: Command, tokens: readonly string[], argv: readonly string[]): Promise<number> {

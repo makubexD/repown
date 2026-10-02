@@ -99,5 +99,7 @@ recorded yet, on a terminal, `repown setup`, the start screen's Record an accoun
 `repown use` or `repown accounts add` (without both `--name` and `--email`) asks gh for
 its public profile to suggest a name and noreply address. Setup, the start screen and
 `accounts add` also ask whether that login exists and is a user, to warn about a typo or
-an organisation. `repown setup` may also ask GitHub whether origin's owner is a user or
-an organisation.
+an organisation. They read which accounts gh and Git Credential Manager are signed in as
+(gh's own account list, and GCM's store on this machine) to say when the login isn't one
+of them. `repown setup` may also ask GitHub whether origin's owner is a user or an
+organisation.

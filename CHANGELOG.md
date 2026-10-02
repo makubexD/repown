@@ -28,6 +28,10 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 - `repown accounts add` prints its suggested next command, `repown use <account>`, in
   cyan where stdout has colour, and exactly as before where it has none (ADR-027's rule).
 
+- In setup and on the start screen, a new account's name question says when this machine
+  is signed in to GitHub (gh, Git Credential Manager) as other accounts only: "signed in as
+  makubexD, not kiefer: if kiefer isn't your account, go back". A login that exists can
+  still be a stranger's, and its noreply address would link your commits to them (ADR-028).
 - A new account's name and email questions say where their value came from: "GitHub shows
   no name for octocat, so this is the login" (a stranger's or an empty profile no longer
   passes unnoticed), and "prefilled with the private address GitHub gives octocat" instead

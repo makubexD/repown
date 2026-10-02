@@ -463,6 +463,8 @@ describe('D7 on the plain prompter, at the default width', () => {
 });
 
 const SUGGEST = async (): Promise<Suggestion> => ({ name: 'Octo Cat', email: 'octocat@example.invalid' });
+/** No sign-ins to compare with, so the machine's real gh or Git Credential Manager accounts never leak in. */
+const NOBODY = async (): Promise<null> => null;
 
 describe('start screen, played with key presses', () => {
   test('F1: every Accounts and Clones line starts with the gutter', async () => {
@@ -538,7 +540,7 @@ describe('start screen, played with key presses', () => {
 
   test('a login starting with a dash reaches accounts add as the account', async () => {
     await withProjects(async (root) => {
-      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST }), [
+      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST, signedIn: NOBODY }), [
         [enter], [...typed('-h'), enter], [enter], [enter], [enter], [up, enter],
       ], { patience: 20_000 });
       assert.match(run.screen, /\$ repown accounts add --name "Octo Cat" --email octocat@example\.invalid "--" -h/, run.screen + run.stderr);
@@ -549,7 +551,7 @@ describe('start screen, played with key presses', () => {
 
   test('H15: Record an account asks login, host, name and email in the frame, then runs accounts add with them all', async () => {
     await withProjects(async (root) => {
-      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST }), [
+      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST, signedIn: NOBODY }), [
         [enter], [...typed('octocat'), enter], [enter], [enter], [enter], [up, enter],
       ], { patience: 20_000 });
       assert.equal(run.result, 0, run.screen + run.stderr);
@@ -570,7 +572,7 @@ describe('start screen, played with key presses', () => {
   test('H16: a login github.com has no account for is named on the name question; Back reaches the login again', async () => {
     await withProjects(async (root) => {
       const missing = async (): Promise<Suggestion> => ({ problem: 'github.com has no account named octocatt: check the spelling' });
-      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: missing }), [
+      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: missing, signedIn: NOBODY }), [
         // The name starts as the login, so it is cleared before `<`.
         [enter], [...typed('octocatt'), enter], [enter], [...Array<string>(8).fill(KEY.backspace), '<', enter], [up, enter], [esc],
       ], { patience: 20_000 });
@@ -601,11 +603,25 @@ describe('start screen, played with key presses', () => {
     });
   });
 
+  test('H20: a login this machine isn\'t signed in as is named on the name question', async () => {
+    await withProjects(async (root) => {
+      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST, signedIn: async () => ['octo-work'] }), [
+        [enter], [...typed('octocat'), enter], [enter], [esc],
+      ], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen);
+      const name = run.screen.search(/Your name, as your commits show it/);
+      assert.ok(name >= 0, run.screen);
+      assert.match(run.screen.slice(name).replace(/\n│ {2}/g, ' '),
+        /signed in as octo-work, not octocat: if octocat isn't your account, go back; otherwise the first push asks you to sign in as it/);
+      assert.equal(existsSync(registryPath()), false, 'nothing recorded');
+    });
+  });
+
   test('H17: a login already recorded, in any case, is refused with the words setup uses', async () => {
     await withProjects(async (root) => {
       mkdirSync(dirname(registryPath()), { recursive: true });
       writeFileSync(registryPath(), '{"accounts":{"octocat":{"name":"Octo Cat","email":"octocat@example.invalid"}}}\n');
-      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST }), [
+      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST, signedIn: NOBODY }), [
         [enter], [...typed('OctoCat'), enter], [esc],
       ], { patience: 20_000 });
       assert.equal(run.result, 130, run.screen);

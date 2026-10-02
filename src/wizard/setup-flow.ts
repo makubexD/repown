@@ -79,6 +79,8 @@ export interface SetupContext {
   /** GCM's stored GitHub accounts. Null when the store was not read; an error when it could not be. */
   readonly stored: Result<readonly string[]> | null;
   suggest(account: string, host: string): Promise<Suggestion>;
+  /** The github.com logins gh and GCM are signed in as (signedInLogins), read when first asked. */
+  signedIn(): Promise<readonly string[] | null>;
 }
 
 /** A profile lookup's suggestion, and a sentence when the host says the login is no account or an organisation. */
@@ -87,7 +89,19 @@ export interface Suggestion extends Profile {
 }
 
 /** What recording a new account asks with: setup's context, or the start screen's. */
-export type AccountContext = Pick<SetupContext, 'recorded' | 'host' | 'machineIdentity' | 'suggest'>;
+export type AccountContext = Pick<SetupContext, 'recorded' | 'host' | 'machineIdentity' | 'suggest' | 'signedIn'>;
+
+/**
+ * Every github.com login gh or Git Credential Manager is signed in as, once each (any
+ * case). Null when neither could be read: a skipped read is never "signed in as nobody".
+ */
+export function signedInLogins(gh: Result<GhState> | null, stored: Result<readonly string[]> | null): string[] | null {
+  const lists = [gh?.ok ? gh.value.accounts.map((account) => account.login) : null, stored?.ok ? stored.value : null];
+  const read = lists.filter((list): list is readonly string[] => list !== null);
+  if (read.length === 0) return null;
+  const seen = new Set<string>();
+  return read.flat().filter((login) => !seen.has(login.toLowerCase()) && seen.add(login.toLowerCase()));
+}
 
 /** Read once, before the first question. `supported` is false when the version cannot be read. */
 export interface UpstreamRead {
@@ -357,15 +371,26 @@ async function noreplyNote(answers: Answers, ctx: AccountContext): Promise<strin
 
 /**
  * First what the host said about the login (no such account, an organisation), so Back
- * can fix a typo before anything is recorded; else whether the name starts as the login;
- * then the machine's name, never this account's initial value.
+ * can fix a typo before anything is recorded; else whether this machine is signed in as
+ * someone else, and whether the name starts as the login; then the machine's name, never this account's initial value.
  */
 async function nameDetail(answers: Answers, ctx: AccountContext): Promise<string | undefined> {
   if (!isNew(answers)) return undefined;
   const found = await ctx.suggest(accountOf(answers), hostOf(answers, ctx));
-  const lead = found.problem ? printable(found.problem) : loginPrefill(answers, found, ctx);
-  const parts = [lead, machineName(ctx)].filter((part) => part);
+  const leads = found.problem ? [printable(found.problem)] : [await notSignedIn(answers, ctx), loginPrefill(answers, found, ctx)];
+  const parts = [...leads, machineName(ctx)].filter((part) => part);
   return parts.length > 0 ? parts.join('; ') : undefined;
+}
+
+/** On GitHub, when this machine is signed in as other logins only: perhaps not this person's account. */
+async function notSignedIn(answers: Answers, ctx: AccountContext): Promise<string | null> {
+  if (hostOf(answers, ctx) !== 'github') return null;
+  const logins = await ctx.signedIn();
+  const login = accountOf(answers);
+  if (!logins || logins.length === 0 || logins.some((other) => other.toLowerCase() === login.toLowerCase())) return null;
+  const shown = printable(login);
+  return 'signed in as ' + logins.map(printable).join(', ') + ', not ' + shown + ': if ' + shown +
+    ' isn\'t your account, go back; otherwise the first push asks you to sign in as it';
 }
 
 /** Said when the name question starts as the login: no profile name was found. */

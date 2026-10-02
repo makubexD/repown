@@ -15,7 +15,7 @@ import { ok, err, type Result } from '../core/result.ts';
 import { previewLines } from '../commands/fix.ts';
 import { readUnpushed, type UnpushedFact } from '../core/unpushed.ts';
 import { readPushFacts } from '../core/push-state.ts';
-import { SOURCE_GCM, SOURCE_GH, SOURCE_OWNS, type DetectedAccount, type SetupContext, type Suggestion, type UpstreamRead } from './setup-flow.ts';
+import { SOURCE_GCM, SOURCE_GH, SOURCE_OWNS, signedInLogins, type DetectedAccount, type SetupContext, type Suggestion, type UpstreamRead } from './setup-flow.ts';
 
 export interface DetectionInput {
   /** False for any origin that is not GitHub: owner, gh and GCM are GitHub's only. */
@@ -232,6 +232,7 @@ function assemble(cwd: string | null, recorded: Readonly<Record<string, Account>
     machineIdentity: { name: facts.name, email: facts.email },
     upstream: facts.upstream, stored: facts.stored,
     suggest: suggester(),
+    signedIn: async () => signedInLogins(facts.gh, facts.stored),
   };
 }
 

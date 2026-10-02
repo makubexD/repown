@@ -17,22 +17,33 @@ and the tests compare it byte for byte. NO_COLOR, FORCE_COLOR and TERM=dumb are 
 
 ## Decision
 
-- **Colour is still decided by `useColour`, and nothing is added where it says no.** A
-  pipe, a log, `NO_COLOR`, `FORCE_COLOR=0` and `TERM=dumb` get exactly the bytes they got
-  before. Marks are part of the decoration, not of the words.
-- **The wizard (setup and the start screen) is accented.** The title is a black-on-cyan
-  badge. In a `Label   value` line the frame shows, the value is bold cyan. Commands, in
-  the review and on `> ` lines, are cyan (they were dim). Styling is applied after
-  wrapping, so every line wraps at the width it had without colour.
+- **Nothing is added where there is no colour.** A pipe, a log, `NO_COLOR`, `FORCE_COLOR=0`
+  and `TERM=dumb` get exactly the bytes they got before. Marks are part of the decoration,
+  not of the words. Two deciders are involved, and both say no in those cases:
+  - setup's run report (the closing line, its `> ` and not-run commands) asks `useColour`
+    of stderr, through `marked` and `accent`;
+  - inside the clack frame, colour follows `node:util`'s `styleText`, as clack's own
+    symbols do. It checks stdout, so `repown setup > out.log` draws the frame plain while
+    the run report on the terminal is coloured. On Node 20, `styleText` checks no stream;
+    the frame is only drawn when stderr has colour (ADR-016), so it never colours a pipe.
+- **The wizard's frame is accented.** The title is a black-on-cyan badge. In a
+  `Label   value` line drawn as information (the start screen's summary, a step's
+  changes), the value is bold cyan, on its continuation lines too. Commands are cyan:
+  in the review box (they were dim), on `> ` lines, and on the start screen's hand-over
+  line. The review box's other lines stay plain. Styling is applied after wrapping, so
+  every line wraps at the width it had without colour.
 - **Setup's closing line leads with a mark where stderr has colour:** a green ✔ when done,
-  a yellow ▲ when the next push will fail. Its step and not-run commands are cyan. A stop
-  keeps its red `FAIL` word and gets no mark of its own. The words and exit codes are
-  unchanged, with or without `--no-input`.
-- **Symbols follow the frame.** `unicodeTerminal()` reads the signals clack draws its own
-  frame by: every terminal outside Windows except the Linux console; on Windows, Windows
-  Terminal (`WT_SESSION`), VS Code (`TERM_PROGRAM=vscode`), mintty and others that set
-  `TERM=xterm-256color`, CI, ConEmu/cmder, JetBrains. Elsewhere the marks are `+ ! x`. The
-  list is copied, not imported, because only clack.ts may import the package (ADR-016).
+  a yellow ▲ when the next push will fail; the blockers under it are indented two columns
+  more, so they stay deeper than the marked line. Its step and not-run commands are cyan.
+  A stop keeps its red `FAIL` word and gets no mark of its own. The words and exit codes
+  are unchanged, with or without `--no-input`.
+- **Symbols follow the frame.** `unicodeTerminal()` is a copy of clack 1.8.1's
+  `isUnicodeSupported`: every terminal outside Windows except the Linux console
+  (`TERM=linux`); on Windows only one that signals it: Windows Terminal (`WT_SESSION`),
+  VS Code or Terminus (`TERM_PROGRAM`), `TERM=xterm-256color` (Git Bash's mintty) or
+  `alacritty`, CI, cmder, JetBrains. Elsewhere the marks are `+` and `!`. The list is
+  copied, not imported, because only clack.ts may import the package (ADR-016); a clack
+  upgrade re-checks it.
 
 ## Alternatives considered
 

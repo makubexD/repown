@@ -11,7 +11,7 @@ import { styleText } from 'node:util';
 import * as p from '@clack/prompts';
 import { BACK, CANCEL, type Asked, type Choice, type Drawn, type Prompter, type Reply, type Review, type ReviewChoice, type StepChoice, type StepConfirm } from './engine.ts';
 import { BACK_WORD, type Streams } from './plain.ts';
-import { BACK_TO_REVIEW, PICK_QUESTION, RUN_THIS_STEP, reviewDefault, reviewLines, reviewOptions, reviewQuestion, labelOf, stepConfirmLines, stepOptions, textWidth, wrap } from './review-text.ts';
+import { BACK_TO_REVIEW, PICK_QUESTION, RUN_THIS_STEP, labelOf, reviewDefault, reviewLines, reviewOptions, reviewQuestion, stepConfirmLines, stepOptions, textWidth, wrap } from './review-text.ts';
 
 /** A value no real choice can have. */
 const GO_BACK = '\u0000back';
@@ -29,7 +29,7 @@ export function clackPrompter(streams: Streams): Prompter {
     close: () => {},
     intro: (title) => p.intro(badge(title), io),
     // After a cancel, clack has already drawn the gutter's last line.
-    outro: (message, cancelled) => (cancelled ? p.cancel(message, io) : p.outro(message, io)),
+    outro: (message, cancelled) => (cancelled ? p.cancel(message, io) : p.outro(commandOr(message), io)),
     // A line, not clack's spinner: the spinner takes over Ctrl-C and exits 0, where a
     // cancel must exit 130.
     busy: (message) => p.log.step(message, io),
@@ -41,6 +41,11 @@ function badge(title: string): string {
   const padded = ' ' + title + ' ';
   const styled = styleText(['bgCyan', 'black'], padded);
   return styled === padded ? title : styled;
+}
+
+/** A `> command` hand-over line cyan; any other closing line as it is. */
+function commandOr(message: string): string {
+  return message.startsWith('> ') ? styleText('cyan', message) : message;
 }
 
 function askDrawn(step: Drawn, asked: Asked, io: Io): Promise<Reply> {
@@ -148,12 +153,13 @@ function logLines(io: Io, lines: readonly string[]): void {
  * Styling after wrapping keeps every line as wide as it is without colour (ADR-027).
  */
 function accented(text: string, width: number): string[] {
+  const rows = wrap(text, width);
+  if (text.startsWith('> ')) return rows.map((row) => styleText('cyan', row));
   const label = labelOf(text);
-  return wrap(text, width).map((line, index) => accentLine(line, index === 0 ? label : ' '.repeat(label.length)));
+  return rows.map((row, index) => accentLine(row, index === 0 ? label : ' '.repeat(label.length)));
 }
 
 function accentLine(line: string, label: string): string {
-  if (line.startsWith('> ')) return styleText('cyan', line);
   if (!label || !line.startsWith(label)) return line;
   return label + styleText(['bold', 'cyan'], line.slice(label.length));
 }

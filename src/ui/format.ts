@@ -49,13 +49,12 @@ export function unicodeTerminal(env: NodeJS.ProcessEnv = process.env, platform: 
     || env['TERMINAL_EMULATOR'] === 'JetBrains-JediTerm';
 }
 
-export type Mark = 'ok' | 'warn' | 'fail';
+export type Mark = 'ok' | 'warn';
 
 /** Each mark's colour, its symbol, and the ASCII stand-in where Unicode can't be drawn. */
 const MARKS: Record<Mark, { colour: keyof typeof COLOURS; unicode: string; ascii: string }> = {
   ok: { colour: 'green', unicode: '✔', ascii: '+' },
   warn: { colour: 'yellow', unicode: '▲', ascii: '!' },
-  fail: { colour: 'red', unicode: '✖', ascii: 'x' },
 };
 
 /** `text` led by a coloured mark where `stream` has colour; exactly `text` where it has none. */

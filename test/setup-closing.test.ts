@@ -56,6 +56,7 @@ describe('setup closes on what still blocks the next push', () => {
   test('with colour, a blocked closing line leads with a yellow triangle', () => {
     const run = setup(FIRST, { ...COLOUR, GH_TOKEN: 'x' });
     assert.match(run.stderr, /\x1b\[33m▲\x1b\[0m set up for octocat; the next push will fail: GH_TOKEN is set\n/);
+    assert.match(run.stderr, /\n {11}GH_TOKEN is set in this shell/, 'each blocker stays deeper than the marked line above it');
   });
 
   test('nothing in the way: done, exactly as before', () => {

@@ -122,7 +122,7 @@ and help text in its own file under `src/commands/`, so help can't drift from th
 | Command | Code | Explained in |
 | --- | --- | --- |
 | `repown status` (bare `repown` when stdin or stderr is not a terminal, and inside a clone when stdout is redirected) | `src/commands/status.ts`, `src/commands/start.ts`, `src/ui/dispatch.ts`, `src/core/inspect.ts`, `src/core/push-state.ts`, `src/core/blockers.ts` | [card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are) |
-| Start screen (bare `repown` in a terminal, outside a clone or in a bare repository) | `src/commands/start.ts`, `src/wizard/home-context.ts`, `src/wizard/home-flow.ts`, `src/wizard/home-text.ts`, `src/wizard/home-run.ts`, `src/program.ts` | [card 14](docs/HOW-IT-WORKS.md#14-outside-a-clone) |
+| Start screen (bare `repown` in a terminal, outside a clone or in a bare repository) | `src/commands/start.ts`, `src/wizard/home-context.ts`, `src/wizard/home-flow.ts`, `src/wizard/home-text.ts`, `src/wizard/home-run.ts`, `src/wizard/clack.ts` (its frame and accents), `src/program.ts` | [card 14](docs/HOW-IT-WORKS.md#14-outside-a-clone) |
 | `repown doctor` | `src/commands/doctor.ts`, `src/core/inspect.ts`, `src/core/credential/gcm.ts`, `src/core/credential/gh.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
 | `repown fix` | `src/commands/fix.ts`, `src/core/credential/repair.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
 | `repown reauthor` | `src/commands/reauthor.ts`, `src/core/reauthor.ts`, `src/core/push-destination.ts` | [card 8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) |

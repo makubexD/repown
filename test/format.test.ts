@@ -102,21 +102,20 @@ describe('marked and accent: decoration only where the stream has colour', () =>
 
   test('NO_COLOR keeps a terminal plain too', () => {
     process.env['NO_COLOR'] = '1';
-    assert.equal(marked('fail', TERMINAL, 'stopped'), 'stopped');
+    assert.equal(marked('warn', TERMINAL, 'careful'), 'careful');
     assert.equal(accent(TERMINAL, 'repown use'), 'repown use');
   });
 
-  test('a Unicode terminal gets a coloured check, triangle or cross before the text', () => {
+  test('a Unicode terminal gets a coloured check or triangle before the text', () => {
     process.env['TERM'] = 'xterm-256color';
     assert.equal(marked('ok', TERMINAL, 'done'), ESC + '32m✔' + ESC + '0m done');
     assert.equal(marked('warn', TERMINAL, 'careful'), ESC + '33m▲' + ESC + '0m careful');
-    assert.equal(marked('fail', TERMINAL, 'stopped'), ESC + '31m✖' + ESC + '0m stopped');
     assert.equal(accent(TERMINAL, 'repown use'), ESC + '36mrepown use' + ESC + '0m');
   });
 
   test('a terminal with no Unicode signal gets ASCII marks', () => {
     if (process.platform !== 'win32') process.env['TERM'] = 'linux';
-    const kinds: Mark[] = ['ok', 'warn', 'fail'];
-    assert.deepEqual(kinds.map((kind) => plain(marked(kind, TERMINAL, 'z'))), ['+ z', '! z', 'x z']);
+    const kinds: Mark[] = ['ok', 'warn'];
+    assert.deepEqual(kinds.map((kind) => plain(marked(kind, TERMINAL, 'z'))), ['+ z', '! z']);
   });
 });

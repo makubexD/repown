@@ -93,7 +93,10 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   and prompts go to stderr. `noted` is optional advice on stderr, in the same columns as
   `warn`, dim when that stream has colour. `displayPath` shows Windows separators on Windows
   and leaves any other path unchanged; status uses it for the clone path and doctor for the
-  Git Credential Manager path. Colour is decided per stream.
+  Git Credential Manager path. Colour is decided per stream. Decoration (`marked` for ✔/▲,
+  `accent` for cyan) returns the text unchanged where that stream has no colour: never add a
+  mark to plain output by hand (ADR-027). `unicodeTerminal` copies clack's
+  `isUnicodeSupported`; re-check it when clack is upgraded.
 - `--format json` (`scan`, `accounts list`) is a stable contract for scripts; the text
   layout isn't. Renaming a JSON field is breaking (ADR-014).
 - `src/wizard/` is `repown setup`: `engine.ts` owns Back, the review loop, the opening

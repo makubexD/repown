@@ -871,7 +871,7 @@ OK    guard      on -- every push is checked before it leaves
        > git config --local push.autoSetupRemote true
 OK    upstream   branches without an upstream push without -u in this clone
 
-       done: this clone is set up for octocat
+       ✔ done: this clone is set up for octocat
        changed in this clone:
          user.name: (added) Octo Cat
          user.email: (added) octocat@example.invalid
@@ -887,7 +887,7 @@ OK    upstream   branches without an upstream push without -u in this clone
 
 The last line is only when gh still acts as someone else and the review did not already say so. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh   (signs <account> in to gh)`. The review says the same thing (`gh still acts as <active>, so gh pr create here would act as that account (git pushes are unaffected). If you use gh here: gh auth switch -u <account>.` when gh already lists it, otherwise `If you use gh here: repown use <account> --gh (signs <account> in to gh).`), and that run does not print it again. With `--no-input` there is no review, so the line after the run is the one place it appears. The first push's sign-in is said by `use` when `use` runs. When the pin is left out and Git Credential Manager's store was read and does not list the account, the review says `No stored credential for <account> yet: the first push signs in once (your browser opens).`
 
-`changed in this clone:` is what this run wrote in the clone, read before the first step and again after it (also after Stop, or after a step fails). A key that was unset is `(added)`; one that is gone is `old -> (removed)`. A key that did not change is left out. `repown.allowOwner` lists the values added or removed. The guard is `push guard: off -> on`. Only these config values are shown, never what a credential helper prints. When nothing in the clone changed, that block is the one line `nothing changed in this clone`. A settled clone whose pin was left out still says `done: this clone is set up for <account>`. `done` needs nothing left in the way of the next push, read again after the run: otherwise the line is `set up for <account>; the next push will fail: <first blocker> (and N more below)`, followed by each blocker's lines, and the exit code is unchanged ([ADR-026](decisions/ADR-026-setup-says-what-blocks-the-next-push.md)). The blockers: commits by another address the guard will refuse (also those another remote has but the push destination lacks), a sign-in carried by the push path (named by config key, never shown), `GIT_AUTHOR_EMAIL` / `GIT_COMMITTER_EMAIL` / `GH_TOKEN` / `GITHUB_TOKEN` set, `author.email` / `committer.email` in config, a destination owner the guard refuses, a branch diverged from its tracked ref on the destination, no upstream where a plain `git push` needs one, and a detached HEAD. The review lists them first among its notes.
+`changed in this clone:` is what this run wrote in the clone, read before the first step and again after it (also after Stop, or after a step fails). A key that was unset is `(added)`; one that is gone is `old -> (removed)`. A key that did not change is left out. `repown.allowOwner` lists the values added or removed. The guard is `push guard: off -> on`. Only these config values are shown, never what a credential helper prints. When nothing in the clone changed, that block is the one line `nothing changed in this clone`. A settled clone whose pin was left out still says `done: this clone is set up for <account>`. `done` needs nothing left in the way of the next push, read again after the run: otherwise the line is `set up for <account>; the next push will fail: <first blocker> (and N more below)`, followed by each blocker's lines, and the exit code is unchanged ([ADR-026](decisions/ADR-026-setup-says-what-blocks-the-next-push.md)). Where stderr has colour, `done` leads with a green ✔ and the blocked line with a yellow ▲ (`+` and `!` where Unicode can't be drawn), each blocker sits two columns deeper, and the commands (in the review, on `> ` lines and under `not run:`) are cyan. Without colour none of that is added ([ADR-027](decisions/ADR-027-the-wizard-decorates-only-where-it-draws-colour.md)). The blockers: commits by another address the guard will refuse (also those another remote has but the push destination lacks), a sign-in carried by the push path (named by config key, never shown), `GIT_AUTHOR_EMAIL` / `GIT_COMMITTER_EMAIL` / `GH_TOKEN` / `GITHUB_TOKEN` set, `author.email` / `committer.email` in config, a destination owner the guard refuses, a branch diverged from its tracked ref on the destination, no upstream where a plain `git push` needs one, and a detached HEAD. The review lists them first among its notes.
 
 Recording an account is not in the clone. That run adds a separate section:
 
@@ -925,7 +925,7 @@ When a `use --gh` step ran and gh's active account afterwards is that account, t
 Skip does not run that step. The closing lines name every skipped step, and say the clone is set up only when the pin ran:
 
 ```
-       done: this clone is set up for octocat
+       ✔ done: this clone is set up for octocat
        skipped: Turn on the push guard: each push is checked first
        changed in this clone:
          user.name: (added) Octo Cat
@@ -1014,9 +1014,10 @@ flowchart TD
 
 With colour on, the screen looks like this. The summary is inside the frame, and there
 is no blank line before **What next?**. The highlighted row shows its hint in parentheses.
-The title is a cyan badge, each summary value is bold cyan, and commands are cyan. Where
-Windows can't draw Unicode (its legacy console), clack draws `T | * >` in place of
-`┌ │ ◆ ●`. No variable needs setting ([ADR-027](decisions/ADR-027-the-wizard-decorates-only-where-it-draws-colour.md)).
+The title is a cyan badge, each summary value is bold cyan, and the hand-over line
+(`> repown ...`) is cyan. On a terminal that can't draw Unicode, clack draws ASCII
+stand-ins (`T` for `┌`, `|` for `│`, `*` for `◆`, `>` for the selected `●`). No variable needs
+setting ([ADR-027](decisions/ADR-027-the-wizard-decorates-only-where-it-draws-colour.md)).
 
 ```
 ┌  repown · not a clone: /home/octocat/code

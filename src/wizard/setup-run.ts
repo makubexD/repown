@@ -420,7 +420,9 @@ function closing(account: string, found: readonly Blocker[]): void {
   const [first] = blocking;
   out.detail(first ? out.marked('warn', process.stderr, 'set up for ' + printable(account) + '; the next push will fail: ' + printable(first.summary) + more)
     : out.marked('ok', process.stderr, 'done: this clone is set up for ' + printable(account)));
-  for (const line of found.flatMap((blocker) => blocker.lines)) out.detail('  ' + printable(line));
+  // A mark pushes the closing words two columns right; the blockers stay two deeper still.
+  const indent = useColour(process.stderr) ? '    ' : '  ';
+  for (const line of found.flatMap((blocker) => blocker.lines)) out.detail(indent + printable(line));
 }
 
 /** Re-read after the run: a step may have fixed what the review showed, or not. */

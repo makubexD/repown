@@ -72,12 +72,16 @@ export function textWidth(columns: number | undefined, margin: number): number {
   return Math.max(24, Math.min(MAX_WIDTH, (columns ?? 80) - margin));
 }
 
-/** A `label   value` line's label column: one or two words, then two spaces or more. */
-const LABEL = String.raw`\S+(?: \S+)? {2,}`;
+/**
+ * What a wrapped line's continuation hangs under: any indent, then a "1. " step number or
+ * a "label   " column (one or two words, then two spaces or more). Group 1 is the label.
+ */
+const HANG = /^\s*(?:\d+\. |(\S+(?: \S+)? {2,}(?=\S)))?/;
 
 /** The label column of a `label   value` line, padding included; '' for any other line. */
 export function labelOf(text: string): string {
-  return new RegExp('^' + LABEL + '(?=\\S)').exec(text)?.[0] ?? '';
+  const found = HANG.exec(text)!;
+  return found[1] !== undefined && found[0] === found[1] ? found[1] : '';
 }
 
 /**
@@ -86,7 +90,7 @@ export function labelOf(text: string): string {
  */
 export function wrap(text: string, width: number): string[] {
   if (text.length <= width) return [text];
-  const hang = ' '.repeat(new RegExp('^\\s*(?:\\d+\\. |' + LABEL + ')?').exec(text)![0].length);
+  const hang = ' '.repeat(HANG.exec(text)![0].length);
   const lines: string[] = [];
   let line = '';
   for (const word of text.split(/(?<=\S) (?=\S)/)) {

@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import { clackPrompter } from '../src/wizard/clack.ts';
 import { BACK, CANCEL, type Drawn, type Prompter } from '../src/wizard/engine.ts';
+import { labelOf, wrap } from '../src/wizard/review-text.ts';
 
 const ENTER = '\r';
 const DOWN = '\x1b[B';
@@ -120,7 +121,7 @@ test('without colour the title is exactly as before, unpadded', () => {
   const saved = process.env['FORCE_COLOR'];
   process.env['FORCE_COLOR'] = '0';
   try {
-    assert.match(drawn((prompter) => prompter.intro?.('repown setup')), /^┌ {2}repown setup\n$/);
+    assert.match(drawn((prompter) => prompter.intro?.('repown setup')), /^(┌|T) {2}repown setup\n$/, 'clack draws T where Unicode can\'t be drawn');
   } finally {
     if (saved === undefined) delete process.env['FORCE_COLOR']; else process.env['FORCE_COLOR'] = saved;
   }
@@ -135,4 +136,29 @@ test('a wrapped value keeps its colour on the continuation line, at the same wid
   const rows = coloured.split('\n').filter((row) => row.includes('clone'));
   assert.ok(rows.length > 1, coloured);
   for (const row of rows) assert.match(row, /\x1b\[36m/, row);
+});
+
+test('labelOf names the column wrap hangs under, and nothing for a numbered or indented line', () => {
+  const label = 'Accounts   2 recorded: octo-work, octocat, and a few more names to make it wrap';
+  assert.equal(labelOf(label), 'Accounts   ');
+  assert.equal(wrap(label, 40)[1]!.length - wrap(label, 40)[1]!.trimStart().length, 'Accounts   '.length);
+  assert.equal(labelOf('1. Pin  this clone to octocat'), '');
+  assert.equal(labelOf('  user.name:  Octo Cat'), '');
+  assert.equal(labelOf('plain words stay as they are'), '');
+});
+
+test('a wrapped command is cyan on every row', () => {
+  const command = '> repown use octocat --name="Octo Cat" --email=octocat@users.noreply.example.invalid --guard --auto-upstream';
+  let coloured = '';
+  withColour(() => { coloured = drawn((prompter) => prompter.show?.([command])); });
+  const rows = coloured.split('\n').filter((row) => /octocat|guard|upstream/.test(row));
+  assert.ok(rows.length > 1, coloured);
+  for (const row of rows) assert.match(row, /\x1b\[36m/, row);
+});
+
+test('the start screen\'s hand-over line closes the frame in cyan; a plain closing line is not styled', () => {
+  withColour(() => {
+    assert.match(drawn((prompter) => prompter.outro?.('> repown setup --cwd code')), /\x1b\[36m> repown setup --cwd code/);
+    assert.doesNotMatch(drawn((prompter) => prompter.outro?.('Running the commands')), /\x1b\[36m/);
+  });
 });

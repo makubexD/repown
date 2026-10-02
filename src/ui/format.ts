@@ -9,6 +9,7 @@ const COLOURS = {
   green: '\x1b[32m',
   yellow: '\x1b[33m',
   red: '\x1b[31m',
+  cyan: '\x1b[36m',
   dim: '\x1b[2m',
   reset: '\x1b[0m',
 };
@@ -32,6 +33,40 @@ export function useColour(stream: NodeJS.WriteStream): boolean {
 
 function paint(stream: NodeJS.WriteStream, colour: keyof typeof COLOURS, text: string): string {
   return useColour(stream) ? COLOURS[colour] + text + COLOURS.reset : text;
+}
+
+/**
+ * Whether the terminal draws symbols beyond ASCII: the signals @clack/prompts draws its own
+ * frame by, so a mark and the frame around it never disagree. Windows' legacy console does
+ * not; Windows Terminal, VS Code and mintty (TERM=xterm-256color) do (ADR-027).
+ */
+export function unicodeTerminal(env: NodeJS.ProcessEnv = process.env, platform: string = process.platform): boolean {
+  if (platform !== 'win32') return env['TERM'] !== 'linux';
+  return Boolean(env['CI'] || env['WT_SESSION'] || env['TERMINUS_SUBLIME'])
+    || env['ConEmuTask'] === '{cmd::Cmder}'
+    || ['Terminus-Sublime', 'vscode'].includes(env['TERM_PROGRAM'] ?? '')
+    || ['xterm-256color', 'alacritty'].includes(env['TERM'] ?? '')
+    || env['TERMINAL_EMULATOR'] === 'JetBrains-JediTerm';
+}
+
+export type Mark = 'ok' | 'warn';
+
+/** Each mark's colour, its symbol, and the ASCII stand-in where Unicode can't be drawn. */
+const MARKS: Record<Mark, { colour: keyof typeof COLOURS; unicode: string; ascii: string }> = {
+  ok: { colour: 'green', unicode: '✔', ascii: '+' },
+  warn: { colour: 'yellow', unicode: '▲', ascii: '!' },
+};
+
+/** `text` led by a coloured mark where `stream` has colour; exactly `text` where it has none. */
+export function marked(kind: Mark, stream: NodeJS.WriteStream, text: string): string {
+  if (!useColour(stream)) return text;
+  const mark = MARKS[kind];
+  return paint(stream, mark.colour, unicodeTerminal() ? mark.unicode : mark.ascii) + ' ' + text;
+}
+
+/** A command, cyan where `stream` has colour. */
+export function accent(stream: NodeJS.WriteStream, text: string): string {
+  return paint(stream, 'cyan', text);
 }
 
 /** A status word, the stream it goes to, and its colour. */

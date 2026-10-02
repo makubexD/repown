@@ -11,7 +11,7 @@ import { styleText } from 'node:util';
 import * as p from '@clack/prompts';
 import { BACK, CANCEL, type Asked, type Choice, type Drawn, type Prompter, type Reply, type Review, type ReviewChoice, type StepChoice, type StepConfirm } from './engine.ts';
 import { BACK_WORD, type Streams } from './plain.ts';
-import { BACK_TO_REVIEW, PICK_QUESTION, RUN_THIS_STEP, reviewDefault, reviewLines, reviewOptions, reviewQuestion, stepConfirmLines, stepOptions, textWidth, wrap } from './review-text.ts';
+import { BACK_TO_REVIEW, PICK_QUESTION, RUN_THIS_STEP, labelOf, reviewDefault, reviewLines, reviewOptions, reviewQuestion, stepConfirmLines, stepOptions, textWidth, wrap } from './review-text.ts';
 
 /** A value no real choice can have. */
 const GO_BACK = '\u0000back';
@@ -27,13 +27,25 @@ export function clackPrompter(streams: Streams): Prompter {
     show: (lines) => logLines(io, lines),
     confirmStep: (confirm) => showStep(confirm, io),
     close: () => {},
-    intro: (title) => p.intro(title, io),
+    intro: (title) => p.intro(badge(title), io),
     // After a cancel, clack has already drawn the gutter's last line.
-    outro: (message, cancelled) => (cancelled ? p.cancel(message, io) : p.outro(message, io)),
+    outro: (message, cancelled) => (cancelled ? p.cancel(message, io) : p.outro(commandOr(message), io)),
     // A line, not clack's spinner: the spinner takes over Ctrl-C and exits 0, where a
     // cancel must exit 130.
     busy: (message) => p.log.step(message, io),
   };
+}
+
+/** The title black on cyan. Its padding only comes with the colour, so a plain title is unchanged. */
+function badge(title: string): string {
+  const padded = ' ' + title + ' ';
+  const styled = styleText(['bgCyan', 'black'], padded);
+  return styled === padded ? title : styled;
+}
+
+/** A `> command` hand-over line cyan; any other closing line as it is. */
+function commandOr(message: string): string {
+  return message.startsWith('> ') ? styleText('cyan', message) : message;
 }
 
 function askDrawn(step: Drawn, asked: Asked, io: Io): Promise<Reply> {
@@ -133,7 +145,23 @@ async function showStep(confirm: StepConfirm, io: Io): Promise<StepChoice | type
 }
 
 function logLines(io: Io, lines: readonly string[]): void {
-  p.log.message(lines.flatMap((text) => wrap(text, widthOf(io, GUTTER))).join('\n'), io);
+  p.log.message(lines.flatMap((text) => accented(text, widthOf(io, GUTTER))).join('\n'), io);
+}
+
+/**
+ * One shown line, wrapped, then styled: a label's value bold cyan, a `> command` cyan.
+ * Styling after wrapping keeps every line as wide as it is without colour (ADR-027).
+ */
+function accented(text: string, width: number): string[] {
+  const rows = wrap(text, width);
+  if (text.startsWith('> ')) return rows.map((row) => styleText('cyan', row));
+  const label = labelOf(text);
+  return rows.map((row, index) => accentLine(row, index === 0 ? label : ' '.repeat(label.length)));
+}
+
+function accentLine(line: string, label: string): string {
+  if (!label || !line.startsWith(label)) return line;
+  return label + styleText(['bold', 'cyan'], line.slice(label.length));
 }
 
 async function chosen(confirm: StepConfirm, io: Io): Promise<StepChoice | typeof CANCEL> {
@@ -142,7 +170,7 @@ async function chosen(confirm: StepConfirm, io: Io): Promise<StepChoice | typeof
 }
 
 async function showReview(review: Review, io: Io): Promise<ReviewChoice> {
-  p.note(reviewLines(review, widthOf(io, BOX), (text) => styleText('dim', text)).join('\n'), review.title, io);
+  p.note(reviewLines(review, widthOf(io, BOX), (text) => styleText('cyan', text)).join('\n'), review.title, io);
   const choice = await p.select({ ...io, message: reviewQuestion(review), options: reviewOptions(review),
     initialValue: reviewDefault(review) });
   return p.isCancel(choice) ? CANCEL : choice;

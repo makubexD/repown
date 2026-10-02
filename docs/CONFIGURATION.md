@@ -21,6 +21,13 @@ is needed to get started: [README](../README.md#quick-start) covers that.
 off on stderr (`NO_COLOR` without `FORCE_COLOR`, or `FORCE_COLOR=0`/`false`), always with
 `TERM=dumb`, and when the optional prompt library can't load.
 
+Colour needs no setting: a terminal gets it. Where it does, the wizard's frame and setup's
+closing mark (✔ or ▲) use Unicode, or ASCII (`+` or `!`) on the Linux console
+(`TERM=linux`) and on Windows unless the terminal is known to draw Unicode: Windows Terminal
+(`WT_SESSION`), VS Code (`TERM_PROGRAM=vscode`), Git Bash's mintty (`TERM=xterm-256color`),
+alacritty, cmder, JetBrains, or `CI`
+([ADR-027](decisions/ADR-027-the-wizard-decorates-only-where-it-draws-colour.md)).
+
 ## The account registry
 
 One file, `accounts.json`, holding each account's name, email and host (no credentials).

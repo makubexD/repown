@@ -3,7 +3,7 @@
 **Status:** Accepted. Supersedes the help-outside-a-clone branch of
 [ADR-018](ADR-018-bare-repown-guides-new-clones.md) and
 [ADR-021](ADR-021-bare-repown-always-opens-setup.md), in a terminal only. What happens after
-an action is superseded in part by [ADR-028](ADR-028-the-start-screen-returns-after-a-machine-action.md).
+an action, and how Record an account asks, are superseded in part by [ADR-028](ADR-028-the-start-screen-returns-after-a-machine-action.md).
 
 ## Context
 

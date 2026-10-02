@@ -10,7 +10,7 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 ### Changed
 - The wizard (`repown setup`, and bare `repown` in a terminal) is easier to read in colour,
   with nothing to set: the title is a cyan badge, each summary value is bold cyan, the
-  commands setup shows and runs, and the `repown use <account>` that `accounts add` suggests, are cyan, and setup's closing line leads with a green ✔ (done) or a yellow ▲ (the next push
+  commands setup shows and runs are cyan, and setup's closing line leads with a green ✔ (done) or a yellow ▲ (the next push
   will fail). On a terminal that can't draw Unicode (Windows' console without a known terminal, or
   the Linux console), the marks are `+` and `!`. Without colour (a
   pipe, a log, `NO_COLOR`), the output is exactly as before
@@ -19,11 +19,14 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   name (a typo) or the name is an organisation. It still records the account, and says nothing
   when GitHub can't be asked.
 - The start screen's **Record an account** asks everything in its frame: the login, where
-  it's hosted, and the commit name and email, prefilled from the GitHub profile, with Back on
+  it's hosted, and the commit name and email, prefilled from GitHub (name, noreply address), with Back on
   each. It then runs `repown accounts add` with every answer as a flag, so the bare `Commit
   name` / `Commit email` prompts are gone from it, and a login already recorded is refused as
   in setup. In setup and on the start screen, the name question first says when github.com
-  has no account by that login, so a typo can be fixed before it is recorded.
+  has no account by that login, or it is an organisation, so a typo can be fixed before it
+  is recorded.
+- `repown accounts add` prints its suggested next command, `repown use <account>`, in
+  cyan where stdout has colour, and exactly as before where it has none (ADR-027's rule).
 
 - After Record an account, Check this machine or Stop gh serving credentials, the start
   screen comes back with a fresh summary instead of exiting; Quit, Esc or Ctrl-C leave it

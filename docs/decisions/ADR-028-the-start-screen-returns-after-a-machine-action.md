@@ -1,7 +1,7 @@
 # ADR-028: The start screen returns to its menu after a machine-level action
 
 **Status:** Accepted. Supersedes in part [ADR-024](ADR-024-bare-repown-outside-a-clone-opens-a-start-screen.md):
-what happens after an action.
+what happens after an action, and how Record an account asks.
 
 ## Context
 
@@ -27,6 +27,9 @@ before.
 - **Quit exits 0, Esc and Ctrl-C exit 130,** as before. An action that failed has already
   said so in its own output (`FAIL …`), and the menu that follows lets the user retry or
   leave.
+- **Record an account asks setup's own new-account questions in the frame** (login,
+  host, name, email, with Back), then runs `accounts add` with every answer as a flag,
+  so no bare prompt follows the frame. A login already recorded is refused, as in setup.
 - Each action is still the command's own `run()`, printed first as the command it stands
   for (ADR-024).
 

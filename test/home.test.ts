@@ -14,6 +14,9 @@ import { commandFor, homeNote, listedClones, menuItems, summaryLines } from '../
 import { runHome } from '../src/wizard/home-run.ts';
 import { formatCommand, printable } from '../src/wizard/setup-flow.ts';
 import { displayPath } from '../src/ui/format.ts';
+import { parseArgs } from '../src/ui/args.ts';
+import { specFor } from '../src/ui/command.ts';
+import accountsGroup from '../src/commands/accounts.ts';
 import { sandbox, type Sandbox } from './helpers.ts';
 
 describe('start screen', () => {
@@ -205,7 +208,12 @@ describe('start screen commands', () => {
     assert.deepEqual(account, ['accounts', 'add', '--name=Octo Cat', '--email=octocat@example.invalid', '--host=github', '--', 'octocat'],
       'the same command setup runs for a new account, so accounts add asks nothing more');
     assert.equal(formatCommand(account), "repown accounts add octocat --name 'Octo Cat' --email octocat@example.invalid");
+    const parsed = parseArgs(account.slice(2), specFor(accountsGroup.actions['add']!));
+    assert.ok(parsed.ok, 'accounts add accepts the argv the start screen builds');
+    assert.deepEqual(parsed.value.positional, ['octocat']);
     const dash = commandFor({ kind: 'account', login: '-h', ...profile });
+    const dashed = parseArgs(dash.slice(2), specFor(accountsGroup.actions['add']!));
+    assert.ok(dashed.ok && dashed.value.positional[0] === '-h', 'a dashed login stays the account');
     assert.deepEqual(dash.slice(-2), ['--', '-h']);
     assert.match(formatCommand(dash), / -- -h$/);
     assert.deepEqual(commandFor({ kind: 'doctor' }), ['doctor']);

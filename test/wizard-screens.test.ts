@@ -575,11 +575,14 @@ describe('start screen, played with key presses', () => {
         [enter], [...typed('octocatt'), enter], [enter], [...Array<string>(8).fill(KEY.backspace), '<', enter], [up, enter], [esc],
       ], { patience: 20_000 });
       assert.equal(run.result, 130, run.screen);
-      const sentence = run.screen.search(/github\.com has no account named octocatt: check the spelling/);
+      const host = run.screen.search(/Where is this account hosted\?/);
       const name = run.screen.search(/Your name, as your commits show it/);
-      assert.ok(sentence >= 0 && name > sentence, run.screen);
+      assert.ok(host >= 0 && name > host, run.screen);
+      assert.match(run.screen.slice(host, name), /github\.com has no account named octocatt: check the spelling/,
+        'the sentence is the name question\'s own detail, drawn after the host question');
       const afterName = run.screen.slice(name);
-      assert.match(afterName, /The account's user name/, 'Back from the name, then from the host, is the login question');
+      assert.match(afterName, /The account's user name[^\n]*\n(?:│[^\n]*\n)*│ {2}octocatt/,
+        'Back from the name, then from the host, is the login question, still holding the login');
       assert.equal(existsSync(registryPath()), false, 'nothing recorded');
     });
   });

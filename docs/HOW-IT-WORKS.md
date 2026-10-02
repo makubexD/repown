@@ -1012,6 +1012,7 @@ flowchart TD
   MENU -->|gh is the helper| FIX["Stop gh serving credentials"]
   MENU --> ADD["Record an account"]
   MENU --> DOC["Check this machine"]
+  FIX & ADD & DOC -->|"the command runs, then"| HOME
   MENU --> SH["Show help, exit 0"]
   MENU --> QUIT["Quit, exit 0"]
   MENU -->|Esc or Ctrl-C| ESC["exit 130, nothing changed"]
@@ -1167,25 +1168,37 @@ top help on stdout, and exits 0.
 **Record an account** asks setup's own questions for a new account, in the frame:
 `The account's user name (login)` (hint: `the name you sign in with, e.g. octocat; not
 your email address`), where it is hosted (GitHub by default), and the name and email
-commits show, prefilled from the GitHub profile (the email as GitHub's noreply
-address). `type < to go back` works on every question; on the login it returns to
-the menu. Esc still exits 130. An empty login is `a value is required`. Anything
-outside letters, digits and `. _ @ -` is `use letters, digits and . _ @ - only`. A
-login already recorded, in any case, is `"octocat" is already recorded on this
-machine: use it by that name`. When github.com has no account by that login (a typo),
-the name question says so first (`github.com has no account named octocatt: check the
-spelling`), so `<` can fix it before anything is recorded. Then it runs `repown
-accounts add` with every answer as a flag, so nothing more is asked. A login that
-starts with a dash is passed after `--`, so it stays the account name:
+commits show. On GitHub they start from a lookup: the profile's name (else the login),
+and the noreply address GitHub gives the account. Text questions take `<` to go back,
+and the host question has a Back choice; Back on the login returns to the menu. Esc
+still exits 130. An empty login is `a value is required`. Anything outside letters,
+digits and `. _ @ -` is `use letters, digits and . _ @ - only`. A login already
+recorded, in any case, is `"octocat" is already recorded on this machine: use it by
+that name`. When github.com has no account by that login (a typo), or it is an
+organisation, the name question says so first, before this machine's default name if
+there is one:
 
 ```
-└  > repown accounts add octocat --name 'Octo Cat' --email 1234+octocat@users.noreply.github.com
+●  github.com has no account named octocatt: check the spelling; not this machine's
+│  default name (Octo Cat), unless this account uses it
 ```
+
+so Back can fix the login before anything is recorded (an organisation reads
+`octo-org is an organisation on github.com, not an account you sign in as`). Then it
+runs `repown accounts add` with every answer as a flag, so nothing more is asked:
+
+```
+└  > repown accounts add octocat --name 'Octo Cat' --email '1234+octocat@users.noreply.github.com'
+```
+
+A login that starts with a dash is passed after `--`, so it stays the account name:
+`repown accounts add --name 'Octo Cat' --email … -- -h`.
 
 Each of those runs that command's own `run()`, after the frame closes on the command.
 On a plain terminal the closing line is that same command on its own line. After
 **Record an account**, **Check this machine** or **Stop gh serving credentials**, the
-start screen opens again, with the folder read afresh, so the summary shows the change
+start screen opens again once that command has run, whether or not it succeeded, with the
+folder read afresh, so the summary shows the change
 ([ADR-028](decisions/ADR-028-the-start-screen-returns-after-a-machine-action.md)).
 Setting up a clone and Show help end it. **Quit**
 exits 0 and prints `Quit`. Esc or Ctrl-C exits 130, the same cancel `repown setup`

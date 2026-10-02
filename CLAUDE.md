@@ -112,8 +112,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   draws through the Prompter (`show`, `choose`) and runs each action's own `run()`.
   Record an account asks setup's own new-account steps (`loginStep`, `profileSteps` in
   `setup-flow.ts`) through the engine's `runFlow`, then runs `accounts add` with every
-  answer as a flag; never a second copy of those questions. After fix, doctor or a
-  recorded account the screen opens again and re-reads (ADR-028); setup, help and Quit end it.
+  answer as a flag; never a second copy of those questions. Once fix, doctor or
+  `accounts add` has run, failed or not, the screen opens again and re-reads (ADR-028); setup, help and Quit end it.
 
 ## Tests
 

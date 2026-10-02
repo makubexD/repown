@@ -1,7 +1,7 @@
 // The start screen: a summary of this folder, then one menu. Each action prints
 // the command it stands for and runs that command's own run(). Loaded only
 // through the runner start.ts returns, so a typed command never imports it.
-// After fix, doctor or recording an account, the screen opens again (ADR-028).
+// Once fix, doctor or accounts add has run, failed or not, the screen opens again (ADR-028).
 //
 // Quit exits 0. Esc and Ctrl-C exit 130, the same cancel setup uses. Neither writes.
 
@@ -76,7 +76,7 @@ async function chooseNext(prompter: Prompter, home: HomeState, deps: HomeRunDeps
   }
 }
 
-/** Setup, help and Quit end the screen; fix, doctor and a recorded account come back to it. */
+/** Setup, help and Quit end the screen; once fix, doctor or accounts add has run, it comes back. */
 async function dispatchChoice(picked: string, prompter: Prompter, home: HomeState, deps: HomeRunDeps): Promise<number | null | typeof AGAIN> {
   if (picked === MENU.quit) return finish(prompter, QUIT, 0);
   if (picked === MENU.help) return showTopHelp(prompter);

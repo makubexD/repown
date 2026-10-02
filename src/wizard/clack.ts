@@ -128,15 +128,23 @@ function isBack(typed: string | undefined, asked: Asked): boolean {
 
 /**
  * clack draws its gutter in front of a select's second line but not a text prompt's,
- * so a text question draws it itself.
+ * so a text question draws it itself, with clack's own bar (`|` where Unicode isn't drawn).
  */
-const TEXT_GUTTER = styleText('gray', '│') + '  ';
+const TEXT_GUTTER = styleText('gray', p.S_BAR) + '  ';
 
 /** The question, and under it the hint, wrapped in the gutter -- visible whatever the answer shows. */
 function messageOf(step: Drawn, io: Io, extra?: string): string {
-  const hint = [step.hint, extra].filter((part) => part).join(' · ');
   const gutter = step.kind === 'text' ? TEXT_GUTTER : '';
-  return [step.message, ...(hint ? wrap(hint, widthOf(io, GUTTER)) : [])].join('\n' + gutter);
+  return [step.message, ...hintRows(step.hint, extra, widthOf(io, GUTTER))].join('\n' + gutter);
+}
+
+/** The hint wrapped, then the extra ("type < to go back") on its last row if it fits whole, else on its own. */
+function hintRows(hint: string | undefined, extra: string | undefined, width: number): string[] {
+  const rows = hint ? wrap(hint, width) : [];
+  if (!extra) return rows;
+  const joined = rows.length > 0 ? rows[rows.length - 1] + ' · ' + extra : extra;
+  if (joined.length <= width) return [...rows.slice(0, -1), joined];
+  return [...rows, ...wrap(extra, width)];
 }
 
 async function showStep(confirm: StepConfirm, io: Io): Promise<StepChoice | typeof CANCEL> {

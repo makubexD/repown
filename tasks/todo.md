@@ -1,9 +1,9 @@
 # Start-screen gaps
 
-Status: Phase 4, task 1 done (plan committed).
+Status: Phase 4, task 2 done.
 
 - [x] 1. Plan: SPEC.md + tasks/todo.md
-- [ ] 2. G1 + G6: the text question's gutter follows clack's bar; `type < to go back` stays whole
+- [x] 2. G1 + G6: the text question's gutter follows clack's bar; `type < to go back` stays whole
 - [ ] 3. G3: a profile lookup that knows "no such user"; `accounts add` warns
 - [ ] 4. G2 + G7 + G8 + G3: Record an account asks login, host, name, email in the frame
 - [ ] 5. G4: ADR-028, the start screen returns to its menu after a machine-level action

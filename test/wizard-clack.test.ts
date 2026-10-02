@@ -5,6 +5,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { PassThrough } from 'node:stream';
 import { clackPrompter } from '../src/wizard/clack.ts';
 import { BACK, CANCEL, type Drawn, type Prompter } from '../src/wizard/engine.ts';
@@ -161,4 +162,46 @@ test('the start screen\'s hand-over line closes the frame in cyan; a plain closi
     assert.match(drawn((prompter) => prompter.outro?.('> repown setup --cwd code')), /\x1b\[36m> repown setup --cwd code/);
     assert.doesNotMatch(drawn((prompter) => prompter.outro?.('Running the commands')), /\x1b\[36m/);
   });
+});
+
+/** No sign of a Unicode terminal: clack then draws its ASCII frame (Windows needs every signal unset, elsewhere TERM=linux). */
+function asciiEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, FORCE_COLOR: '0' };
+  for (const key of ['CI', 'WT_SESSION', 'TERMINUS_SUBLIME', 'ConEmuTask', 'TERM_PROGRAM', 'TERM', 'TERMINAL_EMULATOR']) delete env[key];
+  if (process.platform !== 'win32') env['TERM'] = 'linux';
+  return env;
+}
+
+const ASK_TEXT = `
+  import { PassThrough } from 'node:stream';
+  import { clackPrompter } from ${JSON.stringify(new URL('../src/wizard/clack.ts', import.meta.url).href)};
+  const input = new PassThrough();
+  const output = new PassThrough();
+  let shown = '';
+  output.on('data', (chunk) => { shown += chunk.toString(); });
+  setTimeout(() => input.write('\\r'), 50);
+  await clackPrompter({ input, output }).ask(
+    { id: 'name', kind: 'text', message: 'Commit name', hint: 'shown on every commit', flag: '--name' },
+    { initial: 'Octo Cat', choices: [], detail: undefined, canGoBack: true });
+  process.stderr.write(shown);
+`;
+
+test('in a terminal without Unicode, a text question\'s hint lines use clack\'s ASCII gutter too', () => {
+  const run = spawnSync(process.execPath, ['--input-type=module'], { input: ASK_TEXT, env: asciiEnv(), encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stderr, /^\| {2}shown on every commit · type < to go back$/m);
+  assert.doesNotMatch(run.stderr, /[│┌└◆◇]/u, run.stderr);
+});
+
+test('"type < to go back" is never split across lines; it takes a line of its own when it doesn\'t fit', async () => {
+  const input = new PassThrough();
+  const output = Object.assign(new PassThrough(), { columns: 37 });
+  let shown = '';
+  output.on('data', (chunk: Buffer) => { shown += chunk.toString(); });
+  const long = { ...name, hint: 'one two three four five six seven' } as Drawn;
+  press(input, ENTER);
+  await clackPrompter({ input, output }).ask(long, { initial: 'Octo Cat', choices: [], detail: undefined, canGoBack: true });
+  const plain = shown.replace(ANSI, '');
+  assert.match(plain, /^.\s+six seven$/m, plain);
+  assert.match(plain, /^.\s+type < to go back$/m, plain);
 });

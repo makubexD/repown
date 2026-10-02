@@ -16,6 +16,12 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   pipe, a log, `NO_COLOR`), the output is exactly as before
   (ADR-027).
 
+### Fixed
+- On a terminal that can't draw Unicode (classic Windows cmd), a text question's hint lines drew
+  a `│` beside a gutter of `|`. They now use the same bar as the rest of the frame.
+- "type < to go back" no longer breaks across two lines; when it doesn't fit after the hint, it
+  takes a line of its own.
+
 ## [0.4.0] - 2026-09-30
 
 ### Added

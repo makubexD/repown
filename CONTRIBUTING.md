@@ -82,8 +82,15 @@ with an installed repown.
   reversed one is superseded, never rewritten.
 - **Tests first.** Anything that touches git uses `sandbox()` from
   [test/helpers.ts](test/helpers.ts), which isolates git config and clears the variables
-  that would leak your identity into a test. `node --test test/guard.test.ts` runs one
-  file; `node --test --test-name-pattern="<regex>" test/guard.test.ts` one test.
+  that would leak your identity into a test. `sandbox()` and `plainTerminal()` also clear
+  `NO_COLOR`, `FORCE_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE`, `COLORTERM` and `TERM`.
+  `plainTerminal()` is what a file uses when it does not call `sandbox()`. A test that
+  wants colour sets it explicitly. `node --test test/guard.test.ts` runs one file;
+  `node --test --test-name-pattern="<regex>" test/guard.test.ts` one test;
+  `node --test --test-shard=1/3 "test/*.test.ts"` one shard. CI runs the Windows suite
+  as three of those.
+- **Fake executables.** `gh.exe` and `git-credential-manager.exe` are compiled once per
+  test process and then reused ([test/fake-exe.ts](test/fake-exe.ts)).
 - **Changing what `repown setup` shows?** [test/wizard-screens.test.ts](test/wizard-screens.test.ts)
   plays it as a newcomer would, pressing arrows, Enter, typed text and Esc on the real
   screens (`play()` in [test/setup-fixtures.ts](test/setup-fixtures.ts)), in one scenario

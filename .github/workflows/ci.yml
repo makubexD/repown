@@ -16,14 +16,24 @@
 # git against sandboxes under the runner's temp directory, with GIT_CONFIG_GLOBAL
 # and GIT_CONFIG_SYSTEM pointed at empty files so the runner's own configuration
 # cannot influence a result.
+#
+# WHY WINDOWS IS THREE SHARDS AND LINUX AND MACOS ARE NOT. One Windows Test
+# step took 621 s on Node 24 and 655 s on Node 22; the job was 660-695 s
+# (run 36727911874). Three shards per Node (22 and 24) brought the slowest
+# job to 319 s, with Test steps of 55-278 s, when TEMP pointed at RUNNER_TEMP
+# and Defender skipped it (run 36775604717). The same shards without that
+# tweak: slowest job 375 s, Test steps 61-320 s, summed Test time 1032 s
+# against 893 s with it (run 36776320265). The tweak stays. Linux and macOS
+# stay one unsharded `npm test` each: ubuntu finishes in about 1.5 min, and
+# what macOS adds is a filesystem, which one Node 24 job already exercises.
+# Every test still runs on every OS. A shard cannot split a file, and shard 3
+# is bound by test/wizard-setup.test.ts, the largest one.
+#
+# WHY ONE UBUNTU ROW FORCES COLOUR. The extra ubuntu Node 24 job sets
+# FORCE_COLOR and CLICOLOR_FORCE to 1, so a test that leaks either fails CI.
+# The other rows leave the variables unset. A test that wants colour sets it.
 
 name: CI
-
-# A/B switch for the Windows TEMP/Defender step in the test job.
-# Measurement only: Opus runs once with this set to '1' and once without,
-# then removes whichever loses.
-env:
-  WIN_TEMP_TWEAK: '0'
 
 on:
   push:
@@ -108,10 +118,10 @@ jobs:
       - name: Typecheck and build
         run: npm run build
 
-      # Measurement only. Opus will measure one run with WIN_TEMP_TWEAK=1 and one
-      # without, then remove whichever loses. Not a decision to keep this step.
+      # Windows process creation and Defender scanning dominate the git-heavy
+      # suite. Pointing TEMP at RUNNER_TEMP and excluding it was measured faster.
       - name: Point TEMP at RUNNER_TEMP and exclude it from Defender
-        if: matrix.os == 'windows-latest' && env.WIN_TEMP_TWEAK == '1'
+        if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
           $dir = Join-Path $env:RUNNER_TEMP 'repown-tmp'

@@ -24,6 +24,10 @@ and the tests compare it byte for byte. NO_COLOR, FORCE_COLOR and TERM=dumb are 
   badge. In a `Label   value` line the frame shows, the value is bold cyan. Commands, in
   the review and on `> ` lines, are cyan (they were dim). Styling is applied after
   wrapping, so every line wraps at the width it had without colour.
+- **Setup's closing line leads with a mark where stderr has colour:** a green ✔ when done,
+  a yellow ▲ when the next push will fail. Its step and not-run commands are cyan. A stop
+  keeps its red `FAIL` word and gets no mark of its own. The words and exit codes are
+  unchanged, with or without `--no-input`.
 - **Symbols follow the frame.** `unicodeTerminal()` reads the signals clack draws its own
   frame by: every terminal outside Windows except the Linux console; on Windows, Windows
   Terminal (`WT_SESSION`), VS Code (`TERM_PROGRAM=vscode`), mintty and others that set
@@ -48,8 +52,8 @@ and the tests compare it byte for byte. NO_COLOR, FORCE_COLOR and TERM=dumb are 
 ## Consequences
 
 - On Windows Terminal, VS Code and macOS/Linux terminals the wizard shows the badge, cyan
-  values and commands; on the legacy Windows console the same colours, with clack's
-  ASCII frame.
+  values and commands, and setup closes on ✔ or ▲; on the legacy Windows console the same
+  colours, with clack's ASCII frame and `+` or `!`.
 - Output without colour is unchanged, so scripts, logs and the existing tests are too.
 - clack's own key hint still prints `↑/↓` and `•` on a non-Unicode terminal; that is
   inside the library.

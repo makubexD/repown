@@ -354,7 +354,7 @@ async function offer(
   if (index > 0) process.stderr.write('\n');
   out.detail('step ' + (index + 1) + ' of ' + plan.length + ': ' + printable(planned.what));
   if (!confirm) {
-    out.detail('> ' + formatCommand(planned.argv));
+    out.detail(out.accent(process.stderr, '> ' + formatCommand(planned.argv)));
     return 'yes';
   }
   return confirm(planned);
@@ -389,7 +389,7 @@ function runPlanned(planned: PlannedCommand, git: Git, hideNext: boolean): Promi
 function halt(remaining: readonly PlannedCommand[], code: number, why?: string): number {
   out.fail('setup', why ?? (code === CANCELLED ? 'interrupted' : 'stopped: that command exited ' + code));
   if (remaining.length > 0) out.detail('not run:');
-  for (const planned of remaining) out.detail('  ' + formatCommand(planned.argv));
+  for (const planned of remaining) out.detail('  ' + out.accent(process.stderr, formatCommand(planned.argv)));
   return code;
 }
 
@@ -418,8 +418,8 @@ function closing(account: string, found: readonly Blocker[]): void {
   const blocking = found.filter((blocker) => blocker.blocks);
   const more = blocking.length > 1 ? ' (and ' + (blocking.length - 1) + ' more below)' : '';
   const [first] = blocking;
-  out.detail(first ? 'set up for ' + printable(account) + '; the next push will fail: ' + printable(first.summary) + more
-    : 'done: this clone is set up for ' + printable(account));
+  out.detail(first ? out.marked('warn', process.stderr, 'set up for ' + printable(account) + '; the next push will fail: ' + printable(first.summary) + more)
+    : out.marked('ok', process.stderr, 'done: this clone is set up for ' + printable(account)));
   for (const line of found.flatMap((blocker) => blocker.lines)) out.detail('  ' + printable(line));
 }
 

@@ -44,6 +44,20 @@ describe('setup closes on what still blocks the next push', () => {
     assert.match(run.stderr, /author\.email is set in git config/);
   });
 
+  // FORCE_COLOR stands for a terminal; TERM=xterm-256color for one that draws Unicode.
+  const COLOUR = { FORCE_COLOR: '1', TERM: 'xterm-256color' };
+
+  test('with colour, done leads with a green check and each command is cyan', () => {
+    const run = setup(FIRST, COLOUR);
+    assert.match(run.stderr, /\x1b\[32m✔\x1b\[0m done: this clone is set up for octocat\n/);
+    assert.match(run.stderr, /\x1b\[36m> repown use octocat[^\n]*\x1b\[0m\n/);
+  });
+
+  test('with colour, a blocked closing line leads with a yellow triangle', () => {
+    const run = setup(FIRST, { ...COLOUR, GH_TOKEN: 'x' });
+    assert.match(run.stderr, /\x1b\[33m▲\x1b\[0m set up for octocat; the next push will fail: GH_TOKEN is set\n/);
+  });
+
   test('nothing in the way: done, exactly as before', () => {
     const run = setup(FIRST);
     assert.match(run.stderr, /\n {7}done: this clone is set up for octocat\n/);

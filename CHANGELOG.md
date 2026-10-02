@@ -7,6 +7,14 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+### Changed
+- The wizard (`repown setup`, and bare `repown` in a terminal) is easier to read in colour,
+  with nothing to set: the title is a cyan badge, each summary value is bold cyan, commands
+  are cyan, and setup's closing line leads with a green ✔ (done) or a yellow ▲ (the next push
+  will fail). Where Windows can't draw Unicode, the marks are `+` and `!`. Without colour (a
+  pipe, a log, `NO_COLOR`), the output is exactly as before
+  (ADR-027).
+
 ## [0.4.0] - 2026-09-30
 
 ### Added

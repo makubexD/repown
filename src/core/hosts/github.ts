@@ -45,6 +45,11 @@ async function resolveProfile(account: string): Promise<Profile | null> {
   return { ...(name ? { name } : {}), ...(email ? { email } : {}) };
 }
 
+/** The address GitHub gives an account to keep its own private (with or without the id in front). */
+export function isNoreplyAddress(email: string): boolean {
+  return /^(\d+\+)?[^@\s]+@users\.noreply\.github\.com$/i.test(email);
+}
+
 /**
  * The users endpoint answers for an organisation too, with type Organization.
  * Anything else, including a failed call, is unknown -- not a user.

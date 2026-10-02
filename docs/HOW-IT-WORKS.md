@@ -1167,7 +1167,13 @@ top help on stdout, and exits 0.
 `The account's user name (login)` (hint: `the name you sign in with, e.g. octocat; not
 your email address`), where it is hosted (GitHub by default), and the name and email
 commits show. On GitHub they start from a lookup: the profile's name (else the login),
-and the noreply address GitHub gives the account. Text questions take `<` to go back,
+and the noreply address GitHub gives the account. Each question says where its value
+came from: `GitHub shows no name for octocat, so this is the login` (or `this is the
+login` when GitHub couldn't be asked), and `prefilled with the private address GitHub
+gives octocat (github.com/settings/emails)`; with nothing prefilled the email question
+gives a tip with an example (`like 1234+octocat@users.noreply.github.com`). Where this
+machine has a default name or address, they add `your default git name here is Octo
+Cat: use it only if this account does too`. Text questions take `<` to go back,
 and the host question has a Back choice; Back on the login returns to the menu. Esc
 still exits 130. An empty login is `a value is required`. Anything outside letters,
 digits and `. _ @ -` is `use letters, digits and . _ @ - only`. A login already
@@ -1179,9 +1185,9 @@ default name if there is one:
 ```
 ◆  Your name, as your commits show it
 │  e.g. Octo Cat; anyone who can see the repository sees it
-│  github.com has no account named octocatt: check the spelling; not
-│  this machine's default name (Octo Cat), unless this account uses it
-│  type < to go back
+│  github.com has no account named octocatt: check the spelling; your
+│  default git name here is Octo Cat: use it only if this account does
+│  too · type < to go back
 │  octocatt
 ```
 

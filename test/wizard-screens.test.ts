@@ -341,8 +341,8 @@ describe('repown setup, played with key presses', () => {
     const { outcome, screen } = await play(ctx, [[down, enter], [enter], [enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     const flat = screen.replace(/│/g, ' ').replace(/\s+/g, ' ');
-    assert.match(flat, /not this machine's default name \(Octo Work\), unless this account uses it/);
-    assert.match(flat, /not this machine's default address \(octo-work@example\.invalid\), unless this account uses it/);
+    assert.match(flat, /your default git name here is Octo Work: use it only if this account does too/);
+    assert.match(flat, /your default git address here is octo-work@example\.invalid: use it only if this account does too/);
     assert.doesNotMatch(flat, /type it|Octo Work </);
     assert.match(screen, /Octo Cat█/);
     assert.match(screen, /octocat@example\.invalid█/);
@@ -454,8 +454,8 @@ describe('D7 on the plain prompter, at the default width', () => {
     });
     const screen = await playPlain(ctx, '\n\n\n\n\n');
     const flat = screen.replace(/\s+/g, ' ');
-    assert.match(flat, /not this machine's default name \(Octo Work\), unless this account uses it/);
-    assert.match(flat, /not this machine's default address \(octo-work@example\.invalid\)/);
+    assert.match(flat, /your default git name here is Octo Work: use it only if this account does too/);
+    assert.match(flat, /your default git address here is octo-work@example\.invalid: use it only if this account does too/);
     for (const line of screen.split('\n')) {
       assert.doesNotMatch(line, /(?:Octo Work|octo-work@example\.invalid)\)?\s+type it\s*$/);
     }

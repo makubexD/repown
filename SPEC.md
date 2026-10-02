@@ -21,7 +21,7 @@ screen can remove an account.
    only when nothing is prefilled.
 5. **Name (N4):** a name prefill that is the login says so ("GitHub shows no name for X, so
    this is the login" / offline "this is the login"). Machine sentences: "your default git
-   name here is X: type it only if this account uses it too" (and the address).
+   name here is X: use it only if this account does too" (and the address).
 6. **Detail (N5):** clack draws a step's detail under its hint, before "type < to go back".
 7. **Signed in (N1):** on GitHub, when gh or Git Credential Manager lists github.com accounts
    and the login (any case) isn't among them and no 404/organisation sentence shows, the name

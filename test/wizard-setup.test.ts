@@ -15,7 +15,7 @@ import { pathWithoutGh, plainTerminal, sandbox, type Sandbox } from './helpers.t
 import { setupContext as context } from './setup-fixtures.ts';
 import { ok, err } from '../src/core/result.ts';
 import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Review, type ReviewChoice, type StepConfirm } from '../src/wizard/engine.ts';
-import { setupFlow, planCommands, formatCommand, gitStepOf, keptFlags, blockersOf, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext } from '../src/wizard/setup-flow.ts';
+import { setupFlow, planCommands, formatCommand, gitStepOf, keptFlags, blockersOf, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext, type Suggestion } from '../src/wizard/setup-flow.ts';
 import { pinWrites } from '../src/core/identity.ts';
 import { plainPrompter } from '../src/wizard/plain.ts';
 import { reviewLines, reviewDefault } from '../src/wizard/review-text.ts';
@@ -964,8 +964,8 @@ describe('setup flow', () => {
 
   test('D7 a new account is shown the machine default, which is never filled in', async () => {
     const machine = { name: 'Octo Work', email: 'octo-work@example.invalid' };
-    const nameLine = 'not this machine\'s default name (Octo Work), unless this account uses it';
-    const addressLine = 'not this machine\'s default address (octo-work@example.invalid), unless this account uses it';
+    const nameLine = 'your default git name here is Octo Work: use it only if this account does too';
+    const addressLine = 'your default git address here is octo-work@example.invalid: use it only if this account does too';
     const ctx = context({
       recorded: {}, owner: 'octocat', ownerIsUser: true, machineIdentity: machine,
       suggest: async () => ({ name: 'Octo Cat', email: 'octocat@example.invalid' }),
@@ -976,26 +976,26 @@ describe('setup flow', () => {
     assert.equal((await name.detail?.(fresh, ctx)), nameLine);
     const shown = (await email.detail?.(fresh, ctx)) ?? '';
     assert.equal(shown.endsWith('; ' + addressLine), true, shown);
-    assert.match(shown, /^tip: to keep your own address private[\s\S]*1234\+octocat@users\.noreply\.github\.com; not this machine's default address/);
-    assert.doesNotMatch(shown, /Octo Work <|·|type it/);
+    assert.match(shown, /^tip: to keep your own address private[\s\S]*1234\+octocat@users\.noreply\.github\.com; your default git address here/);
+    assert.doesNotMatch(shown, /Octo Work <|·/);
     assert.equal(await name.initial?.(fresh, ctx), 'Octo Cat');
     assert.equal(await email.initial?.(fresh, ctx), 'octocat@example.invalid');
 
     const unnamed = context({ recorded: {}, machineIdentity: { name: null, email: 'octo-work@example.invalid' } });
-    assert.equal((await stepOf(unnamed, 'name').detail?.(fresh, unnamed)), undefined);
+    assert.equal((await stepOf(unnamed, 'name').detail?.(fresh, unnamed)), 'this is the login', 'no name found: the prefill is the login, and it says so');
     const unnamedEmail = (await stepOf(unnamed, 'email').detail?.(fresh, unnamed)) ?? '';
-    assert.match(unnamedEmail, /not this machine's default address \(octo-work@example\.invalid\)/);
+    assert.match(unnamedEmail, /your default git address here is octo-work@example\.invalid/);
     assert.doesNotMatch(unnamedEmail, /Octo Work </);
 
     const recorded = context({ machineIdentity: machine });
     const known = { account: 'octocat' };
     assert.equal((await stepOf(recorded, 'name').detail?.(known, recorded)), undefined);
-    assert.doesNotMatch((await stepOf(recorded, 'email').detail?.(known, recorded)) ?? '', /this machine's default/);
+    assert.doesNotMatch((await stepOf(recorded, 'email').detail?.(known, recorded)) ?? '', /default git address/);
 
     const noEmail = context({ recorded: {}, machineIdentity: { name: 'Octo Work', email: null } });
-    assert.equal((await stepOf(noEmail, 'name').detail?.(fresh, noEmail)), nameLine);
+    assert.equal((await stepOf(noEmail, 'name').detail?.(fresh, noEmail)), 'this is the login; ' + nameLine);
     const tipOnly = (await stepOf(noEmail, 'email').detail?.(fresh, noEmail)) ?? '';
-    assert.doesNotMatch(tipOnly, /this machine's default/);
+    assert.doesNotMatch(tipOnly, /default git address/);
     assert.match(tipOnly, /noreply/);
 
     const bare = context({ recorded: {}, machineIdentity: machine });
@@ -2509,7 +2509,27 @@ test('a new account\'s name question first says what GitHub said about the login
   });
   const fresh = { account: NEW_ACCOUNT, newAccount: 'octocatt', host: 'github' };
   assert.equal(await stepOf(ctx, 'name').detail?.(fresh, ctx),
-    'github.com has no account named octocatt: check the spelling; not this machine\'s default name (Octo Work), unless this account uses it');
+    'github.com has no account named octocatt: check the spelling; your default git name here is Octo Work: use it only if this account does too');
   const quiet = context({ recorded: {}, suggest: async () => ({ problem: null }) });
-  assert.equal(await stepOf(quiet, 'name').detail?.(fresh, quiet), undefined, 'a user, or a lookup that failed, says nothing');
+  assert.equal(await stepOf(quiet, 'name').detail?.(fresh, quiet), 'this is the login', 'a lookup that failed says only where the prefill came from');
+});
+
+test('the name and email questions say where their prefill came from', async () => {
+  const fresh = { account: NEW_ACCOUNT, newAccount: 'octocat', host: 'github' };
+  const details = async (suggestion: Suggestion, answers: Answers = fresh): Promise<(string | undefined)[]> => {
+    const ctx = context({ recorded: {}, machineIdentity: { name: null, email: null }, suggest: async () => suggestion });
+    return [await stepOf(ctx, 'name').detail?.(answers, ctx), await stepOf(ctx, 'email').detail?.(answers, ctx)];
+  };
+  const noreply = '843102+octocat@users.noreply.github.com';
+  assert.deepEqual(await details({ email: noreply }), ['GitHub shows no name for octocat, so this is the login',
+    'prefilled with the private address GitHub gives octocat (github.com/settings/emails)']);
+  assert.deepEqual(await details({ name: 'Octo Cat', email: noreply }),
+    [undefined, 'prefilled with the private address GitHub gives octocat (github.com/settings/emails)']);
+  const [offlineName, offlineEmail] = await details({});
+  assert.equal(offlineName, 'this is the login');
+  assert.match(offlineEmail ?? '', /^tip: to keep your own address private[\s\S]*like 1234\+octocat@users\.noreply\.github\.com$/);
+  const [, typedEmail] = await details({ name: 'Octo Cat', email: 'octocat@example.invalid' });
+  assert.match(typedEmail ?? '', /^tip:/, 'an address that is not GitHub\'s private one keeps the tip');
+  const azure = { ...fresh, host: 'azdo' };
+  assert.deepEqual(await details({}, azure), ['this is the login', undefined]);
 });

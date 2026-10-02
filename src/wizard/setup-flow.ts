@@ -9,6 +9,7 @@
 
 import { ghAdvice, upstreamText } from '../commands/status.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
+import { isNoreplyAddress } from '../core/hosts/github.ts';
 import { shellWord } from '../core/guard/check.ts';
 import { printable } from '../ui/format.ts';
 import { foreignAddresses, foreignCount, type UnpushedFact } from '../core/unpushed.ts';
@@ -341,33 +342,47 @@ function hostChoices(): Choice[] {
   });
 }
 
-/** Where a GitHub account's private address comes from, for someone who has never looked. */
-function noreplyExample(answers: Answers, ctx: AccountContext): string | undefined {
+/**
+ * On GitHub: the private address when that is what the email starts as, else where to
+ * find it, for someone who has never looked.
+ */
+async function noreplyNote(answers: Answers, ctx: AccountContext): Promise<string | undefined> {
   if (hostOf(answers, ctx) !== 'github') return undefined;
+  const account = printable(accountOf(answers));
+  const { email } = await ctx.suggest(accountOf(answers), 'github');
+  if (email && isNoreplyAddress(email)) return 'prefilled with the private address GitHub gives ' + account + ' (github.com/settings/emails)';
   return 'tip: to keep your own address private, use the one GitHub gives you, shown at ' +
-    'github.com/settings/emails, like 1234+' + printable(accountOf(answers)) + '@users.noreply.github.com';
+    'github.com/settings/emails, like 1234+' + account + '@users.noreply.github.com';
 }
 
 /**
  * First what the host said about the login (no such account, an organisation), so Back
- * can fix a typo before anything is recorded; then the machine's name, never this
- * account's initial value.
+ * can fix a typo before anything is recorded; else whether the name starts as the login;
+ * then the machine's name, never this account's initial value.
  */
 async function nameDetail(answers: Answers, ctx: AccountContext): Promise<string | undefined> {
   if (!isNew(answers)) return undefined;
-  const { problem } = await ctx.suggest(accountOf(answers), hostOf(answers, ctx));
-  const parts = [problem ? printable(problem) : null, machineName(ctx)].filter((part) => part);
+  const found = await ctx.suggest(accountOf(answers), hostOf(answers, ctx));
+  const lead = found.problem ? printable(found.problem) : loginPrefill(answers, found, ctx);
+  const parts = [lead, machineName(ctx)].filter((part) => part);
   return parts.length > 0 ? parts.join('; ') : undefined;
+}
+
+/** Said when the name question starts as the login: no profile name was found. */
+function loginPrefill(answers: Answers, found: Suggestion, ctx: AccountContext): string | null {
+  if (found.name) return null;
+  const answered = found.email !== undefined && hostOf(answers, ctx) === 'github';
+  return answered ? 'GitHub shows no name for ' + printable(accountOf(answers)) + ', so this is the login' : 'this is the login';
 }
 
 function machineName(ctx: AccountContext): string | null {
   const name = ctx.machineIdentity.name;
-  return name ? 'not this machine\'s default name (' + printable(name) + '), unless this account uses it' : null;
+  return name ? 'your default git name here is ' + printable(name) + ': use it only if this account does too' : null;
 }
 
-/** Noreply tip first, then the machine address. Two sentences; both prompters wrap one detail. */
-function emailDetail(answers: Answers, ctx: AccountContext): string | undefined {
-  const tip = noreplyExample(answers, ctx);
+/** The private-address note first, then the machine address. Two sentences; both prompters wrap one detail. */
+async function emailDetail(answers: Answers, ctx: AccountContext): Promise<string | undefined> {
+  const tip = await noreplyNote(answers, ctx);
   const line = addressDetail(answers, ctx);
   if (tip && line) return tip + '; ' + line;
   return tip ?? line;
@@ -376,7 +391,7 @@ function emailDetail(answers: Answers, ctx: AccountContext): string | undefined 
 function addressDetail(answers: Answers, ctx: AccountContext): string | undefined {
   const email = ctx.machineIdentity.email;
   if (!isNew(answers) || !email) return undefined;
-  return 'not this machine\'s default address (' + printable(email) + '), unless this account uses it';
+  return 'your default git address here is ' + printable(email) + ': use it only if this account does too';
 }
 
 const UPSTREAM_HINT = 'sets push.autoSetupRemote in this clone only, so the first push of a branch without an upstream ' +

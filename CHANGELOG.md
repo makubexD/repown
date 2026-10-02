@@ -28,6 +28,11 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 - `repown accounts add` prints its suggested next command, `repown use <account>`, in
   cyan where stdout has colour, and exactly as before where it has none (ADR-027's rule).
 
+- A new account's name and email questions say where their value came from: "GitHub shows
+  no name for octocat, so this is the login" (a stranger's or an empty profile no longer
+  passes unnoticed), and "prefilled with the private address GitHub gives octocat" instead
+  of a `1234+` example beside the real address. The machine's identity reads "your default
+  git name here is …: use it only if this account does too".
 - A question's note (this clone's current account, what the history holds, what GitHub said
   about a login) is drawn inside that question, under its hint, instead of as a separate
   line above it that read as part of the previous answer. Plain prompts already did this.

@@ -74,3 +74,11 @@ address ([ADR-011](ADR-011-refuse-vs-warn.md)).
   [docs/FAQ.md](../FAQ.md#questions) lists the call.
 - Without gh, or when that lookup fails, the owner is listed and not preselected.
 - A recorded organisation stays in the list and is not preselected.
+
+## Notes
+
+- **2026-10-02, the wording changed, not the decision.** The machine identity now reads
+  "your default git name here is <name>: use it only if this account does too" (and the
+  same for the address). The name question also says when it starts as the login ("GitHub
+  shows no name for <login>, so this is the login"), and the email question names a
+  prefilled noreply address as GitHub's private one instead of giving the `1234+` example.

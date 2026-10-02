@@ -9,10 +9,10 @@
 // Over SSH there is no credential helper at all -- the SSH key decides -- so an
 // SSH remote pins no credential key rather than one that selects nothing.
 
-import type { HostProvider, Profile } from './types.ts';
+import type { AccountKind, HostProvider, Profile } from './types.ts';
 import type { GitUrl } from '../url.ts';
 import { credentialPrefix } from '../url.ts';
-import { ghProfileField } from '../credential/gh.ts';
+import { ghProfileField, ghProfileLookup } from '../credential/gh.ts';
 
 const HOSTS = ['github.com', 'gist.github.com', 'www.github.com', 'ssh.github.com'];
 
@@ -49,9 +49,10 @@ async function resolveProfile(account: string): Promise<Profile | null> {
  * The users endpoint answers for an organisation too, with type Organization.
  * Anything else, including a failed call, is unknown -- not a user.
  */
-async function accountKind(login: string): Promise<'user' | 'organization' | null> {
-  const type = await ghProfileField(login, 'type');
-  if (type === 'User') return 'user';
-  if (type === 'Organization') return 'organization';
+async function accountKind(login: string): Promise<AccountKind | null> {
+  const found = await ghProfileLookup(login, 'type');
+  if (found.missing) return 'missing';
+  if (found.value === 'User') return 'user';
+  if (found.value === 'Organization') return 'organization';
   return null;
 }

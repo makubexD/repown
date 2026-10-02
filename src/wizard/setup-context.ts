@@ -10,7 +10,7 @@ import { pinHolds } from '../core/identity.ts';
 import { loadRegistry, type Account, type Registry } from '../core/registry.ts';
 import { planRepair, type RemovalOutcome } from '../core/credential/repair.ts';
 import { isGh, type GhState } from '../core/credential/gh.ts';
-import { providers, type Profile } from '../core/hosts/index.ts';
+import { providers, type AccountKind, type Profile } from '../core/hosts/index.ts';
 import { ok, err, type Result } from '../core/result.ts';
 import { previewLines } from '../commands/fix.ts';
 import { readUnpushed, type UnpushedFact } from '../core/unpushed.ts';
@@ -105,7 +105,7 @@ export interface ReadOptions {
   /** False when setup will not prompt: the kind is unused, so this path never calls gh api. */
   readonly classifyOwner?: boolean;
   /** When set, classifies the owner instead of the provider. Tests pass a spy. */
-  readonly accountKind?: (login: string) => Promise<'user' | 'organization' | null>;
+  readonly accountKind?: (login: string) => Promise<AccountKind | null>;
   /** Tests pass the auth snapshot. Production reads it. */
   readonly auth?: AuthState;
 }
@@ -290,7 +290,7 @@ function signedIn(auth: AuthState, owner: string): boolean {
   return auth.gh.value.accounts.some((account) => account.login.toLowerCase() === owner.toLowerCase());
 }
 
-function asUser(kind: 'user' | 'organization' | null): boolean | null {
+function asUser(kind: AccountKind | null): boolean | null {
   if (kind === 'user') return true;
   if (kind === 'organization') return false;
   return null;

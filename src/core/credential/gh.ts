@@ -117,11 +117,26 @@ export function ghProfileArgs(login: string, field: string): readonly string[] {
   return ['api', '--hostname', 'github.com', `users/${login}`, '--jq', `.${field}`];
 }
 
+/** A profile field's value, and whether github.com said there is no such account. */
+export interface ProfileLookup {
+  readonly value: string | null;
+  readonly missing: boolean;
+}
+
 /** A profile field from github.com, or null. Absence here is unremarkable. */
 export async function ghProfileField(login: string, field: string): Promise<string | null> {
-  const result = await run('gh', ghProfileArgs(login, field));
+  return (await ghProfileLookup(login, field)).value;
+}
+
+export async function ghProfileLookup(login: string, field: string): Promise<ProfileLookup> {
+  return profileLookupFrom(await run('gh', ghProfileArgs(login, field)));
+}
+
+/** Only github.com's own 404 means missing: offline, refused or no gh is unknown. */
+export function profileLookupFrom(result: ExecResult): ProfileLookup {
   const value = output(result);
-  return value && value !== 'null' ? value : null;
+  const missing = !succeeded(result) && /(HTTP 404)/.test(result.stderr);
+  return { value: value && value !== 'null' ? value : null, missing };
 }
 
 export async function ghSwitch(login: string): Promise<Result<void>> {

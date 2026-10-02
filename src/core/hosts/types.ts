@@ -14,6 +14,8 @@ export interface Profile {
   readonly email?: string;
 }
 
+export type AccountKind = 'user' | 'organization' | 'missing';
+
 export interface HostProvider {
   /** Stable identifier used in output and in the account registry. */
   readonly id: string;
@@ -37,8 +39,9 @@ export interface HostProvider {
   resolveProfile?(account: string): Promise<Profile | null>;
 
   /**
-   * 'user' or 'organization' -- GitHub's own word for the kind -- or null when
-   * this host can't say. Optional. Null means unknown, never "a user".
+   * 'user' or 'organization' -- GitHub's own word for the kind --, 'missing' when the
+   * host says no such account exists, or null when this host can't say. Optional.
+   * Null means unknown, never "a user".
    */
-  accountKind?(login: string): Promise<'user' | 'organization' | null>;
+  accountKind?(login: string): Promise<AccountKind | null>;
 }

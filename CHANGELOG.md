@@ -15,6 +15,9 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   the Linux console), the marks are `+` and `!`. Without colour (a
   pipe, a log, `NO_COLOR`), the output is exactly as before
   (ADR-027).
+- `repown accounts add <login>`, when it asks, warns when github.com has no account by that
+  name (a typo) or the name is an organisation. It still records the account, and says nothing
+  when GitHub can't be asked.
 
 ### Fixed
 - On a terminal that can't draw Unicode (classic Windows cmd), a text question's hint lines drew

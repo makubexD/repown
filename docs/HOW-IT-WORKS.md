@@ -173,6 +173,11 @@ The registry stores a name, an email and a host per account, never a secret, out
 every repository ([where](CONFIGURATION.md#the-account-registry)). Run `add` again to
 change an account; pinned clones keep the old values until you `repown use` it again.
 Without a terminal, `add` can't ask: pass `--name` and `--email`.
+
+When `add` asks, it looks the login up on GitHub first. If github.com has no account by that
+name, it says so before asking (`WARN  accounts   github.com has no account named octocat:
+check the spelling (recording it anyway)`), and an organisation gets the same kind of line.
+It still records: offline, or behind a refused lookup, it says nothing.
 </details>
 
 ### 3. Pin a clone

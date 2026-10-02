@@ -700,7 +700,7 @@ never suggested.
 | How should setup work? Recommended (default) or Step by step | unless `--step-by-step` is passed, or an `<account>` is given (that uses Recommended and skips this question). Not stored ([ADR-007](decisions/ADR-007-no-profile-store.md), [ADR-020](decisions/ADR-020-setup-leaves-clone-ready.md)). The flag is `--step-by-step` | nothing by itself |
 | Which account should this clone belong to? | an account is recorded, or a GitHub login can already be seen. Default: the one pinned here if it is recorded, else origin's owner when it is recorded and not known to be an organisation, else origin's owner when that owner is a user, else the first other recorded account, else a new account | `use <account>`, after `accounts add` when the login is not recorded |
 | The account's user name (login) | "a new account", or nothing recorded and nothing detected. Starts as origin's owner only when that owner is a user and is not recorded. Refused if already recorded | the `<account>` of `accounts add` |
-| Where it's hosted, and your name and email as commits show them (on GitHub, with where to find your noreply address; this machine's default is shown, never filled in) | the login is new: "a new account", or one picked from the logins already seen | `accounts add <account> --name --email --host` |
+| Where it's hosted, and your name and email as commits show them (on GitHub, with where to find your noreply address; this machine's default is shown, never filled in; when github.com has no account by that login, or it is an organisation, the name question says so first) | the login is new: "a new account", or one picked from the logins already seen | `accounts add <account> --name --email --host` |
 | Also make this account gh's active account? (default No) | a GitHub clone (or one whose origin isn't a URL), gh knows the account, another is active. Recommended does not ask this when the clone is already pinned to that account: it answers No, and the review names the command (`gh auth switch -u <account>`, or `repown use <account> --gh` when gh does not list it) | `use --gh` |
 | Sign in to gh as that account too? (default No) | the same, except gh does not know the account. Yes opens a browser; gh then acts as that account in every terminal. The line under it names gh's active account, or says gh isn't signed in. Recommended skips it the same way when the clone is already pinned to that account | `use --gh` |
 | Push through origin instead of the URL set for this branch? (default Yes) | the branch pushes to a URL (from `branch.<name>.pushRemote`, `remote.pushDefault` or `branch.<name>.remote`) naming the same host and path as a remote here. A URL there can carry its own sign-in and is never fetched. The review shows the key and the remote, never the URL, and so does the run's "changed in this clone" (`(a URL) -> origin`). The flag is `--repoint` | `git config --local <key> <remote>` |
@@ -1164,17 +1164,22 @@ On a plain terminal the command is its own line:
 `repown doctor`. **Show help** closes the frame with `└  > repown --help`, prints the
 top help on stdout, and exits 0.
 
-**Record an account** asks `The account's user name (login)`, with the hint
-`the name you sign in with, e.g. octocat; not your email address`. Because there is a
-menu to return to, the screen also says `type < to go back`. Typing `<` returns to the
-menu. Esc still exits 130. An empty answer is
-`a value is required`. Anything outside letters, digits and `. _ @ -` is
-`use letters, digits and . _ @ - only`. It then runs `repown accounts add`. A login
-that starts with a dash is printed and passed after `--`, so it stays the account
-name (`repown accounts add -- -h`):
+**Record an account** asks setup's own questions for a new account, in the frame:
+`The account's user name (login)` (hint: `the name you sign in with, e.g. octocat; not
+your email address`), where it is hosted (GitHub by default), and the name and email
+commits show, prefilled from the GitHub profile (the email as GitHub's noreply
+address). `type < to go back` works on every question; on the login it returns to
+the menu. Esc still exits 130. An empty login is `a value is required`. Anything
+outside letters, digits and `. _ @ -` is `use letters, digits and . _ @ - only`. A
+login already recorded, in any case, is `"octocat" is already recorded on this
+machine: use it by that name`. When github.com has no account by that login (a typo),
+the name question says so first (`github.com has no account named octocatt: check the
+spelling`), so `<` can fix it before anything is recorded. Then it runs `repown
+accounts add` with every answer as a flag, so nothing more is asked. A login that
+starts with a dash is passed after `--`, so it stays the account name:
 
 ```
-└  > repown accounts add octocat
+└  > repown accounts add octocat --name 'Octo Cat' --email 1234+octocat@users.noreply.github.com
 ```
 
 Each of those runs that command's own `run()`, after the frame closes on the command.

@@ -25,6 +25,13 @@ export interface HomeState {
   readonly registry: Result<Registry>;
   readonly ghIsHelper: boolean;
   readonly clones: readonly HomeClone[];
+  /** Global user.name and user.email: shown beside a new account's, never filled in. */
+  readonly identity: Identity;
+}
+
+export interface Identity {
+  readonly name: string | null;
+  readonly email: string | null;
 }
 
 /** Tests pass fakes. Production reads the machine. */
@@ -33,13 +40,21 @@ export interface HomeDeps {
   readonly ghIsHelper?: (cwd: string) => Promise<boolean>;
   readonly findClones?: (cwd: string) => Promise<readonly string[]>;
   readonly inspect?: (git: Git) => Promise<RepoState>;
+  readonly identity?: (cwd: string) => Promise<Identity>;
 }
 
 export async function readHome(cwd: string, deps: HomeDeps = {}): Promise<HomeState> {
-  const [registry, ghIsHelper, clones] = await Promise.all([
-    registryOf(deps), helperOf(cwd, deps), clonesOf(cwd, deps),
+  const [registry, ghIsHelper, clones, identity] = await Promise.all([
+    registryOf(deps), helperOf(cwd, deps), clonesOf(cwd, deps), (deps.identity ?? identityOf)(cwd),
   ]);
-  return { cwd: resolve(cwd), registry, ghIsHelper, clones };
+  return { cwd: resolve(cwd), registry, ghIsHelper, clones, identity };
+}
+
+/** Outside a clone, git's own lookup is the global (or system) value. */
+async function identityOf(cwd: string): Promise<Identity> {
+  const git = new Git(cwd);
+  const [name, email] = await Promise.all([git.getConfig('user.name'), git.getConfig('user.email')]);
+  return { name, email };
 }
 
 function registryOf(deps: HomeDeps): Promise<Result<Registry>> {

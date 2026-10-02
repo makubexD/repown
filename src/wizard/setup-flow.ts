@@ -77,8 +77,16 @@ export interface SetupContext {
   readonly upstream: UpstreamRead;
   /** GCM's stored GitHub accounts. Null when the store was not read; an error when it could not be. */
   readonly stored: Result<readonly string[]> | null;
-  suggest(account: string, host: string): Promise<Profile>;
+  suggest(account: string, host: string): Promise<Suggestion>;
 }
+
+/** A profile lookup's suggestion, and a sentence when the host says the login is no account or an organisation. */
+export interface Suggestion extends Profile {
+  readonly problem?: string | null;
+}
+
+/** What recording a new account asks with: setup's context, or the start screen's. */
+export type AccountContext = Pick<SetupContext, 'recorded' | 'host' | 'machineIdentity' | 'suggest'>;
 
 /** Read once, before the first question. `supported` is false when the version cannot be read. */
 export interface UpstreamRead {
@@ -175,6 +183,23 @@ function steps(ctx: SetupContext): Step<SetupContext>[] {
   return [
     modeStep(),
     ...accountSteps(ctx),
+    ...profileSteps(ctx),
+    ...choiceSteps(ctx),
+  ];
+}
+
+/** A new account's login, refused when already recorded. The start screen asks it too. */
+export function loginStep<C>(ctx: AccountContext): Step<C> {
+  return {
+    id: 'newAccount', kind: 'text', flag: '<account>', message: 'The account\'s user name (login)',
+    hint: 'the name you sign in with, e.g. octocat; not your email address',
+    validate: (value) => newAccountProblem(String(value), ctx),
+  };
+}
+
+/** Where a new account is hosted, and its commit name and email. The start screen asks these too. */
+export function profileSteps<C>(ctx: AccountContext): Step<C>[] {
+  return [
     { id: 'host', kind: 'select', flag: '--host', message: 'Where is this account hosted?',
       hint: 'on GitHub, repown also makes pushes sign in as this account', when: (answers) => isNew(answers),
       choices: () => hostChoices(), initial: () => ctx.host },
@@ -186,8 +211,24 @@ function steps(ctx: SetupContext): Step<SetupContext>[] {
       hint: 'anyone who can see the repository can read it once you push', when: (answers) => isNew(answers), validate: required,
       initial: async (answers) => (await ctx.suggest(accountOf(answers), hostOf(answers, ctx))).email,
       detail: (answers) => emailDetail(answers, ctx) },
-    ...choiceSteps(ctx),
   ];
+}
+
+export interface NewAccount {
+  readonly login: string;
+  readonly name: string;
+  readonly email: string;
+  readonly host: string;
+}
+
+/** A new account from the answers that ask for one. */
+export function newAccountOf(answers: Answers, ctx: AccountContext): NewAccount {
+  return { login: accountOf(answers), name: String(answers['name']), email: String(answers['email']), host: hostOf(answers, ctx) };
+}
+
+/** `accounts add` with every answer as a flag, so it asks nothing; `--` keeps a dashed login the account. */
+export function addAccountArgv(account: NewAccount): string[] {
+  return ['accounts', 'add', '--name=' + account.name, '--email=' + account.email, '--host=' + account.host, '--', account.login];
 }
 
 function modeStep(): Step<SetupContext> {
@@ -215,9 +256,7 @@ function accountSteps(ctx: SetupContext): Step<SetupContext>[] {
       when: () => Object.keys(ctx.recorded).length > 0 || ctx.detected.length > 0,
       choices: () => accountChoices(ctx), initial: () => defaultAccount(ctx),
       detail: () => (ctx.pinned ? 'right now this clone is pinned to ' + ctx.pinned : 'right now this clone isn\'t pinned to any account') },
-    { id: 'newAccount', kind: 'text', flag: '<account>', message: 'The account\'s user name (login)',
-      hint: 'the name you sign in with, e.g. octocat; not your email address', when: (answers) => asksForLogin(answers),
-      validate: (value) => newAccountProblem(String(value), ctx), initial: () => ownerInitial(ctx) },
+    { ...loginStep<SetupContext>(ctx), when: (answers) => asksForLogin(answers), initial: () => ownerInitial(ctx) },
   ];
 }
 
@@ -303,28 +342,38 @@ function hostChoices(): Choice[] {
 }
 
 /** Where a GitHub account's private address comes from, for someone who has never looked. */
-function noreplyExample(answers: Answers, ctx: SetupContext): string | undefined {
+function noreplyExample(answers: Answers, ctx: AccountContext): string | undefined {
   if (hostOf(answers, ctx) !== 'github') return undefined;
   return 'tip: to keep your own address private, use the one GitHub gives you, shown at ' +
     'github.com/settings/emails, like 1234+' + printable(accountOf(answers)) + '@users.noreply.github.com';
 }
 
-/** The machine's name, beside a new account. Never that account's initial value. */
-function nameDetail(answers: Answers, ctx: SetupContext): string | undefined {
+/**
+ * First what the host said about the login (no such account, an organisation), so Back
+ * can fix a typo before anything is recorded; then the machine's name, never this
+ * account's initial value.
+ */
+async function nameDetail(answers: Answers, ctx: AccountContext): Promise<string | undefined> {
+  if (!isNew(answers)) return undefined;
+  const { problem } = await ctx.suggest(accountOf(answers), hostOf(answers, ctx));
+  const parts = [problem ? printable(problem) : null, machineName(ctx)].filter((part) => part);
+  return parts.length > 0 ? parts.join('; ') : undefined;
+}
+
+function machineName(ctx: AccountContext): string | null {
   const name = ctx.machineIdentity.name;
-  if (!isNew(answers) || !name) return undefined;
-  return 'not this machine\'s default name (' + printable(name) + '), unless this account uses it';
+  return name ? 'not this machine\'s default name (' + printable(name) + '), unless this account uses it' : null;
 }
 
 /** Noreply tip first, then the machine address. Two sentences; both prompters wrap one detail. */
-function emailDetail(answers: Answers, ctx: SetupContext): string | undefined {
+function emailDetail(answers: Answers, ctx: AccountContext): string | undefined {
   const tip = noreplyExample(answers, ctx);
   const line = addressDetail(answers, ctx);
   if (tip && line) return tip + '; ' + line;
   return tip ?? line;
 }
 
-function addressDetail(answers: Answers, ctx: SetupContext): string | undefined {
+function addressDetail(answers: Answers, ctx: AccountContext): string | undefined {
   const email = ctx.machineIdentity.email;
   if (!isNew(answers) || !email) return undefined;
   return 'not this machine\'s default address (' + printable(email) + '), unless this account uses it';
@@ -535,14 +584,14 @@ export function loginProblem(value: string): string | null {
   return LOGIN.test(value) ? null : 'use letters, digits and . _ @ - only';
 }
 
-function newAccountProblem(value: string, ctx: SetupContext): string | null {
+function newAccountProblem(value: string, ctx: AccountContext): string | null {
   const problem = loginProblem(value);
   if (problem) return problem;
   const clash = Object.keys(ctx.recorded).find((account) => lower(account) === lower(value));
   return clash ? '"' + clash + '" is already recorded on this machine: use it by that name' : null;
 }
 
-function hostOf(answers: Answers, ctx: SetupContext): string {
+function hostOf(answers: Answers, ctx: AccountContext): string {
   return typeof answers['host'] === 'string' ? answers['host'] : ctx.host;
 }
 
@@ -584,8 +633,7 @@ export function planCommands(answers: Answers, ctx: SetupContext): PlannedComman
   const planned: (readonly string[] | null)[] = [
     repointArgv(answers, ctx),
     fetchArgv(answers, ctx),
-    isNew(answers) ? ['accounts', 'add', '--name=' + String(answers['name']), '--email=' + String(answers['email']),
-      '--host=' + hostOf(answers, ctx), '--', account] : null,
+    isNew(answers) ? addAccountArgv(newAccountOf(answers, ctx)) : null,
     answers['allowOwner'] === true && ctx.owner ? allowOwnerLine(ctx) : null,
     answers['fix'] === true ? ['fix', '--yes', ...cwd] : null,
     useArgv(answers, ctx),

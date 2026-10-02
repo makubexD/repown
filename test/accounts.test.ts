@@ -1,10 +1,9 @@
-// `accounts add`'s profile lookup: a suggestion to save retyping, and a sentence when the
+// The profile lookup `accounts add` and setup share: a suggestion to save retyping, and a sentence when the
 // host says the login is no account or an organisation. Never a refusal: offline still records.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lookUpProfile } from '../src/commands/accounts.ts';
-import type { AccountKind, HostProvider } from '../src/core/hosts/index.ts';
+import { lookUpProfile, type AccountKind, type HostProvider } from '../src/core/hosts/index.ts';
 
 function host(kind: AccountKind | null, profile: { name?: string; email?: string } | null): HostProvider {
   return { resolveProfile: async () => profile, accountKind: async () => kind } as unknown as HostProvider;

@@ -110,6 +110,9 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   wraps at itself). The start screen is the same folder: `home-context.ts` reads
   (read-only), `home-flow.ts` is pure, `home-text.ts` holds the words, and `home-run.ts`
   draws through the Prompter (`show`, `choose`) and runs each action's own `run()`.
+  Record an account asks setup's own new-account steps (`loginStep`, `profileSteps` in
+  `setup-flow.ts`) through the engine's `runFlow`, then runs `accounts add` with every
+  answer as a flag; never a second copy of those questions.
 
 ## Tests
 

@@ -17,7 +17,7 @@ import { KEY, typed, play, linesWith, setupContext } from './setup-fixtures.ts';
 import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
 import { wizard, type Prompter } from '../src/wizard/engine.ts';
 import { plainPrompter } from '../src/wizard/plain.ts';
-import { setupFlow, type SetupContext } from '../src/wizard/setup-flow.ts';
+import { setupFlow, type SetupContext, type Suggestion } from '../src/wizard/setup-flow.ts';
 import { textWidth, wrap } from '../src/wizard/review-text.ts';
 
 const { enter, up, down, esc } = KEY;
@@ -462,6 +462,8 @@ describe('D7 on the plain prompter, at the default width', () => {
   });
 });
 
+const SUGGEST = async (): Promise<Suggestion> => ({ name: 'Octo Cat', email: 'octocat@example.invalid' });
+
 describe('start screen, played with key presses', () => {
   test('F1: every Accounts and Clones line starts with the gutter', async () => {
     await withProjects(async (root) => {
@@ -535,20 +537,59 @@ describe('start screen, played with key presses', () => {
   });
 
   test('a login starting with a dash reaches accounts add as the account', async () => {
-    const restore = forceNotTTY();
-    try {
-      await withProjects(async (root) => {
-        const run = await play((prompter) => runHome({ prompter, cwd: root }), [
-          [enter], [...typed('-h'), enter],
-        ], { patience: 20_000 });
-        assert.match(run.screen, /> repown accounts add -- -h/, run.screen + run.stderr);
-        assert.equal(run.result, 1, run.stderr);
-        assert.match(run.stderr, /interactive terminal to ask for the Commit name/);
-        assert.doesNotMatch(run.stderr, /unknown option/);
-      });
-    } finally {
-      restore();
-    }
+    await withProjects(async (root) => {
+      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST }), [
+        [enter], [...typed('-h'), enter], [enter], [enter], [enter],
+      ], { patience: 20_000 });
+      assert.match(run.screen, /> repown accounts add --name 'Octo Cat' --email octocat@example\.invalid -- -h/, run.screen + run.stderr);
+      assert.equal(run.result, 0, run.stderr);
+      assert.match(readFileSync(registryPath(), 'utf8'), /"-h"/);
+    });
+  });
+
+  test('H15: Record an account asks login, host, name and email in the frame, then runs accounts add with them all', async () => {
+    await withProjects(async (root) => {
+      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST }), [
+        [enter], [...typed('octocat'), enter], [enter], [enter], [enter],
+      ], { patience: 20_000 });
+      assert.equal(run.result, 0, run.screen + run.stderr);
+      for (const question of ["The account's user name", 'Where is this account hosted?', 'Your name, as your commits show it', 'Your email, as your commits show it']) {
+        assert.ok(run.screen.includes(question), question + '\n' + run.screen);
+      }
+      assert.match(run.screen, /└ {2}> repown accounts add octocat --name 'Octo Cat' --email octocat@example\.invalid/);
+      assert.doesNotMatch(run.stderr, /Commit name|Commit email/, 'no prompt is left for accounts add');
+      assert.match(run.stdout, /OK\s+accounts\s+octocat {2}Octo Cat <octocat@example\.invalid>/);
+      assert.match(readFileSync(registryPath(), 'utf8'), /"octocat"/);
+    });
+  });
+
+  test('H16: a login github.com has no account for is named on the name question; Back reaches the login again', async () => {
+    await withProjects(async (root) => {
+      const missing = async (): Promise<Suggestion> => ({ problem: 'github.com has no account named octocatt: check the spelling' });
+      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: missing }), [
+        // The name starts as the login, so it is cleared before `<`.
+        [enter], [...typed('octocatt'), enter], [enter], [...Array<string>(8).fill(KEY.backspace), '<', enter], [up, enter], [esc],
+      ], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen);
+      const sentence = run.screen.search(/github\.com has no account named octocatt: check the spelling/);
+      const name = run.screen.search(/Your name, as your commits show it/);
+      assert.ok(sentence >= 0 && name > sentence, run.screen);
+      const afterName = run.screen.slice(name);
+      assert.match(afterName, /The account's user name/, 'Back from the name, then from the host, is the login question');
+      assert.equal(existsSync(registryPath()), false, 'nothing recorded');
+    });
+  });
+
+  test('H17: a login already recorded, in any case, is refused with the words setup uses', async () => {
+    await withProjects(async (root) => {
+      mkdirSync(dirname(registryPath()), { recursive: true });
+      writeFileSync(registryPath(), '{"accounts":{"octocat":{"name":"Octo Cat","email":"octocat@example.invalid"}}}\n');
+      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST }), [
+        [enter], [...typed('OctoCat'), enter], [esc],
+      ], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen);
+      assert.match(run.screen, /"octocat" is already recorded on this machine: use it by that name/);
+    });
   });
 
   test('F7: the plain prompter indents the summary two spaces', async () => {

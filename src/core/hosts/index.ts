@@ -1,7 +1,7 @@
 // Provider resolution. Ordered, with `generic` always last so every URL resolves
 // to something and no caller has to handle "no provider".
 
-import type { AccountKind, HostProvider } from './types.ts';
+import type { AccountKind, HostProvider, Profile } from './types.ts';
 import type { GitUrl } from '../url.ts';
 import { githubProvider } from './github.ts';
 import { azureDevOpsProvider } from './azdo.ts';
@@ -25,6 +25,13 @@ export function loginKindProblem(kind: AccountKind | null | undefined, login: st
   if (kind === 'missing') return 'github.com has no account named ' + login + ': check the spelling';
   if (kind === 'organization') return login + ' is an organisation on github.com, not an account you sign in as';
   return null;
+}
+
+/** The host's profile for a login, and a sentence when the host says it is no account or an organisation. */
+export async function lookUpProfile(provider: HostProvider | undefined, account: string): Promise<{ profile: Profile; problem: string | null }> {
+  if (!provider?.resolveProfile) return { profile: {}, problem: null };
+  const [profile, kind] = await Promise.all([provider.resolveProfile(account), provider.accountKind?.(account)]);
+  return { profile: profile ?? {}, problem: loginKindProblem(kind, account) };
 }
 
 export type { AccountKind, HostProvider, Profile } from './types.ts';

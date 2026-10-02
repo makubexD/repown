@@ -4,7 +4,7 @@
 // afterwards, in every repository on the machine.
 
 import { loadRegistry, saveAccount, removeAccount, registryPath, type Account } from '../core/registry.ts';
-import { loginKindProblem, providers, type HostProvider, type Profile } from '../core/hosts/index.ts';
+import { lookUpProfile, providers, type Profile } from '../core/hosts/index.ts';
 import { ask, interactive } from '../ui/prompt.ts';
 import { flagString, wantsJson, FORMAT_OPTION, type Args } from '../ui/args.ts';
 import type { Command, CommandGroup } from '../ui/command.ts';
@@ -81,13 +81,6 @@ async function suggestProfile(hostId: string, account: string): Promise<Profile>
   const found = await lookUpProfile(providers().find((candidate) => candidate.id === hostId), account);
   if (found.problem) out.warn('accounts', found.problem + ' (recording it anyway)');
   return found.profile;
-}
-
-/** The host's profile for a login, and a sentence when the host says it is no account or an organisation. */
-export async function lookUpProfile(provider: HostProvider | undefined, account: string): Promise<{ profile: Profile; problem: string | null }> {
-  if (!provider?.resolveProfile) return { profile: {}, problem: null };
-  const [profile, kind] = await Promise.all([provider.resolveProfile(account), provider.accountKind?.(account)]);
-  return { profile: profile ?? {}, problem: loginKindProblem(kind, account) };
 }
 
 async function askFor(label: string, suggestion?: string): Promise<string | null> {

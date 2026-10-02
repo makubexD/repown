@@ -18,6 +18,12 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 - `repown accounts add <login>`, when it asks, warns when github.com has no account by that
   name (a typo) or the name is an organisation. It still records the account, and says nothing
   when GitHub can't be asked.
+- The start screen's **Record an account** asks everything in its frame: the login, where
+  it's hosted, and the commit name and email, prefilled from the GitHub profile, with Back on
+  each. It then runs `repown accounts add` with every answer as a flag, so the bare `Commit
+  name` / `Commit email` prompts are gone from it, and a login already recorded is refused as
+  in setup. In setup and on the start screen, the name question first says when github.com
+  has no account by that login, so a typo can be fixed before it is recorded.
 
 ### Fixed
 - On a terminal that can't draw Unicode (classic Windows cmd), a text question's hint lines drew

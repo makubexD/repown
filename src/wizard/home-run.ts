@@ -13,11 +13,12 @@ import { specFor, type Command } from '../ui/command.ts';
 import { loadEntries } from '../ui/dispatch.ts';
 import * as out from '../ui/format.ts';
 import { renderTopHelp } from '../ui/help.ts';
-import { BACK, CANCEL, type Asked, type Drawn, type Prompter } from './engine.ts';
+import { CANCEL, runFlow, type Pass, type Prompter } from './engine.ts';
 import { readHome, type HomeState } from './home-context.ts';
 import { BACK as HOME_BACK, MENU, commandFor, homeNote, listedClones, menuItems, summaryLines } from './home-flow.ts';
-import { BACK_LABEL, BUSY, CANCELLED, LOGIN_HINT, LOGIN_MESSAGE, QUIT, WHAT_NEXT, WHICH_CLONE, homeTitle } from './home-text.ts';
-import { formatCommand, loginProblem, printable } from './setup-flow.ts';
+import { BACK_LABEL, BUSY, CANCELLED, QUIT, WHAT_NEXT, WHICH_CLONE, homeTitle } from './home-text.ts';
+import { formatCommand, loginStep, newAccountOf, printable, profileSteps, type AccountContext } from './setup-flow.ts';
+import { suggester } from './setup-context.ts';
 import { choosePrompter, runSetup } from './setup-run.ts';
 
 const CANCELLED_CODE = 130;
@@ -28,14 +29,12 @@ export interface HomeRunDeps {
   readonly cwd?: string;
   /** Tests pass a fake read. Production reads this folder. */
   readonly read?: (cwd: string) => Promise<HomeState>;
+  /** Tests pass a fake profile lookup. Production asks the host, once per login. */
+  readonly suggest?: AccountContext['suggest'];
 }
 
-const LOGIN_STEP: Drawn = {
-  id: 'login', kind: 'text', message: LOGIN_MESSAGE, hint: LOGIN_HINT, flag: '<account>',
-  validate: (value) => loginProblem(String(value)),
-};
-
-const LOGIN_ASKED: Asked = { initial: undefined, choices: [], detail: undefined, canGoBack: true };
+/** The account questions from the top. Back from the login returns to the menu, as `opening`. */
+const FIRST_PASS: Pass = { answers: {}, start: 0, given: new Set(), history: [], toOpening: true, showOpening: false };
 
 export async function runHome(deps: HomeRunDeps = {}): Promise<number> {
   const prompter = deps.prompter ?? await choosePrompter();
@@ -54,25 +53,25 @@ async function openHome(prompter: Prompter, deps: HomeRunDeps): Promise<number> 
   showLines(prompter, summaryLines(home));
   const note = homeNote(home);
   if (note) prompter.note(note);
-  return chooseNext(prompter, home);
+  return chooseNext(prompter, home, deps);
 }
 
-async function chooseNext(prompter: Prompter, home: HomeState): Promise<number> {
+async function chooseNext(prompter: Prompter, home: HomeState, deps: HomeRunDeps): Promise<number> {
   for (;;) {
     const picked = await prompter.choose(WHAT_NEXT, menuItems(home));
     if (picked === CANCEL) return finish(prompter, CANCELLED, CANCELLED_CODE);
-    const code = await dispatchChoice(picked, prompter, home);
+    const code = await dispatchChoice(picked, prompter, home, deps);
     if (code !== null) return code;
   }
 }
 
-async function dispatchChoice(picked: string, prompter: Prompter, home: HomeState): Promise<number | null> {
+async function dispatchChoice(picked: string, prompter: Prompter, home: HomeState, deps: HomeRunDeps): Promise<number | null> {
   if (picked === MENU.quit) return finish(prompter, QUIT, 0);
   if (picked === MENU.help) return showTopHelp(prompter);
   if (picked === MENU.setup) return pickClone(prompter, home);
   if (picked === MENU.fix) return runOwn(prompter, fixCommand, [], commandFor({ kind: 'fix' }));
   if (picked === MENU.doctor) return runOwn(prompter, doctorCommand, [], commandFor({ kind: 'doctor' }));
-  if (picked === MENU.account) return recordAccount(prompter);
+  if (picked === MENU.account) return recordAccount(prompter, home, deps);
   return finish(prompter, QUIT, 0);
 }
 
@@ -92,22 +91,22 @@ async function runInClone(prompter: Prompter, cwd: string): Promise<number> {
   return runSetup(setupArgs(cwd), { interactive: true, prompter });
 }
 
-async function recordAccount(prompter: Prompter): Promise<number | null> {
-  const login = await askLogin(prompter);
-  if (login === CANCEL) return finish(prompter, CANCELLED, CANCELLED_CODE);
-  if (login === BACK) return null;
-  const argv = commandFor({ kind: 'account', login });
-  return runOwn(prompter, accountsGroup.actions['add']!, ['--', login], argv);
+/**
+ * Setup's own questions for a new account (login, host, name, email) in this frame,
+ * then `accounts add` with every answer as a flag, so it has nothing left to ask.
+ */
+async function recordAccount(prompter: Prompter, home: HomeState, deps: HomeRunDeps): Promise<number | null> {
+  const ctx = accountContext(home, deps);
+  const walk = await runFlow({ steps: [loginStep(ctx), ...profileSteps(ctx)] }, ctx, FIRST_PASS, prompter);
+  if (walk.status === 'cancelled') return finish(prompter, CANCELLED, CANCELLED_CODE);
+  if (walk.status === 'opening') return null;
+  const argv = commandFor({ kind: 'account', ...newAccountOf(walk.answers, ctx) });
+  return runOwn(prompter, accountsGroup.actions['add']!, argv.slice(2), argv);
 }
 
-async function askLogin(prompter: Prompter): Promise<string | typeof CANCEL | typeof BACK> {
-  for (;;) {
-    const reply = await prompter.ask(LOGIN_STEP, LOGIN_ASKED);
-    if (reply === CANCEL || reply === BACK) return reply;
-    const problem = loginProblem(String(reply));
-    if (!problem) return String(reply).trim();
-    prompter.note(problem);
-  }
+function accountContext(home: HomeState, deps: HomeRunDeps): AccountContext {
+  const recorded = home.registry.ok ? home.registry.value.accounts : {};
+  return { recorded, host: 'github', machineIdentity: home.identity, suggest: deps.suggest ?? suggester() };
 }
 
 async function runOwn(prompter: Prompter, command: Command, tokens: readonly string[], argv: readonly string[]): Promise<number> {

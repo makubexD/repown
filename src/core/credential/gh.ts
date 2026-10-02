@@ -135,7 +135,7 @@ export async function ghProfileLookup(login: string, field: string): Promise<Pro
 /** Only github.com's own 404 means missing: offline, refused or no gh is unknown. */
 export function profileLookupFrom(result: ExecResult): ProfileLookup {
   const value = output(result);
-  const missing = !succeeded(result) && /(HTTP 404)/.test(result.stderr);
+  const missing = !succeeded(result) && /\(HTTP 404\)/.test(result.stderr);
   return { value: value && value !== 'null' ? value : null, missing };
 }
 

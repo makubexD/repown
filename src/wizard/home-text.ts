@@ -21,8 +21,6 @@ export const HINT_ACCOUNT = 'repown accounts add';
 export const HINT_DOCTOR = 'repown doctor';
 export const NOT_SET_UP = 'not set up';
 export const SET_UP = 'set up';
-export const LOGIN_MESSAGE = 'The account\'s user name (login)';
-export const LOGIN_HINT = 'the name you sign in with, e.g. octocat; not your email address';
 export const CANCELLED = 'Cancelled: nothing was changed.';
 
 export function homeTitle(cwd: string): string {

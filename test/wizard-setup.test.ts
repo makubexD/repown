@@ -171,7 +171,7 @@ describe('setup flow', () => {
     const picked = { account: 'octocat' };
     assert.equal(wording(step.message, picked, ctx), 'Also make this account gh\'s active account?');
     assert.match(wording(step.hint, picked, ctx), /git is not affected/);
-    assert.equal(step.detail?.(picked, ctx), 'gh\'s active account is octo-work');
+    assert.equal((await step.detail?.(picked, ctx)), 'gh\'s active account is octo-work');
     const review = setupFlow(ctx).review({ account: 'octocat', gh: true, guard: true }, ctx);
     assert.ok(review.steps.some((item) => item.what === 'Pin this clone to octocat, and make it gh\'s active account'));
     await answer(context({ gh, host: 'azdo', credentialPinned: false }), [['account', 'octocat'], ['guard', true], ['review', 'run']]);
@@ -190,7 +190,7 @@ describe('setup flow', () => {
     assert.equal(wording(step.hint, picked, ctx),
       'gh is GitHub\'s command-line tool (gh pr create); git pushes don\'t need it. ' +
       'Yes opens your browser to sign in, and gh then acts as octocat in every terminal');
-    assert.equal(step.detail?.(picked, ctx), 'gh\'s active account is octo-work');
+    assert.equal((await step.detail?.(picked, ctx)), 'gh\'s active account is octo-work');
     const answers = await answer(ctx, [['account', 'octocat'], ['gh', true], ['guard', false], ['review', 'run']]);
     assert.deepEqual(argvOf(answers, ctx), [['use', '--gh', '--', 'octocat']]);
     const review = setupFlow(ctx).review(answers, ctx);
@@ -204,11 +204,11 @@ describe('setup flow', () => {
     const none = ok({ accounts: [], active: null });
     await answer(context({ gh: none, host: 'azdo', credentialPinned: false }), [['account', 'octocat'], ['guard', true], ['review', 'run']]);
     const ctx = context({ gh: none });
-    assert.equal(stepOf(ctx, 'gh').detail?.({ account: 'octocat' }, ctx), 'gh isn\'t signed in to any account');
+    assert.equal((await stepOf(ctx, 'gh').detail?.({ account: 'octocat' }, ctx)), 'gh isn\'t signed in to any account');
     assert.equal(stepOf(ctx, 'gh').when?.({ account: 'octocat' }, ctx), true);
   });
 
-  test('a fresh gh, from the empty hosts fixture, is offered a sign-in', () => {
+  test('a fresh gh, from the empty hosts fixture, is offered a sign-in', async () => {
     const parsed = ghStateFrom({ code: 0, stdout: GH_EMPTY_HOSTS, stderr: '' });
     assert.equal(parsed.ok, true);
     if (!parsed.ok) return;
@@ -217,7 +217,7 @@ describe('setup flow', () => {
     const picked = { account: 'octocat' };
     assert.equal(step.when?.(picked, ctx), true);
     assert.equal(wording(step.message, picked, ctx), 'Sign in to gh as octocat too?');
-    assert.equal(step.detail?.(picked, ctx), 'gh isn\'t signed in to any account');
+    assert.equal((await step.detail?.(picked, ctx)), 'gh isn\'t signed in to any account');
   });
 
   test('when gh stays someone else, the review says so and names ghAdvice\'s fix', () => {
@@ -720,9 +720,9 @@ describe('setup flow', () => {
     assert.equal(stepOf(off, 'upstream').when?.({}, off), true, 'an explicit false is not already on');
   });
 
-  test('the guard question says when a repository has no commits yet', () => {
+  test('the guard question says when a repository has no commits yet', async () => {
     const guard = setupFlow(context()).steps.find((step) => step.id === 'guard')!;
-    assert.match(guard.detail!({ account: 'octocat' }, context()) ?? '', /no commits yet/);
+    assert.match((await guard.detail!({ account: 'octocat' }, context())) ?? '', /no commits yet/);
   });
 
   test('a clone pinned to the account but changed since says why pinning again is offered', () => {
@@ -756,10 +756,10 @@ describe('setup flow', () => {
     assert.ok(!textOf(review).some((line) => /push as octocat/.test(line)));
   });
 
-  test('a history that could not be read is said, not shown as clean', () => {
+  test('a history that could not be read is said, not shown as clean', async () => {
     const flow = setupFlow(context({ addresses: err('git log failed') }));
     const guard = flow.steps.find((step) => step.id === 'guard')!;
-    assert.match(guard.detail?.({ account: 'octocat' }, context({ addresses: err('git log failed') })) ?? '', /could not be read/);
+    assert.match((await guard.detail?.({ account: 'octocat' }, context({ addresses: err('git log failed') }))) ?? '', /could not be read/);
   });
 
   test('S19 the review notes unpushed commits by another address, and Recommended does not rewrite them', () => {
@@ -973,8 +973,8 @@ describe('setup flow', () => {
     const fresh = { account: NEW_ACCOUNT, newAccount: 'octocat', host: 'github' };
     const name = stepOf(ctx, 'name');
     const email = stepOf(ctx, 'email');
-    assert.equal(name.detail?.(fresh, ctx), nameLine);
-    const shown = email.detail?.(fresh, ctx) ?? '';
+    assert.equal((await name.detail?.(fresh, ctx)), nameLine);
+    const shown = (await email.detail?.(fresh, ctx)) ?? '';
     assert.equal(shown.endsWith('; ' + addressLine), true, shown);
     assert.match(shown, /^tip: to keep your own address private[\s\S]*1234\+octocat@users\.noreply\.github\.com; not this machine's default address/);
     assert.doesNotMatch(shown, /Octo Work <|·|type it/);
@@ -982,19 +982,19 @@ describe('setup flow', () => {
     assert.equal(await email.initial?.(fresh, ctx), 'octocat@example.invalid');
 
     const unnamed = context({ recorded: {}, machineIdentity: { name: null, email: 'octo-work@example.invalid' } });
-    assert.equal(stepOf(unnamed, 'name').detail?.(fresh, unnamed), undefined);
-    const unnamedEmail = stepOf(unnamed, 'email').detail?.(fresh, unnamed) ?? '';
+    assert.equal((await stepOf(unnamed, 'name').detail?.(fresh, unnamed)), undefined);
+    const unnamedEmail = (await stepOf(unnamed, 'email').detail?.(fresh, unnamed)) ?? '';
     assert.match(unnamedEmail, /not this machine's default address \(octo-work@example\.invalid\)/);
     assert.doesNotMatch(unnamedEmail, /Octo Work </);
 
     const recorded = context({ machineIdentity: machine });
     const known = { account: 'octocat' };
-    assert.equal(stepOf(recorded, 'name').detail?.(known, recorded), undefined);
-    assert.doesNotMatch(stepOf(recorded, 'email').detail?.(known, recorded) ?? '', /this machine's default/);
+    assert.equal((await stepOf(recorded, 'name').detail?.(known, recorded)), undefined);
+    assert.doesNotMatch((await stepOf(recorded, 'email').detail?.(known, recorded)) ?? '', /this machine's default/);
 
     const noEmail = context({ recorded: {}, machineIdentity: { name: 'Octo Work', email: null } });
-    assert.equal(stepOf(noEmail, 'name').detail?.(fresh, noEmail), nameLine);
-    const tipOnly = stepOf(noEmail, 'email').detail?.(fresh, noEmail) ?? '';
+    assert.equal((await stepOf(noEmail, 'name').detail?.(fresh, noEmail)), nameLine);
+    const tipOnly = (await stepOf(noEmail, 'email').detail?.(fresh, noEmail)) ?? '';
     assert.doesNotMatch(tipOnly, /this machine's default/);
     assert.match(tipOnly, /noreply/);
 
@@ -2500,4 +2500,16 @@ describe('repown setup: repoint and fetch, in a real clone', () => {
     assert.match(run.stderr, /branch\.main\.remote: \(a URL\) -> origin/);
     assert.doesNotMatch(run.stdout + run.stderr, /ghp_secret|octocat:/);
   });
+});
+
+test('a new account\'s name question first says what GitHub said about the login, then the machine name', async () => {
+  const ctx = context({
+    recorded: {}, machineIdentity: { name: 'Octo Work', email: null },
+    suggest: async () => ({ problem: 'github.com has no account named octocatt: check the spelling' }),
+  });
+  const fresh = { account: NEW_ACCOUNT, newAccount: 'octocatt', host: 'github' };
+  assert.equal(await stepOf(ctx, 'name').detail?.(fresh, ctx),
+    'github.com has no account named octocatt: check the spelling; not this machine\'s default name (Octo Work), unless this account uses it');
+  const quiet = context({ recorded: {}, suggest: async () => ({ problem: null }) });
+  assert.equal(await stepOf(quiet, 'name').detail?.(fresh, quiet), undefined, 'a user, or a lookup that failed, says nothing');
 });

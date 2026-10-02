@@ -11,7 +11,7 @@ import {
   NONE_RECORDED, NOT_SET_UP, QUIT, RECORD_ACCOUNT, SET_UP, SETUP_CLONE, SHOW_HELP, STOP_GH,
   clonesNone, clonesSome, couldNotRead, moreClones, recordedLine, setupHint, unreadableLine,
 } from './home-text.ts';
-import { printable } from './setup-flow.ts';
+import { addAccountArgv, printable, type NewAccount } from './setup-flow.ts';
 
 /** Shown choices. `back` returns to the menu; the others run a command or leave. */
 export const MENU = {
@@ -25,7 +25,7 @@ const LIST_CAP = 20;
 export type HomeAction =
   | { readonly kind: 'setup'; readonly path: string }
   | { readonly kind: 'fix' }
-  | { readonly kind: 'account'; readonly login: string }
+  | ({ readonly kind: 'account' } & NewAccount)
   | { readonly kind: 'doctor' };
 
 export interface CloneList {
@@ -56,13 +56,13 @@ export function listedClones(home: HomeState): CloneList {
 
 /**
  * The command the action stands for. `--cwd=<path>` is how setup's own plans spell
- * it. `accounts add` puts `--` before the login, as that plan does, so a login
- * that starts with a dash stays the account.
+ * it. `accounts add` is the very command setup runs for a new account: every answer
+ * as a flag, and `--` before the login, so a login that starts with a dash stays the account.
  */
 export function commandFor(action: HomeAction): readonly string[] {
   if (action.kind === 'setup') return ['setup', '--cwd=' + action.path];
   if (action.kind === 'fix') return ['fix'];
-  if (action.kind === 'account') return ['accounts', 'add', '--', action.login];
+  if (action.kind === 'account') return addAccountArgv(action);
   return ['doctor'];
 }
 

@@ -164,7 +164,7 @@ describe('start screen', () => {
       'octo\x1bcat': { name: 'Octo Cat', email: 'octocat@example.invalid' },
     };
     const home: HomeState = {
-      cwd: 'work', registry: ok({ accounts, unreadable: [] }), ghIsHelper: false, clones: [],
+      cwd: 'work', registry: ok({ accounts, unreadable: [] }), ghIsHelper: false, clones: [], identity: { name: null, email: null },
     };
     const line = shown(home, 'Accounts');
     const escaped = [printable('octo\ncat'), printable('octo\x1bcat')].join(', ');
@@ -184,7 +184,7 @@ describe('start screen', () => {
     const path = join(cwd, 'odd\tname');
     const home: HomeState = {
       cwd, registry: ok({ accounts: {}, unreadable: [] }), ghIsHelper: false,
-      clones: [{ path, setUp: false }],
+      clones: [{ path, setUp: false }], identity: { name: null, email: null },
     };
     const [choice] = listedClones(home).clones;
     assert.equal(choice!.value, path);
@@ -200,10 +200,14 @@ describe('start screen commands', () => {
     assert.deepEqual(setup, ['setup', '--cwd=' + path]);
     assert.match(formatCommand(setup), /repown setup --cwd /);
     assert.deepEqual(commandFor({ kind: 'fix' }), ['fix']);
-    assert.deepEqual(commandFor({ kind: 'account', login: 'octocat' }), ['accounts', 'add', '--', 'octocat']);
-    assert.match(formatCommand(commandFor({ kind: 'account', login: 'octocat' })), /^repown accounts add octocat$/);
-    assert.deepEqual(commandFor({ kind: 'account', login: '-h' }), ['accounts', 'add', '--', '-h']);
-    assert.match(formatCommand(commandFor({ kind: 'account', login: '-h' })), /repown accounts add -- -h/);
+    const profile = { name: 'Octo Cat', email: 'octocat@example.invalid', host: 'github' };
+    const account = commandFor({ kind: 'account', login: 'octocat', ...profile });
+    assert.deepEqual(account, ['accounts', 'add', '--name=Octo Cat', '--email=octocat@example.invalid', '--host=github', '--', 'octocat'],
+      'the same command setup runs for a new account, so accounts add asks nothing more');
+    assert.equal(formatCommand(account), "repown accounts add octocat --name 'Octo Cat' --email octocat@example.invalid");
+    const dash = commandFor({ kind: 'account', login: '-h', ...profile });
+    assert.deepEqual(dash.slice(-2), ['--', '-h']);
+    assert.match(formatCommand(dash), / -- -h$/);
     assert.deepEqual(commandFor({ kind: 'doctor' }), ['doctor']);
   });
 });
@@ -224,7 +228,7 @@ function cancelPrompter(intro: (title: string) => void): Prompter {
 }
 
 function emptyRead(cwd: string): Promise<HomeState> {
-  return Promise.resolve({ cwd, registry: ok({ accounts: {}, unreadable: [] }), ghIsHelper: false, clones: [] });
+  return Promise.resolve({ cwd, registry: ok({ accounts: {}, unreadable: [] }), ghIsHelper: false, clones: [], identity: { name: null, email: null } });
 }
 
 function writeRegistry(raw: string): string {

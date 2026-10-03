@@ -7,69 +7,73 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
-### Added
-- The start screen's **Remove an account**: pick a recorded account, read what stays
-  (pinned clones keep their settings and the push guard), confirm, and it runs
-  `repown accounts remove`; the menu then comes back, its summary one account fewer (ADR-028, its note).
+The start screen (bare `repown` outside a clone) now records and removes accounts without
+leaving its frame, and warns before you pin a clone to someone else's GitHub account. Every
+command repown prints for you to copy now pastes correctly in sh, bash, zsh, fish, PowerShell
+and cmd. `status`, `doctor` and the pre-push guard are faster on Windows.
 
-### Changed
-- The wizard (`repown setup`, and bare `repown` in a terminal) is easier to read in colour,
-  with nothing to set: the title is a cyan badge, each summary value is bold cyan, the
-  commands setup shows and runs are cyan, and setup's closing line leads with a green ✔ (done) or a yellow ▲ (the next push
-  will fail). On a terminal that can't draw Unicode (Windows' console without a known terminal, or
-  the Linux console), the marks are `+` and `!`. Without colour (a
-  pipe, a log, `NO_COLOR`), the output is exactly as before
-  (ADR-027).
+### Added
+- **Remove an account** on the start screen: pick a recorded account, read what stays (clones
+  pinned to it keep their settings and the push guard), and confirm. It runs
+  `repown accounts remove`, and the start screen comes back without it (ADR-028).
+- **A warning before you record someone else's GitHub account.** When gh or Git Credential
+  Manager is signed in to github.com as other accounts only, the name question in setup and on
+  the start screen says so: `signed in as octo-work, not octocat: if octocat isn't your
+  account, go back; otherwise the first push asks you to sign in as it`. A login that exists
+  can still be a stranger's, and its noreply address would link your commits to them. Nothing
+  is refused (ADR-028).
 - `repown accounts add <login>`, when it asks, warns when github.com has no account by that
   name (a typo) or the name is an organisation. It still records the account, and says nothing
   when GitHub can't be asked.
-- The start screen's **Record an account** asks everything in its frame: the login, where
-  it's hosted, and the commit name and email, prefilled from GitHub (name, noreply address), with Back on
-  each. It then runs `repown accounts add` with every answer as a flag, so the bare `Commit
-  name` / `Commit email` prompts are gone from it, and a login already recorded is refused as
-  in setup. In setup and on the start screen, the name question first says when github.com
-  has no account by that login, or it is an organisation, so a typo can be fixed before it
-  is recorded.
-- `repown accounts add` prints its suggested next command, `repown use <account>`, in
-  cyan where stdout has colour, and exactly as before where it has none (ADR-027's rule).
-- In setup and on the start screen, a new account's name question says when this machine
-  is signed in to GitHub (gh, Git Credential Manager) as other accounts only: "signed in as
-  octo-work, not octocat: if octocat isn't your account, go back; otherwise the first push
-  asks you to sign in as it". A login that exists can still be a stranger's, and its noreply
-  address would link your commits to them (ADR-028, its note).
-- A new account's name and email questions say where their value came from: "GitHub shows
-  no name for octocat, so this is the login" (a stranger's or an empty profile no longer
-  passes unnoticed), and "prefilled with the private address GitHub gives octocat" instead
-  of a `1234+` example beside the real address. The machine's identity reads "your default
-  git name here is …: use it only if this account does too".
-- A question's note (this clone's current account, what the history holds, what GitHub said
-  about a login) is drawn inside that question, under its hint, instead of as a separate
-  line above it that read as part of the previous answer. Plain prompts already did this.
-- `repown status`, `doctor`, `scan`, the pre-push guard, the start screen's read of each clone and setup's first read start
-  far fewer git processes: they read each config scope once instead of once per key
-  (`repown status` in a clone: 68 processes became 38, about a third faster on Windows) (ADR-029).
-- Commands setup and the start screen draw to copy start with `$ ` instead of `> `: pasted
-  whole, `>` was a redirect in every shell and left an empty file named `repown` (ADR-027).
-- After Record an account, Check this machine or Stop gh serving credentials, the start
-  screen comes back with a fresh summary instead of exiting; Quit, Esc or Ctrl-C leave it
+
+### Changed
+- **Record an account on the start screen asks everything in its frame**: the login, where it
+  is hosted, and the commit name and email, prefilled from GitHub (name, noreply address), with
+  Back on each. It then runs `repown accounts add` with every answer as a flag, so the bare
+  `Commit name` / `Commit email` prompts are gone. A login already recorded is refused, and in
+  setup and on the start screen a login github.com doesn't know, or an organisation, is named
+  on the name question, so a typo can be fixed before anything is recorded.
+- **The start screen comes back** with a fresh summary after Record an account, Remove an
+  account, Check this machine or Stop gh serving credentials. Quit, Esc or Ctrl-C leave it
   (ADR-028).
+- **Prefilled answers say where they came from**: `GitHub shows no name for octocat, so this
+  is the login`, and `prefilled with the private address GitHub gives octocat` instead of a
+  `1234+` example beside the real address. This machine's own identity reads `your default git
+  name here is …: use it only if this account does too`.
+- **The wizard is easier to read in colour**, with nothing to set: the title is a cyan badge,
+  summary values are bold cyan, commands are cyan, and setup's closing line leads with a green
+  ✔ (done) or a yellow ▲ (the next push will fail). On a terminal that can't draw Unicode
+  (Windows' classic console, the Linux console) the marks are `+` and `!`. Without colour (a
+  pipe, a log, `NO_COLOR`) the output is exactly as before. `repown accounts add` prints its
+  next command, `repown use <account>`, in cyan the same way (ADR-027).
+- A question's note (this clone's current account, what the history holds, what GitHub said
+  about a login) is drawn inside that question, under its hint, instead of as a line above it
+  that read as part of the previous answer. Plain prompts already did this.
+- Commands setup and the start screen show for you to copy start with `$ ` instead of `> `:
+  pasted whole, `>` was a redirect in every shell and left an empty file named `repown`
+  (ADR-027).
+- **Faster on Windows:** `repown status`, `doctor`, `scan`, the pre-push guard, the start
+  screen's read of each clone and setup's first read take each git config scope in one read
+  instead of one process per key. One `repown status` in a clone went from 68 processes to 38,
+  about a third faster (ADR-029).
 
 ### Fixed
-- Commands repown prints to copy paste correctly in cmd and PowerShell as well as POSIX shells:
-  a value with a space or an apostrophe is in double quotes (`--name "Octo Cat"`, on every OS),
-  a GitHub noreply address and a URL are no longer quoted, a leading `@` and a dashed word with
+- **Security: pasting a command repown printed can no longer run part of it as code.** A value
+  no quoting keeps literal in every shell (`$`, a backtick, `"`, `%`, `!`, a curly double quote,
+  a control character, an escaping backslash) used to get a single-quoted command, and pasted
+  into PowerShell or cmd part of it ran. A remote's owner made of such text could do that
+  through the allow-owner advice of the guard, `status` or `use`. repown now says to add it by
+  hand, shows `[value not safe to paste]` in a command it runs itself, and prints the owner
+  with control and bidi characters escaped.
+- **Copyable commands paste correctly in cmd and PowerShell as well as POSIX shells**: a value
+  with a space or an apostrophe is in double quotes (`--name "Octo Cat"`, on every OS), a
+  GitHub noreply address and a URL are no longer quoted, a leading `@` and a dashed word with
   `.` or `:` are quoted (PowerShell read them as a splat, or split them), and the `--` before a
   dashed login is `"--"` (PowerShell dropped a bare one).
-- A value no quoting keeps literal in every shell (`$`, a backtick, `"`, `%`, `!`, a curly double
-  quote, a control character, an escaping backslash) no longer gets a single-quoted command:
-  pasted into PowerShell or cmd, part of it ran as code. A remote's owner made of such text could
-  do that through the guard's, `status`'s or `use`'s allow-owner advice. Repown now says to add
-  it by hand, shows `[value not safe to paste]` in a command it runs itself, and prints the owner
-  with control and bidi characters escaped.
-- On a terminal that can't draw Unicode (classic Windows cmd), a text question's hint lines drew
-  a `│` beside a gutter of `|`. They now use the same bar as the rest of the frame.
-- "type < to go back" no longer breaks across two lines; when it doesn't fit after the hint, it
-  takes a line of its own.
+- On a terminal that can't draw Unicode (classic Windows cmd), a text question's hint lines
+  drew a `│` beside a gutter of `|`. They now use the same bar as the rest of the frame.
+- `type < to go back` no longer breaks across two lines; when it doesn't fit after the hint,
+  it takes a line of its own.
 
 ## [0.4.0] - 2026-09-30
 

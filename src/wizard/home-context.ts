@@ -5,6 +5,7 @@
 import { readdir } from 'node:fs/promises';
 import { join, relative, resolve, sep } from 'node:path';
 import { Git } from '../core/git.ts';
+import { snapshotOf } from '../core/config-snapshot.ts';
 import { inspectAuth, inspectRepo, type RepoState } from '../core/inspect.ts';
 import { planRepair } from '../core/credential/repair.ts';
 import { loadRegistry, type Registry } from '../core/registry.ts';
@@ -131,7 +132,7 @@ async function childNames(cwd: string): Promise<string[]> {
 
 async function describeClone(dir: string, deps: HomeDeps): Promise<HomeClone | null> {
   const inspect = deps.inspect ?? inspectRepo;
-  const repo = await inspect(new Git(dir));
+  const repo = await inspect(snapshotOf(new Git(dir)));
   if (!repo.isRepo) return null;
   return { path: resolve(dir), setUp: identityProblems(repo).length === 0 };
 }

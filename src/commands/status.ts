@@ -18,6 +18,7 @@
 import { inspectRepo, inspectAuth, activeAccountLabel, type RepoState, type AuthState } from '../core/inspect.ts';
 import { isPinned } from '../core/identity.ts';
 import { loadRegistry, type Account, type Registry } from '../core/registry.ts';
+import { snapshotOf } from '../core/config-snapshot.ts';
 import type { Result } from '../core/result.ts';
 import { ALLOW_OWNER_BY_HAND, allowOwnerCommand, allowedOwners, copyableCommand } from '../core/guard/check.ts';
 import { existsSync } from 'node:fs';
@@ -34,7 +35,8 @@ export default {
   summary: 'this clone\'s and this machine\'s settings, and what to fix (bare `repown` when output isn\'t a terminal)',
 
   async run(args: Args): Promise<number> {
-    const git = gitFor(args);
+    // Read-only: every config read of this run comes from one list per scope (ADR-029).
+    const git = snapshotOf(gitFor(args));
     const repo = await inspectRepo(git);
     if (!repo.isRepo) {
       out.fail('repown', 'Not a git repository: ' + git.cwd);

@@ -18,6 +18,7 @@ import { inspectRepo, inspectAuth, activeAccountLabel, type AuthState, type Repo
 import { loadRegistry, type Account, type Registry } from '../core/registry.ts';
 import type { Result } from '../core/result.ts';
 import { gitFor, type Args } from '../ui/args.ts';
+import { snapshotOf } from '../core/config-snapshot.ts';
 import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
@@ -35,7 +36,8 @@ export default {
   examples: ['repown doctor'],
 
   async run(args: Args): Promise<number> {
-    const git = gitFor(args);
+    // Read-only: config reads come from one list per scope (ADR-029).
+    const git = snapshotOf(gitFor(args));
     const repo = await inspectRepo(git);
     const auth = await inspectAuth(git, repo.originUrl ?? undefined);
     const warned = printReport(repo, auth, await loadRegistry());

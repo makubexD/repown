@@ -55,7 +55,12 @@ export class Git {
    * an object, never what a push SENDS, so a replaced foreign commit read as the
    * clean replacement while the original was published.
    */
-  private exec(args: readonly string[], input?: string): Promise<ExecResult> {
+  protected exec(args: readonly string[], input?: string): Promise<ExecResult> {
+    return this.spawnGit(args, input);
+  }
+
+  /** The one place a git child starts. A ConfigSnapshot answers config reads before it (ADR-029). */
+  protected spawnGit(args: readonly string[], input?: string): Promise<ExecResult> {
     const full = ['--no-replace-objects', ...args];
     return input === undefined
       ? run('git', full, { cwd: this.cwd })

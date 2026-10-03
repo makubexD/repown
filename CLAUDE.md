@@ -97,6 +97,10 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   `accent` for cyan) returns the text unchanged where that stream has no colour: never add a
   mark to plain output by hand (ADR-027). `unicodeTerminal` copies clack's
   `isUnicodeSupported`; re-check it when clack is upgraded.
+- Read-only commands (`status`, `doctor`, `scan`, `guard check`, the start screen's clone read,
+  setup's `readContext`) read config through `snapshotOf(git)` (`src/core/config-snapshot.ts`):
+  one `git config [--scope] --list -z` per scope answers every getter (ADR-029). Never hand a
+  snapshot to code that writes config; it throws. URL matches and origins still go to git.
 - `--format json` (`scan`, `accounts list`) is a stable contract for scripts; the text
   layout isn't. Renaming a JSON field is breaking (ADR-014).
 - `src/wizard/` is `repown setup`: `engine.ts` owns Back, the review loop, the opening

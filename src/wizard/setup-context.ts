@@ -16,6 +16,7 @@ import { previewLines } from '../commands/fix.ts';
 import { readUnpushed, type UnpushedFact } from '../core/unpushed.ts';
 import { readPushFacts } from '../core/push-state.ts';
 import { SOURCE_GCM, SOURCE_GH, SOURCE_OWNS, signedInLogins, type DetectedAccount, type SetupContext, type Suggestion, type UpstreamRead } from './setup-flow.ts';
+import { snapshotOf } from '../core/config-snapshot.ts';
 
 export interface DetectionInput {
   /** False for any origin that is not GitHub: owner, gh and GCM are GitHub's only. */
@@ -113,9 +114,11 @@ export interface ReadOptions {
 export async function readContext(git: Git, cwd: string | null, options: ReadOptions = {}): Promise<Result<SetupContext>> {
   const registry = await readRegistry();
   if (!registry.ok) return registry;
-  const repo = await inspectRepo(git);
+  // Read-only: one list per scope answers every config read of this context (ADR-029).
+  const view = snapshotOf(git);
+  const repo = await inspectRepo(view);
   const recorded = registry.value.accounts;
-  const facts = await readFacts(git, repo, recorded, options);
+  const facts = await readFacts(view, repo, recorded, options);
   return ok(assemble(cwd, recorded, repo, facts));
 }
 

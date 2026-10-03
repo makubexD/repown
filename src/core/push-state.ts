@@ -102,7 +102,7 @@ async function repointOf(git: Git, branch: string | null): Promise<Repoint | nul
 
 async function destinationOf(git: Git, target: PushTarget | null): Promise<PushDestination | null> {
   if (!target) return null;
-  const raw = target.isRemote ? await pushUrlOf(git, target.name) : target.name;
+  const raw = target.isRemote ? await pushUrlOf(git, target.name) : await bareTargetUrl(git, target.name);
   const url = raw ? parseGitUrl(raw) : null;
   const owner = url ? providerFor(url).ownerOf(url) : null;
   if (!owner) return null;
@@ -110,8 +110,13 @@ async function destinationOf(git: Git, target: PushTarget | null): Promise<PushD
   return { remote: target.isRemote ? target.name : null, owner, allowed };
 }
 
-async function pushUrlOf(git: Git, remote: string): Promise<string | null> {
-  return (await git.getConfig('remote.' + remote + '.pushurl')) ?? git.getConfig('remote.' + remote + '.url');
+function pushUrlOf(git: Git, remote: string): Promise<string | null> {
+  return git.remotePushUrl(remote);
+}
+
+/** A push straight to a URL, as git rewrites it (insteadOf; see rewrittenUrl). */
+async function bareTargetUrl(git: Git, url: string): Promise<string> {
+  return (await git.rewrittenUrl(url)) ?? url;
 }
 
 /** Only the tracked ref ON the destination: a triangular workflow's upstream does not block its push. */

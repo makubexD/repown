@@ -150,7 +150,8 @@ function accountChoices(ctx: SetupContext) {
 }
 
 function repo(owner: string, accountKind: (login: string) => Promise<'user' | 'organization' | null>): RepoState {
-  return { owner, provider: { id: 'github', accountKind } } as RepoState;
+  const provider = { id: 'github', accountKind };
+  return { owner, provider, ownerProvider: provider } as RepoState;
 }
 
 function ghAuth(logins: readonly string[]): AuthState {

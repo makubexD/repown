@@ -18,6 +18,8 @@ test('a github.com profile lookup names the host, so GH_HOST cannot redirect it'
     ghProfileArgs('octo-org', 'name'),
     ['api', '--hostname', 'github.com', 'users/octo-org', '--jq', '.name'],
   );
+  assert.deepEqual(ghProfileArgs('a b/..', 'name'), ['api', '--hostname', 'github.com', 'users/a%20b%2F..', '--jq', '.name'],
+    'the login is one path segment, whatever it holds');
   const source = readFileSync(new URL('../src/core/credential/gh.ts', import.meta.url), 'utf8');
   assert.match(source, /run\('gh', ghProfileArgs\(login, field\)\)/);
 });

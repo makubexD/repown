@@ -82,12 +82,19 @@ function readAccounts(value: unknown): Registry {
   return { accounts, unreadable };
 }
 
+/** Why a write would fail or drop entries, or null when it would keep every entry. */
+export function writeProblem(registry: Result<Registry>): string | null {
+  if (!registry.ok) return registry.error;
+  if (registry.value.unreadable.length === 0) return null;
+  return registryPath() + ' has entries repown cannot read (' + registry.value.unreadable.join(', ') +
+    ') -- saving would drop them; fix or remove them first';
+}
+
 /** The registry, but only if a write would keep every entry in it. */
 async function loadForWrite(): Promise<Result<Registry>> {
   const registry = await loadRegistry();
-  if (!registry.ok || registry.value.unreadable.length === 0) return registry;
-  return err(registryPath() + ' has entries repown cannot read (' + registry.value.unreadable.join(', ') +
-             ') -- saving would drop them; fix or remove them first');
+  const problem = writeProblem(registry);
+  return problem === null || !registry.ok ? registry : err(problem);
 }
 
 export async function lookupAccount(account: string): Promise<Result<Account | null>> {

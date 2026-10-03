@@ -24,7 +24,7 @@ async function searchDirectories(): Promise<string[]> {
   const directories: string[] = [];
 
   // Git for Windows bundles GCM as a sibling of git's own exec-path:
-  //   <root>/mingw64/libexec/git-core  ->  <root>/mingw64/bin
+  //   <root>/mingw64/libexec/git-core  ->  <root>/mingw64/bin   (ucrt64 from Git 2.56 on)
   const execPath = await run('git', ['--exec-path']);
   if (succeeded(execPath)) {
     const mingw = dirname(dirname(execPath.stdout.trim()));

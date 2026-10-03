@@ -53,6 +53,11 @@ export function unreadableLine(recorded: number, unreadable: number, path: strin
   return recorded === 0 ? tail : recorded + ' recorded, ' + tail;
 }
 
+/** Said instead of the account questions when the answers could not be saved anyway. */
+export function recordBlocked(reason: string): string {
+  return 'Record an account needs an account list it can save: ' + reason.replace(/\.$/, '') + '. Nothing was asked.';
+}
+
 export function couldNotRead(path: string): string {
   return 'could not read ' + path;
 }

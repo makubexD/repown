@@ -114,7 +114,8 @@ function toAccount(raw: unknown): GhAccount[] {
 
 /** Arguments for a github.com profile field. `--hostname` so GH_HOST cannot redirect the call. */
 export function ghProfileArgs(login: string, field: string): readonly string[] {
-  return ['api', '--hostname', 'github.com', `users/${login}`, '--jq', `.${field}`];
+  // One path segment, whatever the login holds (callers also look up only GitHub-shaped logins).
+  return ['api', '--hostname', 'github.com', `users/${encodeURIComponent(login)}`, '--jq', `.${field}`];
 }
 
 /** A profile field's value, and whether github.com said there is no such account. */

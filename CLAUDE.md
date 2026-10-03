@@ -86,6 +86,10 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   Don't add `--path-format`: git before 2.31 echoes it back and exits 0.
 - `check.ts` inspects the author and committer of every commit in the pushed range read from
   stdin (excluding what the remote already has), and every tagger, not the current config.
+- The owner shown anywhere (`inspectRepo`'s `owner` with its `ownerProvider`, push-state's
+  destination) comes from `Git.remotePushUrl` (`git remote get-url --push`), the URL the hook
+  receives; `provider`, `url` and `credentialKeys` follow the configured fetch URL. A push
+  straight to a URL goes through `rewrittenUrl` (`ls-remote --get-url`).
 - `unpushed.ts` counts against remote-tracking refs, so its rebase advice depends on
   `push-destination.ts`: a push destination no tracking ref reaches is unknown, and the
   rebase is then conditional. `FETCH_HEAD` is no proof of a fetch; a failed one writes it (ADR-025).
@@ -114,7 +118,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   wraps at itself). The start screen is the same folder: `home-context.ts` reads
   (read-only), `home-flow.ts` is pure, `home-text.ts` holds the words, and `home-run.ts`
   draws through the Prompter (`show`, `choose`) and runs each action's own `run()`.
-  Record an account asks setup's own new-account steps (`loginStep`, `profileSteps` in
+  Record an account first refuses an account list it couldn't save (`writeProblem`,
+  `registry.ts`), then asks setup's own new-account steps (`loginStep`, `profileSteps` in
   `setup-flow.ts`) through the engine's `runFlow`, then runs `accounts add` with every
   answer as a flag; never a second copy of those questions. Once fix, doctor,
   `accounts add` or `accounts remove` has run, failed or not, the screen opens again and re-reads (ADR-028); setup, help and Quit end it.
@@ -128,7 +133,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - `plainTerminal()` clears those same six in a file that does not use `sandbox()`.
   A test that wants colour sets it explicitly.
 - `test/fake-exe.ts` compiles the fake `gh.exe` and `git-credential-manager.exe` once
-  per process and reuses that build.
+  per process and reuses that build; tests put its folder on `PATH` (`fakeExeDir`), never a copy
+  in a sandbox (Windows can keep a new .exe locked, and the sandbox can't be deleted).
 - Guard tests build foreign-authored commits with `git commit-tree`, which doesn't move HEAD.
 - `test/wizard-screens.test.ts` plays `repown setup`'s real screens with key presses
   (`play()` in `test/setup-fixtures.ts`), including the opening review and resume from it,

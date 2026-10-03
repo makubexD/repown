@@ -2,6 +2,7 @@
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Git } from '../src/core/git.ts';
 import { readUnpushed } from '../src/core/unpushed.ts';
@@ -88,6 +89,38 @@ describe('readPushFacts', () => {
     box.git('config', 'branch.main.pushRemote', 'upstream');
     box.git('config', '--add', 'repown.allowOwner', 'Octo-Org');
     assert.deepEqual((await read()).destination, { remote: 'upstream', owner: 'octo-org', allowed: ['octo-org'] });
+  });
+
+  test('the destination owner is the one git pushes to: insteadOf, pushInsteadOf and pushurl count', async () => {
+    commit('first');
+    box.git('remote', 'add', 'origin', 'https://github.com/octocat/hello.git');
+    box.git('config', 'branch.main.remote', 'origin');
+    box.git('config', 'url.https://github.com/octo-org/.insteadOf', 'https://github.com/octocat/');
+    assert.equal((await read()).destination?.owner, 'octo-org', 'insteadOf rewrites the push URL too');
+    box.git('config', '--unset', 'url.https://github.com/octo-org/.insteadOf');
+    box.git('config', 'url.https://github.com/octo-work/.pushInsteadOf', 'https://github.com/octocat/');
+    assert.equal((await read()).destination?.owner, 'octo-work', 'pushInsteadOf rewrites only pushes');
+    box.git('config', 'remote.origin.pushurl', 'https://github.com/octo-org/hello.git');
+    assert.equal((await read()).destination?.owner, 'octo-org', 'an explicit pushurl is not rewritten by pushInsteadOf');
+  });
+
+  test('a push to a bare URL is read after insteadOf', async () => {
+    commit('first');
+    box.git('config', 'branch.main.remote', 'https://github.com/octocat/hello.git');
+    box.git('config', 'url.https://github.com/octo-org/.insteadOf', 'https://github.com/octocat/');
+    assert.equal((await read()).destination?.owner, 'octo-org');
+  });
+
+  test('remotePushUrl is the very URL the pre-push hook receives', async () => {
+    commit('first');
+    const dest = bare('dest');
+    box.git('remote', 'add', 'origin', 'https://github.com/octocat/hello.git');
+    box.git('config', 'url.' + dest.replace(/\\/g, '/') + '.pushInsteadOf', 'https://github.com/octocat/hello.git');
+    const seen = join(box.dir, '..', 'hook-saw.txt');
+    const hooks = box.git('rev-parse', '--git-path', 'hooks');
+    writeFileSync(join(box.dir, hooks, 'pre-push'), '#!/bin/sh\nprintf %s "$2" > "' + seen.replace(/\\/g, '/') + '"\n', { mode: 0o755 });
+    box.git('push', '-q', 'origin', 'HEAD:main');
+    assert.equal(await new Git(box.dir).remotePushUrl('origin'), readFileSync(seen, 'utf8'));
   });
 
   test('diverged from the tracked ref on the destination', async () => {

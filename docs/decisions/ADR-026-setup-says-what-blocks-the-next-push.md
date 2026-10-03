@@ -104,3 +104,11 @@ problem".
   clone with `--no-input`.
 - The closing re-reads the clone once more (a few git reads).
 - `url.*.insteadOf` rewrites that add credentials are not read.
+
+## Notes
+
+- **2026-10-03, the destination owner follows git.** Setup, status, `use` and the blockers read
+  the owner from `git remote get-url --push` (`pushurl`, `pushInsteadOf`, `insteadOf` applied),
+  the URL the pre-push hook hands the guard, instead of the raw `remote.<r>.pushurl`/`url`. A
+  push straight to a URL is read through `ls-remote --get-url` (`insteadOf` only). Credentials
+  written into a rewritten URL are still not read (the gap listed above).

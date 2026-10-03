@@ -15,7 +15,7 @@ import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 import { loadRegistry, registryPath } from '../src/core/registry.ts';
 import { err, ok } from '../src/core/result.ts';
 import { pathWithoutGh, plainTerminal, sandbox, type Sandbox } from './helpers.ts';
-import { compileFakeExe } from './fake-exe.ts';
+import { fakeExeDir } from './fake-exe.ts';
 
 export const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 
@@ -108,12 +108,17 @@ export function fakeGhEnv(box: Sandbox, extra: NodeJS.ProcessEnv = {}): NodeJS.P
   mkdirSync(bin, { recursive: true });
   installFakeGh(bin);
   const env = quietEnv();
-  return { ...env, ...extra, PATH: bin + delimiter + (env['PATH'] ?? '') };
+  return { ...env, ...extra, PATH: fakeGhPath(bin) + delimiter + (env['PATH'] ?? '') };
 }
 
+/** On Windows the compiled fake stays where it was built (fakeExeDir); fakeGhPath puts it on PATH. */
 export function installFakeGh(bin: string): void {
-  if (process.platform === 'win32') copyFileSync(compileFakeExe('gh.exe', FAKE_GH_CS), join(bin, 'gh.exe'));
-  else writeFileSync(join(bin, 'gh'), FAKE_GH_SH, { mode: 0o755 });
+  if (process.platform !== 'win32') writeFileSync(join(bin, 'gh'), FAKE_GH_SH, { mode: 0o755 });
+}
+
+/** The PATH entries that find the fake gh first: its build folder on Windows, `bin` elsewhere. */
+export function fakeGhPath(bin: string): string {
+  return process.platform === 'win32' ? fakeExeDir('gh.exe', FAKE_GH_CS) + delimiter + bin : bin;
 }
 
 export const FAKE_GH_CS = `

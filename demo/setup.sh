@@ -5,8 +5,9 @@
 # identities only (octocat, *.example.invalid).
 #
 # The insteadOf rewrite hands the hook a local path rather than the GitHub URL, so
-# the destination-owner check has nothing to compare; the demo's refusal comes
-# from the commit-author check, which is the point being shown.
+# the destination-owner check (the guard's, and status/setup's, which read the same
+# rewritten URL) has nothing to compare; the demo's refusal comes from the
+# commit-author check, which is the point being shown.
 
 REPO_ROOT=$(pwd)
 ORIGINAL_PATH=$PATH

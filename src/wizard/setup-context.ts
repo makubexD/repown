@@ -282,9 +282,9 @@ function ghLogins(gh: Result<GhState>): Result<readonly string[]> {
  */
 export async function askOwnerIsUser(repo: RepoState, auth: AuthState, options: ReadOptions = {}): Promise<boolean | null> {
   if (options.classifyOwner === false) return null;
-  if (repo.provider.id !== 'github' || !repo.owner) return null;
+  if (repo.ownerProvider.id !== 'github' || !repo.owner) return null;
   if (signedIn(auth, repo.owner)) return true;
-  const ask = options.accountKind ?? repo.provider.accountKind;
+  const ask = options.accountKind ?? repo.ownerProvider.accountKind;
   if (!ask) return null;
   return asUser(await ask(repo.owner));
 }

@@ -245,6 +245,12 @@ describe('setup flow', () => {
       'git config --local --add repown.allowOwner octo-org');
   });
 
+  test('a recorded account with control characters is escaped in the account question', () => {
+    const ctx = context({ recorded: { 'octo\x1bcat': { name: 'Octo\x1b[2JCat', email: 'o@example.invalid' } } });
+    const choices = stepOf(ctx, 'account').choices?.({}, ctx) ?? [];
+    for (const choice of choices) assert.doesNotMatch(choice.label + (choice.hint ?? ''), /[\x00-\x1f]/, JSON.stringify(choice));
+  });
+
   test('control characters are shown escaped, so nothing can redraw the review', () => {
     const shown = formatCommand(['use', '--', 'octo\x1b[2Jcat']);
     assert.doesNotMatch(shown, /\x1b/);
@@ -257,7 +263,7 @@ describe('setup flow', () => {
 
   test('a new account login must be a plain name: no spaces, slashes, ? or #', () => {
     const newAccount = setupFlow(context()).steps.find((step) => step.id === 'newAccount')!;
-    for (const bad of [' octo-work', 'octo work', 'octo/work', '../user', 'a?b', 'a#b', 'a\x1bb']) {
+    for (const bad of [' octo-work', 'octo work', 'octo/work', '../user', 'a?b', 'a#b', 'a\x1bb', '.', '..', '...']) {
       assert.ok(newAccount.validate?.(bad), bad);
     }
     for (const good of ['octo-work', 'octo.work', 'octo_work', 'octo@example.invalid']) {
@@ -1274,7 +1280,7 @@ test('the name and email questions say where their prefill came from', async () 
     return [await stepOf(ctx, 'name').detail?.(answers, ctx), await stepOf(ctx, 'email').detail?.(answers, ctx)];
   };
   const noreply = '843102+octocat@users.noreply.github.com';
-  assert.deepEqual(await details({ email: noreply }), ['GitHub shows no name for octocat, so this is the login',
+  assert.deepEqual(await details({ email: noreply }), ['GitHub gives no usable name for octocat, so this is the login',
     'prefilled with the private address GitHub gives octocat (github.com/settings/emails)']);
   assert.deepEqual(await details({ name: 'Octo Cat', email: noreply }),
     [undefined, 'prefilled with the private address GitHub gives octocat (github.com/settings/emails)']);

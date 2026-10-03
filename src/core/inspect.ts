@@ -26,9 +26,12 @@ export interface RepoState {
   readonly branch: CurrentBranch | null;
   readonly originUrl: string | null;
   readonly url: GitUrl | null;
+  /** The host of origin's configured (fetch) URL: what the credential keys follow. */
   readonly provider: HostProvider;
-  /** Who owns the repository origin points at, per the provider's rules. */
+  /** The owner origin's pushes go to (the URL git pushes to, as the guard sees it). */
   readonly owner: string | null;
+  /** The host of that same push URL; it differs from `provider` only when pushes are rewritten elsewhere. */
+  readonly ownerProvider: HostProvider;
   readonly identity: RepoIdentity;
   readonly credentialKeys: readonly string[];
   readonly guard: GuardState;
@@ -59,20 +62,32 @@ export async function inspectRepo(git: Git): Promise<RepoState> {
   const provider = providerFor(url);
   const credentialKeys = url ? provider.credentialKeys(url) : [];
 
-  const [root, branch, hook, identity, guard, helper] = await Promise.all([
+  const [root, branch, hook, identity, guard, helper, pushed] = await Promise.all([
     isRepo ? git.root() : Promise.resolve(null),
     isRepo ? git.currentBranch() : Promise.resolve(null),
     isRepo ? hookLocation(git) : Promise.resolve(null),
     readIdentity(git, credentialKeys[0] ?? null),
     isRepo ? guardState(git) : Promise.resolve<GuardState>('off'),
     git.getUrlMatch('credential.helper', originUrl ?? DEFAULT_PROBE_URL),
+    pushSide(git, originUrl),
   ]);
 
   return {
     git, isRepo, root, branch, originUrl, url, provider,
-    owner: url ? provider.ownerOf(url) : null,
+    owner: pushed.owner, ownerProvider: pushed.provider,
     identity, credentialKeys, guard, hook, helper,
   };
+}
+
+/**
+ * Who origin's pushes go to, and on which host: the URL git pushes to (pushurl,
+ * pushInsteadOf, insteadOf), the one the guard checks, not the configured fetch URL the
+ * credentials follow. The owner and its host always come from that same URL.
+ */
+async function pushSide(git: Git, originUrl: string | null): Promise<{ owner: string | null; provider: HostProvider }> {
+  const pushed = originUrl ? parseGitUrl((await git.remotePushUrl('origin')) ?? originUrl) : null;
+  const provider = providerFor(pushed);
+  return { owner: pushed ? provider.ownerOf(pushed) : null, provider };
 }
 
 export async function inspectAuth(git: Git, probeUrl?: string): Promise<AuthState> {

@@ -16,6 +16,9 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   nothing suggested. A profile name with control or bidi characters is dropped instead of
   drawn and saved, and the warning about a missing account escapes the login. Setup and the
   start screen refuse a login made only of dots.
+- The start screen's Record an account checks first that the account list can be saved. When
+  it can't be read, or has entries repown can't read, it says why and asks nothing, instead of
+  asking four questions and then failing to save (and skipping the "already recorded" check).
 
 ## [0.5.0] - 2026-10-03
 

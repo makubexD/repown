@@ -17,7 +17,8 @@ import { renderTopHelp } from '../ui/help.ts';
 import { CANCEL, runFlow, type Pass, type Prompter } from './engine.ts';
 import { readHome, readSignedIn, type HomeState } from './home-context.ts';
 import { BACK as HOME_BACK, MENU, accountChoices, accountOfChoice, commandFor, homeNote, listedClones, menuItems, summaryLines } from './home-flow.ts';
-import { BACK_LABEL, BUSY, CANCELLED, QUIT, WHAT_NEXT, WHICH_ACCOUNT, WHICH_CLONE, homeTitle, removeLabel, removeNote, removeQuestion } from './home-text.ts';
+import { BACK_LABEL, BUSY, CANCELLED, QUIT, WHAT_NEXT, WHICH_ACCOUNT, WHICH_CLONE, homeTitle, recordBlocked, removeLabel, removeNote, removeQuestion } from './home-text.ts';
+import { writeProblem } from '../core/registry.ts';
 import { formatCommand, loginStep, newAccountOf, printable, profileSteps, type AccountContext } from './setup-flow.ts';
 import { COMMAND_MARK } from './review-text.ts';
 import { suggester } from './setup-context.ts';
@@ -112,6 +113,9 @@ async function runInClone(prompter: Prompter, cwd: string): Promise<number> {
  * then `accounts add` with every answer as a flag, so it has nothing left to ask.
  */
 async function recordAccount(prompter: Prompter, home: HomeState, deps: HomeRunDeps): Promise<number | null | typeof AGAIN> {
+  // The same reasons accounts add would give on save, before anyone answers four questions for nothing.
+  const blocked = writeProblem(home.registry);
+  if (blocked) { prompter.note(recordBlocked(printable(blocked))); return null; }
   const ctx = accountContext(home, deps);
   const walk = await runFlow({ steps: [loginStep(ctx), ...profileSteps(ctx)] }, ctx, FIRST_PASS, prompter);
   if (walk.status === 'cancelled') return finish(prompter, CANCELLED, CANCELLED_CODE);

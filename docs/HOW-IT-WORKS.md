@@ -1173,7 +1173,10 @@ On a plain terminal the command is its own line:
 `repown doctor`. **Show help** closes the frame with `└  $ repown --help`, prints the
 top help on stdout, and exits 0.
 
-**Record an account** asks setup's own questions for a new account, in the frame:
+**Record an account** first checks that the account list can be saved: when it can't be
+read, or has entries repown can't read, it says why (the same reason `accounts add` would
+give on save) and `Nothing was asked.`, and the menu comes back. Otherwise it asks setup's
+own questions for a new account, in the frame:
 `The account's user name (login)` (hint: `the name you sign in with, e.g. octocat; not
 your email address`), where it is hosted (GitHub by default), and the name and email
 commits show. On GitHub they start from a lookup: the profile's name (else the login),

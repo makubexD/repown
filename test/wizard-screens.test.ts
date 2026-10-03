@@ -656,6 +656,23 @@ describe('start screen, played with key presses', () => {
     });
   });
 
+  test('H22: Record an account on an account list it can\'t save says why, asks nothing, and the menu comes back', async () => {
+    await withProjects(async (root) => {
+      mkdirSync(dirname(registryPath()), { recursive: true });
+      for (const [body, reason] of [['{', /is not valid JSON/], ['{"accounts":{"broken":{"name":1}}}\n', /has entries repown cannot read \(broken\)/]] as const) {
+        writeFileSync(registryPath(), body);
+        const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST, signedIn: NOBODY }), [[enter], [esc]], { patience: 20_000 });
+        assert.equal(run.result, 130, run.screen);
+        const flat = run.screen.replace(/\n│ {2}/g, ' ');
+        assert.match(flat, reason, run.screen);
+        assert.match(flat, /Nothing was asked/);
+        assert.doesNotMatch(run.screen, /The account's user name/, 'no question before the list can be saved');
+        assert.equal((run.screen.match(/What next\?/g) ?? []).length >= 2, true, 'the menu comes back');
+        assert.equal(readFileSync(registryPath(), 'utf8'), body, 'nothing was written');
+      }
+    });
+  });
+
   test('H17: a login already recorded, in any case, is refused with the words setup uses', async () => {
     await withProjects(async (root) => {
       mkdirSync(dirname(registryPath()), { recursive: true });

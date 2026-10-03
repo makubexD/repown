@@ -74,3 +74,8 @@ before.
   returns to the menu), then runs `accounts remove`'s own `run()`; the screen comes back
   like the other machine-level actions. A typed `repown accounts remove` is unchanged, with
   no confirm.
+- **2026-10-03, as extended: Record an account checks the account list first.** When the
+  registry can't be read, or has entries repown can't read, it says why (`writeProblem`,
+  `src/core/registry.ts`, the same reasons `accounts add` gives on save) and asks nothing, instead
+  of asking all four questions for a save that would fail. Remove an account was already hidden
+  in that state.

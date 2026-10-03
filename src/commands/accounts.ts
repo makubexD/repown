@@ -86,7 +86,7 @@ function useCommand(account: string): string {
 /** Best effort. A host that cannot be asked simply contributes no suggestion. */
 async function suggestProfile(hostId: string, account: string): Promise<Profile> {
   const found = await lookUpProfile(providers().find((candidate) => candidate.id === hostId), account);
-  if (found.problem) out.warn('accounts', found.problem + ' (recording it anyway)');
+  if (found.problem) out.warn('accounts', out.printable(found.problem) + ' (recording it anyway)');
   return found.profile;
 }
 

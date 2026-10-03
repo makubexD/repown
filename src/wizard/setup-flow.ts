@@ -622,6 +622,7 @@ const LOGIN = /^[\w.@-]+$/;
 /** Empty, or not spelled as a login. The start screen asks for a login by this rule too. */
 export function loginProblem(value: string): string | null {
   if (!value.trim()) return 'a value is required';
+  if (/^\.+$/.test(value)) return 'a login can\'t be only dots';
   return LOGIN.test(value) ? null : 'use letters, digits and . _ @ - only';
 }
 

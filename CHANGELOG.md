@@ -7,6 +7,16 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+### Fixed
+- **Security: a typed login can no longer pull in another account's GitHub profile.**
+  `repown accounts add ../user` made the lookup GitHub's own `/user`, your signed-in account,
+  and suggested its name and noreply id for a different login. The profile is now looked up
+  only for a login spelled the way GitHub spells one (letters, digits, `-`, `_`), and the
+  login is one URL path segment whatever it holds. Anything else is recorded as typed, with
+  nothing suggested. A profile name with control or bidi characters is dropped instead of
+  drawn and saved, and the warning about a missing account escapes the login. Setup and the
+  start screen refuse a login made only of dots.
+
 ## [0.5.0] - 2026-10-03
 
 The start screen (bare `repown` outside a clone) now records and removes accounts without

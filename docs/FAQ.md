@@ -97,7 +97,8 @@ from that tool's hook instead ([card 10](HOW-IT-WORKS.md#10-other-hook-tools)).
 `repown use --gh` may run `gh auth login`, in a terminal only. For an account that isn't
 recorded yet, on a terminal, `repown setup`, the start screen's Record an account,
 `repown use` or `repown accounts add` (without both `--name` and `--email`) asks gh for
-its public profile to suggest a name and noreply address. Setup, the start screen and
+its public profile to suggest a name and noreply address, for a GitHub-shaped login only
+(letters, digits, `-`, `_`). Setup, the start screen and
 `accounts add` also ask whether that login exists and is a user, to warn about a typo or
 an organisation. Setup and the start screen read which accounts gh and Git Credential Manager are signed in as
 (gh's own account list, and GCM's store on this machine) to say when the login isn't one

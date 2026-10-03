@@ -169,6 +169,11 @@ repown accounts list
 repown accounts remove octocat           # clones already pinned keep their identity
 ```
 
+The suggestion is looked up only for a login spelled the way GitHub spells one (letters,
+digits, `-` and `_`): anything else, such as `../user` or `a.b`, is recorded as typed with
+nothing suggested, so no other account's profile is ever offered. A profile name with
+control or bidi characters is dropped, never shown or saved.
+
 The registry stores a name, an email and a host per account, never a secret, outside
 every repository ([where](CONFIGURATION.md#the-account-registry)). Run `add` again to
 change an account; pinned clones keep the old values until you `repown use` it again.

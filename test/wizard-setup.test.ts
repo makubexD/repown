@@ -257,7 +257,7 @@ describe('setup flow', () => {
 
   test('a new account login must be a plain name: no spaces, slashes, ? or #', () => {
     const newAccount = setupFlow(context()).steps.find((step) => step.id === 'newAccount')!;
-    for (const bad of [' octo-work', 'octo work', 'octo/work', '../user', 'a?b', 'a#b', 'a\x1bb']) {
+    for (const bad of [' octo-work', 'octo work', 'octo/work', '../user', 'a?b', 'a#b', 'a\x1bb', '.', '..', '...']) {
       assert.ok(newAccount.validate?.(bad), bad);
     }
     for (const good of ['octo-work', 'octo.work', 'octo_work', 'octo@example.invalid']) {

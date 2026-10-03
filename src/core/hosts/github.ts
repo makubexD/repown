@@ -12,7 +12,8 @@
 import type { AccountKind, HostProvider, Profile } from './types.ts';
 import type { GitUrl } from '../url.ts';
 import { credentialPrefix } from '../url.ts';
-import { ghProfileField, ghProfileLookup } from '../credential/gh.ts';
+import { ghProfileField, ghProfileLookup, type ProfileLookup } from '../credential/gh.ts';
+import { printable } from '../../ui/format.ts';
 
 const HOSTS = ['github.com', 'gist.github.com', 'www.github.com', 'ssh.github.com'];
 
@@ -32,15 +33,33 @@ function credentialKeys(url: GitUrl): readonly string[] {
   return url.scheme === 'https' ? [`credential.${credentialPrefix(url)}.username`] : [];
 }
 
-async function resolveProfile(account: string): Promise<Profile | null> {
-  const [name, id] = await Promise.all([
-    ghProfileField(account, 'name'),
-    ghProfileField(account, 'id'),
-  ]);
+/**
+ * GitHub's own login shape (an underscore for Enterprise Managed Users). Nothing else is
+ * looked up: a typed `../user` would make `users/../user` GitHub's own `/user`, the
+ * signed-in account, and suggest its name and address for another login.
+ */
+export function githubLogin(login: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(login);
+}
+
+type ReadField = (login: string, field: string) => Promise<string | null>;
+
+function resolveProfile(account: string): Promise<Profile | null> {
+  return profileFrom(account, ghProfileField);
+}
+
+/**
+ * The suggestion for a GitHub-shaped login. A name that printable() would change (control,
+ * bidi, zero-width characters) is dropped: it would be drawn, and saved if accepted.
+ */
+export async function profileFrom(account: string, read: ReadField): Promise<Profile | null> {
+  if (!githubLogin(account)) return null;
+  const [found, id] = await Promise.all([read(account, 'name'), read(account, 'id')]);
+  const name = found && printable(found) === found ? found : null;
   // GitHub's own noreply address: publishable by design, and it still links
   // the commit to the account. Offered as a default so a private address
   // need never be published to get working attribution.
-  const email = id ? `${id}+${account}@users.noreply.github.com` : undefined;
+  const email = id && /^\d+$/.test(id) ? `${id}+${account}@users.noreply.github.com` : undefined;
   if (!name && !email) return null;
   return { ...(name ? { name } : {}), ...(email ? { email } : {}) };
 }
@@ -54,8 +73,14 @@ export function isNoreplyAddress(email: string): boolean {
  * The users endpoint answers for an organisation too, with type Organization.
  * Anything else, including a failed call, is unknown -- not a user.
  */
-async function accountKind(login: string): Promise<AccountKind | null> {
-  const found = await ghProfileLookup(login, 'type');
+function accountKind(login: string): Promise<AccountKind | null> {
+  return kindFrom(login, ghProfileLookup);
+}
+
+/** What github.com says a GitHub-shaped login is; nothing for any other login. */
+export async function kindFrom(login: string, lookup: (login: string, field: string) => Promise<ProfileLookup>): Promise<AccountKind | null> {
+  if (!githubLogin(login)) return null;
+  const found = await lookup(login, 'type');
   if (found.missing) return 'missing';
   if (found.value === 'User') return 'user';
   if (found.value === 'Organization') return 'organization';

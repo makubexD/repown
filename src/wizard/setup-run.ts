@@ -24,6 +24,7 @@ import { setupFlow, planCommands, formatCommand, gitStepOf, keptFlags, briefOf, 
 import { cloneChangeLines, machineChangeLines, readCloneSnapshot, type CloneSnapshot } from './setup-changes.ts';
 import { readContext, readRegistry, type ReadOptions } from './setup-context.ts';
 import { plainPrompter } from './plain.ts';
+import { COMMAND_MARK } from './review-text.ts';
 import { blockers, type Blocker } from '../core/blockers.ts';
 import { readPushFacts } from '../core/push-state.ts';
 import { guardState, hookLocation } from '../core/guard/hook.ts';
@@ -354,7 +355,7 @@ async function offer(
   if (index > 0) process.stderr.write('\n');
   out.detail('step ' + (index + 1) + ' of ' + plan.length + ': ' + printable(planned.what));
   if (!confirm) {
-    out.detail(out.accent(process.stderr, '> ' + formatCommand(planned.argv)));
+    out.detail(out.accent(process.stderr, COMMAND_MARK + formatCommand(planned.argv)));
     return 'yes';
   }
   return confirm(planned);

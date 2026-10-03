@@ -1,0 +1,76 @@
+# ADR-028: The start screen returns to its menu after a machine-level action, and asks a new account in its frame; an unknown login is named, never refused
+
+**Status:** Accepted. Supersedes in part [ADR-024](ADR-024-bare-repown-outside-a-clone-opens-a-start-screen.md):
+what happens after an action, and how Record an account asks.
+
+## Context
+
+ADR-024 made every start-screen action an existing command's own `run()`, and the
+screen ended with that command. A user recorded an account, saw `OK accounts …`, and
+had to run `repown` again to see it in the summary, or to record a second one. The
+machine-level actions (record an account, check this machine, stop gh serving
+credentials) are often done in a row, and none of them leaves the folder or hands the
+terminal to another flow.
+
+In the same change, Record an account began asking setup's own new-account questions
+in the frame (login, host, name, email) and running `accounts add` with every answer as
+a flag. Its closing `OK` and `Use it in any clone` lines are `accounts add`'s own, as
+before.
+
+## Decision
+
+- **After Record an account, Check this machine or Stop gh serving credentials, the
+  start screen opens again**: a new frame, the folder read afresh (so the summary shows
+  the new account, or gh no longer serving credentials), and the menu.
+- **Set up a clone found here, Show help and Quit still end the screen.** Setup is its own
+  flow with its own ending, and help is for reading.
+- **Quit exits 0, Esc and Ctrl-C exit 130,** as before. An action that failed has already
+  said so in its own output (`FAIL …`), and the menu that follows lets the user retry or
+  leave.
+- **Record an account asks setup's own new-account questions in the frame** (login,
+  host, name, email, with Back), then runs `accounts add` with every answer as a flag,
+  so no bare prompt follows the frame. A login already recorded is refused, as in setup.
+- **A login github.com doesn't know, or that is an organisation, is named, never refused.**
+  Only gh's own `(HTTP 404)` on a failed lookup means "no such account"; offline, a refused
+  lookup (403) or no gh is unknown and says nothing. In setup and on the start screen the
+  sentence leads the name question's detail, so Back can fix a typo before anything is
+  recorded; a typed `repown accounts add` that asks prints it as a `WARN` and records anyway.
+- Each action is still the command's own `run()`, printed first as the command it stands
+  for (ADR-024).
+
+## Alternatives considered
+
+| Option | Why not |
+| --- | --- |
+| Keep ending after every action (ADR-024) | The summary is stale at once, and a second account means starting again. |
+| Return to the menu without re-reading | Shows the old summary: "2 recorded" right after recording a third. |
+| Quit exits with the last action's code | Quit is a choice, not a failure; the failure was already shown, and a script never reaches this screen (it needs a terminal on every stream). |
+| Refuse a login GitHub doesn't know | An enterprise host, a renamed account or no network would block recording; the host's answer is advice. |
+| After a 404, note it and ask the login again, accepting the same login typed twice | Chosen against while building: the name question comes next anyway, Back reaches the login from there, and setup gets the same sentence with no new loop. |
+| Return after setup too | Setup ends on its own closing line (done, or what blocks the next push); a menu after it buries that. |
+
+## Consequences
+
+- One more read of the folder (the bounded walk of ADR-024) after each machine-level
+  action.
+- Leaving the start screen after an action takes one more key: Quit, Esc or Ctrl-C.
+- The exit code no longer reports a failed action on this path; the action's own output
+  does. Typed commands (`repown accounts add`, `repown doctor`, `repown fix`) are unchanged.
+
+## Notes
+
+- **2026-10-02, as extended.** On GitHub, when gh or Git Credential Manager is signed in
+  as other github.com accounts only, the name question also says so ("signed in as A, B,
+  not X: if X isn't your account, go back; otherwise the first push asks you to sign in as
+  it"). A login that exists on GitHub can still be someone else's: the noreply address
+  prefilled from it would link your commits to their profile. Like the 404 sentence it is
+  named, never refused (an account not yet signed in is normal: the first push signs it
+  in), and it says nothing when neither gh nor GCM can be read or lists anyone. Setup uses
+  the sign-ins it already read; the start screen reads them only when the name question
+  first asks. A typed `repown accounts add` doesn't say it.
+- **2026-10-02, as extended: Remove an account.** The menu offers it after Record an
+  account once an account is recorded and every registry entry reads. It asks which account,
+  says that pinned clones keep their settings and the guard, asks to confirm (Back from either
+  returns to the menu), then runs `accounts remove`'s own `run()`; the screen comes back
+  like the other machine-level actions. A typed `repown accounts remove` is unchanged, with
+  no confirm.

@@ -4,7 +4,8 @@
 // afterwards, in every repository on the machine.
 
 import { loadRegistry, saveAccount, removeAccount, registryPath, type Account } from '../core/registry.ts';
-import { providers } from '../core/hosts/index.ts';
+import { lookUpProfile, providers, type Profile } from '../core/hosts/index.ts';
+import { copyableCommand } from '../core/guard/check.ts';
 import { ask, interactive } from '../ui/prompt.ts';
 import { flagString, wantsJson, FORMAT_OPTION, type Args } from '../ui/args.ts';
 import type { Command, CommandGroup } from '../ui/command.ts';
@@ -69,18 +70,24 @@ async function add(args: Args): Promise<number> {
   const written = await saveAccount(account, { name, email, host: hostId });
   if (!written.ok) { out.fail('accounts', written.error); return 1; }
 
-  out.pass('accounts', account + '  ' + name + ' <' + email + '>');
+  out.pass('accounts', out.printable(account) + '  ' + out.printable(name) + ' <' + out.printable(email) + '>');
   out.line();
-  out.line('  Use it in any clone:  repown use ' + account);
+  out.line('  Use it in any clone:  ' + out.accent(process.stdout, useCommand(account)));
   out.line();
   return 0;
 }
 
+/** `repown use <account>` to paste, `--` first for a dashed login; described when it can't be printed safely. */
+function useCommand(account: string): string {
+  const words = account.startsWith('-') ? ['repown', 'use', '--', account] : ['repown', 'use', account];
+  return copyableCommand(words) ?? 'repown use, with this account\'s name';
+}
+
 /** Best effort. A host that cannot be asked simply contributes no suggestion. */
-async function suggestProfile(hostId: string, account: string): Promise<{ name?: string; email?: string }> {
-  const provider = providers().find((candidate) => candidate.id === hostId);
-  if (!provider?.resolveProfile) return {};
-  return (await provider.resolveProfile(account)) ?? {};
+async function suggestProfile(hostId: string, account: string): Promise<Profile> {
+  const found = await lookUpProfile(providers().find((candidate) => candidate.id === hostId), account);
+  if (found.problem) out.warn('accounts', found.problem + ' (recording it anyway)');
+  return found.profile;
 }
 
 async function askFor(label: string, suggestion?: string): Promise<string | null> {
@@ -95,9 +102,9 @@ async function remove(args: Args): Promise<number> {
   const account = args.positional[0]!;
   const removed = await removeAccount(account);
   if (!removed.ok) { out.fail('accounts', removed.error); return 1; }
-  if (!removed.value) { out.warn('accounts', account + ' was not recorded.'); return 0; }
+  if (!removed.value) { out.warn('accounts', out.printable(account) + ' was not recorded.'); return 0; }
 
-  out.pass('accounts', 'removed ' + account);
+  out.pass('accounts', 'removed ' + out.printable(account));
   out.line();
   out.line('  Clones already pinned to it are unchanged -- their identity is in');
   out.line('  their own .git/config. Unpin one with: repown off');

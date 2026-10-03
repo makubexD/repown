@@ -1,7 +1,9 @@
 // `repown setup`: the flow (which steps, what they turn into) with a scripted
-// prompter and a hand-built context, then the command itself -- in-process with a
-// scripted prompter for the interactive paths, and spawned for the paths a script
-// or CI would take. Every run happens in a sandbox (isolated git config, registry).
+// prompter and a hand-built context, the setup lead, Ctrl-C during gh sign-in, and the
+// repoint and re-author steps. The command run on a terminal, without one, its context
+// read, S18 and repoint in a real clone are in the wizard-setup-*.test.ts files, split
+// off so node --test runs them in parallel; a suite split by test keeps its name, so
+// every test path is unchanged. Every run happens in a sandbox (isolated git config, registry).
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,7 +17,7 @@ import { pathWithoutGh, plainTerminal, sandbox, type Sandbox } from './helpers.t
 import { setupContext as context } from './setup-fixtures.ts';
 import { ok, err } from '../src/core/result.ts';
 import { wizard, BACK, CANCEL, type Answers, type Prompter, type Reply, type Review, type ReviewChoice, type StepConfirm } from '../src/wizard/engine.ts';
-import { setupFlow, planCommands, formatCommand, gitStepOf, keptFlags, blockersOf, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, type SetupContext } from '../src/wizard/setup-flow.ts';
+import { setupFlow, planCommands, formatCommand, gitStepOf, keptFlags, blockersOf, changesOf, briefOf, missingFlags, printable, NEW_ACCOUNT, DETECTED_PREFIX, accountOf, isNew, signedInLogins, type SetupContext, type Suggestion } from '../src/wizard/setup-flow.ts';
 import { pinWrites } from '../src/core/identity.ts';
 import { plainPrompter } from '../src/wizard/plain.ts';
 import { reviewLines, reviewDefault } from '../src/wizard/review-text.ts';
@@ -29,90 +31,9 @@ import type { AuthState } from '../src/core/inspect.ts';
 import { ghStateFrom } from '../src/core/credential/gh.ts';
 import { inherit, handingOver } from '../src/core/exec.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
-
-const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
-plainTerminal();
-
-// ---------------------------------------------------------------- the flow
-
-type Entry = readonly [string, Reply | ReviewChoice];
-
-function scripted(script: Entry[]): Prompter & { readonly asked: string[]; readonly reviews: Review[]; readonly confirms: StepConfirm[] } {
-  const queue = [...script];
-  const next = (id: string): Reply | ReviewChoice => {
-    const entry = queue.shift();
-    assert.ok(entry, 'script ran out at ' + id);
-    assert.equal(entry[0], id, 'the wizard asked ' + id + ', the script expected ' + entry[0]);
-    return entry[1];
-  };
-  const asked: string[] = [];
-  const reviews: Review[] = [];
-  const confirms: StepConfirm[] = [];
-  return {
-    asked,
-    reviews,
-    confirms,
-    ask: async (step) => { asked.push(step.id); return next(step.id) as Reply; },
-    review: async (review) => { reviews.push(review); return next('review') as ReviewChoice; },
-    pickStep: async () => next('pick') as string,
-    choose: async () => { throw new Error('setup does not choose'); },
-    note: () => {},
-    close: () => {},
-    confirmStep: async (brief) => {
-      confirms.push(brief);
-      const choice = next('step');
-      return choice === CANCEL ? CANCEL : choice as 'yes' | 'skip' | 'stop';
-    },
-  };
-}
-
-/** Step by step, so a script is asked every question. Pass `mode` in `given` to drive Recommended. */
-async function answer(ctx: SetupContext, script: Entry[], given: Answers = {}): Promise<Answers> {
-  const mode = given['mode'] === undefined ? { mode: 'step' } : {};
-  const outcome = await wizard(setupFlow(ctx), ctx, { ...mode, ...given }, scripted(script));
-  assert.equal(outcome.status, 'run');
-  return outcome.status === 'run' ? outcome.answers : {};
-}
-
-/** Every line of text a review shows. */
-const textOf = (review: Review): string[] =>
-  [review.title, ...review.headline, ...review.notes, ...review.steps.flatMap((step) => [step.what, step.command, ...step.detail])];
-
-const argvOf = (answers: Answers, ctx: SetupContext): (readonly string[])[] =>
-  planCommands(answers, ctx).map((command) => command.argv);
-
-/** Newest first, as git log lists them; the oldest commit's parent is `rebaseBase`. */
-function onBranch(emails: readonly string[], rebaseBase = 'abc1234'): SetupContext['unpushed'] {
-  const parentOf = (index: number): string | null =>
-    index < emails.length - 1 ? 'fff' + index : rebaseBase === '--root' ? null : rebaseBase;
-  return {
-    branch: 'main',
-    commits: ok(emails.map((address, index) => ({ authorEmail: address, committerEmail: address, parent: parentOf(index) }))),
-    unknown: null,
-  };
-}
-
-function reviewNotes(ctx: SetupContext, answers: Answers = { account: 'octocat' }): string {
-  return setupFlow(ctx).review(answers, ctx).notes.join('\n');
-}
-
-/** A commit-tree whose committer date is fixed, so log order does not depend on the clock. */
-function commitAt(box: Sandbox, date: string, args: readonly string[]): string {
-  const saved = { author: process.env['GIT_AUTHOR_DATE'], committer: process.env['GIT_COMMITTER_DATE'] };
-  process.env['GIT_AUTHOR_DATE'] = date;
-  process.env['GIT_COMMITTER_DATE'] = date;
-  try {
-    return box.git(...args);
-  } finally {
-    restoreEnv('GIT_AUTHOR_DATE', saved.author);
-    restoreEnv('GIT_COMMITTER_DATE', saved.committer);
-  }
-}
-
-function restoreEnv(name: string, value: string | undefined): void {
-  if (value === undefined) delete process.env[name];
-  else process.env[name] = value;
-}
+import {
+  CLI, scripted, answer, textOf, argvOf, onBranch, reviewNotes, commitAt, restoreEnv, plainChoice, stepOf, wording, shellSplit, home, record, repown, localConfig, hook, shot, sectionLines, expectedPin, ghAuth, WAIT_CHILD, plainLead, guarded, holdInherit, untilUp, releaseInherit, captureStep, type Entry, type Home,
+} from './wizard-setup-helpers.ts';
 
 describe('setup flow', () => {
   test('a recorded account in its own repo: pin it and turn the guard on', async () => {
@@ -171,7 +92,7 @@ describe('setup flow', () => {
     const picked = { account: 'octocat' };
     assert.equal(wording(step.message, picked, ctx), 'Also make this account gh\'s active account?');
     assert.match(wording(step.hint, picked, ctx), /git is not affected/);
-    assert.equal(step.detail?.(picked, ctx), 'gh\'s active account is octo-work');
+    assert.equal((await step.detail?.(picked, ctx)), 'gh\'s active account is octo-work');
     const review = setupFlow(ctx).review({ account: 'octocat', gh: true, guard: true }, ctx);
     assert.ok(review.steps.some((item) => item.what === 'Pin this clone to octocat, and make it gh\'s active account'));
     await answer(context({ gh, host: 'azdo', credentialPinned: false }), [['account', 'octocat'], ['guard', true], ['review', 'run']]);
@@ -190,7 +111,7 @@ describe('setup flow', () => {
     assert.equal(wording(step.hint, picked, ctx),
       'gh is GitHub\'s command-line tool (gh pr create); git pushes don\'t need it. ' +
       'Yes opens your browser to sign in, and gh then acts as octocat in every terminal');
-    assert.equal(step.detail?.(picked, ctx), 'gh\'s active account is octo-work');
+    assert.equal((await step.detail?.(picked, ctx)), 'gh\'s active account is octo-work');
     const answers = await answer(ctx, [['account', 'octocat'], ['gh', true], ['guard', false], ['review', 'run']]);
     assert.deepEqual(argvOf(answers, ctx), [['use', '--gh', '--', 'octocat']]);
     const review = setupFlow(ctx).review(answers, ctx);
@@ -204,11 +125,11 @@ describe('setup flow', () => {
     const none = ok({ accounts: [], active: null });
     await answer(context({ gh: none, host: 'azdo', credentialPinned: false }), [['account', 'octocat'], ['guard', true], ['review', 'run']]);
     const ctx = context({ gh: none });
-    assert.equal(stepOf(ctx, 'gh').detail?.({ account: 'octocat' }, ctx), 'gh isn\'t signed in to any account');
+    assert.equal((await stepOf(ctx, 'gh').detail?.({ account: 'octocat' }, ctx)), 'gh isn\'t signed in to any account');
     assert.equal(stepOf(ctx, 'gh').when?.({ account: 'octocat' }, ctx), true);
   });
 
-  test('a fresh gh, from the empty hosts fixture, is offered a sign-in', () => {
+  test('a fresh gh, from the empty hosts fixture, is offered a sign-in', async () => {
     const parsed = ghStateFrom({ code: 0, stdout: GH_EMPTY_HOSTS, stderr: '' });
     assert.equal(parsed.ok, true);
     if (!parsed.ok) return;
@@ -217,7 +138,7 @@ describe('setup flow', () => {
     const picked = { account: 'octocat' };
     assert.equal(step.when?.(picked, ctx), true);
     assert.equal(wording(step.message, picked, ctx), 'Sign in to gh as octocat too?');
-    assert.equal(step.detail?.(picked, ctx), 'gh isn\'t signed in to any account');
+    assert.equal((await step.detail?.(picked, ctx)), 'gh isn\'t signed in to any account');
   });
 
   test('when gh stays someone else, the review says so and names ghAdvice\'s fix', () => {
@@ -296,7 +217,7 @@ describe('setup flow', () => {
 
   test('a value that starts with a dash stays attached to its option in the shown command', () => {
     assert.equal(formatCommand(['accounts', 'add', '--name=-dash', '--email=a@example.invalid', '--host=github', '--', 'octocat']),
-      "repown accounts add octocat '--name=-dash' --email a@example.invalid");
+      'repown accounts add octocat "--name=-dash" --email a@example.invalid');
   });
 
   test('every shown command parses back to the argv that runs', async () => {
@@ -318,8 +239,8 @@ describe('setup flow', () => {
 
   test('the equivalent commands are shown quoted, the way you would type them', () => {
     assert.equal(formatCommand(['accounts', 'add', '--name=Octo Cat', '--email=a@example.invalid', '--host=github', '--', 'octocat']),
-      "repown accounts add octocat --name 'Octo Cat' --email a@example.invalid");
-    assert.equal(formatCommand(['use', '--gh', '--', '-odd']), 'repown use --gh -- -odd');
+      'repown accounts add octocat --name "Octo Cat" --email a@example.invalid');
+    assert.equal(formatCommand(['use', '--gh', '--', '-odd']), 'repown use --gh "--" -odd');
     assert.equal(formatCommand(['git', 'config', '--local', '--add', 'repown.allowOwner', 'octo-org']),
       'git config --local --add repown.allowOwner octo-org');
   });
@@ -327,7 +248,7 @@ describe('setup flow', () => {
   test('control characters are shown escaped, so nothing can redraw the review', () => {
     const shown = formatCommand(['use', '--', 'octo\x1b[2Jcat']);
     assert.doesNotMatch(shown, /\x1b/);
-    assert.match(shown, /\\u001b/);
+    assert.equal(shown, 'repown use [value not safe to paste]', 'no quoting keeps a control character literal, so it is not offered to paste');
     const ctx = context({ owner: 'octo\x1b]0;x\x07org' });
     for (const line of textOf(setupFlow(ctx).review({ account: 'octocat', guard: true }, ctx))) {
       assert.doesNotMatch(line, /[\x00-\x1f\x7f]/);
@@ -720,9 +641,9 @@ describe('setup flow', () => {
     assert.equal(stepOf(off, 'upstream').when?.({}, off), true, 'an explicit false is not already on');
   });
 
-  test('the guard question says when a repository has no commits yet', () => {
+  test('the guard question says when a repository has no commits yet', async () => {
     const guard = setupFlow(context()).steps.find((step) => step.id === 'guard')!;
-    assert.match(guard.detail!({ account: 'octocat' }, context()) ?? '', /no commits yet/);
+    assert.match((await guard.detail!({ account: 'octocat' }, context())) ?? '', /no commits yet/);
   });
 
   test('a clone pinned to the account but changed since says why pinning again is offered', () => {
@@ -756,10 +677,10 @@ describe('setup flow', () => {
     assert.ok(!textOf(review).some((line) => /push as octocat/.test(line)));
   });
 
-  test('a history that could not be read is said, not shown as clean', () => {
+  test('a history that could not be read is said, not shown as clean', async () => {
     const flow = setupFlow(context({ addresses: err('git log failed') }));
     const guard = flow.steps.find((step) => step.id === 'guard')!;
-    assert.match(guard.detail?.({ account: 'octocat' }, context({ addresses: err('git log failed') })) ?? '', /could not be read/);
+    assert.match((await guard.detail?.({ account: 'octocat' }, context({ addresses: err('git log failed') }))) ?? '', /could not be read/);
   });
 
   test('S19 the review notes unpushed commits by another address, and Recommended does not rewrite them', () => {
@@ -811,7 +732,7 @@ describe('setup flow', () => {
   test('ADR-025 behind a remote with no tracking refs the review says to fetch, and the rebase is conditional', () => {
     const unknown = { kind: 'remote', name: 'my fork' } as const;
     const notes = reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid'], '--root'), unknown } }));
-    assert.match(notes, /my fork has no remote-tracking refs, so some of these may already be on it \(the guard skips any already on the branch you push to\): git fetch 'my fork', then repown use octocat to count again/);
+    assert.match(notes, /my fork has no remote-tracking refs, so some of these may already be on it \(the guard skips any already on the branch you push to\): git fetch "my fork", then repown use octocat to count again/);
     assert.match(notes, /if my fork has none of them, re-author it: git rebase --root /);
     assert.doesNotMatch(notes, /^\s*re-author/m);
   });
@@ -824,7 +745,7 @@ describe('setup flow', () => {
     const url = { kind: 'url', key: 'branch.main.remote', remote: '-o' } as const;
     assert.doesNotMatch(reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: url } })), /git config|git fetch/);
     const bidi = { kind: 'remote', name: 'fork\u202egnp.exe\u200b' } as const;
-    assert.match(reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: bidi } })), /git fetch 'fork\?gnp\.exe\?'/);
+    assert.match(reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: bidi } })), /git fetch "fork\?gnp\.exe\?"/);
   });
 
   test('ADR-025 remotes that could not be read are unknown, not "none"', () => {
@@ -964,8 +885,8 @@ describe('setup flow', () => {
 
   test('D7 a new account is shown the machine default, which is never filled in', async () => {
     const machine = { name: 'Octo Work', email: 'octo-work@example.invalid' };
-    const nameLine = 'not this machine\'s default name (Octo Work), unless this account uses it';
-    const addressLine = 'not this machine\'s default address (octo-work@example.invalid), unless this account uses it';
+    const nameLine = 'your default git name here is Octo Work: use it only if this account does too';
+    const addressLine = 'your default git address here is octo-work@example.invalid: use it only if this account does too';
     const ctx = context({
       recorded: {}, owner: 'octocat', ownerIsUser: true, machineIdentity: machine,
       suggest: async () => ({ name: 'Octo Cat', email: 'octocat@example.invalid' }),
@@ -973,29 +894,29 @@ describe('setup flow', () => {
     const fresh = { account: NEW_ACCOUNT, newAccount: 'octocat', host: 'github' };
     const name = stepOf(ctx, 'name');
     const email = stepOf(ctx, 'email');
-    assert.equal(name.detail?.(fresh, ctx), nameLine);
-    const shown = email.detail?.(fresh, ctx) ?? '';
+    assert.equal((await name.detail?.(fresh, ctx)), nameLine);
+    const shown = (await email.detail?.(fresh, ctx)) ?? '';
     assert.equal(shown.endsWith('; ' + addressLine), true, shown);
-    assert.match(shown, /^tip: to keep your own address private[\s\S]*1234\+octocat@users\.noreply\.github\.com; not this machine's default address/);
-    assert.doesNotMatch(shown, /Octo Work <|·|type it/);
+    assert.match(shown, /^tip: to keep your own address private[\s\S]*1234\+octocat@users\.noreply\.github\.com; your default git address here/);
+    assert.doesNotMatch(shown, /Octo Work <|·/);
     assert.equal(await name.initial?.(fresh, ctx), 'Octo Cat');
     assert.equal(await email.initial?.(fresh, ctx), 'octocat@example.invalid');
 
     const unnamed = context({ recorded: {}, machineIdentity: { name: null, email: 'octo-work@example.invalid' } });
-    assert.equal(stepOf(unnamed, 'name').detail?.(fresh, unnamed), undefined);
-    const unnamedEmail = stepOf(unnamed, 'email').detail?.(fresh, unnamed) ?? '';
-    assert.match(unnamedEmail, /not this machine's default address \(octo-work@example\.invalid\)/);
+    assert.equal((await stepOf(unnamed, 'name').detail?.(fresh, unnamed)), 'this is the login', 'no name found: the prefill is the login, and it says so');
+    const unnamedEmail = (await stepOf(unnamed, 'email').detail?.(fresh, unnamed)) ?? '';
+    assert.match(unnamedEmail, /your default git address here is octo-work@example\.invalid/);
     assert.doesNotMatch(unnamedEmail, /Octo Work </);
 
     const recorded = context({ machineIdentity: machine });
     const known = { account: 'octocat' };
-    assert.equal(stepOf(recorded, 'name').detail?.(known, recorded), undefined);
-    assert.doesNotMatch(stepOf(recorded, 'email').detail?.(known, recorded) ?? '', /this machine's default/);
+    assert.equal((await stepOf(recorded, 'name').detail?.(known, recorded)), undefined);
+    assert.doesNotMatch((await stepOf(recorded, 'email').detail?.(known, recorded)) ?? '', /default git address/);
 
     const noEmail = context({ recorded: {}, machineIdentity: { name: 'Octo Work', email: null } });
-    assert.equal(stepOf(noEmail, 'name').detail?.(fresh, noEmail), nameLine);
-    const tipOnly = stepOf(noEmail, 'email').detail?.(fresh, noEmail) ?? '';
-    assert.doesNotMatch(tipOnly, /this machine's default/);
+    assert.equal((await stepOf(noEmail, 'name').detail?.(fresh, noEmail)), 'this is the login; ' + nameLine);
+    const tipOnly = (await stepOf(noEmail, 'email').detail?.(fresh, noEmail)) ?? '';
+    assert.doesNotMatch(tipOnly, /default git address/);
     assert.match(tipOnly, /noreply/);
 
     const bare = context({ recorded: {}, machineIdentity: machine });
@@ -1107,7 +1028,7 @@ describe('setup flow', () => {
     assert.equal(yes.choice, 'yes');
     assert.match(yes.shown, /user\.name = Octo Cat/);
     assert.match(yes.shown, /Pin this clone to octocat: its commit name, email and push sign-in/);
-    assert.match(yes.shown, /> repown use octocat/);
+    assert.match(yes.shown, /\$ repown use octocat/);
     assert.match(yes.shown, /Run this step\?/);
     assert.match(yes.shown, /1\) Yes/);
     assert.match(yes.shown, /2\) Skip/);
@@ -1117,1037 +1038,6 @@ describe('setup flow', () => {
     assert.equal((await plainChoice('', 'yes')).choice, CANCEL);
   });
 });
-
-async function plainChoice(keys: string, initial: 'yes' | 'skip'): Promise<{ choice: unknown; shown: string }> {
-  const input = new PassThrough();
-  const output = new PassThrough();
-  let shown = '';
-  output.on('data', (chunk: Buffer) => { shown += chunk.toString(); });
-  const prompter = plainPrompter({ input, output });
-  if (keys) input.write(keys);
-  else input.end();
-  const choice = await prompter.confirmStep({
-    changes: ['user.name = Octo Cat'],
-    why: 'Pin this clone to octocat: its commit name, email and push sign-in',
-    command: 'repown use octocat',
-    initial,
-  });
-  prompter.close();
-  return { choice, shown };
-}
-
-function stepOf(ctx: SetupContext, id: string) {
-  const found = setupFlow(ctx).steps.find((item) => item.id === id);
-  assert.ok(found, id);
-  return found;
-}
-
-function wording(text: string | ((answers: Answers, ctx: SetupContext) => string), answers: Answers, ctx: SetupContext): string {
-  return typeof text === 'function' ? text(answers, ctx) : text;
-}
-
-/** A POSIX shell's word splitting, for the single-quoted words formatCommand produces. */
-function shellSplit(line: string): string[] {
-  return [...line.matchAll(/'((?:[^']|'\\'')*)'|(\S+)/g)].map((match) =>
-    match[1] !== undefined ? match[1].replaceAll("'\\''", "'") : match[2]!);
-}
-
-// ---------------------------------------------------------------- the command
-
-interface Home {
-  readonly box: Sandbox;
-  readonly registry: string;
-  readonly dispose: () => void;
-}
-
-function home(): Home {
-  const box = sandbox();
-  const registry = mkdtempSync(join(tmpdir(), 'repown-registry-'));
-  const saved = process.env['REPOWN_CONFIG_DIR'];
-  process.env['REPOWN_CONFIG_DIR'] = registry;
-  // By the account most tests pin, so the clone has no commit by another address unless a test makes one.
-  box.git('-c', 'user.name=Octo Cat', '-c', 'user.email=octocat@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'base');
-  return { box, registry, dispose: () => {
-    if (saved === undefined) delete process.env['REPOWN_CONFIG_DIR']; else process.env['REPOWN_CONFIG_DIR'] = saved;
-    rmSync(registry, { recursive: true, force: true });
-    box.dispose();
-  } };
-}
-
-function record(at: Home, account: string, email: string): void {
-  writeFileSync(join(at.registry, 'accounts.json'), JSON.stringify({ accounts: { [account]: { name: 'Octo Cat', email, host: 'github' } } }));
-}
-
-function repown(args: readonly string[], cwd: string): { status: number; stdout: string; stderr: string } {
-  const run = spawnSync(process.execPath, [CLI, ...args], { cwd, input: '', env: process.env, encoding: 'utf8' });
-  return { status: run.status ?? -1, stdout: run.stdout, stderr: run.stderr };
-}
-
-const localConfig = (at: Home): string => readFileSync(join(at.box.dir, '.git', 'config'), 'utf8');
-const hook = (at: Home): string => join(at.box.dir, '.git', 'hooks', 'pre-push');
-
-describe('setup context: would `use` change anything here?', () => {
-  let at: Home;
-  beforeEach(() => {
-    at = home();
-    record(at, 'octocat', 'octocat@example.invalid');
-    at.box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
-  });
-  afterEach(() => at.dispose());
-
-  const read = async (): Promise<SetupContext> => {
-    const ctx = await readContext(new Git(at.box.dir), null);
-    assert.ok(ctx.ok, ctx.ok ? '' : ctx.error);
-    return ctx.value;
-  };
-  const pin = (): void => { assert.equal(repown(['use', 'octocat'], at.box.dir).status, 0); };
-
-  test('a clone `use` just pinned is intact, and one never pinned is not', async () => {
-    assert.equal((await read()).pinIntact, false);
-    pin();
-    assert.equal((await read()).pinIntact, true);
-  });
-
-  test('the context keeps the credential keys and the hook path a step explains', async () => {
-    const ctx = await read();
-    assert.deepEqual(ctx.credentialKeys, ['credential.https://github.com.username']);
-    assert.match(ctx.hookPath ?? '', /[\\/]pre-push$/);
-  });
-
-  test('any key `use` writes that differs, repeats, is blank or carries spaces is not intact', async () => {
-    const edits: (readonly string[])[] = [
-      ['config', 'user.email', 'other@example.invalid'],
-      ['config', '--add', 'user.email', ''],
-      ['config', '--add', 'repown.account', 'octocat'],
-      ['config', 'user.email', ' octocat@example.invalid'],
-      ['config', '--unset', 'credential.https://github.com.username'],
-      ['config', '--unset', 'user.useConfigOnly'],
-    ];
-    for (const edit of edits) {
-      pin();
-      at.box.git(...edit);
-      assert.equal((await read()).pinIntact, false, 'intact after: git ' + edit.join(' '));
-      // `use` can't overwrite a key with two values: clear it before the next pin.
-      const key = edit.find((word, index) => index > 0 && !word.startsWith('--'))!;
-      try { at.box.git('config', '--unset-all', key); } catch { /* already unset */ }
-    }
-  });
-
-  test('says whether gh is the credential helper, anywhere in the helper list', async () => {
-    assert.equal((await read()).ghIsHelper, false);
-    at.box.git('config', 'credential.helper', '!gh auth git-credential');
-    at.box.git('config', '--add', 'credential.helper', 'manager');
-    assert.equal((await read()).ghIsHelper, true, 'gh asked first, even with another helper after it');
-  });
-
-  test('machine identity is global user.name and user.email, not the clone\'s', async () => {
-    assert.deepEqual((await read()).machineIdentity, { name: null, email: null });
-    at.box.git('config', '--global', 'user.name', 'Octo Cat');
-    at.box.git('config', '--global', 'user.email', 'octocat@example.invalid');
-    assert.deepEqual((await read()).machineIdentity, { name: 'Octo Cat', email: 'octocat@example.invalid' });
-  });
-
-  test('reads the git version gate and the effective push.autoSetupRemote', async () => {
-    const ctx = await read();
-    assert.equal(ctx.upstream.supported, gitSupportsAutoUpstream(at.box.git('--version')));
-    assert.equal(ctx.upstream.enabled, null);
-    assert.equal(ctx.upstream.branch, 'main');
-    assert.equal(ctx.upstream.tracked, null);
-    at.box.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
-    at.box.git('branch', '--set-upstream-to=origin/main');
-    assert.equal((await read()).upstream.tracked, 'origin/main');
-    at.box.git('config', '--global', 'push.autoSetupRemote', 'true');
-    assert.equal((await read()).upstream.enabled, true, 'effective value, from any scope');
-    at.box.git('config', '--local', 'push.autoSetupRemote', 'false');
-    assert.equal((await read()).upstream.enabled, false, 'local false wins over global true');
-    at.box.git('checkout', '--detach');
-    assert.equal((await read()).upstream.branch, null);
-    assert.equal((await read()).upstream.tracked, null);
-  });
-
-  test('an origin that is not GitHub detects no accounts and does not classify the owner', async () => {
-    at.box.git('remote', 'set-url', 'origin', 'https://dev.azure.com/octo-org/project/_git/repo');
-    const ctx = await read();
-    assert.equal(ctx.owner, 'octo-org');
-    assert.equal(ctx.detected.length, 0);
-    assert.equal(ctx.ownerIsUser, null);
-  });
-
-  test('--no-input does not classify the owner', async () => {
-    at.box.git('remote', 'set-url', 'origin', 'https://github.com/octo-org/project.git');
-    let calls = 0;
-    const accountKind = async (): Promise<'organization'> => { calls += 1; return 'organization'; };
-    const ctx = await readContext(new Git(at.box.dir), null, { classifyOwner: false, accountKind });
-    assert.ok(ctx.ok, ctx.ok ? '' : ctx.error);
-    assert.equal(calls, 0);
-    assert.equal(ctx.value.ownerIsUser, null);
-    const status = await runSetup(
-      { positional: ['octocat'], flags: new Map<string, string | boolean>([['no-input', true], ['cwd', at.box.dir]]) },
-      { interactive: true, accountKind },
-    );
-    assert.equal(status, 0);
-    assert.equal(calls, 0);
-  });
-
-  test('S19 readContext reads unpushed commits once, and the review compares the account email', async () => {
-    const tree = at.box.git('rev-parse', 'HEAD^{tree}');
-    const ours = commitAt(at.box, '1700000000', [
-      '-c', 'user.name=Octo Cat', '-c', 'user.email=octocat@example.invalid',
-      'commit-tree', tree, '-m', 'ours',
-    ]);
-    const foreign = commitAt(at.box, '1700000060', [
-      '-c', 'user.name=Author', '-c', 'user.email=work@example.invalid',
-      '-c', 'committer.name=Author', '-c', 'committer.email=work@example.invalid',
-      'commit-tree', tree, '-p', ours, '-m', 'foreign',
-    ]);
-    at.box.git('update-ref', 'HEAD', foreign);
-    writeFileSync(join(at.registry, 'accounts.json'), JSON.stringify({ accounts: {
-      octocat: { name: 'Octo Cat', email: 'octocat@example.invalid', host: 'github' },
-      'octo-work': { name: 'Octo Work', email: 'work@example.invalid', host: 'github' },
-    } }));
-    const ctx = await read();
-    assert.equal(ctx.unpushed.branch, 'main');
-    assert.equal(ctx.unpushed.commits.ok, true);
-    if (!ctx.unpushed.commits.ok) return;
-    const emails = ctx.unpushed.commits.value.map((commit) => commit.authorEmail);
-    assert.deepEqual(emails, ['work@example.invalid', 'octocat@example.invalid']);
-    assert.match(reviewNotes(ctx, { account: 'octocat' }), /1 commit on main not on any remote is by work@example\.invalid/);
-    const ownFirst = at.box.git('rev-parse', '--short', ours);
-    assert.match(reviewNotes(ctx, { account: 'octocat' }), new RegExp('re-author it: git rebase ' + ownFirst + ' --exec "git commit --amend --no-edit --reset-author --allow-empty", or pin that address'));
-    assert.match(reviewNotes(ctx, { account: 'octo-work' }), /1 commit on main not on any remote is by octocat@example\.invalid/);
-    assert.match(reviewNotes(ctx, { account: 'octo-work' }), /re-author it: git rebase --root /);
-    assert.doesNotMatch(reviewNotes(ctx, { account: 'octo-work' }), /work@example\.invalid/);
-    at.box.git('update-ref', 'refs/remotes/origin/main', foreign);
-    const published = await read();
-    assert.equal(published.unpushed.commits.ok && published.unpushed.commits.value.length, 0);
-    assert.doesNotMatch(reviewNotes(published, { account: 'octocat' }), /not on any remote/);
-    at.box.git('checkout', '--detach');
-    const detached = await read();
-    assert.equal(detached.unpushed.branch, null);
-  });
-
-  test('what git actually uses must agree: an include or a differently-cased credential entry is not intact', async () => {
-    pin();
-    const extra = join(at.registry, 'extra.gitconfig');
-    writeFileSync(extra, '[user]\n\temail = other@example.invalid\n');
-    at.box.git('config', 'include.path', extra);
-    assert.equal((await read()).pinIntact, false, 'an included file overrides the email');
-    at.box.git('config', '--unset', 'include.path');
-    assert.equal((await read()).pinIntact, true);
-    at.box.git('config', 'credential.https://GITHUB.COM.username', 'octo-work');
-    assert.equal((await read()).pinIntact, false, 'git matches credential URLs without case');
-  });
-});
-
-describe('repown setup, without a terminal', () => {
-  let at: Home;
-  beforeEach(() => { at = home(); });
-  afterEach(() => at.dispose());
-
-  test('without --no-input it exits 2, names what it would need, and writes nothing', () => {
-    const before = localConfig(at);
-    const run = repown(['setup'], at.box.dir);
-    assert.equal(run.status, 2);
-    assert.equal(run.stdout, '');
-    assert.match(run.stderr, /needs a terminal/);
-    assert.match(run.stderr, /--no-input/);
-    assert.equal(localConfig(at), before);
-  });
-
-  test('outside a repository it says where to run it', () => {
-    const outside = mkdtempSync(join(tmpdir(), 'repown-outside-'));
-    try {
-      const run = repown(['setup', 'octocat', '--no-input'], outside);
-      assert.equal(run.status, 1);
-      assert.ok(run.stderr.includes('run it inside a clone: cd path/to/repo, then repown setup'), run.stderr);
-    } finally {
-      rmSync(outside, { recursive: true, force: true });
-    }
-  });
-
-  test('--no-input with everything given runs the commands, and only what was asked for', () => {
-    record(at, 'octocat', 'octocat@example.invalid');
-    const run = repown(['setup', 'octocat', '--no-input', '--guard'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    assert.match(localConfig(at), /account = octocat/);
-    assert.ok(existsSync(hook(at)));
-    assert.match(run.stderr, /step 1 of 2: Pin this clone to octocat/);
-    assert.match(run.stderr, /step 2 of 2: Turn on the push guard/);
-    assert.match(run.stderr, /done: this clone is set up for octocat$/m);
-    assert.match(run.stderr, /check it any time: repown status \(this clone\), repown doctor \(this machine\)/);
-    assert.doesNotMatch(run.stdout, /done:|check it any time/, 'setup\'s own lines stay off stdout');
-    assert.match(run.stderr, /\n\n {7}step 2 of 2/, 'a blank line between steps');
-    assert.doesNotMatch(run.stdout, /Next: repown guard on/, 'use\'s hint is left out when the next step turns the guard on');
-    assert.match(run.stdout, /OK +guard +on/);
-  });
-
-  test('--no-input without --guard leaves the guard off', () => {
-    record(at, 'octocat', 'octocat@example.invalid');
-    const run = repown(['setup', 'octocat', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0);
-    assert.equal(existsSync(hook(at)), false);
-    assert.match(run.stdout, /Next: repown guard on/, 'with no guard step to follow, use\'s hint stays');
-  });
-
-  test('--no-input with a value missing exits 2 naming it, and writes nothing', () => {
-    const run = repown(['setup', 'octo-work', '--no-input'], at.box.dir);
-    assert.equal(run.status, 2);
-    assert.match(run.stderr, /--name/);
-    assert.match(run.stderr, /--email/);
-    assert.doesNotMatch(localConfig(at), /repown/);
-    assert.equal(existsSync(join(at.registry, 'accounts.json')), false);
-  });
-
-  test('a new account given in full is recorded, then pinned', () => {
-    const run = repown(['setup', 'octo-work', '--name', 'Octo Work', '--email', 'work@example.invalid', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    assert.match(readFileSync(join(at.registry, 'accounts.json'), 'utf8'), /work@example\.invalid/);
-    assert.match(localConfig(at), /account = octo-work/);
-  });
-
-  test('--name or --email for an account already recorded is a usage error, not an overwrite', () => {
-    record(at, 'octocat', 'octocat@example.invalid');
-    const run = repown(['setup', 'octocat', '--name', 'Other', '--email', 'other@example.invalid', '--no-input'], at.box.dir);
-    assert.equal(run.status, 2);
-    assert.match(readFileSync(join(at.registry, 'accounts.json'), 'utf8'), /octocat@example\.invalid/);
-  });
-
-  test('a recorded entry missing its name or email counts as not recorded, so nothing runs half-way', () => {
-    writeFileSync(join(at.registry, 'accounts.json'), JSON.stringify({ accounts: { octocat: { name: '', email: '' } } }));
-    at.box.git('remote', 'add', 'origin', 'https://github.com/octo-org/project.git');
-    const run = repown(['setup', 'octocat', '--allow-owner', 'octo-org', '--no-input'], at.box.dir);
-    assert.equal(run.status, 2);
-    assert.match(run.stderr, /--name/);
-    assert.doesNotMatch(localConfig(at), /allowOwner/);
-  });
-
-  test('--name and --email without an account still describe a new one, and --no-input asks for the login', () => {
-    record(at, 'octocat', 'octocat@example.invalid');
-    const run = repown(['setup', '--name', 'Octo Work', '--email', 'work@example.invalid', '--no-input'], at.box.dir);
-    assert.equal(run.status, 2);
-    assert.match(run.stderr, /<account>/);
-  });
-
-  test('--fix where gh is not the helper says there is nothing to undo', () => {
-    record(at, 'octocat', 'octocat@example.invalid');
-    const run = repown(['setup', 'octocat', '--fix', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stderr, /nothing to undo/);
-  });
-
-  test('--allow-owner writes the owner repo-locally, once, however often setup runs', () => {
-    record(at, 'octocat', 'octocat@example.invalid');
-    at.box.git('remote', 'add', 'origin', 'https://github.com/octo-org/project.git');
-    for (let run = 0; run < 2; run++) {
-      assert.equal(repown(['setup', 'octocat', '--allow-owner', 'octo-org', '--no-input'], at.box.dir).status, 0);
-    }
-    assert.equal(at.box.git('config', '--local', '--get-all', 'repown.allowOwner'), 'octo-org');
-    assert.doesNotMatch(readFileSync(at.box.globalConfig, 'utf8'), /allowOwner/);
-  });
-
-  test('--allow-owner naming someone other than origin\'s owner is a usage error', () => {
-    record(at, 'octocat', 'octocat@example.invalid');
-    at.box.git('remote', 'add', 'origin', 'https://github.com/octo-org/project.git');
-    assert.equal(repown(['setup', 'octocat', '--allow-owner', 'someone-else', '--no-input'], at.box.dir).status, 2);
-  });
-
-  test('--guard with a hook repown did not write fails before writing anything', () => {
-    record(at, 'octocat', 'octocat@example.invalid');
-    mkdirSync(join(at.box.dir, '.git', 'hooks'), { recursive: true });
-    writeFileSync(hook(at), '#!/bin/sh\nexit 0\n');
-    const run = repown(['setup', 'octocat', '--guard', '--no-input'], at.box.dir);
-    assert.equal(run.status, 1);
-    assert.doesNotMatch(localConfig(at), /repown/);
-    assert.equal(readFileSync(hook(at), 'utf8'), '#!/bin/sh\nexit 0\n');
-  });
-
-  test('outside a repository it fails with exit 1', () => {
-    const outside = mkdtempSync(join(tmpdir(), 'repown-norepo-'));
-    try {
-      assert.equal(repown(['setup', 'octocat', '--no-input'], outside).status, 1);
-    } finally {
-      rmSync(outside, { recursive: true, force: true });
-    }
-  });
-
-  test('--help prints help and runs nothing', () => {
-    const run = repown(['setup', '--help'], at.box.dir);
-    assert.equal(run.status, 0);
-    assert.match(run.stdout, /--no-input/);
-    assert.match(run.stdout, /--auto-upstream/);
-    assert.match(run.stdout, /push branches without -u: the first push sets the upstream, in this clone only \(push\.autoSetupRemote\)/);
-    assert.match(run.stdout, /--step-by-step/);
-    assert.doesNotMatch(localConfig(at), /repown/);
-  });
-
-  test('S17 --step-by-step --no-input is a usage error and writes nothing', () => {
-    record(at, 'octocat', 'octocat@example.invalid');
-    const before = localConfig(at);
-    const run = repown(['setup', 'octocat', '--step-by-step', '--no-input'], at.box.dir);
-    assert.equal(run.status, 2);
-    assert.match(run.stderr, /--step-by-step needs a terminal to ask/);
-    assert.equal(localConfig(at), before);
-  });
-
-  test('S20 --auto-upstream answers yes in this clone; --no-input without it stays no', () => {
-    record(at, 'octocat', 'octocat@example.invalid');
-    const supported = gitSupportsAutoUpstream(at.box.git('--version'));
-    const skipped = repown(['setup', 'octocat', '--no-input'], at.box.dir);
-    assert.equal(skipped.status, 0, skipped.stderr);
-    assert.throws(() => at.box.git('config', '--local', '--get', 'push.autoSetupRemote'));
-    const run = repown(['setup', 'octocat', '--auto-upstream', '--guard', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    if (!supported) {
-      assert.throws(() => at.box.git('config', '--local', '--get', 'push.autoSetupRemote'));
-      return;
-    }
-    assert.equal(at.box.git('config', '--local', '--get', 'push.autoSetupRemote'), 'true');
-    assert.doesNotMatch(readFileSync(at.box.globalConfig, 'utf8'), /autoSetupRemote/);
-    const guardAt = run.stderr.indexOf('Turn on the push guard');
-    const upAt = run.stderr.indexOf('Push branches without -u: the first push sets the upstream (this clone only)');
-    assert.match(run.stdout, /upstream +branches without an upstream push without -u in this clone/);
-    assert.ok(guardAt >= 0 && upAt > guardAt, run.stderr);
-    assert.match(run.stderr, /git config --local push\.autoSetupRemote true/);
-    assert.equal(repown(['setup', 'octocat', '--auto-upstream', '--no-input'], at.box.dir).status, 0);
-    assert.equal(at.box.git('config', '--local', '--get', 'push.autoSetupRemote'), 'true');
-  });
-
-  test('S10 --auto-upstream writes nothing when push.autoSetupRemote is already effective', () => {
-    record(at, 'octocat', 'octocat@example.invalid');
-    at.box.git('config', '--global', 'push.autoSetupRemote', 'true');
-    const run = repown(['setup', 'octocat', '--auto-upstream', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    assert.throws(() => at.box.git('config', '--local', '--get', 'push.autoSetupRemote'));
-    assert.match(readFileSync(at.box.globalConfig, 'utf8'), /autoSetupRemote/);
-  });
-});
-
-describe('repown setup, on a terminal (scripted)', () => {
-  let at: Home;
-  let savedPath: string | undefined;
-  // These scripts are about the pin and the guard. A gh on PATH that is signed
-  // in to nobody would insert the sign-in question; keep that off this path.
-  beforeEach(() => {
-    at = home();
-    record(at, 'octocat', 'octocat@example.invalid');
-    // These scripts are step by step, about the pin and the guard. On git 2.37+
-    // an unset push.autoSetupRemote would be another question, so set it the
-    // way a finished setup would. Recommended would fill that answer itself.
-    at.box.git('config', '--local', 'push.autoSetupRemote', 'true');
-    savedPath = process.env['PATH'];
-    process.env['PATH'] = pathWithoutGh(savedPath ?? '');
-  });
-  afterEach(() => {
-    if (savedPath === undefined) delete process.env['PATH'];
-    else process.env['PATH'] = savedPath;
-    at.dispose();
-  });
-
-  const runWith = (prompter: Prompter): Promise<number> =>
-    runSetup({ positional: [], flags: new Map([['cwd', at.box.dir]]) }, { prompter, interactive: true });
-  const run = (script: Entry[]): Promise<number> => runWith(scripted(script));
-
-  async function runCaptured(script: Entry[]): Promise<{ code: number; stderr: string; confirms: StepConfirm[] }> {
-    let stderr = '';
-    const write = process.stderr.write;
-    process.stderr.write = ((chunk: string | Uint8Array) => { stderr += String(chunk); return true; }) as typeof process.stderr.write;
-    const prompter = scripted(script);
-    try {
-      return { code: await runWith(prompter), stderr, confirms: prompter.confirms };
-    } finally {
-      process.stderr.write = write;
-    }
-  }
-
-  test('S15 setup <recorded account> asks nothing before the review', async () => {
-    const supported = gitSupportsAutoUpstream(at.box.git('--version'));
-    if (supported) at.box.git('config', '--local', '--unset', 'push.autoSetupRemote');
-    const prompter = scripted([['review', 'decline']]);
-    const code = await runSetup(
-      { positional: ['octocat'], flags: new Map<string, string | boolean>([['cwd', at.box.dir]]) },
-      { prompter, interactive: true },
-    );
-    assert.equal(code, 1);
-    assert.deepEqual(prompter.asked, []);
-    const commands = prompter.reviews[0]!.steps.map((step) => step.command).join('\n');
-    assert.match(commands, /guard on/);
-    if (supported) assert.match(commands, /push\.autoSetupRemote/);
-    assert.equal(prompter.reviews[0]!.settled, false);
-  });
-
-  test('--step-by-step skips the mode question and asks the guard', async () => {
-    const prompter = scripted([['account', 'octocat'], ['guard', false], ['review', 'decline']]);
-    const code = await runSetup(
-      { positional: [], flags: new Map<string, string | boolean>([['cwd', at.box.dir], ['step-by-step', true]]) },
-      { prompter, interactive: true },
-    );
-    assert.equal(code, 1);
-    assert.deepEqual(prompter.asked, ['account', 'guard']);
-  });
-
-  test('Run pins the clone and turns the guard on', async () => {
-    assert.equal(await run([
-      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'], ['step', 'yes'], ['step', 'yes'],
-    ]), 0);
-    assert.match(localConfig(at), /account = octocat/);
-    assert.ok(existsSync(hook(at)));
-  });
-
-  test('Done on the opening settled screen leaves git config byte-identical', async () => {
-    assert.equal(repown(['use', 'octocat'], at.box.dir).status, 0);
-    assert.equal(repown(['guard', 'on'], at.box.dir).status, 0);
-    const before = at.box.git('config', '--local', '--list');
-    const prompter = scripted([['review', 'done']]);
-    const endings: string[] = [];
-    const closing: Prompter = { ...prompter, outro: (message) => { endings.push(message); } };
-    assert.equal(await runWith(closing), 0);
-    assert.deepEqual(prompter.asked, []);
-    assert.equal(prompter.reviews[0]?.settled, true);
-    assert.match(prompter.reviews[0]?.headline.join('\n') ?? '', /upstream {4}set on the first push \(push\.autoSetupRemote\)/);
-    assert.equal(at.box.git('config', '--local', '--list'), before);
-    assert.deepEqual(endings, ['Nothing changed: this clone was already set up']);
-  });
-
-  test('--no-input on a settled clone leaves git config byte-identical and can still name gh', () => {
-    assert.equal(repown(['use', 'octocat'], at.box.dir).status, 0);
-    assert.equal(repown(['guard', 'on'], at.box.dir).status, 0);
-    const before = at.box.git('config', '--local', '--list');
-    const run = repown(['setup', 'octocat', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    assert.equal(at.box.git('config', '--local', '--list'), before);
-    assert.match(run.stderr, /done: this clone is set up for octocat$/m);
-    assert.match(run.stderr, /nothing changed in this clone/);
-    assert.doesNotMatch(run.stderr, /repown use /);
-  });
-
-  test('already set up: Done exits 0 and writes nothing; Apply again pins as before', async () => {
-    const first = scripted([['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'run'], ['step', 'yes']]);
-    assert.equal(await runWith(first), 0);
-    assert.equal(first.reviews[0]!.settled, false, 'not set up before the first run');
-    const before = localConfig(at);
-    const again = scripted([['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'done']]);
-    assert.equal(await runWith(again), 0);
-    assert.equal(again.reviews[0]!.settled, true, 'the clone, read back from git, counts as set up');
-    assert.equal(localConfig(at), before);
-    assert.equal(await run([
-      ['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'run'], ['step', 'yes'],
-    ]), 0);
-    assert.equal(localConfig(at), before);
-  });
-
-  test('Decline exits 1 and writes nothing', async () => {
-    const before = localConfig(at);
-    assert.equal(await run([['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'decline']]), 1);
-    assert.equal(localConfig(at), before);
-    assert.equal(existsSync(hook(at)), false);
-  });
-
-  test('Decline and cancel each end with one line: nothing changed, and how to start again', async () => {
-    const endings: [string, boolean | undefined][] = [];
-    const closing = (script: Entry[]): Prompter => ({ ...scripted(script), outro: (message, cancelled) => { endings.push([message, cancelled]); } });
-    assert.equal(await runWith(closing([['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'decline']])), 1);
-    assert.equal(await runWith(closing([['mode', CANCEL]])), 130);
-    assert.deepEqual(endings, [
-      ['Declined: nothing was changed. Run repown setup again any time.', false],
-      ['Cancelled: nothing was changed. Run repown setup again any time.', true],
-    ]);
-  });
-
-  test('S16 Skip leaves that step unchanged and the next one still runs', async () => {
-    const seen = await runCaptured([
-      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'],
-      ['step', 'skip'], ['step', 'yes'],
-    ]);
-    assert.equal(seen.code, 0, seen.stderr);
-    assert.doesNotMatch(localConfig(at), /account = octocat/);
-    assert.ok(existsSync(hook(at)));
-    assert.match(seen.stderr, /skipped: Pin this clone to octocat/);
-    assert.doesNotMatch(seen.stderr, /done: this clone is set up|; the next push will fail/);
-    assert.deepEqual(seen.confirms[0]?.changes, [
-      'user.name = Octo Cat',
-      'user.email = octocat@example.invalid',
-      'user.useConfigOnly = true',
-      'repown.account = octocat',
-    ]);
-    assert.equal(seen.confirms[0]?.initial, 'yes');
-    assert.match(seen.confirms[0]?.command ?? '', /repown use octocat/);
-    assert.match(seen.confirms[1]?.changes.join('\n') ?? '', /pre-push hook: .+pre-push runs repown guard check/);
-    for (const line of seen.confirms.flatMap((item) => item.changes)) assert.doesNotMatch(line, /token|password|secret/i);
-  });
-
-  test('S16 done is said only when the pin ran', async () => {
-    const seen = await runCaptured([
-      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'],
-      ['step', 'yes'], ['step', 'skip'],
-    ]);
-    assert.equal(seen.code, 0, seen.stderr);
-    assert.match(localConfig(at), /account = octocat/);
-    assert.equal(existsSync(hook(at)), false);
-    assert.match(seen.stderr, /done: this clone is set up for octocat$/m);
-    assert.match(seen.stderr, /skipped: Turn on the push guard: each push is checked first/);
-  });
-
-  test('S16 skipping every step writes nothing and does not say the clone is set up', async () => {
-    const seen = await runCaptured([
-      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'],
-      ['step', 'skip'], ['step', 'skip'],
-    ]);
-    assert.equal(seen.code, 0, seen.stderr);
-    assert.doesNotMatch(localConfig(at), /repown/);
-    assert.equal(existsSync(hook(at)), false);
-    assert.doesNotMatch(seen.stderr, /done: this clone is set up|; the next push will fail/);
-    assert.match(seen.stderr, /skipped: Pin this clone to octocat/);
-    assert.match(seen.stderr, /skipped: Turn on the push guard/);
-  });
-
-  test('S16 Stop and Esc run nothing further and list the steps not run', async () => {
-    const stopped = await runCaptured([
-      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'],
-      ['step', 'stop'],
-    ]);
-    assert.equal(stopped.code, 130);
-    assert.doesNotMatch(localConfig(at), /repown/);
-    assert.equal(existsSync(hook(at)), false);
-    assert.match(stopped.stderr, /stopped/);
-    assert.doesNotMatch(stopped.stderr, /interrupted/);
-    assert.match(stopped.stderr, /not run:/);
-    assert.match(stopped.stderr, /repown use octocat/);
-    assert.match(stopped.stderr, /repown guard on/);
-    assert.doesNotMatch(stopped.stderr, /done: this clone is set up|; the next push will fail/);
-
-    const cancelled = await runCaptured([
-      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'],
-      ['step', 'yes'], ['step', CANCEL],
-    ]);
-    assert.equal(cancelled.code, 130);
-    assert.match(localConfig(at), /account = octocat/);
-    assert.equal(existsSync(hook(at)), false);
-    const rest = cancelled.stderr.split('not run:')[1] ?? '';
-    assert.match(rest, /repown guard on/);
-    assert.doesNotMatch(rest, /repown use/);
-  });
-
-  test('Recommended runs every planned step without asking again', async () => {
-    const seen = await runCaptured([['mode', 'recommended'], ['account', 'octocat'], ['review', 'run']]);
-    assert.equal(seen.code, 0, seen.stderr);
-    assert.deepEqual(seen.confirms, []);
-    assert.match(localConfig(at), /account = octocat/);
-    assert.ok(existsSync(hook(at)));
-    assert.match(seen.stderr, /> repown use octocat/);
-    assert.match(seen.stderr, /done: this clone is set up for octocat$/m);
-    assert.doesNotMatch(seen.stderr, /skipped:/);
-  });
-
-  test('Cancel at a step or at the review exits 130 and writes nothing', async () => {
-    const before = localConfig(at);
-    assert.equal(await run([['mode', CANCEL]]), 130);
-    assert.equal(await run([['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', CANCEL]]), 130);
-    assert.equal(localConfig(at), before);
-  });
-
-  test('a review that already named gh does not repeat it after the run', async () => {
-    assert.equal(repown(['use', 'octocat'], at.box.dir).status, 0);
-    assert.equal(repown(['guard', 'on'], at.box.dir).status, 0);
-    assert.equal(repown(['guard', 'off'], at.box.dir).status, 0);
-    const preview = ghAuth('octo-work', ['octo-work']);
-    const prompter = scripted([['mode', 'recommended'], ['account', 'octocat'], ['review', 'run']]);
-    let stderr = '';
-    const write = process.stderr.write;
-    process.stderr.write = ((chunk: string | Uint8Array) => { stderr += String(chunk); return true; }) as typeof process.stderr.write;
-    try {
-      const code = await runSetup(
-        { positional: [], flags: new Map([['cwd', at.box.dir]]) },
-        { prompter, interactive: true, auth: async () => preview, preview },
-      );
-      assert.equal(code, 0, stderr);
-    } finally {
-      process.stderr.write = write;
-    }
-    assert.deepEqual(prompter.asked, ['mode', 'account']);
-    assert.match(prompter.reviews[0]?.notes.join('\n') ?? '', /If you use gh here: repown use octocat --gh \(signs octocat in to gh\)\./);
-    assert.doesNotMatch(prompter.reviews[0]?.notes.join('\n') ?? '', /later: repown use|--gh {3}\(/);
-    assert.doesNotMatch(stderr, /optional, only if you use gh/);
-  });
-
-  test('after the steps, gh advice is one more done line and the first push is not repeated', async () => {
-    const left = await captureSetup(async () => ghAuth('octo-work', ['octo-work']));
-    assert.equal(left.code, 0, left.stderr);
-    assert.match(left.stderr, /done: this clone is set up for octocat$/m);
-    assert.match(left.stderr, /optional, only if you use gh here: repown use octocat --gh {3}\(signs octocat in to gh\)/);
-    assert.doesNotMatch(left.stderr, /first push/);
-    const same = await captureSetup(async () => ghAuth('octocat', ['octocat']));
-    assert.equal(same.code, 0, same.stderr);
-    assert.doesNotMatch(same.stderr, /optional, only if you use gh here/);
-  });
-
-  function ghAuth(active: string, logins: readonly string[]): AuthState {
-    return {
-      gcmPath: null, gcmPresent: false, stored: ok([]), ghPresent: true,
-      gh: ok({ accounts: logins.map((login) => ({ login, active: login === active })), active }),
-      helper: null, ghIsHelper: false, helperIsGcm: false, ghHelperOrigins: [],
-    };
-  }
-
-  async function captureSetup(auth: () => Promise<AuthState>): Promise<{ code: number; stderr: string }> {
-    let stderr = '';
-    const write = process.stderr.write;
-    process.stderr.write = ((chunk: string | Uint8Array) => { stderr += String(chunk); return true; }) as typeof process.stderr.write;
-    try {
-      const code = await runSetup(
-        { positional: ['octocat'], flags: new Map<string, string | boolean>([['cwd', at.box.dir], ['no-input', true]]) },
-        { interactive: false, auth },
-      );
-      return { code, stderr };
-    } finally {
-      process.stderr.write = write;
-    }
-  }
-});
-
-describe('S18 diff of this clone', () => {
-  test('names a changed key, an added key, a removed key, added allowOwner values, and the guard', () => {
-    const before = shot(
-      [['user.name', 'Sandbox'], ['user.email', 'sandbox@example.invalid'], ['user.useConfigOnly', null],
-        ['repown.account', 'octocat'], ['credential.https://github.com.username', 'octocat']],
-      ['kept-owner'], null, 'off');
-    const after = shot(
-      [['user.name', 'Octo Cat'], ['user.email', null], ['user.useConfigOnly', 'true'],
-        ['repown.account', 'octocat'], ['credential.https://github.com.username', 'octo-work']],
-      ['kept-owner', 'octo-org'], 'true', 'on');
-    assert.deepEqual(cloneChangeLines(before, after), [
-      '  user.name: Sandbox -> Octo Cat',
-      '  user.email: sandbox@example.invalid -> (removed)',
-      '  user.useConfigOnly: (added) true',
-      '  credential.https://github.com.username: octocat -> octo-work',
-      '  repown.allowOwner: (added) octo-org',
-      '  push.autoSetupRemote: (added) true',
-      '  push guard: off -> on',
-    ]);
-  });
-
-  test('an unchanged clone, including allowOwner values in a different order, diffs to nothing', () => {
-    const before = shot([['user.name', 'Octo Cat']], ['octo-org', 'octocat'], 'true', 'on');
-    const after = shot([['user.name', 'Octo Cat']], ['octocat', 'octo-org'], 'true', 'on');
-    assert.deepEqual(cloneChangeLines(before, after), []);
-    assert.deepEqual(cloneChangeLines(before, shot([], [], 'true', 'on')), [
-      '  user.name: Octo Cat -> (removed)',
-      '  repown.allowOwner: octo-org, octocat -> (removed)',
-    ]);
-  });
-
-  test('machine lines are the registry add and a gh account that is now active', () => {
-    assert.deepEqual(machineChangeLines(null, null), []);
-    assert.deepEqual(machineChangeLines('octo-work', 'octocat'), [
-      "  this machine's account registry: added octo-work",
-      "  gh: octocat is now gh's active account (every terminal)",
-    ]);
-  });
-
-  test('the snapshot is local config, every allowOwner value, and the guard', async () => {
-    const box = sandbox();
-    try {
-      box.git('config', '--local', '--unset', 'user.name');
-      box.git('config', '--global', 'user.name', 'Octo Work');
-      box.git('config', '--global', 'push.autoSetupRemote', 'true');
-      box.git('config', '--local', '--add', 'repown.allowOwner', 'octo-org');
-      box.git('config', '--local', '--add', 'repown.allowOwner', 'octocat');
-      box.git('config', '--local', 'credential.https://github.com.username', 'octocat');
-      box.git('config', '--local', 'user.signingkey', 'not-watched');
-      const shot = await readCloneSnapshot(new Git(box.dir), ['credential.https://github.com.username']);
-      assert.deepEqual(shot.values.map(([key]) => key), [
-        'user.name', 'user.email', 'user.useConfigOnly', 'repown.account',
-        'credential.https://github.com.username',
-      ]);
-      assert.equal(shot.values[0]?.[1], null);
-      assert.equal(shot.values[1]?.[1], 'sandbox@example.invalid');
-      assert.equal(shot.values[4]?.[1], 'octocat');
-      assert.equal(shot.autoUpstream, null);
-      assert.deepEqual(shot.allowOwner, ['octo-org', 'octocat']);
-      assert.equal(shot.guard, 'off');
-      assert.equal(repown(['guard', 'on'], box.dir).status, 0);
-      assert.equal((await readCloneSnapshot(new Git(box.dir), [])).guard, 'on');
-    } finally {
-      box.dispose();
-    }
-  });
-});
-
-function shot(
-  values: readonly (readonly [string, string | null])[],
-  allowOwner: readonly string[],
-  autoUpstream: string | null,
-  guard: 'off' | 'on' | 'foreign',
-): CloneSnapshot {
-  return { values, allowOwner, autoUpstream, guard };
-}
-
-describe('S18 after a setup run', () => {
-  let at: Home;
-  let savedPath: string | undefined;
-  beforeEach(() => {
-    at = home();
-    record(at, 'octocat', 'octocat@example.invalid');
-    at.box.git('config', '--local', 'push.autoSetupRemote', 'true');
-    savedPath = process.env['PATH'];
-    process.env['PATH'] = pathWithoutGh(savedPath ?? '');
-  });
-  afterEach(() => {
-    if (savedPath === undefined) delete process.env['PATH'];
-    else process.env['PATH'] = savedPath;
-    at.dispose();
-  });
-
-  const play = (script: Entry[], prompter?: Prompter): Promise<{ code: number; stderr: string; stdout: string }> =>
-    captureRun(script, prompter);
-
-  test('Recommended lists every local change after done and before the check line', async () => {
-    at.box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
-    at.box.git('config', '--local', 'credential.helper', '!echo live-password-should-not-appear');
-    if (gitSupportsAutoUpstream(at.box.git('--version'))) at.box.git('config', '--local', '--unset', 'push.autoSetupRemote');
-    const seen = await play([['mode', 'recommended'], ['account', 'octocat'], ['review', 'run']]);
-    assert.equal(seen.code, 0, seen.stderr);
-    assert.deepEqual(sectionLines(seen.stderr, 'changed in this clone:', 'check it any time:'), expectedPin(at.box));
-    assert.ok(seen.stderr.indexOf('done:') < seen.stderr.indexOf('changed in this clone:'));
-    assert.match(seen.stderr, / {7}changed in this clone:/);
-    assert.match(seen.stderr, / {9}user\.name: Sandbox -> Octo Cat/);
-    assert.doesNotMatch(seen.stderr, /changed on this machine:/);
-    assert.doesNotMatch(seen.stdout, /changed in this clone/);
-    assert.doesNotMatch(seen.stdout + seen.stderr, /live-password/);
-  });
-
-  test('--allow-owner shows the added value, not the owners already there', () => {
-    at.box.git('remote', 'add', 'origin', 'https://github.com/octo-org/project.git');
-    at.box.git('config', '--local', '--add', 'repown.allowOwner', 'kept-owner');
-    const run = repown(['setup', 'octocat', '--allow-owner', 'octo-org', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stderr, / {9}repown\.allowOwner: \(added\) octo-org/);
-    assert.doesNotMatch(run.stderr, /kept-owner/);
-    assert.ok(run.stderr.indexOf('done:') < run.stderr.indexOf('changed in this clone:'));
-    assert.ok(run.stderr.indexOf('changed in this clone:') < run.stderr.indexOf('check it any time:'));
-  });
-
-  test('a global identity is not reported as this clone\'s old value', () => {
-    at.box.git('config', '--local', '--unset', 'user.name');
-    at.box.git('config', '--local', '--unset', 'user.email');
-    at.box.git('config', '--global', 'user.name', 'Octo Work');
-    at.box.git('config', '--global', 'user.email', 'work@example.invalid');
-    const run = repown(['setup', 'octocat', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stderr, /user\.name: \(added\) Octo Cat/);
-    assert.match(run.stderr, /user\.email: \(added\) octocat@example\.invalid/);
-    assert.doesNotMatch(run.stderr, /Octo Work|work@example\.invalid ->/);
-  });
-
-  test('a global push.autoSetupRemote is not a change in this clone', () => {
-    at.box.git('config', '--local', '--unset', 'push.autoSetupRemote');
-    at.box.git('config', '--global', 'push.autoSetupRemote', 'true');
-    const run = repown(['setup', 'octocat', '--auto-upstream', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stderr, /changed in this clone:/);
-    assert.doesNotMatch(run.stderr, /push\.autoSetupRemote/);
-  });
-
-  test('skipping the pin still reports the guard, after the skipped line', async () => {
-    const seen = await play([
-      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'], ['step', 'skip'], ['step', 'yes'],
-    ]);
-    assert.equal(seen.code, 0, seen.stderr);
-    assert.deepEqual(sectionLines(seen.stderr, 'changed in this clone:', 'check it any time:'), ['push guard: off -> on']);
-    assert.ok(seen.stderr.indexOf('skipped:') < seen.stderr.indexOf('changed in this clone:'));
-    assert.doesNotMatch(seen.stderr, /user\.name:/);
-  });
-
-  test('skipping every step says nothing changed', async () => {
-    const seen = await play([
-      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'], ['step', 'skip'], ['step', 'skip'],
-    ]);
-    assert.equal(seen.code, 0, seen.stderr);
-    assert.match(seen.stderr, /nothing changed in this clone/);
-    assert.doesNotMatch(seen.stderr, /changed in this clone:/);
-    assert.ok(seen.stderr.indexOf('skipped:') < seen.stderr.indexOf('nothing changed in this clone'));
-  });
-
-  test('Stop before any step reports nothing changed, after the steps not run', async () => {
-    const seen = await play([
-      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'], ['step', 'stop'],
-    ]);
-    assert.equal(seen.code, 130);
-    assert.match(seen.stderr, /nothing changed in this clone/);
-    assert.doesNotMatch(seen.stderr, /changed in this clone:|done:|check it any time/);
-    assert.ok(seen.stderr.indexOf('not run:') < seen.stderr.indexOf('nothing changed in this clone'));
-  });
-
-  test('Stop after the pin reports what that step wrote and does not say done', async () => {
-    const seen = await play([
-      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'], ['step', 'yes'], ['step', 'stop'],
-    ]);
-    assert.equal(seen.code, 130);
-    assert.match(seen.stderr, /user\.name: Sandbox -> Octo Cat/);
-    assert.doesNotMatch(seen.stderr, / {9}push guard:|done: this clone is set up|; the next push will fail/);
-    assert.ok(seen.stderr.indexOf('not run:') < seen.stderr.indexOf('changed in this clone:'));
-  });
-
-  test('Apply the same settings again says nothing changed', async () => {
-    const first = await play([['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'run'], ['step', 'yes']]);
-    assert.equal(first.code, 0, first.stderr);
-    const again = await play([['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'run'], ['step', 'yes']]);
-    assert.equal(again.code, 0, again.stderr);
-    assert.match(again.stderr, /done: this clone is set up for octocat$/m);
-    assert.match(again.stderr, /nothing changed in this clone/);
-    assert.doesNotMatch(again.stderr, /changed in this clone:/);
-    assert.ok(again.stderr.indexOf('done:') < again.stderr.indexOf('nothing changed in this clone'));
-    assert.ok(again.stderr.indexOf('nothing changed in this clone') < again.stderr.indexOf('check it any time:'));
-  });
-
-  test('Done, before any step, prints no change report', async () => {
-    assert.equal((await play([['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'run'], ['step', 'yes']])).code, 0);
-    const done = await play([['mode', 'step'], ['account', 'octocat'], ['guard', false], ['review', 'done']]);
-    assert.equal(done.code, 0, done.stderr);
-    assert.doesNotMatch(done.stderr, /changed in this clone:|nothing changed in this clone/);
-  });
-
-  test('a failed step still reports what earlier steps wrote', async () => {
-    const base = scripted([
-      ['mode', 'step'], ['account', 'octocat'], ['guard', true], ['review', 'run'], ['step', 'yes'], ['step', 'yes'],
-    ]);
-    const prompter: Prompter = {
-      ...base,
-      confirmStep: async (brief) => {
-        if (brief.command.includes('guard on')) at.box.git('config', 'core.hooksPath', join(at.box.dir, 'hooks-elsewhere'));
-        return base.confirmStep(brief);
-      },
-    };
-    const seen = await play([], prompter);
-    assert.equal(seen.code, 1, seen.stderr);
-    assert.match(seen.stderr, /stopped: that command exited 1/);
-    assert.match(seen.stderr, /user\.name: Sandbox -> Octo Cat/);
-    assert.doesNotMatch(seen.stderr, / {9}push guard:|done: this clone is set up|; the next push will fail|check it any time:/);
-    assert.ok(seen.stderr.indexOf('exited 1') < seen.stderr.indexOf('changed in this clone:'));
-  });
-
-  test('a failed later step still names an account the registry step added', async () => {
-    at.box.git('config', '--local', 'push.autoSetupRemote', 'true');
-    const base = scripted([
-      ['mode', 'step'], ['account', NEW_ACCOUNT], ['newAccount', 'octo-work'], ['host', 'github'],
-      ['name', 'Octo Work'], ['email', 'work@example.invalid'], ['guard', false], ['reauthor', false], ['review', 'run'],
-      ['step', 'yes'], ['step', 'yes'],
-    ]);
-    const prompter: Prompter = {
-      ...base,
-      confirmStep: async (brief) => {
-        if (brief.command.includes('use ')) writeFileSync(join(at.registry, 'accounts.json'), '{');
-        return base.confirmStep(brief);
-      },
-    };
-    const seen = await play([], prompter);
-    assert.equal(seen.code, 1, seen.stderr);
-    assert.match(seen.stderr, /nothing changed in this clone/);
-    assert.match(seen.stderr, /changed on this machine:\n\s+this machine's account registry: added octo-work/);
-    assert.ok(seen.stderr.indexOf('nothing changed in this clone') < seen.stderr.indexOf('changed on this machine:'));
-    assert.doesNotMatch(seen.stderr, /changed in this clone:/);
-  });
-
-  test("use --gh that leaves the account active is one machine line, not use's own sentence", async () => {
-    const seen = await injected([['gh', true]], async () => ghAuth('Octocat', ['Octocat']));
-    assert.equal(seen.code, 0, seen.stderr);
-    assert.match(seen.stderr, /changed on this machine:\n\s+gh: octocat is now gh's active account \(every terminal\)/);
-    assert.doesNotMatch(seen.stderr, /active account switched to|signed in as|optional, only if you use gh/);
-    assert.ok(seen.stderr.indexOf('changed in this clone:') < seen.stderr.indexOf('changed on this machine:'));
-    assert.ok(seen.stderr.indexOf("gh's active account") < seen.stderr.indexOf('check it any time:'));
-  });
-
-  test('use --gh that leaves someone else active does not claim the switch', async () => {
-    const seen = await injected([['gh', true]], async () => ghAuth('octo-work', ['octo-work']));
-    assert.equal(seen.code, 0, seen.stderr);
-    assert.doesNotMatch(seen.stderr, /is now gh's active account|changed on this machine/);
-    assert.match(seen.stderr, /optional, only if you use gh here/);
-    assert.ok(seen.stderr.indexOf('changed in this clone:') < seen.stderr.indexOf('optional, only if you use gh here'));
-  });
-
-  test('gh already active is not reported when this run did not pass --gh', async () => {
-    const seen = await injected([], async () => ghAuth('octocat', ['octocat']));
-    assert.equal(seen.code, 0, seen.stderr);
-    assert.match(seen.stderr, /changed in this clone:/);
-    assert.doesNotMatch(seen.stderr, /is now gh's active account|changed on this machine|optional, only if you use gh/);
-  });
-
-  async function captureRun(script: Entry[], prompter?: Prompter): Promise<{ code: number; stderr: string; stdout: string }> {
-    let stderr = '';
-    let stdout = '';
-    const errWrite = process.stderr.write;
-    const outWrite = process.stdout.write;
-    const take = (into: 'err' | 'out') => ((chunk: string | Uint8Array) => {
-      if (into === 'err') stderr += String(chunk); else stdout += String(chunk);
-      return true;
-    }) as typeof process.stderr.write;
-    process.stderr.write = take('err');
-    process.stdout.write = take('out');
-    try {
-      const code = await runSetup(
-        { positional: [], flags: new Map([['cwd', at.box.dir]]) },
-        { prompter: prompter ?? scripted(script), interactive: true },
-      );
-      return { code, stderr, stdout };
-    } finally {
-      process.stderr.write = errWrite;
-      process.stdout.write = outWrite;
-    }
-  }
-
-  function injected(
-    extra: [string, string | boolean][],
-    auth: () => Promise<AuthState>,
-  ): Promise<{ code: number; stderr: string }> {
-    return captureAuth(extra, auth);
-  }
-
-  async function captureAuth(extra: [string, string | boolean][], auth: () => Promise<AuthState>): Promise<{ code: number; stderr: string }> {
-    let stderr = '';
-    const write = process.stderr.write;
-    process.stderr.write = ((chunk: string | Uint8Array) => { stderr += String(chunk); return true; }) as typeof process.stderr.write;
-    try {
-      const flags = new Map<string, string | boolean>([['cwd', at.box.dir], ['no-input', true], ...extra]);
-      const code = await runSetup({ positional: ['octocat'], flags }, { interactive: false, auth });
-      return { code, stderr };
-    } finally {
-      process.stderr.write = write;
-    }
-  }
-});
-
-function sectionLines(stderr: string, start: string, end: string): string[] {
-  const lines = stderr.split('\n');
-  const from = lines.findIndex((line) => line.includes(start));
-  assert.ok(from >= 0, start + '\n' + stderr);
-  const rest = lines.slice(from + 1);
-  const until = rest.findIndex((line) => line.includes(end));
-  return (until < 0 ? rest : rest.slice(0, until)).map((line) => line.trim()).filter((line) => line.length > 0);
-}
-
-function expectedPin(box: Sandbox): string[] {
-  const upstream = gitSupportsAutoUpstream(box.git('--version')) ? ['push.autoSetupRemote: (added) true'] : [];
-  return [
-    'user.name: Sandbox -> Octo Cat',
-    'user.email: sandbox@example.invalid -> octocat@example.invalid',
-    'user.useConfigOnly: (added) true',
-    'repown.account: (added) octocat',
-    'credential.https://github.com.username: (added) octocat',
-    ...upstream,
-    'push guard: off -> on',
-  ];
-}
-
-function ghAuth(active: string, logins: readonly string[]): AuthState {
-  return {
-    gcmPath: null, gcmPresent: false, stored: ok([]), ghPresent: true,
-    gh: ok({ accounts: logins.map((login) => ({ login, active: login === active })), active }),
-    helper: null, ghIsHelper: false, helperIsGcm: false, ghHelperOrigins: [],
-  };
-}
-
-const WAIT_CHILD = 'const fs=require("fs");fs.writeFileSync(process.argv[1],"up");' +
-  'const stop=process.argv[1]+".stop";' +
-  'const wait=()=>{if(fs.existsSync(stop))process.exit(0);else setTimeout(wait,15)};wait()';
 
 describe('the setup lead on the plain prompter', () => {
   test('F7: the lead is indented two spaces', async () => {
@@ -2166,21 +1056,6 @@ describe('the setup lead on the plain prompter', () => {
     }
   });
 });
-
-async function plainLead(box: Sandbox): Promise<string> {
-  const input = new PassThrough();
-  const output = new PassThrough();
-  let shown = '';
-  output.on('data', (chunk: Buffer) => { shown += chunk.toString(); });
-  const prompter = plainPrompter({ input, output });
-  input.end();
-  const code = await runSetup(
-    { positional: [], flags: new Map([['cwd', box.dir]]) },
-    { interactive: true, prompter, lead: SETUP_NOTE },
-  );
-  assert.equal(code, 130, shown);
-  return shown;
-}
 
 describe('Ctrl-C during gh sign-in', () => {
   test('a SIGINT while inherit is running still runs the next setup step', async () => {
@@ -2203,58 +1078,6 @@ describe('Ctrl-C during gh sign-in', () => {
     }
   });
 });
-
-function guarded(at: Home): { positional: readonly string[]; flags: Map<string, string | boolean> } {
-  const flags = new Map<string, string | boolean>([['cwd', at.box.dir], ['guard', true], ['no-input', true]]);
-  return { positional: ['octocat'], flags };
-}
-
-async function holdInherit(): Promise<() => Promise<void>> {
-  const marker = join(tmpdir(), 'repown-hold-' + process.pid);
-  const stop = marker + '.stop';
-  rmSync(marker, { force: true });
-  rmSync(stop, { force: true });
-  const pending = inherit(process.execPath, ['-e', WAIT_CHILD, marker]);
-  const release = (): Promise<void> => releaseInherit(pending, marker, stop);
-  try {
-    await untilUp(marker);
-  } catch (error) {
-    await release();
-    throw error;
-  }
-  return release;
-}
-
-async function untilUp(marker: string): Promise<void> {
-  const started = Date.now();
-  while (!existsSync(marker)) {
-    if (Date.now() - started > 5_000) throw new Error('child did not start');
-    await new Promise((resolve) => setTimeout(resolve, 15));
-  }
-  assert.equal(handingOver(), true);
-}
-
-async function releaseInherit(pending: Promise<unknown>, marker: string, stop: string): Promise<void> {
-  writeFileSync(stop, 'x');
-  await pending;
-  rmSync(marker, { force: true });
-  rmSync(stop, { force: true });
-}
-
-function captureStep(onFirst: () => void): { text: () => string; begin: () => void; end: () => void } {
-  let stderr = '';
-  let emitted = false;
-  const write = process.stderr.write;
-  const begin = (): void => {
-    process.stderr.write = ((chunk: string | Uint8Array): boolean => {
-      const text = String(chunk);
-      stderr += text;
-      if (!emitted && text.includes('step 1 of')) { emitted = true; onFirst(); }
-      return true;
-    }) as typeof process.stderr.write;
-  };
-  return { text: () => stderr, begin, end: () => { process.stderr.write = write; } };
-}
 
 describe('setup: point the branch back at its remote, fetch the destination first', () => {
   const THEIRS = 'old@example.invalid';
@@ -2401,103 +1224,67 @@ describe('setup: re-author the commits by another address, only when asked', () 
   });
 });
 
-describe('repown setup: repoint and fetch, in a real clone', () => {
-  let at: Home;
-  beforeEach(() => { at = home(); record(at, 'octocat', 'octocat@example.invalid'); });
-  afterEach(() => at.dispose());
+test('a new account\'s name question first says what GitHub said about the login, then the machine name', async () => {
+  const ctx = context({
+    recorded: {}, machineIdentity: { name: 'Octo Work', email: null },
+    suggest: async () => ({ problem: 'github.com has no account named octocatt: check the spelling' }),
+  });
+  const fresh = { account: NEW_ACCOUNT, newAccount: 'octocatt', host: 'github' };
+  assert.equal(await stepOf(ctx, 'name').detail?.(fresh, ctx),
+    'github.com has no account named octocatt: check the spelling; your default git name here is Octo Work: use it only if this account does too');
+  const quiet = context({ recorded: {}, suggest: async () => ({ problem: null }) });
+  assert.equal(await stepOf(quiet, 'name').detail?.(fresh, quiet), 'this is the login', 'a lookup that failed says only where the prefill came from');
+});
 
-  /** A bare origin holding the first commit, never fetched here (no tracking refs), then a commit by another address. */
-  const unfetchedOrigin = (): string => {
-    const path = join(at.box.dir, '..', 'origin.git');
-    at.box.git('init', '-q', '--bare', path);
-    at.box.git('remote', 'add', 'origin', path);
-    at.box.git('push', '-q', 'origin', 'HEAD:refs/heads/main');
-    at.box.git('update-ref', '-d', 'refs/remotes/origin/main');
-    at.box.git('-c', 'user.name=Someone', '-c', 'user.email=old@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'theirs');
-    return path;
+test('the name question says when this machine is signed in to GitHub as others, not this login', async () => {
+  const fresh = { account: NEW_ACCOUNT, newAccount: 'octocat', host: 'github' };
+  const named = { name: 'Octo Cat', email: '1234+octocat@users.noreply.github.com' };
+  const detail = async (signedIn: readonly string[] | null, suggestion: Suggestion = named, answers: Answers = fresh): Promise<string | undefined> => {
+    const ctx = context({ recorded: {}, signedIn: async () => signedIn, suggest: async () => suggestion });
+    return stepOf(ctx, 'name').detail?.(answers, ctx);
   };
-  const tracking = (): string => at.box.git('for-each-ref', 'refs/remotes/origin/');
+  const note = 'signed in as octo-work, octo-org, not octocat: if octocat isn\'t your account, go back; otherwise the first push asks you to sign in as it';
+  assert.equal(await detail(['octo-work', 'octo-org']), note);
+  assert.equal(await detail(['octo-work', 'OctoCat']), undefined, 'the login is one of them, in any case');
+  assert.equal(await detail(null), undefined, 'neither gh nor Git Credential Manager could be read');
+  assert.equal(await detail([]), undefined, 'signed in as nobody: nothing to compare with');
+  assert.equal(await detail(['octo-work'], { problem: 'github.com has no account named octocat: check the spelling' }),
+    'github.com has no account named octocat: check the spelling', 'a missing account says only that');
+  assert.equal(await detail(['octo-work'], {}, { ...fresh, host: 'azdo' }), 'this is the login', 'only GitHub sign-ins are read');
+  assert.equal(await detail(['octo-work'], {}),
+    'signed in as octo-work, not octocat: if octocat isn\'t your account, go back; otherwise the first push asks you to sign in as it; this is the login');
+  assert.equal(await detail(['octo-work'], {}, { ...fresh, name: 'Octo Cat' }),
+    'signed in as octo-work, not octocat: if octocat isn\'t your account, go back; otherwise the first push asks you to sign in as it',
+    'back on the question after typing a name: it no longer starts as the login');
+});
 
-  test('--fetch fetches the destination first; --no-input without it does not', () => {
-    unfetchedOrigin();
-    assert.equal(repown(['setup', 'octocat', '--no-input'], at.box.dir).status, 0);
-    assert.equal(tracking(), '', 'no fetch unless asked');
-    at.box.git('config', '--local', '--unset', 'repown.account');
-    const run = repown(['setup', 'octocat', '--fetch', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stderr, /step 1 of \d: Fetch origin/);
-    assert.match(run.stderr, /> git fetch origin/);
-    assert.notEqual(tracking(), '');
-  });
+test('signedInLogins joins gh\'s and Git Credential Manager\'s accounts, once each, and is null when neither reads', () => {
+  const gh = ok({ accounts: [{ login: 'octo-org', active: true }, { login: 'octo-work', active: false }], active: 'octo-org' });
+  assert.deepEqual(signedInLogins(gh, ok(['Octo-Org', 'octocat'])), ['octo-org', 'octo-work', 'octocat']);
+  assert.deepEqual(signedInLogins(null, ok(['octocat'])), ['octocat']);
+  assert.deepEqual(signedInLogins(err('gh auth status failed'), null), null);
+  assert.deepEqual(signedInLogins(null, err('no GCM')), null);
+  assert.deepEqual(signedInLogins(ok({ accounts: [], active: null }), null), []);
+});
 
-  test('a failed fetch warns, the rest of the plan runs, and the destination stays unknown', () => {
-    rmSync(unfetchedOrigin(), { recursive: true, force: true });
-    const run = repown(['setup', 'octocat', '--fetch', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stdout + run.stderr, /WARN\s+fetch\s+could not fetch origin \(/);
-    assert.match(localConfig(at), /account = octocat/);
-    assert.equal(tracking(), '');
-  });
-
-  test('--fetch where nothing needs fetching says so and fetches nothing', () => {
-    const run = repown(['setup', 'octocat', '--fetch', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stderr, /--fetch: /);
-    assert.doesNotMatch(run.stderr, /> git fetch/);
-  });
-
-  test('the field case, re-authored: the closing line says done and the push passes the guard', () => {
-    unfetchedOrigin();
-    const run = repown(['setup', 'octocat', '--fetch', '--guard', '--auto-upstream', '--reauthor', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stderr, /> repown reauthor --yes/);
-    assert.match(run.stderr, /done: this clone is set up for octocat/);
-    assert.equal(at.box.git('log', '-1', '--format=%ae|%ce'), 'octocat@example.invalid|octocat@example.invalid');
-    const push = spawnSync('git', ['push', 'origin', 'HEAD:main'], { cwd: at.box.dir, encoding: 'utf8', env: process.env });
-    assert.equal(push.status, 0, push.stderr);
-  });
-
-  test('the field case, not re-authored: the closing line names the commits the guard will refuse', () => {
-    unfetchedOrigin();
-    const run = repown(['setup', 'octocat', '--fetch', '--guard', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    assert.doesNotMatch(run.stderr, /repown reauthor/);
-    assert.match(run.stderr, /set up for octocat; the next push will fail: 1 commit by another address/);
-    const push = spawnSync('git', ['push', 'origin', 'HEAD:main'], { cwd: at.box.dir, encoding: 'utf8', env: process.env });
-    assert.notEqual(push.status, 0, 'the guard refuses it');
-  });
-
-  test('the field case with the guard left off: done, and the commits named as a warning', () => {
-    unfetchedOrigin();
-    const run = repown(['setup', 'octocat', '--fetch', '--auto-upstream', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stderr, /done: this clone is set up for octocat$/m);
-    assert.match(run.stderr, /1 commit on main not on any remote is by old@example\.invalid; the guard is off, so it pushes as it is/);
-  });
-
-  test('--reauthor with nothing by another address says so and rewrites nothing', () => {
-    const path = join(at.box.dir, '..', 'origin.git');
-    at.box.git('init', '-q', '--bare', path);
-    at.box.git('remote', 'add', 'origin', path);
-    at.box.git('push', '-q', '-u', 'origin', 'HEAD:main');
-    const before = at.box.git('rev-parse', 'HEAD');
-    const run = repown(['setup', 'octocat', '--reauthor', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stderr, /--reauthor: /);
-    assert.equal(at.box.git('rev-parse', 'HEAD'), before);
-  });
-
-  test('--repoint points the branch back at its remote, and nothing prints the URL', () => {
-    at.box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
-    at.box.git('config', 'branch.main.remote', 'https://octocat:ghp_secret@github.com/octocat/project.git');
-    const kept = repown(['setup', 'octocat', '--no-input'], at.box.dir);
-    assert.equal(at.box.git('config', 'branch.main.remote'), 'https://octocat:ghp_secret@github.com/octocat/project.git', 'not without --repoint');
-    assert.doesNotMatch(kept.stdout + kept.stderr, /ghp_secret/);
-    const run = repown(['setup', 'octocat', '--repoint', '--no-input'], at.box.dir);
-    assert.equal(run.status, 0, run.stderr);
-    assert.equal(at.box.git('config', 'branch.main.remote'), 'origin');
-    assert.match(run.stderr, /> git config --local branch\.main\.remote origin/);
-    assert.match(run.stderr, /branch\.main\.remote: \(a URL\) -> origin/);
-    assert.doesNotMatch(run.stdout + run.stderr, /ghp_secret|octocat:/);
-  });
+test('the name and email questions say where their prefill came from', async () => {
+  const fresh = { account: NEW_ACCOUNT, newAccount: 'octocat', host: 'github' };
+  const details = async (suggestion: Suggestion, answers: Answers = fresh): Promise<(string | undefined)[]> => {
+    const ctx = context({ recorded: {}, machineIdentity: { name: null, email: null }, suggest: async () => suggestion });
+    return [await stepOf(ctx, 'name').detail?.(answers, ctx), await stepOf(ctx, 'email').detail?.(answers, ctx)];
+  };
+  const noreply = '843102+octocat@users.noreply.github.com';
+  assert.deepEqual(await details({ email: noreply }), ['GitHub shows no name for octocat, so this is the login',
+    'prefilled with the private address GitHub gives octocat (github.com/settings/emails)']);
+  assert.deepEqual(await details({ name: 'Octo Cat', email: noreply }),
+    [undefined, 'prefilled with the private address GitHub gives octocat (github.com/settings/emails)']);
+  const [, retyped] = await details({ email: noreply }, { ...fresh, email: 'octocat@example.invalid' });
+  assert.match(retyped ?? '', /^tip:/, 'back on the question after typing an address: it no longer holds the prefill');
+  const [offlineName, offlineEmail] = await details({});
+  assert.equal(offlineName, 'this is the login');
+  assert.match(offlineEmail ?? '', /^tip: to keep your own address private[\s\S]*like 1234\+octocat@users\.noreply\.github\.com$/);
+  const [, typedEmail] = await details({ name: 'Octo Cat', email: 'octocat@example.invalid' });
+  assert.match(typedEmail ?? '', /^tip:/, 'an address that is not GitHub\'s private one keeps the tip');
+  const azure = { ...fresh, host: 'azdo' };
+  assert.deepEqual(await details({}, azure), ['this is the login', undefined]);
 });

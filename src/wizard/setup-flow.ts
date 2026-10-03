@@ -9,7 +9,8 @@
 
 import { ghAdvice, upstreamText } from '../commands/status.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
-import { shellWord } from '../core/guard/check.ts';
+import { isNoreplyAddress } from '../core/hosts/github.ts';
+import { ALLOW_OWNER_BY_HAND, allowOwnerCommand, shellWord } from '../core/guard/check.ts';
 import { printable } from '../ui/format.ts';
 import { foreignAddresses, foreignCount, type UnpushedFact } from '../core/unpushed.ts';
 import type { PushFacts } from '../core/push-state.ts';
@@ -77,7 +78,30 @@ export interface SetupContext {
   readonly upstream: UpstreamRead;
   /** GCM's stored GitHub accounts. Null when the store was not read; an error when it could not be. */
   readonly stored: Result<readonly string[]> | null;
-  suggest(account: string, host: string): Promise<Profile>;
+  suggest(account: string, host: string): Promise<Suggestion>;
+  /** The github.com logins gh and GCM are signed in as (signedInLogins), read when first asked. */
+  signedIn(): Promise<readonly string[] | null>;
+}
+
+/** A profile lookup's suggestion, and a sentence when the host says the login is no account or an organisation. */
+export interface Suggestion extends Profile {
+  readonly problem?: string | null;
+}
+
+/** What recording a new account asks with: setup's context, or the start screen's. */
+export type AccountContext = Pick<SetupContext, 'recorded' | 'host' | 'machineIdentity' | 'suggest' | 'signedIn'>;
+
+/**
+ * Every github.com login gh or Git Credential Manager is signed in as, once each (any
+ * case). Null when neither could be read: a skipped read is never "signed in as nobody".
+ */
+export function signedInLogins(gh: Result<GhState> | null, stored: Result<readonly string[]> | null): string[] | null {
+  const lists = [gh?.ok ? gh.value.accounts.map((account) => account.login) : null, stored?.ok ? stored.value : null];
+  const read = lists.filter((list): list is readonly string[] => list !== null);
+  if (read.length === 0) return null;
+  const byCase = new Map<string, string>();
+  for (const login of read.flat()) if (!byCase.has(login.toLowerCase())) byCase.set(login.toLowerCase(), login);
+  return [...byCase.values()];
 }
 
 /** Read once, before the first question. `supported` is false when the version cannot be read. */
@@ -175,6 +199,23 @@ function steps(ctx: SetupContext): Step<SetupContext>[] {
   return [
     modeStep(),
     ...accountSteps(ctx),
+    ...profileSteps(ctx),
+    ...choiceSteps(ctx),
+  ];
+}
+
+/** A new account's login, refused when already recorded. The start screen asks it too. */
+export function loginStep<C>(ctx: AccountContext): Step<C> {
+  return {
+    id: 'newAccount', kind: 'text', flag: '<account>', message: 'The account\'s user name (login)',
+    hint: 'the name you sign in with, e.g. octocat; not your email address',
+    validate: (value) => newAccountProblem(String(value), ctx),
+  };
+}
+
+/** Where a new account is hosted, and its commit name and email. The start screen asks these too. */
+export function profileSteps<C>(ctx: AccountContext): Step<C>[] {
+  return [
     { id: 'host', kind: 'select', flag: '--host', message: 'Where is this account hosted?',
       hint: 'on GitHub, repown also makes pushes sign in as this account', when: (answers) => isNew(answers),
       choices: () => hostChoices(), initial: () => ctx.host },
@@ -186,8 +227,24 @@ function steps(ctx: SetupContext): Step<SetupContext>[] {
       hint: 'anyone who can see the repository can read it once you push', when: (answers) => isNew(answers), validate: required,
       initial: async (answers) => (await ctx.suggest(accountOf(answers), hostOf(answers, ctx))).email,
       detail: (answers) => emailDetail(answers, ctx) },
-    ...choiceSteps(ctx),
   ];
+}
+
+export interface NewAccount {
+  readonly login: string;
+  readonly name: string;
+  readonly email: string;
+  readonly host: string;
+}
+
+/** A new account from the answers that ask for one. */
+export function newAccountOf(answers: Answers, ctx: AccountContext): NewAccount {
+  return { login: accountOf(answers), name: String(answers['name']), email: String(answers['email']), host: hostOf(answers, ctx) };
+}
+
+/** `accounts add` with every answer as a flag, so it asks nothing; `--` keeps a dashed login the account. */
+export function addAccountArgv(account: NewAccount): string[] {
+  return ['accounts', 'add', '--name=' + account.name, '--email=' + account.email, '--host=' + account.host, '--', account.login];
 }
 
 function modeStep(): Step<SetupContext> {
@@ -215,9 +272,7 @@ function accountSteps(ctx: SetupContext): Step<SetupContext>[] {
       when: () => Object.keys(ctx.recorded).length > 0 || ctx.detected.length > 0,
       choices: () => accountChoices(ctx), initial: () => defaultAccount(ctx),
       detail: () => (ctx.pinned ? 'right now this clone is pinned to ' + ctx.pinned : 'right now this clone isn\'t pinned to any account') },
-    { id: 'newAccount', kind: 'text', flag: '<account>', message: 'The account\'s user name (login)',
-      hint: 'the name you sign in with, e.g. octocat; not your email address', when: (answers) => asksForLogin(answers),
-      validate: (value) => newAccountProblem(String(value), ctx), initial: () => ownerInitial(ctx) },
+    { ...loginStep<SetupContext>(ctx), when: (answers) => asksForLogin(answers), initial: () => ownerInitial(ctx) },
   ];
 }
 
@@ -302,32 +357,67 @@ function hostChoices(): Choice[] {
   });
 }
 
-/** Where a GitHub account's private address comes from, for someone who has never looked. */
-function noreplyExample(answers: Answers, ctx: SetupContext): string | undefined {
+/**
+ * On GitHub: the private address when that is what the email starts as, else where to
+ * find it, for someone who has never looked.
+ */
+async function noreplyNote(answers: Answers, ctx: AccountContext): Promise<string | undefined> {
   if (hostOf(answers, ctx) !== 'github') return undefined;
+  const account = printable(accountOf(answers));
+  const { email } = await ctx.suggest(accountOf(answers), 'github');
+  if (email && isNoreplyAddress(email) && typeof answers['email'] !== 'string') return 'prefilled with the private address GitHub gives ' + account + ' (github.com/settings/emails)';
   return 'tip: to keep your own address private, use the one GitHub gives you, shown at ' +
-    'github.com/settings/emails, like 1234+' + printable(accountOf(answers)) + '@users.noreply.github.com';
+    'github.com/settings/emails, like 1234+' + account + '@users.noreply.github.com';
 }
 
-/** The machine's name, beside a new account. Never that account's initial value. */
-function nameDetail(answers: Answers, ctx: SetupContext): string | undefined {
+/**
+ * First what the host said about the login (no such account, an organisation), so Back
+ * can fix a typo before anything is recorded; else whether this machine is signed in as
+ * someone else, and whether the name starts as the login; then the machine's name, never this account's initial value.
+ */
+async function nameDetail(answers: Answers, ctx: AccountContext): Promise<string | undefined> {
+  if (!isNew(answers)) return undefined;
+  const found = await ctx.suggest(accountOf(answers), hostOf(answers, ctx));
+  const leads = found.problem ? [printable(found.problem)] : [await notSignedIn(answers, ctx), loginPrefill(answers, found, ctx)];
+  const parts = [...leads, machineName(ctx)].filter((part) => part);
+  return parts.length > 0 ? parts.join('; ') : undefined;
+}
+
+/** On GitHub, when this machine is signed in as other logins only: perhaps not this person's account. */
+async function notSignedIn(answers: Answers, ctx: AccountContext): Promise<string | null> {
+  if (hostOf(answers, ctx) !== 'github') return null;
+  const logins = await ctx.signedIn();
+  const login = accountOf(answers);
+  if (!logins || logins.length === 0 || logins.some((other) => other.toLowerCase() === login.toLowerCase())) return null;
+  const shown = printable(login);
+  return 'signed in as ' + logins.map(printable).join(', ') + ', not ' + shown + ': if ' + shown +
+    ' isn\'t your account, go back; otherwise the first push asks you to sign in as it';
+}
+
+/** Said when the name question starts as the login: no profile name was found. */
+function loginPrefill(answers: Answers, found: Suggestion, ctx: AccountContext): string | null {
+  if (found.name || typeof answers['name'] === 'string') return null;
+  const answered = found.email !== undefined && hostOf(answers, ctx) === 'github';
+  return answered ? 'GitHub shows no name for ' + printable(accountOf(answers)) + ', so this is the login' : 'this is the login';
+}
+
+function machineName(ctx: AccountContext): string | null {
   const name = ctx.machineIdentity.name;
-  if (!isNew(answers) || !name) return undefined;
-  return 'not this machine\'s default name (' + printable(name) + '), unless this account uses it';
+  return name ? 'your default git name here is ' + printable(name) + ': use it only if this account does too' : null;
 }
 
-/** Noreply tip first, then the machine address. Two sentences; both prompters wrap one detail. */
-function emailDetail(answers: Answers, ctx: SetupContext): string | undefined {
-  const tip = noreplyExample(answers, ctx);
+/** The private-address note first, then the machine address. Two sentences; both prompters wrap one detail. */
+async function emailDetail(answers: Answers, ctx: AccountContext): Promise<string | undefined> {
+  const tip = await noreplyNote(answers, ctx);
   const line = addressDetail(answers, ctx);
   if (tip && line) return tip + '; ' + line;
   return tip ?? line;
 }
 
-function addressDetail(answers: Answers, ctx: SetupContext): string | undefined {
+function addressDetail(answers: Answers, ctx: AccountContext): string | undefined {
   const email = ctx.machineIdentity.email;
   if (!isNew(answers) || !email) return undefined;
-  return 'not this machine\'s default address (' + printable(email) + '), unless this account uses it';
+  return 'your default git address here is ' + printable(email) + ': use it only if this account does too';
 }
 
 const UPSTREAM_HINT = 'sets push.autoSetupRemote in this clone only, so the first push of a branch without an upstream ' +
@@ -535,14 +625,14 @@ export function loginProblem(value: string): string | null {
   return LOGIN.test(value) ? null : 'use letters, digits and . _ @ - only';
 }
 
-function newAccountProblem(value: string, ctx: SetupContext): string | null {
+function newAccountProblem(value: string, ctx: AccountContext): string | null {
   const problem = loginProblem(value);
   if (problem) return problem;
   const clash = Object.keys(ctx.recorded).find((account) => lower(account) === lower(value));
   return clash ? '"' + clash + '" is already recorded on this machine: use it by that name' : null;
 }
 
-function hostOf(answers: Answers, ctx: SetupContext): string {
+function hostOf(answers: Answers, ctx: AccountContext): string {
   return typeof answers['host'] === 'string' ? answers['host'] : ctx.host;
 }
 
@@ -584,8 +674,7 @@ export function planCommands(answers: Answers, ctx: SetupContext): PlannedComman
   const planned: (readonly string[] | null)[] = [
     repointArgv(answers, ctx),
     fetchArgv(answers, ctx),
-    isNew(answers) ? ['accounts', 'add', '--name=' + String(answers['name']), '--email=' + String(answers['email']),
-      '--host=' + hostOf(answers, ctx), '--', account] : null,
+    isNew(answers) ? addAccountArgv(newAccountOf(answers, ctx)) : null,
     answers['allowOwner'] === true && ctx.owner ? allowOwnerLine(ctx) : null,
     answers['fix'] === true ? ['fix', '--yes', ...cwd] : null,
     useArgv(answers, ctx),
@@ -674,20 +763,29 @@ function allowOwnerLine(ctx: SetupContext): string[] {
   return [...gitIn(ctx), 'config', '--local', '--add', 'repown.allowOwner', ctx.owner!];
 }
 
+/** Shown in place of a word no quoting keeps literal in every shell (shellWord): it has run, or will, but don't paste it. */
+export const UNQUOTABLE = '[value not safe to paste]';
+
+function wordOf(value: string): string {
+  return shellWord(value) ?? UNQUOTABLE;
+}
+
 /**
  * The command as you would type it: the account where it reads naturally, options
- * as `--name value`, and `--host github` left out because it's the default.
+ * as `--name value`, and `--host github` left out because it's the default. A `--`
+ * before a dashed account comes out quoted (shellWord).
  */
 export function formatCommand(argv: readonly string[]): string {
-  if (argv[0] === 'git') return printable(argv.map(shellWord).join(' '));
+  if (argv[0] === 'git') return printable(argv.map(wordOf).join(' '));
   const end = argv.indexOf('--');
   const head = end < 0 ? argv : argv.slice(0, end);
   const positional = end < 0 ? [] : argv.slice(end + 1);
-  const path = head.filter((token) => !token.startsWith('-'));
-  const options = head.filter((token) => token.startsWith('-') && token !== '--host=github').flatMap(splitOption);
   const dashed = positional.some((value) => value.startsWith('-'));
-  const words = dashed ? [...path, ...options, '--', ...positional] : [...path, ...positional, ...options];
-  return printable(['repown', ...words.map(shellWord)].join(' '));
+  const path = head.filter((token) => !token.startsWith('-')).map(wordOf);
+  const options = head.filter((token) => token.startsWith('-') && token !== '--host=github').flatMap(splitOption).map(wordOf);
+  const accounts = positional.map(wordOf);
+  const words = dashed ? [...path, ...options, wordOf('--'), ...accounts] : [...path, ...accounts, ...options];
+  return printable(['repown', ...words].join(' '));
 }
 
 /** Setup's own importers read it from here; the one definition is in the output helpers. */
@@ -885,8 +983,8 @@ function notes(answers: Answers, ctx: SetupContext): string[] {
   if (guard) lines.push(guard);
   const guarded = answers['guard'] === true || ctx.guard === 'on';
   if (guarded && ownerForeign(account, ctx) && answers['allowOwner'] !== true) {
-    lines.push('Warning: the push guard will refuse pushes to "' + ctx.owner + '". To allow them later: ' +
-      'git config --local --add repown.allowOwner ' + shellWord(ctx.owner!));
+    lines.push('Warning: the push guard will refuse pushes to "' + printable(ctx.owner!) + '". To allow them later: ' +
+      (allowOwnerCommand(ctx.owner!) ?? ALLOW_OWNER_BY_HAND));
   }
   if (ctx.ghIsHelper && answers['fix'] !== true && ctx.credentialPinned) {
     lines.push('Note: gh is still git\'s credential helper, so pushes sign in as gh\'s active account, not ' + account + '.');

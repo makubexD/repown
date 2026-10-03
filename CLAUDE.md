@@ -97,6 +97,10 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   `accent` for cyan) returns the text unchanged where that stream has no colour: never add a
   mark to plain output by hand (ADR-027). `unicodeTerminal` copies clack's
   `isUnicodeSupported`; re-check it when clack is upgraded.
+- Read-only commands (`status`, `doctor`, `scan`, `guard check`, the start screen's clone read,
+  setup's `readContext`) read config through `snapshotOf(git)` (`src/core/config-snapshot.ts`):
+  one `git config [--scope] --list -z` per scope answers the plain getters (ADR-029). Never hand a
+  snapshot to code that writes config; it throws. Booleans, URL matches and origins still go to git.
 - `--format json` (`scan`, `accounts list`) is a stable contract for scripts; the text
   layout isn't. Renaming a JSON field is breaking (ADR-014).
 - `src/wizard/` is `repown setup`: `engine.ts` owns Back, the review loop, the opening
@@ -110,6 +114,10 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   wraps at itself). The start screen is the same folder: `home-context.ts` reads
   (read-only), `home-flow.ts` is pure, `home-text.ts` holds the words, and `home-run.ts`
   draws through the Prompter (`show`, `choose`) and runs each action's own `run()`.
+  Record an account asks setup's own new-account steps (`loginStep`, `profileSteps` in
+  `setup-flow.ts`) through the engine's `runFlow`, then runs `accounts add` with every
+  answer as a flag; never a second copy of those questions. Once fix, doctor,
+  `accounts add` or `accounts remove` has run, failed or not, the screen opens again and re-reads (ADR-028); setup, help and Quit end it.
 
 ## Tests
 
@@ -125,13 +133,21 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - `test/wizard-screens.test.ts` plays `repown setup`'s real screens with key presses
   (`play()` in `test/setup-fixtures.ts`), including the opening review and resume from it,
   the start screen (the summary in the frame, the hand-over line, Show help, Back from
-  the login question) and the setup lead inside the frame (F5, F6, F8). Add a scenario
+  the login question, the signed-in note H20, Remove an account H21) and the setup lead inside
+  the frame (F5, F6, F8). Add a scenario
   when a screen changes.
 - `test/home.test.ts` covers the start screen's read, summary lines, menu, and discovery
   (a refused `.git` at any depth, a bare repository that is not walked).
 - `test/format.test.ts` checks `displayPath` and which streams are coloured. `noted` is
   what prints the gh NOTE on `repown status`.
-- `test/cli.test.ts` spawns the real entry point. Keep `guard check --remote "$1" --url "$2"`
+- `test/config-snapshot.test.ts` reads every config key, in every scope, through a plain `Git`
+  and a `ConfigSnapshot` and compares (ADR-029); add a case when a getter or git's rules change.
+- Split test files share their helpers through `test/<name>-helpers.ts` (moved, not copied).
+- `test/paste.test.ts` runs printed commands through every shell present (sh, bash, dash,
+  zsh, fish, pwsh, powershell, cmd) against npm-shaped probes. Build any copyable word with
+  `shellWord` or `copyableCommand` (`src/core/guard/check.ts`), never by hand; null means no
+  quoting is safe in every shell, so print no command.
+- `test/cli.test.ts` (and `cli-*.test.ts`, split off by suite) spawns the real entry point. Keep `guard check --remote "$1" --url "$2"`
   (hooks already on disk) and `--remote="$1" --url="$2"` (new hooks) working.
 - `test/docs.test.ts` checks the README against `repown --help` and `repown help <group>`.
   It fails when a command or user-facing action is missing from README.md (as

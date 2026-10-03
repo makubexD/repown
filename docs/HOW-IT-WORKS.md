@@ -173,6 +173,11 @@ The registry stores a name, an email and a host per account, never a secret, out
 every repository ([where](CONFIGURATION.md#the-account-registry)). Run `add` again to
 change an account; pinned clones keep the old values until you `repown use` it again.
 Without a terminal, `add` can't ask: pass `--name` and `--email`.
+
+When `add` asks, it looks the login up on GitHub first. If github.com has no account by that
+name, it says so before asking (`WARN  accounts   github.com has no account named octocat:
+check the spelling (recording it anyway)`), and an organisation gets the same kind of line.
+It still records: offline, or behind a refused lookup, it says nothing.
 </details>
 
 ### 3. Pin a clone
@@ -695,7 +700,7 @@ never suggested.
 | How should setup work? Recommended (default) or Step by step | unless `--step-by-step` is passed, or an `<account>` is given (that uses Recommended and skips this question). Not stored ([ADR-007](decisions/ADR-007-no-profile-store.md), [ADR-020](decisions/ADR-020-setup-leaves-clone-ready.md)). The flag is `--step-by-step` | nothing by itself |
 | Which account should this clone belong to? | an account is recorded, or a GitHub login can already be seen. Default: the one pinned here if it is recorded, else origin's owner when it is recorded and not known to be an organisation, else origin's owner when that owner is a user, else the first other recorded account, else a new account | `use <account>`, after `accounts add` when the login is not recorded |
 | The account's user name (login) | "a new account", or nothing recorded and nothing detected. Starts as origin's owner only when that owner is a user and is not recorded. Refused if already recorded | the `<account>` of `accounts add` |
-| Where it's hosted, and your name and email as commits show them (on GitHub, with where to find your noreply address; this machine's default is shown, never filled in) | the login is new: "a new account", or one picked from the logins already seen | `accounts add <account> --name --email --host` |
+| Where it's hosted, and your name and email as commits show them (on GitHub, with where to find your noreply address; this machine's default is shown, never filled in; when github.com has no account by that login, or it is an organisation, the name question says so first; else, when gh or Git Credential Manager is signed in as other github.com accounts only, it says that, and whether the name is just the login) | the login is new: "a new account", or one picked from the logins already seen | `accounts add <account> --name --email --host` |
 | Also make this account gh's active account? (default No) | a GitHub clone (or one whose origin isn't a URL), gh knows the account, another is active. Recommended does not ask this when the clone is already pinned to that account: it answers No, and the review names the command (`gh auth switch -u <account>`, or `repown use <account> --gh` when gh does not list it) | `use --gh` |
 | Sign in to gh as that account too? (default No) | the same, except gh does not know the account. Yes opens a browser; gh then acts as that account in every terminal. The line under it names gh's active account, or says gh isn't signed in. Recommended skips it the same way when the clone is already pinned to that account | `use --gh` |
 | Push through origin instead of the URL set for this branch? (default Yes) | the branch pushes to a URL (from `branch.<name>.pushRemote`, `remote.pushDefault` or `branch.<name>.remote`) naming the same host and path as a remote here. A URL there can carry its own sign-in and is never fetched. The review shows the key and the remote, never the URL, and so does the run's "changed in this clone" (`(a URL) -> origin`). The flag is `--repoint` | `git config --local <key> <remote>` |
@@ -786,8 +791,8 @@ The questions it did not ask are still steps.
 
 ```
 ◇  How should setup work?
-│  Recommended fills in the answers that only change this clone; Step by
-│  step asks each one
+│  Recommended fills in the answers that only change this clone; Step
+│  by step asks each one
 │  ● Recommended
 │  ○ Step by step
 │
@@ -823,11 +828,10 @@ The questions it did not ask are still steps.
 ◇  How should setup work?
 │  Step by step
 │
-●  right now this clone isn't pinned to any account
-│
 ◇  Which account should this clone belong to?
 │  commits made here carry its name and email; on GitHub, pushes from
 │  here also sign in as it
+│  right now this clone isn't pinned to any account
 │  octocat
 │
 ◇  This repository belongs to "octo-org". Let this clone push to it?
@@ -836,12 +840,11 @@ The questions it did not ask are still steps.
 │  clone only
 │  Yes
 │
-●  only your email address is in this repository's commits
-│
 ◇  Turn on the push guard?
 │  before each push, it checks that every commit is yours and goes to
 │  the right place, and stops the push if not; turn it off any time:
 │  repown guard off
+│  only your email address is in this repository's commits
 │  Yes
 │
 ◇  Push branches without -u?
@@ -857,18 +860,18 @@ The questions it did not ask are still steps.
 └  Running the commands
 
        step 1 of 4: Let this clone push to octo-org's repositories
-       > git config --local --add repown.allowOwner octo-org
+       $ git config --local --add repown.allowOwner octo-org
 OK    origin     pushes to octo-org allowed in this clone
 
        ...
 
        step 3 of 4: Turn on the push guard: each push is checked first
-       > repown guard on
+       $ repown guard on
 OK    guard      on -- every push is checked before it leaves
   /home/you/code/project/.git/hooks/pre-push
 
        step 4 of 4: Push branches without -u: the first push sets the upstream (this clone only)
-       > git config --local push.autoSetupRemote true
+       $ git config --local push.autoSetupRemote true
 OK    upstream   branches without an upstream push without -u in this clone
 
        ✔ done: this clone is set up for octocat
@@ -887,7 +890,7 @@ OK    upstream   branches without an upstream push without -u in this clone
 
 The last line is only when gh still acts as someone else and the review did not already say so. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh   (signs <account> in to gh)`. The review says the same thing (`gh still acts as <active>, so gh pr create here would act as that account (git pushes are unaffected). If you use gh here: gh auth switch -u <account>.` when gh already lists it, otherwise `If you use gh here: repown use <account> --gh (signs <account> in to gh).`), and that run does not print it again. With `--no-input` there is no review, so the line after the run is the one place it appears. The first push's sign-in is said by `use` when `use` runs. When the pin is left out and Git Credential Manager's store was read and does not list the account, the review says `No stored credential for <account> yet: the first push signs in once (your browser opens).`
 
-`changed in this clone:` is what this run wrote in the clone, read before the first step and again after it (also after Stop, or after a step fails). A key that was unset is `(added)`; one that is gone is `old -> (removed)`. A key that did not change is left out. `repown.allowOwner` lists the values added or removed. The guard is `push guard: off -> on`. Only these config values are shown, never what a credential helper prints. When nothing in the clone changed, that block is the one line `nothing changed in this clone`. A settled clone whose pin was left out still says `done: this clone is set up for <account>`. `done` needs nothing left in the way of the next push, read again after the run: otherwise the line is `set up for <account>; the next push will fail: <first blocker> (and N more below)`, followed by each blocker's lines, and the exit code is unchanged ([ADR-026](decisions/ADR-026-setup-says-what-blocks-the-next-push.md)). Where stderr has colour, `done` leads with a green ✔ and the blocked line with a yellow ▲ (`+` and `!` where Unicode can't be drawn), each blocker sits two columns deeper, and the commands (in the review, on `> ` lines and under `not run:`) are cyan. Without colour none of that is added ([ADR-027](decisions/ADR-027-the-wizard-decorates-only-where-it-draws-colour.md)). The blockers: commits by another address the guard will refuse (also those another remote has but the push destination lacks), a sign-in carried by the push path (named by config key, never shown), `GIT_AUTHOR_EMAIL` / `GIT_COMMITTER_EMAIL` / `GH_TOKEN` / `GITHUB_TOKEN` set, `author.email` / `committer.email` in config, a destination owner the guard refuses, a branch diverged from its tracked ref on the destination, no upstream where a plain `git push` needs one, and a detached HEAD. The review lists them first among its notes.
+`changed in this clone:` is what this run wrote in the clone, read before the first step and again after it (also after Stop, or after a step fails). A key that was unset is `(added)`; one that is gone is `old -> (removed)`. A key that did not change is left out. `repown.allowOwner` lists the values added or removed. The guard is `push guard: off -> on`. Only these config values are shown, never what a credential helper prints. When nothing in the clone changed, that block is the one line `nothing changed in this clone`. A settled clone whose pin was left out still says `done: this clone is set up for <account>`. `done` needs nothing left in the way of the next push, read again after the run: otherwise the line is `set up for <account>; the next push will fail: <first blocker> (and N more below)`, followed by each blocker's lines, and the exit code is unchanged ([ADR-026](decisions/ADR-026-setup-says-what-blocks-the-next-push.md)). Where stderr has colour, `done` leads with a green ✔ and the blocked line with a yellow ▲ (`+` and `!` where Unicode can't be drawn), each blocker sits two columns deeper, and the commands (in the review, on `$ ` lines and under `not run:`) are cyan. Without colour none of that is added ([ADR-027](decisions/ADR-027-the-wizard-decorates-only-where-it-draws-colour.md)). The blockers: commits by another address the guard will refuse (also those another remote has but the push destination lacks), a sign-in carried by the push path (named by config key, never shown), `GIT_AUTHOR_EMAIL` / `GIT_COMMITTER_EMAIL` / `GH_TOKEN` / `GITHUB_TOKEN` set, `author.email` / `committer.email` in config, a destination owner the guard refuses, a branch diverged from its tracked ref on the destination, no upstream where a plain `git push` needs one, and a detached HEAD. The review lists them first among its notes.
 
 Recording an account is not in the clone. That run adds a separate section:
 
@@ -910,7 +913,7 @@ When a `use --gh` step ran and gh's active account afterwards is that account, t
 │  credential.https://github.com.username = octocat
 │
 │  Pin this clone to octocat: its commit name, email and push sign-in
-│  > repown use octocat
+│  $ repown use octocat
 │
 ◆  Run this step?
 │  ● Yes
@@ -1006,7 +1009,11 @@ flowchart TD
   LIST -->|"← Back"| MENU
   MENU -->|gh is the helper| FIX["Stop gh serving credentials"]
   MENU --> ADD["Record an account"]
+  MENU -->|"an account is recorded, every entry reads"| REM["Remove an account"]
+  REM --> WHICH["which account, then confirm"]
+  WHICH -->|"← Back"| MENU
   MENU --> DOC["Check this machine"]
+  FIX & ADD & WHICH & DOC -->|"the command runs, then"| HOME
   MENU --> SH["Show help, exit 0"]
   MENU --> QUIT["Quit, exit 0"]
   MENU -->|Esc or Ctrl-C| ESC["exit 130, nothing changed"]
@@ -1015,7 +1022,7 @@ flowchart TD
 With colour on, the screen looks like this. The summary is inside the frame, and there
 is no blank line before **What next?**. The highlighted row shows its hint in parentheses.
 The title is a cyan badge, each summary value is bold cyan, and the hand-over line
-(`> repown ...`) is cyan. On a terminal that can't draw Unicode, clack draws ASCII
+(`$ repown ...`) is cyan. On a terminal that can't draw Unicode, clack draws ASCII
 stand-ins (`T` for `┌`, `|` for `│`, `*` for `◆`, `>` for the selected `●`). No variable needs
 setting ([ADR-027](decisions/ADR-027-the-wizard-decorates-only-where-it-draws-colour.md)).
 
@@ -1032,6 +1039,7 @@ setting ([ADR-027](decisions/ADR-027-the-wizard-decorates-only-where-it-draws-co
 │  ● Set up a clone found here (2 not set up)
 │  ○ Stop gh serving credentials
 │  ○ Record an account
+│  ○ Remove an account
 │  ○ Check this machine
 │  ○ Show help
 │  ○ Quit
@@ -1052,9 +1060,10 @@ What next?
   1) Set up a clone found here  -- 2 not set up
   2) Stop gh serving credentials  -- repown fix
   3) Record an account  -- repown accounts add
-  4) Check this machine  -- repown doctor
-  5) Show help
-  6) Quit
+  4) Remove an account  -- repown accounts remove
+  5) Check this machine  -- repown doctor
+  6) Show help
+  7) Quit
   choice [1]: 
 ```
 
@@ -1065,7 +1074,7 @@ indented two spaces.
 | Line | When | Value |
 | --- | --- | --- |
 | `Accounts` | the registry was read | `none recorded`, or `2 recorded: octo-work, octocat` (the logins, sorted) |
-| `Accounts` | the file has entries repown cannot read | `1 recorded, 1 unreadable in <path>: run repown accounts list`, or, when nothing in it could be read, `1 unreadable in <path>: run repown accounts list`. The menu stays |
+| `Accounts` | the file has entries repown cannot read | `1 recorded, 1 unreadable in <path>: run repown accounts list`, or, when nothing in it could be read, `1 unreadable in <path>: run repown accounts list`. The menu stays, without Remove an account (`accounts remove` won't rewrite a file it can't fully read) |
 | `Accounts` | the registry could not be read | `could not read` and that path. Never `none` |
 | `Helper` | gh's per-host helper entries, the ones `repown fix` removes, are present | `gh serves git's credentials: run repown fix` |
 | `Clones` | clones were found, up to 2 levels below | `3 below this folder: 2 not set up, 1 set up` |
@@ -1143,7 +1152,7 @@ frame in that clone. Setup's exit code is repown's. The line about starting setu
 only for bare `repown` inside a clone ([card 5](#5-check-where-you-are)).
 
 ```
-└  > repown setup --cwd '/home/octocat/code/need'
+└  $ repown setup --cwd /home/octocat/code/need
 
 ┌  repown setup
 │
@@ -1151,29 +1160,92 @@ only for bare `repown` inside a clone ([card 5](#5-check-where-you-are)).
 ```
 
 On a plain terminal the command is its own line:
-`> repown setup --cwd '/home/octocat/code/need'`.
+`$ repown setup --cwd /home/octocat/code/need`.
 
-**Stop gh serving credentials** closes the frame with `└  > repown fix`, then runs
+**Stop gh serving credentials** closes the frame with `└  $ repown fix`, then runs
 `repown fix`, which asks its own confirmation.
-**Check this machine** closes the frame with `└  > repown doctor`, then runs
-`repown doctor`. **Show help** closes the frame with `└  > repown --help`, prints the
+**Check this machine** closes the frame with `└  $ repown doctor`, then runs
+`repown doctor`. **Show help** closes the frame with `└  $ repown --help`, prints the
 top help on stdout, and exits 0.
 
-**Record an account** asks `The account's user name (login)`, with the hint
-`the name you sign in with, e.g. octocat; not your email address`. Because there is a
-menu to return to, the screen also says `type < to go back`. Typing `<` returns to the
-menu. Esc still exits 130. An empty answer is
-`a value is required`. Anything outside letters, digits and `. _ @ -` is
-`use letters, digits and . _ @ - only`. It then runs `repown accounts add`. A login
-that starts with a dash is printed and passed after `--`, so it stays the account
-name (`repown accounts add -- -h`):
+**Record an account** asks setup's own questions for a new account, in the frame:
+`The account's user name (login)` (hint: `the name you sign in with, e.g. octocat; not
+your email address`), where it is hosted (GitHub by default), and the name and email
+commits show. On GitHub they start from a lookup: the profile's name (else the login),
+and the noreply address GitHub gives the account. Each question says where its value
+came from: `GitHub shows no name for octocat, so this is the login` (or `this is the
+login` on another host, or when GitHub couldn't be asked), and `prefilled with the private address GitHub
+gives octocat (github.com/settings/emails)`; with nothing prefilled the email question
+gives a tip with an example (`like 1234+octocat@users.noreply.github.com`). Where this
+machine has a default name or address, they add `your default git name here is Octo
+Cat: use it only if this account does too`. Text questions take `<` to go back,
+and the host question has a Back choice; Back on the login returns to the menu. Esc
+still exits 130. An empty login is `a value is required`. Anything outside letters,
+digits and `. _ @ -` is `use letters, digits and . _ @ - only`. A login already
+recorded, in any case, is `"octocat" is already recorded on this machine: use it by
+that name`. When github.com has no account by that login (a typo), or it is an
+organisation, the name question says so first, under its hint and before this machine's
+default name if there is one:
 
 ```
-└  > repown accounts add octocat
+◆  Your name, as your commits show it
+│  e.g. Octo Cat; anyone who can see the repository sees it
+│  github.com has no account named octocatt: check the spelling; your
+│  default git name here is Octo Cat: use it only if this account does
+│  too · type < to go back
+│  octocatt
 ```
+
+so Back can fix the login before anything is recorded (an organisation reads
+`octo-org is an organisation on github.com, not an account you sign in as`). A login
+that exists can still be someone else's: when gh or Git Credential Manager is signed in
+as other github.com accounts only, the name question says `signed in as octo-work, not
+octocat: if octocat isn't your account, go back; otherwise the first push asks you to
+sign in as it` (read on this machine; nothing when neither can be read). Then it
+runs `repown accounts add` with every answer as a flag, so nothing more is asked:
+
+```
+└  $ repown accounts add octocat --name "Octo Cat" --email 1234+octocat@users.noreply.github.com
+```
+
+A login that starts with a dash is passed after `--`, so it stays the account name:
+`repown accounts add --name "Octo Cat" --email … "--" -h`. The `--` is quoted because
+PowerShell drops a bare one before `repown.ps1` (what npm installs) sees it.
+
+Every command repown prints to copy (here, in setup, and in the advice of `status`, `use`,
+`accounts add` and the guard) pastes the same into sh, bash, dash, zsh, fish, PowerShell and
+cmd: a word no shell treats specially stays bare, anything else is in double quotes. A value
+no quoting keeps literal in all of them (one with `$`, a backtick, `"`, `%`, `!`, a curly
+double quote, a control character or an escaping backslash) gets no command: the advice says
+to do it by hand (`add that owner to repown.allowOwner with git config yourself`), and a
+command repown runs anyway shows `[value not safe to paste]` in its place. Single quotes
+would not do: cmd doesn't read them, and PowerShell runs the rest of POSIX's `'\''` as code.
+
+**Remove an account** is offered once an account is recorded, and only when every entry
+in the registry reads (`accounts remove` refuses to rewrite a file it can't fully read).
+It asks `Which account?` (each login with its `name <email>`, and `← Back`), then says
+what stays and asks to confirm:
+
+```
+│  clones pinned to octocat keep their settings and the push guard;
+│  repown use octocat needs it recorded again
+│
+◆  Remove octocat from this machine?
+│  ● Remove octocat
+│  ○ ← Back
+```
+
+`← Back` from either returns to the menu; the frame then closes on
+`$ repown accounts remove octocat`. Only the registry entry goes: a clone pinned to it keeps
+its settings and the guard, and `repown status` there says `not in this machine's registry`.
 
 Each of those runs that command's own `run()`, after the frame closes on the command.
-On a plain terminal the closing line is that same command on its own line. **Quit**
+On a plain terminal the closing line is that same command on its own line. After
+**Record an account**, **Remove an account**, **Check this machine** or **Stop gh serving credentials**, the
+start screen opens again once that command has run, whether or not it succeeded, with the
+folder read afresh, so the summary shows the change
+([ADR-028](decisions/ADR-028-the-start-screen-returns-after-a-machine-action.md)).
+Setting up a clone and Show help end it. **Quit**
 exits 0 and prints `Quit`. Esc or Ctrl-C exits 130, the same cancel `repown setup`
 uses, and prints `Cancelled: nothing was changed.` Neither writes anything.
 

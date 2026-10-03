@@ -89,12 +89,23 @@ with an installed repown.
   `node --test --test-name-pattern="<regex>" test/guard.test.ts` one test;
   `node --test --test-shard=1/3 "test/*.test.ts"` one shard. CI runs the Windows suite
   as three of those.
+- **Keeping `npm test` fast.** `node --test` runs files in parallel and each file's tests in
+  order, so one long file sets the wall time: split a file by suite once it passes about
+  150 s (`*-helpers.ts` holds what the parts share; a suite split by test keeps its name).
+  The cost per test is process starts, mostly git. Measured on Windows, 8 cores, on
+  2026-10-02: 920 s before, 674 s after splitting the four longest files, 550-580 s after
+  read-only commands read config once per scope (ADR-029), with every test path kept.
 - **Fake executables.** `gh.exe` and `git-credential-manager.exe` are compiled once per
   test process and then reused ([test/fake-exe.ts](test/fake-exe.ts)).
 - **Changing what `repown setup` shows?** [test/wizard-screens.test.ts](test/wizard-screens.test.ts)
   plays it as a newcomer would, pressing arrows, Enter, typed text and Esc on the real
   screens (`play()` in [test/setup-fixtures.ts](test/setup-fixtures.ts)), in one scenario
   per situation. Add one for a new situation.
+- **Printing a command to copy?** Build it with `copyableCommand` (or the whole line with
+  `formatCommand`); a null means no quoting is safe in every shell, so say what to do instead. [test/paste.test.ts](test/paste.test.ts) runs printed lines through every
+  shell it finds (sh, bash, dash, zsh, fish, PowerShell 7, Windows PowerShell, cmd) against
+  probes shaped like npm's `repown`, `repown.cmd` and `repown.ps1`; a shell that isn't
+  installed is skipped. CI installs zsh and fish on Linux, so each is measured somewhere.
 - **Before you push:** `npm test` and `npm run build` (the build is also the type check;
   there is no linter). CI repeats both on Linux, Windows and macOS, so watch path
   separators and line endings.
@@ -122,11 +133,11 @@ and help text in its own file under `src/commands/`, so help can't drift from th
 | Command | Code | Explained in |
 | --- | --- | --- |
 | `repown status` (bare `repown` when stdin or stderr is not a terminal, and inside a clone when stdout is redirected) | `src/commands/status.ts`, `src/commands/start.ts`, `src/ui/dispatch.ts`, `src/core/inspect.ts`, `src/core/push-state.ts`, `src/core/blockers.ts` | [card 5](docs/HOW-IT-WORKS.md#5-check-where-you-are) |
-| Start screen (bare `repown` in a terminal, outside a clone or in a bare repository) | `src/commands/start.ts`, `src/wizard/home-context.ts`, `src/wizard/home-flow.ts`, `src/wizard/home-text.ts`, `src/wizard/home-run.ts`, `src/wizard/clack.ts` (its frame and accents), `src/program.ts` | [card 14](docs/HOW-IT-WORKS.md#14-outside-a-clone) |
+| Start screen (bare `repown` in a terminal, outside a clone or in a bare repository) | `src/commands/start.ts`, `src/wizard/home-context.ts`, `src/wizard/home-flow.ts`, `src/wizard/home-text.ts`, `src/wizard/home-run.ts`, `src/wizard/setup-flow.ts` and `src/wizard/setup-context.ts` (Record an account asks setup's own steps), `src/wizard/engine.ts`, `src/wizard/clack.ts` (its frame and accents), `src/program.ts` | [card 14](docs/HOW-IT-WORKS.md#14-outside-a-clone) |
 | `repown doctor` | `src/commands/doctor.ts`, `src/core/inspect.ts`, `src/core/credential/gcm.ts`, `src/core/credential/gh.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
 | `repown fix` | `src/commands/fix.ts`, `src/core/credential/repair.ts` | [card 1](docs/HOW-IT-WORKS.md#1-set-up-the-machine) |
 | `repown reauthor` | `src/commands/reauthor.ts`, `src/core/reauthor.ts`, `src/core/push-destination.ts` | [card 8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) |
-| `repown accounts list`, `repown accounts add`, `repown accounts remove` | `src/commands/accounts.ts`, `src/core/registry.ts` | [card 2](docs/HOW-IT-WORKS.md#2-remember-an-account), [the registry](docs/CONFIGURATION.md#the-account-registry) |
+| `repown accounts list`, `repown accounts add`, `repown accounts remove` | `src/commands/accounts.ts`, `src/core/registry.ts`, `src/core/hosts/index.ts` and `src/core/hosts/github.ts` (the profile lookup), `src/core/credential/gh.ts` | [card 2](docs/HOW-IT-WORKS.md#2-remember-an-account), [the registry](docs/CONFIGURATION.md#the-account-registry) |
 | `repown use` | `src/commands/use.ts`, `src/core/identity.ts`, `src/core/registry.ts`, `src/core/credential/gh.ts`, `src/core/unpushed.ts`, `src/core/push-destination.ts` | [card 3](docs/HOW-IT-WORKS.md#3-pin-a-clone), [per-clone keys](docs/CONFIGURATION.md#per-clone-keys) |
 | `repown off` | `src/commands/off.ts`, `src/core/identity.ts` | [card 12](docs/HOW-IT-WORKS.md#12-uninstall-or-repown-missing) |
 | `repown guard on`, `repown guard off`, `repown guard status` | `src/commands/guard.ts`, `src/core/guard/hook.ts` | [card 7](docs/HOW-IT-WORKS.md#7-push-what-the-guard-checks), [card 10](docs/HOW-IT-WORKS.md#10-other-hook-tools) |
@@ -139,7 +150,7 @@ Shared by all of them:
   (how a command declares its options), `src/ui/args.ts`, `src/ui/help.ts`,
   `src/ui/suggest.ts` (did-you-mean).
 - **Output, colour and prompts:** `src/ui/format.ts`, `src/ui/prompt.ts`.
-- **Reading a clone and the machine:** `src/core/inspect.ts`, `src/core/git.ts` (every git
+- **Reading a clone and the machine:** `src/core/inspect.ts`, `src/core/config-snapshot.ts` (config read once per scope by read-only commands, ADR-029), `src/core/git.ts` (every git
   call), `src/core/version.ts` (whether git or gh is new enough), `src/core/url.ts` (remote URLs and owners), `src/core/result.ts` (answers that can fail).
 - **Hosts** (what each one can pin): `src/core/hosts/`. Adding one is one file there plus
   one line in `providers()` (`src/core/hosts/index.ts`), with `generic` last, plus its

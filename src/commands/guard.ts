@@ -7,6 +7,7 @@
 import { installGuard, uninstallGuard, guardState, fromNpxCache } from '../core/guard/hook.ts';
 import { check, type Refusal } from '../core/guard/check.ts';
 import { flagString, gitFor, type Args } from '../ui/args.ts';
+import { snapshotOf } from '../core/config-snapshot.ts';
 import type { Command, CommandGroup } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
@@ -46,7 +47,8 @@ async function disable(args: Args): Promise<number> {
 
 async function runCheck(args: Args): Promise<number> {
   const refusals = await check({
-    git: gitFor(args),
+    // Read-only, and on every push: config reads come from one list per scope (ADR-029).
+    git: snapshotOf(gitFor(args)),
     remote: flagString(args, 'remote') ?? 'origin',
     url: flagString(args, 'url') ?? '',
     stdin: await readStdin(),

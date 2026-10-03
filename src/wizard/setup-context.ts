@@ -10,12 +10,13 @@ import { pinHolds } from '../core/identity.ts';
 import { loadRegistry, type Account, type Registry } from '../core/registry.ts';
 import { planRepair, type RemovalOutcome } from '../core/credential/repair.ts';
 import { isGh, type GhState } from '../core/credential/gh.ts';
-import { providers, type Profile } from '../core/hosts/index.ts';
+import { lookUpProfile, providers, type AccountKind } from '../core/hosts/index.ts';
 import { ok, err, type Result } from '../core/result.ts';
 import { previewLines } from '../commands/fix.ts';
 import { readUnpushed, type UnpushedFact } from '../core/unpushed.ts';
 import { readPushFacts } from '../core/push-state.ts';
-import { SOURCE_GCM, SOURCE_GH, SOURCE_OWNS, type DetectedAccount, type SetupContext, type UpstreamRead } from './setup-flow.ts';
+import { SOURCE_GCM, SOURCE_GH, SOURCE_OWNS, signedInLogins, type DetectedAccount, type SetupContext, type Suggestion, type UpstreamRead } from './setup-flow.ts';
+import { snapshotOf } from '../core/config-snapshot.ts';
 
 export interface DetectionInput {
   /** False for any origin that is not GitHub: owner, gh and GCM are GitHub's only. */
@@ -105,7 +106,7 @@ export interface ReadOptions {
   /** False when setup will not prompt: the kind is unused, so this path never calls gh api. */
   readonly classifyOwner?: boolean;
   /** When set, classifies the owner instead of the provider. Tests pass a spy. */
-  readonly accountKind?: (login: string) => Promise<'user' | 'organization' | null>;
+  readonly accountKind?: (login: string) => Promise<AccountKind | null>;
   /** Tests pass the auth snapshot. Production reads it. */
   readonly auth?: AuthState;
 }
@@ -113,9 +114,11 @@ export interface ReadOptions {
 export async function readContext(git: Git, cwd: string | null, options: ReadOptions = {}): Promise<Result<SetupContext>> {
   const registry = await readRegistry();
   if (!registry.ok) return registry;
-  const repo = await inspectRepo(git);
+  // Read-only: one list per scope answers every config read of this context (ADR-029).
+  const view = snapshotOf(git);
+  const repo = await inspectRepo(view);
   const recorded = registry.value.accounts;
-  const facts = await readFacts(git, repo, recorded, options);
+  const facts = await readFacts(view, repo, recorded, options);
   return ok(assemble(cwd, recorded, repo, facts));
 }
 
@@ -232,6 +235,7 @@ function assemble(cwd: string | null, recorded: Readonly<Record<string, Account>
     machineIdentity: { name: facts.name, email: facts.email },
     upstream: facts.upstream, stored: facts.stored,
     suggest: suggester(),
+    signedIn: async () => signedInLogins(facts.gh, facts.stored),
   };
 }
 
@@ -290,7 +294,7 @@ function signedIn(auth: AuthState, owner: string): boolean {
   return auth.gh.value.accounts.some((account) => account.login.toLowerCase() === owner.toLowerCase());
 }
 
-function asUser(kind: 'user' | 'organization' | null): boolean | null {
+function asUser(kind: AccountKind | null): boolean | null {
   if (kind === 'user') return true;
   if (kind === 'organization') return false;
   return null;
@@ -327,13 +331,13 @@ async function gitUses(git: Git, values: { name: string; email: string; account:
 }
 
 /** Profile lookups are network calls: one per account and host, however often a step is re-asked. */
-function suggester(): (account: string, host: string) => Promise<Profile> {
-  const cache = new Map<string, Promise<Profile>>();
+export function suggester(): (account: string, host: string) => Promise<Suggestion> {
+  const cache = new Map<string, Promise<Suggestion>>();
   return (account, host) => {
     const key = host + '\n' + account;
     if (!cache.has(key)) {
       const provider = providers().find((candidate) => candidate.id === host);
-      cache.set(key, (provider?.resolveProfile?.(account) ?? Promise.resolve(null)).then((found) => found ?? {}));
+      cache.set(key, lookUpProfile(provider, account).then((found) => ({ ...found.profile, problem: found.problem })));
     }
     return cache.get(key)!;
   };

@@ -8,6 +8,8 @@ export const WHICH_CLONE = 'Which clone?';
 export const SETUP_CLONE = 'Set up a clone found here';
 export const STOP_GH = 'Stop gh serving credentials';
 export const RECORD_ACCOUNT = 'Record an account';
+export const REMOVE_ACCOUNT = 'Remove an account';
+export const WHICH_ACCOUNT = 'Which account?';
 export const CHECK_MACHINE = 'Check this machine';
 export const SHOW_HELP = 'Show help';
 export const QUIT = 'Quit';
@@ -18,15 +20,27 @@ export const NONE_RECORDED = 'none recorded';
 export const HELPER_LINE = 'gh serves git\'s credentials: run repown fix';
 export const HINT_FIX = 'repown fix';
 export const HINT_ACCOUNT = 'repown accounts add';
+export const HINT_REMOVE = 'repown accounts remove';
 export const HINT_DOCTOR = 'repown doctor';
 export const NOT_SET_UP = 'not set up';
 export const SET_UP = 'set up';
-export const LOGIN_MESSAGE = 'The account\'s user name (login)';
-export const LOGIN_HINT = 'the name you sign in with, e.g. octocat; not your email address';
 export const CANCELLED = 'Cancelled: nothing was changed.';
 
 export function homeTitle(cwd: string): string {
   return 'repown · not a clone: ' + displayPath(cwd);
+}
+
+/** What removing leaves as it was: said before the confirm, so nobody expects their clones to change. */
+export function removeNote(login: string): string {
+  return 'clones pinned to ' + login + ' keep their settings and the push guard; repown use ' + login + ' needs it recorded again';
+}
+
+export function removeQuestion(login: string): string {
+  return 'Remove ' + login + ' from this machine?';
+}
+
+export function removeLabel(login: string): string {
+  return 'Remove ' + login;
 }
 
 export function recordedLine(names: readonly string[]): string {

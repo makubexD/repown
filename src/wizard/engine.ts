@@ -53,8 +53,8 @@ export interface Step<C> {
   choices?(answers: Answers, context: C): Choice[];
   /** The default; may be looked up (a profile suggestion), so it may be a promise. */
   initial?(answers: Answers, context: C): Answer | undefined | Promise<Answer | undefined>;
-  /** A line of context shown with the question, worked out from earlier answers. */
-  detail?(answers: Answers, context: C): string | undefined;
+  /** A line of context shown with the question, worked out from earlier answers; may be looked up. */
+  detail?(answers: Answers, context: C): string | undefined | Promise<string | undefined>;
   /** The same rule the command applies; a message when the value is refused. */
   validate?(value: Answer): string | null;
   /** Asked only when this holds; absent means always. A false here drops the answer. */
@@ -123,6 +123,9 @@ export interface Flow<C> {
   resume?(choice: Resume, context: C): { readonly answers: Answers; readonly start: number };
 }
 
+/** What asking needs of a flow: its steps, and how unasked answers are filled. No review. */
+export type Questions<C> = Pick<Flow<C>, 'steps' | 'fill'>;
+
 export interface Prompter {
   ask(step: Drawn, asked: Asked): Promise<Reply>;
   review(review: Review): Promise<ReviewChoice>;
@@ -151,7 +154,7 @@ export type Outcome =
   | { readonly status: 'done' }
   | { readonly status: 'cancelled' };
 
-interface Pass {
+export interface Pass {
   readonly answers: Answers;
   readonly start: number;
   readonly given: ReadonlySet<string>;
@@ -168,7 +171,7 @@ type Walk = { readonly status: 'answered'; readonly answers: Answers; readonly a
   | { readonly status: 'opening' };
 
 /** Asks every reachable step from `pass.start` on, with a history for going back. */
-export async function runFlow<C>(flow: Flow<C>, context: C, pass: Pass, prompter: Prompter): Promise<Walk> {
+export async function runFlow<C>(flow: Questions<C>, context: C, pass: Pass, prompter: Prompter): Promise<Walk> {
   const answers = { ...pass.answers };
   const asked = [...pass.history];
   let index = pass.start;
@@ -208,7 +211,7 @@ function applicable<C>(step: Step<C>, answers: Answers, context: C, given: Reado
   return !given.has(step.id) && (step.when?.(answers, context) ?? true);
 }
 
-function filled<C>(flow: Flow<C>, answers: Answers, context: C, given: ReadonlySet<string>): Answers {
+function filled<C>(flow: Questions<C>, answers: Answers, context: C, given: ReadonlySet<string>): Answers {
   return prune(flow, flow.fill?.(answers, context) ?? answers, context, given);
 }
 
@@ -216,7 +219,7 @@ async function ask<C>(step: Step<C>, at: { answers: Answers; canGoBack: boolean 
   const { answers, canGoBack } = at;
   const initial = answers[step.id] ?? await step.initial?.(answers, context);
   const choices = step.choices?.(answers, context) ?? [];
-  const detail = step.detail?.(answers, context);
+  const detail = await step.detail?.(answers, context);
   return prompter.ask(drawn(step, answers, context), { initial, choices, detail, canGoBack });
 }
 
@@ -233,7 +236,7 @@ function wording<C>(text: Wording<C>, answers: Answers, context: C): string {
 }
 
 /** Drops answers whose step is no longer reachable, so a stale branch never reaches the plan. */
-export function prune<C>(flow: Flow<C>, answers: Answers, context: C, given: ReadonlySet<string>): Answers {
+export function prune<C>(flow: Questions<C>, answers: Answers, context: C, given: ReadonlySet<string>): Answers {
   const kept: Answers = {};
   for (const step of flow.steps) {
     const value = answers[step.id];

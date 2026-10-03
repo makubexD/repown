@@ -26,8 +26,9 @@
 # against 893 s with it (run 36776320265). The tweak stays. Linux and macOS
 # stay one unsharded `npm test` each: ubuntu finishes in about 1.5 min, and
 # what macOS adds is a filesystem, which one Node 24 job already exercises.
-# Every test still runs on every OS. A shard cannot split a file, and shard 3
-# is bound by test/wizard-setup.test.ts, the largest one.
+# Every test still runs on every OS. A shard cannot split a file, so the files
+# that set the wall time (wizard-setup, status, cli, reauthor) are split by suite
+# into files of about 150 s or less, which balances shards and local runs alike.
 #
 # WHY ONE UBUNTU ROW FORCES COLOUR. The extra ubuntu Node 24 job sets
 # FORCE_COLOR and CLICOLOR_FORCE to 1, so a test that leaks either fails CI.
@@ -114,6 +115,12 @@ jobs:
           git --version
 
       - run: npm ci
+
+      # test/paste.test.ts runs printed commands through every shell it finds; Linux is
+      # where zsh and fish are measured (macOS has zsh, Windows has cmd and PowerShell).
+      - name: Install zsh and fish for the paste test
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh fish
 
       - name: Typecheck and build
         run: npm run build

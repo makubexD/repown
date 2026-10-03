@@ -5,12 +5,14 @@
 import { readdir } from 'node:fs/promises';
 import { join, relative, resolve, sep } from 'node:path';
 import { Git } from '../core/git.ts';
-import { inspectRepo, type RepoState } from '../core/inspect.ts';
+import { snapshotOf } from '../core/config-snapshot.ts';
+import { inspectAuth, inspectRepo, type RepoState } from '../core/inspect.ts';
 import { planRepair } from '../core/credential/repair.ts';
 import { loadRegistry, type Registry } from '../core/registry.ts';
 import type { Result } from '../core/result.ts';
 import { identityProblems } from '../commands/status.ts';
 import { CONCURRENCY, discover, mapLimited } from '../commands/scan.ts';
+import { signedInLogins } from './setup-flow.ts';
 
 /** How many levels below this folder the start screen looks. `repown scan` looks further. */
 export const HOME_DEPTH = 2;
@@ -25,6 +27,13 @@ export interface HomeState {
   readonly registry: Result<Registry>;
   readonly ghIsHelper: boolean;
   readonly clones: readonly HomeClone[];
+  /** Global user.name and user.email: shown beside a new account's, never filled in. */
+  readonly identity: Identity;
+}
+
+export interface Identity {
+  readonly name: string | null;
+  readonly email: string | null;
 }
 
 /** Tests pass fakes. Production reads the machine. */
@@ -33,13 +42,21 @@ export interface HomeDeps {
   readonly ghIsHelper?: (cwd: string) => Promise<boolean>;
   readonly findClones?: (cwd: string) => Promise<readonly string[]>;
   readonly inspect?: (git: Git) => Promise<RepoState>;
+  readonly identity?: (cwd: string) => Promise<Identity>;
 }
 
 export async function readHome(cwd: string, deps: HomeDeps = {}): Promise<HomeState> {
-  const [registry, ghIsHelper, clones] = await Promise.all([
-    registryOf(deps), helperOf(cwd, deps), clonesOf(cwd, deps),
+  const [registry, ghIsHelper, clones, identity] = await Promise.all([
+    registryOf(deps), helperOf(cwd, deps), clonesOf(cwd, deps), (deps.identity ?? identityOf)(cwd),
   ]);
-  return { cwd: resolve(cwd), registry, ghIsHelper, clones };
+  return { cwd: resolve(cwd), registry, ghIsHelper, clones, identity };
+}
+
+/** Outside a clone, git's own lookup is the global (or system) value. */
+async function identityOf(cwd: string): Promise<Identity> {
+  const git = new Git(cwd);
+  const [name, email] = await Promise.all([git.getConfig('user.name'), git.getConfig('user.email')]);
+  return { name, email };
 }
 
 function registryOf(deps: HomeDeps): Promise<Result<Registry>> {
@@ -115,7 +132,7 @@ async function childNames(cwd: string): Promise<string[]> {
 
 async function describeClone(dir: string, deps: HomeDeps): Promise<HomeClone | null> {
   const inspect = deps.inspect ?? inspectRepo;
-  const repo = await inspect(new Git(dir));
+  const repo = await inspect(snapshotOf(new Git(dir)));
   if (!repo.isRepo) return null;
   return { path: resolve(dir), setUp: identityProblems(repo).length === 0 };
 }
@@ -128,4 +145,10 @@ function isClone(clone: HomeClone | null): clone is HomeClone {
 function skipHomeEntry(name: string): boolean {
   if (name.startsWith('.') || name === 'node_modules') return true;
   return process.platform === 'win32' && name.toLowerCase() === 'appdata';
+}
+
+/** The github.com logins gh and Git Credential Manager are signed in as; read only when Record an account asks. */
+export async function readSignedIn(cwd: string): Promise<string[] | null> {
+  const auth = await inspectAuth(new Git(cwd));
+  return signedInLogins(auth.ghPresent ? auth.gh : null, auth.stored);
 }

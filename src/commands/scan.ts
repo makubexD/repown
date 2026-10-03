@@ -20,6 +20,7 @@ import { readdir } from 'node:fs/promises';
 import { join, relative, resolve, sep } from 'node:path';
 import { existsSync, statSync } from 'node:fs';
 import { Git } from '../core/git.ts';
+import { snapshotOf } from '../core/config-snapshot.ts';
 import { inspectRepo, type RepoState } from '../core/inspect.ts';
 import { ok, err, type Result } from '../core/result.ts';
 import { flagBool, flagString, wantsJson, FORMAT_OPTION, type Args } from '../ui/args.ts';
@@ -151,7 +152,7 @@ function childAt(root: string, path: string): Found {
  * in different folders are told apart instead of printed as one name twice.
  */
 async function describe(found: Found, showEmails: boolean): Promise<Row> {
-  const git = new Git(found.path);
+  const git = snapshotOf(new Git(found.path));
   const repo = await inspectRepo(git);
   const configured = await git.getConfig('repown.mirrorBranch', 'local');
   const mirror = configured && await git.hasCommit('refs/heads/' + configured) ? configured : null;

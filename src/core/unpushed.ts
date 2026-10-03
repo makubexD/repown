@@ -15,7 +15,7 @@
 import type { CommitIdentity, Git } from './git.ts';
 import { ok, type Result } from './result.ts';
 import { unknownDestination, type UnknownDestination } from './push-destination.ts';
-import { shellWord } from './guard/check.ts';
+import { copyableCommand, shellWord } from './guard/check.ts';
 
 export interface UnpushedCommit {
   readonly authorEmail: string;
@@ -114,19 +114,21 @@ function unknownLine(unknown: UnknownDestination, account: string): string {
 
 function trackingLine(name: string, account: string): string {
   const lead = show(name) + ' has no remote-tracking refs, so some of these may already be on it' + GUARD;
-  if (!copyable(name)) return lead;
-  return lead + ': git fetch ' + shellWord(show(name)) + ', ' + recount(account);
+  const fetch = copyable(name) ? copyableCommand(['git', 'fetch', show(name)]) : null;
+  return fetch ? lead + ': ' + fetch + ', ' + recount(account) : lead;
 }
 
 function urlLine(key: string, remote: string | null, account: string): string {
   const lead = 'this branch pushes to a URL, not a remote' + THERE;
   if (!remote || !copyable(remote)) return lead;
-  const word = shellWord(show(remote));
-  return lead + ': git config --local ' + shellWord(show(key)) + ' ' + word + ', git fetch ' + word + ', ' + recount(account);
+  const repoint = copyableCommand(['git', 'config', '--local', show(key), show(remote)]);
+  const fetch = copyableCommand(['git', 'fetch', show(remote)]);
+  return repoint && fetch ? lead + ': ' + repoint + ', ' + fetch + ', ' + recount(account) : lead;
 }
 
 function recount(account: string): string {
-  return 'then repown use ' + shellWord(show(account)) + ' to count again';
+  const word = shellWord(show(account));
+  return word ? 'then repown use ' + word + ' to count again' : 'then run repown use again to count again';
 }
 
 /** Quoting keeps a shell from splitting a word, not git from reading `-x` as an option. */

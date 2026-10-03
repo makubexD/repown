@@ -43,6 +43,7 @@ function baseline(): Omit<SetupContext, 'recorded' | 'addresses' | 'suggest'> {
     redirected: false,
     fixLines: null,
     machineIdentity: { name: null, email: null },
+    signedIn: async () => null,
     // No branch: these screens are not the unpushed-commit note. A test that
     // wants the note passes the commits readUnpushed would have read.
     unpushed: { branch: null, commits: ok([]), unknown: null },

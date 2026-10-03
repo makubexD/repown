@@ -3,7 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ghProfileArgs, ghLogin, ghLoginVersion, ghStateFrom } from '../src/core/credential/gh.ts';
+import { ghProfileArgs, ghLogin, ghLoginVersion, ghStateFrom, profileLookupFrom } from '../src/core/credential/gh.ts';
+import { loginKindProblem } from '../src/core/hosts/index.ts';
 import type { ExecResult } from '../src/core/exec.ts';
 import { err } from '../src/core/result.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
@@ -128,3 +129,23 @@ function restore(saved: Record<string, string | undefined>): void {
     else process.env[name] = value;
   }
 }
+
+test('a profile lookup github.com answers with 404 is missing; any other failure is unknown, never missing', () => {
+  const notFound = { code: 1, stdout: '{"message":"Not Found","status":"404"}', stderr: 'gh: Not Found (HTTP 404)\n' };
+  assert.deepEqual(profileLookupFrom(notFound), { value: null, missing: true });
+  assert.deepEqual(profileLookupFrom(status('User\n')), { value: 'User', missing: false });
+  assert.deepEqual(profileLookupFrom(status('null\n')), { value: null, missing: false });
+  const offline = { code: 1, stdout: '', stderr: 'error connecting to api.github.com\n' };
+  assert.deepEqual(profileLookupFrom(offline), { value: null, missing: false });
+  const forbidden = { code: 1, stdout: '', stderr: 'gh: Forbidden (HTTP 403)\n' };
+  assert.deepEqual(profileLookupFrom(forbidden), { value: null, missing: false });
+  assert.deepEqual(profileLookupFrom(status('', 0, Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT' }))), { value: null, missing: false });
+});
+
+test('a login github.com has no account for, or an organisation, gets a sentence; a user or an unknown gets none', () => {
+  assert.equal(loginKindProblem('missing', 'octocat'), 'github.com has no account named octocat: check the spelling');
+  assert.equal(loginKindProblem('organization', 'octo-org'), 'octo-org is an organisation on github.com, not an account you sign in as');
+  assert.equal(loginKindProblem('user', 'octocat'), null);
+  assert.equal(loginKindProblem(null, 'octocat'), null);
+  assert.equal(loginKindProblem(undefined, 'octocat'), null);
+});

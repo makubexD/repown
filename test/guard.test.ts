@@ -241,7 +241,15 @@ describe('guard check', () => {
   test('D1 the suggested allowOwner command quotes an owner the shell would interpret', async () => {
     const sha = commitAs(OURS, 'ours');
     const refusals = await push(sha, 'refs/heads/feat/x', 'https://github.com/x%3B%20curl%20evil/r.git');
-    assert.ok(refusals[0]!.detail.some((row) => row.endsWith("repown.allowOwner 'x; curl evil'")));
+    assert.ok(refusals[0]!.detail.some((row) => row.endsWith('repown.allowOwner "x; curl evil"')));
+  });
+
+  test('D1b an owner no quoting keeps literal in every shell gets no command to paste', async () => {
+    const sha = commitAs(OURS, 'ours');
+    const refusals = await push(sha, 'refs/heads/feat/x', 'https://github.com/x%24%27%3BWrite-Output%20PWNED%3B%23/r.git');
+    const detail = refusals[0]!.detail.join('\n');
+    assert.doesNotMatch(detail, /git config --local --add repown\.allowOwner/);
+    assert.match(detail, /add that owner to repown\.allowOwner with git config yourself/);
   });
 
   test('D  a push to someone else’s repository is REFUSED', async () => {

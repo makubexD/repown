@@ -97,7 +97,7 @@ describe('marked and accent: decoration only where the stream has colour', () =>
 
   test('a pipe gets the text exactly as it was', () => {
     assert.equal(marked('ok', PIPE, 'done: set up for octocat'), 'done: set up for octocat');
-    assert.equal(accent(PIPE, '> repown use octocat'), '> repown use octocat');
+    assert.equal(accent(PIPE, '$ repown use octocat'), '$ repown use octocat');
   });
 
   test('NO_COLOR keeps a terminal plain too', () => {

@@ -147,7 +147,7 @@ function checkDestination({ url, owner, allowed }: Destination, onNote?: (note: 
       'destination: ' + printable(redacted(url!.raw)),
       'allowed here: ' + allowed.join(', '),
       'if that owner is legitimate -- an organisation you belong to, say:',
-      '  git config --local --add ' + ALLOW_OWNER_KEY + ' ' + shellWord(printable(owner!)),
+      '  ' + (allowOwnerCommand(owner!) ?? ALLOW_OWNER_BY_HAND),
     ],
   }];
 }
@@ -285,9 +285,12 @@ function matches(actual: string, expected: string): boolean {
   return actual.toLowerCase() === expected.toLowerCase();
 }
 
-/** Text a commit's author chose: control characters could rewrite the terminal around the refusal. */
+/**
+ * Text a commit's author or a remote URL chose: control characters could rewrite the
+ * terminal around the refusal, and bidi or zero-width ones show one owner as another.
+ */
 function printable(text: string): string {
-  return text.replace(/[\x00-\x1f\x7f-\x9f]/g, '?');
+  return text.replace(/[\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '?');
 }
 
 /**
@@ -298,7 +301,39 @@ function redacted(raw: string): string {
   return raw.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/]*@/i, '$1***@');
 }
 
-/** An owner comes from the URL, so a suggested command must quote it for the shell. */
-export function shellWord(value: string): string {
-  return /^[\w.@-]+$/.test(value) ? value : "'" + value.replace(/'/g, "'\\''") + "'";
+/**
+ * A word of a command printed to copy, as sh, bash, dash, zsh, fish, PowerShell and cmd all
+ * read it (test/paste.test.ts runs each). Bare when no shell treats any of it specially: a
+ * leading `@` is a PowerShell splat, and PowerShell splits a dashed word at `.` or `:`.
+ * `--` is quoted, since PowerShell drops a bare one from the `$args` of repown.ps1.
+ * Otherwise double quotes, unless they would expand or end early somewhere: `$` and a
+ * backtick (POSIX, PowerShell), `%` and `!` (cmd), a curly double quote (PowerShell), a
+ * backslash that escapes (`\\`, or one before the closing quote), a control character, or
+ * nothing at all (Windows PowerShell drops `""`). Then it is null and the caller prints no
+ * command: single quotes are no quotes in cmd, and PowerShell would run the rest of a
+ * POSIX `'\''` as code.
+ */
+export function shellWord(value: string): string | null {
+  if (value === '--') return '"--"';
+  if (/^(?:-[\w-]*|[\w./][\w.@+/:-]*)$/.test(value)) return value;
+  if (value === '' || /["$`%!“”„\x00-\x1f\x7f-\x9f]|\\\\|\\$/.test(value)) return null;
+  return '"' + value + '"';
+}
+
+/** A whole command to copy, or null when one of its words can't be printed safely (shellWord). */
+export function copyableCommand(words: readonly string[]): string | null {
+  const quoted = words.map(shellWord);
+  return quoted.every((word) => word !== null) ? quoted.join(' ') : null;
+}
+
+/** Said instead of the allow-owner command when that command can't be printed safely. */
+export const ALLOW_OWNER_BY_HAND = 'add that owner to ' + ALLOW_OWNER_KEY + ' with git config yourself (it can\'t be printed safely to paste)';
+
+/**
+ * The command that lets this clone push to `owner`, or null: for an owner git would read
+ * as an option, or one that shows as something else (control or bidi characters).
+ */
+export function allowOwnerCommand(owner: string): string | null {
+  if (owner.startsWith('-') || printable(owner) !== owner) return null;
+  return copyableCommand(['git', 'config', '--local', '--add', ALLOW_OWNER_KEY, owner]);
 }

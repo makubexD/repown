@@ -10,10 +10,13 @@ import { ok } from '../src/core/result.ts';
 import { registryPath } from '../src/core/registry.ts';
 import { CANCEL, type Prompter } from '../src/wizard/engine.ts';
 import { readHome, type HomeState } from '../src/wizard/home-context.ts';
-import { commandFor, homeNote, listedClones, menuItems, summaryLines } from '../src/wizard/home-flow.ts';
+import { accountChoices, commandFor, homeNote, listedClones, menuItems, summaryLines } from '../src/wizard/home-flow.ts';
 import { runHome } from '../src/wizard/home-run.ts';
 import { formatCommand, printable } from '../src/wizard/setup-flow.ts';
 import { displayPath } from '../src/ui/format.ts';
+import { parseArgs } from '../src/ui/args.ts';
+import { specFor } from '../src/ui/command.ts';
+import accountsGroup from '../src/commands/accounts.ts';
 import { sandbox, type Sandbox } from './helpers.ts';
 
 describe('start screen', () => {
@@ -71,6 +74,7 @@ describe('start screen', () => {
     assert.deepEqual(menuItems(home).map((item) => item.label), [
       'Record an account', 'Check this machine', 'Show help', 'Quit',
     ]);
+    assert.deepEqual(accountChoices(home), []);
   });
 
   test('H9: dot-directories, node_modules, AppData on Windows, and depth 3 are skipped', async () => {
@@ -107,6 +111,27 @@ describe('start screen', () => {
     const labels = menuItems(home).map((item) => item.label);
     assert.ok(labels.includes('Set up a clone found here'));
     assert.ok(labels.includes('Record an account'));
+    assert.equal(labels.includes('Remove an account'), false, 'accounts remove would refuse to rewrite a file it cannot fully read');
+  });
+
+  test('Remove an account follows Record an account once one is recorded, and lists them with name and email', async () => {
+    writeRegistry(JSON.stringify({ accounts: {
+      octocat: { name: 'Octo Cat', email: 'octocat@example.invalid' },
+      'octo-work': { name: 'Octo Work', email: 'octo-work@example.invalid' },
+    } }));
+    const home = await readHome(root);
+    assert.deepEqual(menuItems(home).map((item) => item.label), [
+      'Record an account', 'Remove an account', 'Check this machine', 'Show help', 'Quit',
+    ]);
+    assert.equal(menuItems(home).find((item) => item.label === 'Remove an account')?.hint, 'repown accounts remove');
+    assert.deepEqual(accountChoices(home), [
+      { value: 'account:octo-work', label: 'octo-work', hint: 'Octo Work <octo-work@example.invalid>' },
+      { value: 'account:octocat', label: 'octocat', hint: 'Octo Cat <octocat@example.invalid>' },
+    ]);
+    writeRegistry(JSON.stringify({ accounts: { back: { name: 'Octo Back', email: 'back@example.invalid' } } }));
+    assert.notEqual(accountChoices(await readHome(root))[0]!.value, 'back', 'an account named back is never the Back choice');
+    const none = await readHome(join(root, '..'));
+    assert.ok(menuItems(none).some((item) => item.label === 'Remove an account'), 'the registry is the machine\'s, wherever this runs');
   });
 
   test('a registry with only unreadable entries does not say none recorded', async () => {
@@ -164,7 +189,7 @@ describe('start screen', () => {
       'octo\x1bcat': { name: 'Octo Cat', email: 'octocat@example.invalid' },
     };
     const home: HomeState = {
-      cwd: 'work', registry: ok({ accounts, unreadable: [] }), ghIsHelper: false, clones: [],
+      cwd: 'work', registry: ok({ accounts, unreadable: [] }), ghIsHelper: false, clones: [], identity: { name: null, email: null },
     };
     const line = shown(home, 'Accounts');
     const escaped = [printable('octo\ncat'), printable('octo\x1bcat')].join(', ');
@@ -184,7 +209,7 @@ describe('start screen', () => {
     const path = join(cwd, 'odd\tname');
     const home: HomeState = {
       cwd, registry: ok({ accounts: {}, unreadable: [] }), ghIsHelper: false,
-      clones: [{ path, setUp: false }],
+      clones: [{ path, setUp: false }], identity: { name: null, email: null },
     };
     const [choice] = listedClones(home).clones;
     assert.equal(choice!.value, path);
@@ -200,11 +225,26 @@ describe('start screen commands', () => {
     assert.deepEqual(setup, ['setup', '--cwd=' + path]);
     assert.match(formatCommand(setup), /repown setup --cwd /);
     assert.deepEqual(commandFor({ kind: 'fix' }), ['fix']);
-    assert.deepEqual(commandFor({ kind: 'account', login: 'octocat' }), ['accounts', 'add', '--', 'octocat']);
-    assert.match(formatCommand(commandFor({ kind: 'account', login: 'octocat' })), /^repown accounts add octocat$/);
-    assert.deepEqual(commandFor({ kind: 'account', login: '-h' }), ['accounts', 'add', '--', '-h']);
-    assert.match(formatCommand(commandFor({ kind: 'account', login: '-h' })), /repown accounts add -- -h/);
+    const profile = { name: 'Octo Cat', email: 'octocat@example.invalid', host: 'github' };
+    const account = commandFor({ kind: 'account', login: 'octocat', ...profile });
+    assert.deepEqual(account, ['accounts', 'add', '--name=Octo Cat', '--email=octocat@example.invalid', '--host=github', '--', 'octocat'],
+      'the same command setup runs for a new account, so accounts add asks nothing more');
+    assert.equal(formatCommand(account), 'repown accounts add octocat --name "Octo Cat" --email octocat@example.invalid');
+    const parsed = parseArgs(account.slice(2), specFor(accountsGroup.actions['add']!));
+    assert.ok(parsed.ok, 'accounts add accepts the argv the start screen builds');
+    assert.deepEqual(parsed.value.positional, ['octocat']);
+    const dash = commandFor({ kind: 'account', login: '-h', ...profile });
+    const dashed = parseArgs(dash.slice(2), specFor(accountsGroup.actions['add']!));
+    assert.ok(dashed.ok && dashed.value.positional[0] === '-h', 'a dashed login stays the account');
+    assert.deepEqual(dash.slice(-2), ['--', '-h']);
+    assert.match(formatCommand(dash), / "--" -h$/);
     assert.deepEqual(commandFor({ kind: 'doctor' }), ['doctor']);
+    const remove = commandFor({ kind: 'remove', login: 'octocat' });
+    assert.deepEqual(remove, ['accounts', 'remove', '--', 'octocat']);
+    assert.equal(formatCommand(remove), 'repown accounts remove octocat');
+    const removed = parseArgs(remove.slice(2), specFor(accountsGroup.actions['remove']!));
+    assert.ok(removed.ok && removed.value.positional[0] === 'octocat', 'accounts remove accepts the argv the start screen builds');
+    assert.equal(formatCommand(commandFor({ kind: 'remove', login: '-h' })), 'repown accounts remove "--" -h');
   });
 });
 
@@ -224,7 +264,7 @@ function cancelPrompter(intro: (title: string) => void): Prompter {
 }
 
 function emptyRead(cwd: string): Promise<HomeState> {
-  return Promise.resolve({ cwd, registry: ok({ accounts: {}, unreadable: [] }), ghIsHelper: false, clones: [] });
+  return Promise.resolve({ cwd, registry: ok({ accounts: {}, unreadable: [] }), ghIsHelper: false, clones: [], identity: { name: null, email: null } });
 }
 
 function writeRegistry(raw: string): string {

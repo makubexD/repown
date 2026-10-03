@@ -17,7 +17,7 @@ import { KEY, typed, play, linesWith, setupContext } from './setup-fixtures.ts';
 import { pathWithoutGh, sandbox, type Sandbox } from './helpers.ts';
 import { wizard, type Prompter } from '../src/wizard/engine.ts';
 import { plainPrompter } from '../src/wizard/plain.ts';
-import { setupFlow, type SetupContext } from '../src/wizard/setup-flow.ts';
+import { setupFlow, type SetupContext, type Suggestion } from '../src/wizard/setup-flow.ts';
 import { textWidth, wrap } from '../src/wizard/review-text.ts';
 
 const { enter, up, down, esc } = KEY;
@@ -341,8 +341,8 @@ describe('repown setup, played with key presses', () => {
     const { outcome, screen } = await play(ctx, [[down, enter], [enter], [enter], [enter], [esc]]);
     assert.equal(outcome.status, 'cancelled', screen);
     const flat = screen.replace(/│/g, ' ').replace(/\s+/g, ' ');
-    assert.match(flat, /not this machine's default name \(Octo Work\), unless this account uses it/);
-    assert.match(flat, /not this machine's default address \(octo-work@example\.invalid\), unless this account uses it/);
+    assert.match(flat, /your default git name here is Octo Work: use it only if this account does too/);
+    assert.match(flat, /your default git address here is octo-work@example\.invalid: use it only if this account does too/);
     assert.doesNotMatch(flat, /type it|Octo Work </);
     assert.match(screen, /Octo Cat█/);
     assert.match(screen, /octocat@example\.invalid█/);
@@ -363,14 +363,14 @@ describe('repown setup, played with key presses', () => {
     const plain = screen.replace(/\n│\s*/g, ' ');
     assert.match(plain, /repown\.allowOwner \+= octo-org/);
     assert.match(plain, /Let this clone push to octo-org's repositories/);
-    assert.match(plain, /> git config --local --add repown\.allowOwner octo-org/);
+    assert.match(plain, /\$ git config --local --add repown\.allowOwner octo-org/);
     assert.match(plain, /user\.name = Octo Cat/);
     assert.match(plain, /user\.email = octocat@example\.invalid/);
     assert.match(plain, /user\.useConfigOnly = true/);
     assert.match(plain, /repown\.account = octocat/);
     assert.match(plain, /credential\.https:\/\/github\.com\.username = octocat/);
     assert.match(plain, /Pin this clone to octocat: its commit name, email and push sign-in/);
-    assert.match(plain, /> repown use octocat/);
+    assert.match(plain, /\$ repown use octocat/);
     assert.match(plain, /pre-push hook: \/work\/project\/\.git\/hooks\/pre-push runs repown guard check/);
     assert.match(screen, /Run this step\?/);
     assert.match(screen, /Yes/);
@@ -454,13 +454,17 @@ describe('D7 on the plain prompter, at the default width', () => {
     });
     const screen = await playPlain(ctx, '\n\n\n\n\n');
     const flat = screen.replace(/\s+/g, ' ');
-    assert.match(flat, /not this machine's default name \(Octo Work\), unless this account uses it/);
-    assert.match(flat, /not this machine's default address \(octo-work@example\.invalid\)/);
+    assert.match(flat, /your default git name here is Octo Work: use it only if this account does too/);
+    assert.match(flat, /your default git address here is octo-work@example\.invalid: use it only if this account does too/);
     for (const line of screen.split('\n')) {
       assert.doesNotMatch(line, /(?:Octo Work|octo-work@example\.invalid)\)?\s+type it\s*$/);
     }
   });
 });
+
+const SUGGEST = async (): Promise<Suggestion> => ({ name: 'Octo Cat', email: 'octocat@example.invalid' });
+/** No sign-ins to compare with, so the machine's real gh or Git Credential Manager accounts never leak in. */
+const NOBODY = async (): Promise<null> => null;
 
 describe('start screen, played with key presses', () => {
   test('F1: every Accounts and Clones line starts with the gutter', async () => {
@@ -491,9 +495,9 @@ describe('start screen, played with key presses', () => {
       cloneAt(root, 'need');
       const run = await play((prompter) => runHome({ prompter, cwd: root }), [[enter], [enter], [esc]], { patience: 30_000 });
       assert.equal(run.result, 130, run.screen + run.stderr);
-      assert.match(run.screen, /└ {2}> repown setup --cwd /);
+      assert.match(run.screen, /└ {2}\$ repown setup --cwd /);
       assert.match(run.screen, /need/);
-      const commandAt = run.screen.search(/└ {2}> repown setup --cwd /);
+      const commandAt = run.screen.search(/└ {2}\$ repown setup --cwd /);
       const setupAt = run.screen.search(/┌ {2}repown setup\b/);
       assert.ok(commandAt >= 0 && setupAt > commandAt, run.screen);
       assert.match(run.screen, /How should setup work\?/);
@@ -517,7 +521,7 @@ describe('start screen, played with key presses', () => {
     await withProjects(async (root) => {
       const run = await play((prompter) => runHome({ prompter, cwd: root }), [[down, down, enter]], { patience: 20_000 });
       assert.equal(run.result, 0, run.screen + run.stdout);
-      assert.match(run.screen, /└ {2}> repown --help/);
+      assert.match(run.screen, /└ {2}\$ repown --help/);
       assert.match(run.stdout, /repown <command>/);
       assert.match(run.stdout, /setup\s+guided setup/);
     });
@@ -535,20 +539,133 @@ describe('start screen, played with key presses', () => {
   });
 
   test('a login starting with a dash reaches accounts add as the account', async () => {
-    const restore = forceNotTTY();
-    try {
-      await withProjects(async (root) => {
-        const run = await play((prompter) => runHome({ prompter, cwd: root }), [
-          [enter], [...typed('-h'), enter],
-        ], { patience: 20_000 });
-        assert.match(run.screen, /> repown accounts add -- -h/, run.screen + run.stderr);
-        assert.equal(run.result, 1, run.stderr);
-        assert.match(run.stderr, /interactive terminal to ask for the Commit name/);
-        assert.doesNotMatch(run.stderr, /unknown option/);
-      });
-    } finally {
-      restore();
-    }
+    await withProjects(async (root) => {
+      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST, signedIn: NOBODY }), [
+        [enter], [...typed('-h'), enter], [enter], [enter], [enter], [up, enter],
+      ], { patience: 20_000 });
+      assert.match(run.screen, /\$ repown accounts add --name "Octo Cat" --email octocat@example\.invalid "--" -h/, run.screen + run.stderr);
+      assert.equal(run.result, 0, run.stderr);
+      assert.match(readFileSync(registryPath(), 'utf8'), /"-h"/);
+    });
+  });
+
+  test('H15: Record an account asks login, host, name and email in the frame, then runs accounts add with them all', async () => {
+    await withProjects(async (root) => {
+      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST, signedIn: NOBODY }), [
+        [enter], [...typed('octocat'), enter], [enter], [enter], [enter], [up, enter],
+      ], { patience: 20_000 });
+      assert.equal(run.result, 0, run.screen + run.stderr);
+      const frames = run.screen.split('repown · not a clone:');
+      assert.equal(frames.length, 3, 'a second frame opens after the command: ' + run.screen);
+      assert.match(frames[2]!, /Accounts {3}1 recorded: octocat/, 'its summary is read again');
+      assert.match(frames[2]!, /What next\?[\s\S]*Quit/);
+      for (const question of ["The account's user name", 'Where is this account hosted?', 'Your name, as your commits show it', 'Your email, as your commits show it']) {
+        assert.ok(run.screen.includes(question), question + '\n' + run.screen);
+      }
+      assert.match(run.screen, /└ {2}\$ repown accounts add octocat --name "Octo Cat" --email octocat@example\.invalid/);
+      assert.doesNotMatch(run.stderr, /Commit name|Commit email/, 'no prompt is left for accounts add');
+      assert.match(run.stdout, /OK\s+accounts\s+octocat {2}Octo Cat <octocat@example\.invalid>/);
+      assert.match(readFileSync(registryPath(), 'utf8'), /"octocat"/);
+    });
+  });
+
+  test('H16: a login github.com has no account for is named on the name question; Back reaches the login again', async () => {
+    await withProjects(async (root) => {
+      const missing = async (): Promise<Suggestion> => ({ problem: 'github.com has no account named octocatt: check the spelling' });
+      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: missing, signedIn: NOBODY }), [
+        // The name starts as the login, so it is cleared before `<`.
+        [enter], [...typed('octocatt'), enter], [enter], [...Array<string>(8).fill(KEY.backspace), '<', enter], [up, enter], [esc],
+      ], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen);
+      const host = run.screen.search(/Where is this account hosted\?/);
+      const name = run.screen.search(/Your name, as your commits show it/);
+      assert.ok(host >= 0 && name > host, run.screen);
+      assert.doesNotMatch(run.screen.slice(host, name), /has no account named/, 'not a line above the name question');
+      assert.match(run.screen.slice(name), /^Your name, as your commits show it\n(?:│[^\n]*\n)*?│ {2}github\.com has no account named octocatt: check the spelling/,
+        'the sentence is in the name question\'s own block, under its hint');
+      const afterName = run.screen.slice(name);
+      assert.match(afterName, /The account's user name[^\n]*\n(?:│[^\n]*\n)*│ {2}octocatt/,
+        'Back from the name, then from the host, is the login question, still holding the login');
+      assert.equal(existsSync(registryPath()), false, 'nothing recorded');
+    });
+  });
+
+  test('H18: after Check this machine the menu comes back; Quit then exits 0, Esc 130', async () => {
+    await withProjects(async (root) => {
+      const quit = await play((prompter) => runHome({ prompter, cwd: root }), [[down, enter], [up, enter]], { patience: 30_000 });
+      assert.equal(quit.result, 0, quit.screen + quit.stderr);
+      assert.match(quit.screen, /└ {2}\$ repown doctor/);
+      const after = quit.screen.split('$ repown doctor').at(-1) ?? '';
+      assert.match(after, /repown · not a clone:[\s\S]*What next\?/, quit.screen);
+      assert.match(after, /└ {2}Quit/);
+      const cancelled = await play((prompter) => runHome({ prompter, cwd: root }), [[down, enter], [esc]], { patience: 30_000 });
+      assert.equal(cancelled.result, 130, cancelled.screen);
+    });
+  });
+
+  test('H20: a login this machine isn\'t signed in as is named on the name question', async () => {
+    await withProjects(async (root) => {
+      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST, signedIn: async () => ['octo-work'] }), [
+        [enter], [...typed('octocat'), enter], [enter], [esc],
+      ], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen);
+      const name = run.screen.search(/Your name, as your commits show it/);
+      assert.ok(name >= 0, run.screen);
+      assert.match(run.screen.slice(name).replace(/\n│ {2}/g, ' '),
+        /signed in as octo-work, not octocat: if octocat isn't your account, go back; otherwise the first push asks you to sign in as it/);
+      assert.equal(existsSync(registryPath()), false, 'nothing recorded');
+    });
+  });
+
+  test('H21: Remove an account asks which, then to confirm, runs accounts remove, and the menu comes back one fewer', async () => {
+    await withProjects(async (root) => {
+      const two = '{"accounts":{"octocat":{"name":"Octo Cat","email":"octocat@example.invalid"},' +
+        '"octo-work":{"name":"Octo Work","email":"octo-work@example.invalid"}}}\n';
+      mkdirSync(dirname(registryPath()), { recursive: true });
+      writeFileSync(registryPath(), two);
+      // Menu: Record, Remove, Check, Help, Quit. Accounts: octo-work, octocat, Back. Confirm: Back, Remove.
+      const run = await play((prompter) => runHome({ prompter, cwd: root }), [
+        [down, enter], [down, enter], [down, enter], [up, enter],
+      ], { patience: 20_000 });
+      assert.equal(run.result, 0, run.screen + run.stderr);
+      assert.match(run.screen, /Which account\?/);
+      assert.match(run.screen, /Octo Cat <octocat@example\.invalid>/);
+      assert.match(run.screen.replace(/\n│ {2}/g, ' '), /clones pinned to octocat keep their settings and the push guard; repown use octocat needs it recorded again/);
+      assert.match(run.screen, /└ {2}\$ repown accounts remove octocat/);
+      assert.match(run.stdout, /OK\s+accounts\s+removed octocat/);
+      const frames = run.screen.split('repown · not a clone:');
+      assert.equal(frames.length, 3, run.screen);
+      assert.match(frames[2]!, /Accounts {3}1 recorded: octo-work/);
+      assert.doesNotMatch(readFileSync(registryPath(), 'utf8'), /"octocat"/);
+    });
+  });
+
+  test('H21b: Back from the account list and from the confirm returns to the menu; Esc then exits 130 with nothing removed', async () => {
+    await withProjects(async (root) => {
+      const one = '{"accounts":{"octocat":{"name":"Octo Cat","email":"octocat@example.invalid"}}}\n';
+      mkdirSync(dirname(registryPath()), { recursive: true });
+      writeFileSync(registryPath(), one);
+      const run = await play((prompter) => runHome({ prompter, cwd: root }), [
+        [down, enter], [down, enter], [down, enter], [enter], [enter], [esc],
+      ], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen);
+      assert.match(run.screen, /Remove octocat from this machine\?\n│ {2}● ← Back/, 'the confirm starts on Back');
+      assert.equal((run.screen.match(/Which account\?/g) ?? []).length >= 2, true, run.screen);
+      assert.doesNotMatch(run.screen, /\$ repown accounts remove/);
+      assert.equal(readFileSync(registryPath(), 'utf8'), one);
+    });
+  });
+
+  test('H17: a login already recorded, in any case, is refused with the words setup uses', async () => {
+    await withProjects(async (root) => {
+      mkdirSync(dirname(registryPath()), { recursive: true });
+      writeFileSync(registryPath(), '{"accounts":{"octocat":{"name":"Octo Cat","email":"octocat@example.invalid"}}}\n');
+      const run = await play((prompter) => runHome({ prompter, cwd: root, suggest: SUGGEST, signedIn: NOBODY }), [
+        [enter], [...typed('OctoCat'), enter], [esc],
+      ], { patience: 20_000 });
+      assert.equal(run.result, 130, run.screen);
+      assert.match(run.screen, /"octocat" is already recorded on this machine: use it by that name/);
+    });
   });
 
   test('F7: the plain prompter indents the summary two spaces', async () => {
@@ -673,20 +790,6 @@ async function withProjects(run: (root: string, box: Sandbox) => Promise<void>):
     else process.env['GIT_CEILING_DIRECTORIES'] = saved;
     box.dispose();
   }
-}
-
-/** accounts add asks on a terminal. These screens must reach that ask, not hang in it. */
-function forceNotTTY(): () => void {
-  const streams = [process.stdin, process.stderr];
-  const saved = streams.map((stream) => Object.getOwnPropertyDescriptor(stream, 'isTTY'));
-  for (const stream of streams) Object.defineProperty(stream, 'isTTY', { value: false, configurable: true });
-  return () => {
-    streams.forEach((stream, index) => {
-      const descriptor = saved[index];
-      if (descriptor) Object.defineProperty(stream, 'isTTY', descriptor);
-      else delete (stream as { isTTY?: boolean }).isTTY;
-    });
-  };
 }
 
 function cloneAt(parent: string, name: string): string {

@@ -50,12 +50,18 @@ export class Git {
     this.cwd = cwd;
   }
 
+  /** Every short git call. A ConfigSnapshot answers plain config reads here instead (ADR-029). */
+  protected exec(args: readonly string[], input?: string): Promise<ExecResult> {
+    return this.spawnGit(args, input);
+  }
+
   /**
+   * Starts the git child for exec() (execLong starts its own, for fetch and ls-remote).
    * --no-replace-objects on every call: `git replace` changes what git SHOWS for
    * an object, never what a push SENDS, so a replaced foreign commit read as the
    * clean replacement while the original was published.
    */
-  private exec(args: readonly string[], input?: string): Promise<ExecResult> {
+  protected spawnGit(args: readonly string[], input?: string): Promise<ExecResult> {
     const full = ['--no-replace-objects', ...args];
     return input === undefined
       ? run('git', full, { cwd: this.cwd })
@@ -184,12 +190,12 @@ export class Git {
     return succeeded(await this.exec(this.scoped(scope, [key, value])));
   }
 
-  /** True when the key is gone afterwards -- including when it was never set. */
   /** Appends one more value to a multi-valued key. */
   async addConfig(key: string, value: string, scope: ConfigScope): Promise<boolean> {
     return succeeded(await this.exec(this.scoped(scope, ['--add', key, value])));
   }
 
+  /** True when the key is gone afterwards -- including when it was never set. */
   async unsetConfig(key: string, scope: ConfigScope = 'local'): Promise<boolean> {
     const result = await this.exec(this.scoped(scope, ['--unset-all', key]));
     return succeeded(result) || result.code === 5; // 5 = the key did not exist

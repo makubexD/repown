@@ -11,7 +11,7 @@ import { styleText } from 'node:util';
 import * as p from '@clack/prompts';
 import { BACK, CANCEL, type Asked, type Choice, type Drawn, type Prompter, type Reply, type Review, type ReviewChoice, type StepChoice, type StepConfirm } from './engine.ts';
 import { BACK_WORD, type Streams } from './plain.ts';
-import { BACK_TO_REVIEW, PICK_QUESTION, RUN_THIS_STEP, labelOf, reviewDefault, reviewLines, reviewOptions, reviewQuestion, stepConfirmLines, stepOptions, textWidth, wrap } from './review-text.ts';
+import { BACK_TO_REVIEW, COMMAND_MARK, PICK_QUESTION, RUN_THIS_STEP, labelOf, reviewDefault, reviewLines, reviewOptions, reviewQuestion, stepConfirmLines, stepOptions, textWidth, wrap } from './review-text.ts';
 
 /** A value no real choice can have. */
 const GO_BACK = '\u0000back';
@@ -19,7 +19,7 @@ const GO_BACK = '\u0000back';
 export function clackPrompter(streams: Streams): Prompter {
   const io = { input: streams.input, output: streams.output };
   return {
-    ask: (step, asked) => askDrawn(step, asked, io),
+    ask: (step, asked) => askStep(step, asked, io),
     review: (review) => showReview(review, io),
     pickStep: (steps) => pickClack(steps, io),
     choose: (message, options) => chooseClack(message, options, io),
@@ -43,14 +43,9 @@ function badge(title: string): string {
   return styled === padded ? title : styled;
 }
 
-/** A `> command` hand-over line cyan; any other closing line as it is. */
+/** A `$ command` hand-over line cyan; any other closing line as it is. */
 function commandOr(message: string): string {
-  return message.startsWith('> ') ? styleText('cyan', message) : message;
-}
-
-function askDrawn(step: Drawn, asked: Asked, io: Io): Promise<Reply> {
-  if (asked.detail) p.log.info(wrap(asked.detail, widthOf(io, GUTTER)).join('\n'), io);
-  return askStep(step, asked, io);
+  return message.startsWith(COMMAND_MARK) ? styleText('cyan', message) : message;
 }
 
 async function pickClack(steps: readonly Drawn[], io: Io): Promise<string | typeof BACK | typeof CANCEL> {
@@ -100,13 +95,13 @@ function backOption(asked: Asked): { value: string; label: string; hint: string 
 async function askSelect(step: Drawn, asked: Asked, io: Io): Promise<Reply> {
   const options = [...asked.choices.map((choice) => ({ ...choice })), ...backOption(asked)];
   const preset = typeof asked.initial === 'string' ? { initialValue: asked.initial } : {};
-  const value = await p.select<string>({ ...io, ...preset, message: messageOf(step, io), options });
+  const value = await p.select<string>({ ...io, ...preset, message: messageOf(step, io, asked.detail), options });
   if (p.isCancel(value)) return CANCEL;
   return value === GO_BACK ? BACK : value;
 }
 
 async function askConfirm(step: Drawn, asked: Asked, io: Io): Promise<Reply> {
-  const value = await p.select({ ...io, message: messageOf(step, io), initialValue: asked.initial === true ? 'yes' : 'no',
+  const value = await p.select({ ...io, message: messageOf(step, io, asked.detail), initialValue: asked.initial === true ? 'yes' : 'no',
     options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }, ...backOption(asked)] });
   if (p.isCancel(value)) return CANCEL;
   return value === GO_BACK ? BACK : value === 'yes';
@@ -115,7 +110,7 @@ async function askConfirm(step: Drawn, asked: Asked, io: Io): Promise<Reply> {
 async function askText(step: Drawn, asked: Asked, io: Io): Promise<Reply> {
   const preset = typeof asked.initial === 'string' ? { initialValue: asked.initial } : {};
   const extra = asked.canGoBack ? 'type ' + BACK_WORD + ' to go back' : undefined;
-  const value = await p.text({ ...io, ...preset, message: messageOf(step, io, extra),
+  const value = await p.text({ ...io, ...preset, message: messageOf(step, io, asked.detail, extra),
     validate: (typed) => (isBack(typed, asked) ? undefined : step.validate?.((typed ?? '').trim()) ?? undefined) });
   if (p.isCancel(value)) return CANCEL;
   return isBack(value, asked) ? BACK : value.trim();
@@ -128,15 +123,28 @@ function isBack(typed: string | undefined, asked: Asked): boolean {
 
 /**
  * clack draws its gutter in front of a select's second line but not a text prompt's,
- * so a text question draws it itself.
+ * so a text question draws it itself, with clack's own bar (`|` where Unicode isn't drawn).
  */
-const TEXT_GUTTER = styleText('gray', '│') + '  ';
+const TEXT_GUTTER = styleText('gray', p.S_BAR) + '  ';
 
-/** The question, and under it the hint, wrapped in the gutter -- visible whatever the answer shows. */
-function messageOf(step: Drawn, io: Io, extra?: string): string {
-  const hint = [step.hint, extra].filter((part) => part).join(' · ');
+/**
+ * The question, and under it the hint and the step's detail, wrapped in the gutter --
+ * visible whatever the answer shows. The detail sits in the question's own block, as the
+ * plain prompter draws it, never as a line above that reads as the previous answer's.
+ */
+function messageOf(step: Drawn, io: Io, detail?: string, extra?: string): string {
   const gutter = step.kind === 'text' ? TEXT_GUTTER : '';
-  return [step.message, ...(hint ? wrap(hint, widthOf(io, GUTTER)) : [])].join('\n' + gutter);
+  const width = widthOf(io, GUTTER);
+  const notes = [step.hint, detail].flatMap((text) => (text ? wrap(text, width) : []));
+  return [step.message, ...hintRows(notes, extra, width)].join('\n' + gutter);
+}
+
+/** The hint rows, then the extra ("type < to go back") on the last row if it fits whole, else on its own. */
+function hintRows(rows: readonly string[], extra: string | undefined, width: number): string[] {
+  if (!extra) return [...rows];
+  const joined = rows.length > 0 ? rows[rows.length - 1] + ' · ' + extra : extra;
+  if (joined.length <= width) return [...rows.slice(0, -1), joined];
+  return [...rows, ...wrap(extra, width)];
 }
 
 async function showStep(confirm: StepConfirm, io: Io): Promise<StepChoice | typeof CANCEL> {
@@ -149,12 +157,12 @@ function logLines(io: Io, lines: readonly string[]): void {
 }
 
 /**
- * One shown line, wrapped, then styled: a label's value bold cyan, a `> command` cyan.
+ * One shown line, wrapped, then styled: a label's value bold cyan, a `$ command` cyan.
  * Styling after wrapping keeps every line as wide as it is without colour (ADR-027).
  */
 function accented(text: string, width: number): string[] {
   const rows = wrap(text, width);
-  if (text.startsWith('> ')) return rows.map((row) => styleText('cyan', row));
+  if (text.startsWith(COMMAND_MARK)) return rows.map((row) => styleText('cyan', row));
   const label = labelOf(text);
   return rows.map((row, index) => accentLine(row, index === 0 ? label : ' '.repeat(label.length)));
 }

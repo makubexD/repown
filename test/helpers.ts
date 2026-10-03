@@ -57,9 +57,15 @@ export function sandbox(): Sandbox {
     globalConfig,
     git,
     writeGlobalConfig: (body) => writeFileSync(globalConfig, body),
+    // Windows briefly holds a file a child just closed (or Defender is scanning it): EPERM or
+    // EBUSY, gone a moment later, so the delete retries. The environment comes back whatever
+    // happens, so a failed delete never leaks this sandbox's config into the next test.
     dispose: () => {
-      rmSync(dir, { recursive: true, force: true });
-      restore(saved);
+      try {
+        rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } finally {
+        restore(saved);
+      }
     },
   };
 }

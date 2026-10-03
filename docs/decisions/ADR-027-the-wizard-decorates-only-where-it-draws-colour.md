@@ -68,3 +68,11 @@ and the tests compare it byte for byte. NO_COLOR, FORCE_COLOR and TERM=dumb are 
 - Output without colour is unchanged, so scripts, logs and the existing tests are too.
 - clack's own key hint still prints `↑/↓` and `•` on a non-Unicode terminal; that is
   inside the library.
+
+## Notes
+
+- **2026-10-02, the mark changed.** Command lines drawn to copy now start with `$ ` instead
+  of `> ` (`COMMAND_MARK`, `src/wizard/review-text.ts`), and the cyan rule above keys on
+  it. Pasted whole, `>` is a redirect in sh, bash, zsh, fish, PowerShell and cmd alike: it
+  leaves an empty file named `repown` and runs nothing; `$` there is only a harmless
+  error. The colour decision itself is unchanged.

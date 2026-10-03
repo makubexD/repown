@@ -99,8 +99,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   `isUnicodeSupported`; re-check it when clack is upgraded.
 - Read-only commands (`status`, `doctor`, `scan`, `guard check`, the start screen's clone read,
   setup's `readContext`) read config through `snapshotOf(git)` (`src/core/config-snapshot.ts`):
-  one `git config [--scope] --list -z` per scope answers every getter (ADR-029). Never hand a
-  snapshot to code that writes config; it throws. URL matches and origins still go to git.
+  one `git config [--scope] --list -z` per scope answers the plain getters (ADR-029). Never hand a
+  snapshot to code that writes config; it throws. Booleans, URL matches and origins still go to git.
 - `--format json` (`scan`, `accounts list`) is a stable contract for scripts; the text
   layout isn't. Renaming a JSON field is breaking (ADR-014).
 - `src/wizard/` is `repown setup`: `engine.ts` owns Back, the review loop, the opening
@@ -140,6 +140,9 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   (a refused `.git` at any depth, a bare repository that is not walked).
 - `test/format.test.ts` checks `displayPath` and which streams are coloured. `noted` is
   what prints the gh NOTE on `repown status`.
+- `test/config-snapshot.test.ts` reads every config key, in every scope, through a plain `Git`
+  and a `ConfigSnapshot` and compares (ADR-029); add a case when a getter or git's rules change.
+- Split test files share their helpers through `test/<name>-helpers.ts` (moved, not copied).
 - `test/paste.test.ts` runs printed commands through every shell present (sh, bash, dash,
   zsh, fish, pwsh, powershell, cmd) against npm-shaped probes. Build any copyable word with
   `shellWord` or `copyableCommand` (`src/core/guard/check.ts`), never by hand; null means no

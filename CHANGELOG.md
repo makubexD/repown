@@ -45,7 +45,7 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 - A question's note (this clone's current account, what the history holds, what GitHub said
   about a login) is drawn inside that question, under its hint, instead of as a separate
   line above it that read as part of the previous answer. Plain prompts already did this.
-- `repown status`, `doctor`, `scan`, the pre-push guard, the start screen and setup's first read start
+- `repown status`, `doctor`, `scan`, the pre-push guard, the start screen's read of each clone and setup's first read start
   far fewer git processes: they read each config scope once instead of once per key
   (`repown status` in a clone: 68 processes became 38, about a third faster on Windows) (ADR-029).
 - Commands setup and the start screen draw to copy start with `$ ` instead of `> `: pasted

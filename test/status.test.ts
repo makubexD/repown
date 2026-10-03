@@ -1,7 +1,8 @@
 // `repown status` says where the clone is and which settings are its own.
 // S6 title, path and branch; S7 the two groups; S8 the recorded account;
-// S9 what to run next; S10 outside a repository.
-// The upstream field and the ready: summary (ADR-020).
+// S9 what to run next; S10 outside a repository. The upstream field, the ready:
+// summary (ADR-020) and the account line are in status-upstream, status-ready and
+// status-account.test.ts, split off so node --test runs them in parallel.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';

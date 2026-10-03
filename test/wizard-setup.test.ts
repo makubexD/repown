@@ -1,7 +1,9 @@
 // `repown setup`: the flow (which steps, what they turn into) with a scripted
-// prompter and a hand-built context, then the command itself -- in-process with a
-// scripted prompter for the interactive paths, and spawned for the paths a script
-// or CI would take. Every run happens in a sandbox (isolated git config, registry).
+// prompter and a hand-built context, the setup lead, Ctrl-C during gh sign-in, and the
+// repoint and re-author steps. The command run on a terminal, without one, its context
+// read, S18 and repoint in a real clone are in the wizard-setup-*.test.ts files, split
+// off so node --test runs them in parallel; a suite split by test keeps its name, so
+// every test path is unchanged. Every run happens in a sandbox (isolated git config, registry).
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';

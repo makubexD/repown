@@ -144,7 +144,7 @@ Shared by all of them:
   (how a command declares its options), `src/ui/args.ts`, `src/ui/help.ts`,
   `src/ui/suggest.ts` (did-you-mean).
 - **Output, colour and prompts:** `src/ui/format.ts`, `src/ui/prompt.ts`.
-- **Reading a clone and the machine:** `src/core/inspect.ts`, `src/core/git.ts` (every git
+- **Reading a clone and the machine:** `src/core/inspect.ts`, `src/core/config-snapshot.ts` (config read once per scope by read-only commands, ADR-029), `src/core/git.ts` (every git
   call), `src/core/version.ts` (whether git or gh is new enough), `src/core/url.ts` (remote URLs and owners), `src/core/result.ts` (answers that can fail).
 - **Hosts** (what each one can pin): `src/core/hosts/`. Adding one is one file there plus
   one line in `providers()` (`src/core/hosts/index.ts`), with `generic` last, plus its

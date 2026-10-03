@@ -65,7 +65,7 @@ describe('a config snapshot reads what git reads', () => {
     assert.equal(await snapshot.getConfig('x.inc', 'global'), null);
   });
 
-  test('a snapshot reads each scope once, however many keys are asked', async () => {
+  test('a snapshot reads each scope once for its plain getters; a boolean still asks git', async () => {
     let spawned = 0;
     class Counting extends ConfigSnapshot {
       protected override spawnGit(args: readonly string[], input?: string): Promise<ExecResult> {
@@ -74,8 +74,16 @@ describe('a config snapshot reads what git reads', () => {
       }
     }
     const snapshot = new Counting(box.dir);
-    for (const key of KEYS) for (const scope of SCOPES) await readAll(snapshot, key, scope);
+    for (const key of KEYS) {
+      for (const scope of SCOPES) {
+        await snapshot.getConfig(key, scope);
+        await snapshot.getAllConfig(key, scope);
+        await snapshot.getAllConfigRaw(key, scope);
+      }
+    }
     assert.equal(spawned, SCOPES.length);
+    await snapshot.getBoolConfig('a.flag');
+    assert.equal(spawned, SCOPES.length + 1, 'git reads its own booleans');
   });
 
   test('a snapshot refuses to write, and passes every other git call through', async () => {
@@ -94,6 +102,60 @@ describe('a config snapshot reads what git reads', () => {
     assert.equal(snapshotOf(snapshot), snapshot);
   });
 });
+
+test('booleans git reads its own way (hex, a leading space, out of range) are git\'s answer', async () => {
+  const box = sandbox();
+  try {
+    appendFileSync(join(box.dir, '.git', 'config'), '[b]\n\thex = 0x10\n\tzero = 0x0\n\tspace = " 1"\n\thuge = 99999999999\n\tgig = 3g\n');
+    for (const key of ['b.hex', 'b.zero', 'b.space', 'b.huge', 'b.gig']) {
+      assert.equal(await new ConfigSnapshot(box.dir).getBoolConfig(key), await new Git(box.dir).getBoolConfig(key), key);
+    }
+  } finally {
+    box.dispose();
+  }
+});
+
+test('a scope with no config file at all reads as unset, as git --get does', async () => {
+  const box = sandbox();
+  const saved = { global: process.env['GIT_CONFIG_GLOBAL'], system: process.env['GIT_CONFIG_SYSTEM'] };
+  try {
+    process.env['GIT_CONFIG_GLOBAL'] = join(box.dir, '..', 'no-such-global');
+    process.env['GIT_CONFIG_SYSTEM'] = join(box.dir, '..', 'no-such-system');
+    for (const scope of ['global', 'system'] as const) {
+      const snapshot = new ConfigSnapshot(box.dir);
+      assert.deepEqual(await readAll(snapshot, 'user.name', scope), await readAll(new Git(box.dir), 'user.name', scope), scope);
+      const asked = await new Asking(box.dir).ask(['config', '--' + scope, '--get', 'user.name']);
+      assert.equal(asked.code, 1, 'not set (1), as --get says, never a failure (128)');
+    }
+  } finally {
+    process.env['GIT_CONFIG_GLOBAL'] = saved.global;
+    process.env['GIT_CONFIG_SYSTEM'] = saved.system;
+    box.dispose();
+  }
+});
+
+test('a value that looks like a query flag is still a write, and refused', async () => {
+  const box = sandbox();
+  try {
+    const snapshot = new ConfigSnapshot(box.dir);
+    for (const value of ['--list', '--show-origin', '--get-urlmatch']) await assert.rejects(snapshot.setConfig('a.b', value), /only reads/, value);
+    assert.throws(() => box.git('config', '--local', '--get-all', 'a.b'), 'nothing was written');
+  } finally {
+    box.dispose();
+  }
+});
+
+test('snapshotOf refuses a Git subclass instead of quietly dropping what it overrides', () => {
+  class Fake extends Git {}
+  assert.throws(() => snapshotOf(new Fake('.')), /plain Git/);
+});
+
+/** Sends one git call through a snapshot, to see the exit code a getter would see. */
+class Asking extends ConfigSnapshot {
+  ask(args: readonly string[]): Promise<ExecResult> {
+    return this.exec(args);
+  }
+}
 
 test('outside a repository the local scope fails the same way for both', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'repown-norepo-'));

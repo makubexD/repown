@@ -1,7 +1,8 @@
 // Config reads answered from one `git config [--scope] --list -z` per scope, read on first
-// use, for code that only reads (ADR-029). A read builds the exact output git's own
-// `--get`, `--get-all` or `--type=bool --get` would print, so Git's parsing of that output
-// is unchanged. Every other git call passes through; a config write refuses.
+// use, for code that only reads (ADR-029). A plain `--get` or `--get-all` is answered with
+// the output git itself would print for it, so Git's parsing of that output is unchanged.
+// Other config queries (`--type=bool`, `--get-urlmatch`, `--show-origin --get-regexp`) and
+// every non-config call go to git. A config write refuses.
 
 import { Git, type ConfigScope } from './git.ts';
 import { succeeded, type ExecResult } from './exec.ts';
@@ -10,21 +11,22 @@ interface ConfigRead {
   readonly scope: ConfigScope | undefined;
   readonly key: string;
   readonly all: boolean;
-  readonly bool: boolean;
 }
 
 const SCOPE_FLAGS = new Map<string, ConfigScope>([['--local', 'local'], ['--global', 'global'], ['--system', 'system']]);
+
+/** The first argument after `config` and its scope: the query git is asked, never a value. */
+const PASSED_THROUGH = new Set(['--type=bool', '--get-urlmatch', '--show-origin', '--get-regexp', '--list']);
 
 export class ConfigSnapshot extends Git {
   private readonly lists = new Map<string, Promise<ExecResult>>();
 
   protected override exec(args: readonly string[], input?: string): Promise<ExecResult> {
+    if (args[0] !== 'config') return this.spawnGit(args, input);
     const read = configRead(args);
     if (read) return this.answer(read);
-    if (args[0] === 'config' && !args.some((arg) => PASSED_THROUGH.has(arg))) {
-      return Promise.reject(new Error('a config snapshot only reads: git ' + args.join(' ')));
-    }
-    return this.spawnGit(args, input);
+    if (PASSED_THROUGH.has(actionOf(args) ?? '')) return this.spawnGit(args, input);
+    return Promise.reject(new Error('a config snapshot only reads: git ' + args.join(' ')));
   }
 
   private async answer(read: ConfigRead): Promise<ExecResult> {
@@ -33,37 +35,49 @@ export class ConfigSnapshot extends Git {
     const values = valuesOf(listed.stdout, canonicalKey(read.key));
     if (values.length === 0) return answered(1, '');
     if (read.all) return answered(0, values.map((value) => (value ?? '') + '\n').join(''));
-    const last = values[values.length - 1]!;
-    if (!read.bool) return answered(0, (last ?? '') + '\n');
-    const parsed = gitBool(last);
-    return parsed === null ? answered(128, '') : answered(0, parsed + '\n');
+    return answered(0, (values[values.length - 1] ?? '') + '\n');
   }
 
+  /**
+   * One list per scope, shared by every read of this snapshot (a failure too). A scope with
+   * no file at all is empty: `--list` fails there where `--get` says "not set".
+   */
   private listOf(scope: ConfigScope | undefined): Promise<ExecResult> {
     const name = scope ?? 'effective';
-    if (!this.lists.has(name)) this.lists.set(name, this.spawnGit(scope ? ['config', '--' + scope, '--list', '-z'] : ['config', '--list', '-z']));
+    if (!this.lists.has(name)) this.lists.set(name, this.spawnGit(listArgs(scope)).then(missingFileIsEmpty));
     return this.lists.get(name)!;
   }
 }
 
-/** A snapshot of `git`'s config, or `git` itself when it already is one. */
+/**
+ * A snapshot of a plain `git`, or `git` itself when it already is one. A subclass is refused:
+ * the snapshot keeps only the cwd, so whatever the subclass overrides would be dropped.
+ */
 export function snapshotOf(git: Git): ConfigSnapshot {
-  return git instanceof ConfigSnapshot ? git : new ConfigSnapshot(git.cwd);
+  if (git instanceof ConfigSnapshot) return git;
+  if (Object.getPrototypeOf(git) !== Git.prototype) throw new Error('snapshotOf takes a plain Git, not ' + git.constructor.name);
+  return new ConfigSnapshot(git.cwd);
 }
 
-/** Config queries a snapshot doesn't answer itself; they still go to git. */
-const PASSED_THROUGH = new Set(['--get-urlmatch', '--get-regexp', '--list', '--show-origin']);
+function listArgs(scope: ConfigScope | undefined): string[] {
+  return scope ? ['config', '--' + scope, '--list', '-z'] : ['config', '--list', '-z'];
+}
 
-/** `config [--scope] [--type=bool] --get|--get-all <key>`, exactly the shapes Git's getters send. */
+function missingFileIsEmpty(listed: ExecResult): ExecResult {
+  return !succeeded(listed) && /unable to read config file/.test(listed.stderr) ? answered(0, '') : listed;
+}
+
+/** The query after `config` and an optional scope flag. */
+function actionOf(args: readonly string[]): string | undefined {
+  return SCOPE_FLAGS.has(args[1] ?? '') ? args[2] : args[1];
+}
+
+/** `config [--scope] --get|--get-all <key>`, exactly the shapes Git's plain getters send. */
 function configRead(args: readonly string[]): ConfigRead | null {
-  if (args[0] !== 'config') return null;
-  const rest = args.slice(1);
-  const scope = SCOPE_FLAGS.get(rest[0] ?? '');
-  if (scope) rest.shift();
-  const bool = rest[0] === '--type=bool';
-  if (bool) rest.shift();
+  const scoped = SCOPE_FLAGS.get(args[1] ?? '');
+  const rest = args.slice(scoped ? 2 : 1);
   if (rest.length !== 2 || (rest[0] !== '--get' && rest[0] !== '--get-all')) return null;
-  return { scope, key: rest[1]!, all: rest[0] === '--get-all', bool };
+  return { scope: scoped, key: rest[1]!, all: rest[0] === '--get-all' };
 }
 
 /** Section and variable name are case-insensitive, a subsection is not: `--list` prints them so. */
@@ -85,16 +99,6 @@ function valuesOf(listed: string, key: string): (string | null)[] {
     if (entry !== '' && name === key) values.push(newline < 0 ? null : entry.slice(newline + 1));
   }
   return values;
-}
-
-/** git's own boolean reading: true/yes/on, false/no/off/empty, or an integer (k, m, g allowed). */
-function gitBool(value: string | null): 'true' | 'false' | null {
-  if (value === null) return 'true';
-  const text = value.toLowerCase();
-  if (['true', 'yes', 'on'].includes(text)) return 'true';
-  if (['false', 'no', 'off', ''].includes(text)) return 'false';
-  const integer = /^([-+]?\d+)[kmg]?$/.exec(text);
-  return integer ? (Number(integer[1]) !== 0 ? 'true' : 'false') : null;
 }
 
 function answered(code: number, stdout: string): ExecResult {

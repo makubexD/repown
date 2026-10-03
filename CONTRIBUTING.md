@@ -89,6 +89,12 @@ with an installed repown.
   `node --test --test-name-pattern="<regex>" test/guard.test.ts` one test;
   `node --test --test-shard=1/3 "test/*.test.ts"` one shard. CI runs the Windows suite
   as three of those.
+- **Keeping `npm test` fast.** `node --test` runs files in parallel and each file's tests in
+  order, so one long file sets the wall time: split a file by suite once it passes about
+  150 s (`*-helpers.ts` holds what the parts share; a suite split by test keeps its name).
+  The cost per test is process starts, mostly git. Measured on Windows, 8 cores, on
+  2026-10-02: 920 s before, 674 s after splitting the four longest files, 550-580 s after
+  read-only commands read config once per scope (ADR-029), with every test path kept.
 - **Fake executables.** `gh.exe` and `git-credential-manager.exe` are compiled once per
   test process and then reused ([test/fake-exe.ts](test/fake-exe.ts)).
 - **Changing what `repown setup` shows?** [test/wizard-screens.test.ts](test/wizard-screens.test.ts)

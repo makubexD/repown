@@ -19,6 +19,10 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 - The start screen's Record an account checks first that the account list can be saved. When
   it can't be read, or has entries repown can't read, it says why and asks nothing, instead of
   asking four questions and then failing to save (and skipping the "already recorded" check).
+- Setup, `repown status`, `repown use` and the push blockers name the owner your pushes really
+  go to, after git's `url.<base>.insteadOf` and `pushInsteadOf` rewrites, the same owner the
+  pre-push guard checks. Before, they read the configured URL and could say a push was fine
+  that the guard then refused, or warn about an owner the push never reaches.
 
 ## [0.5.0] - 2026-10-03
 

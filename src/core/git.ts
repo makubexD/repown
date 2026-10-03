@@ -111,6 +111,23 @@ export class Git {
   }
 
   /** Remote names, in the order git lists them. A failed read is an error, not "none". */
+  /**
+   * The URL `git push <remote>` uses, as the pre-push hook receives it: pushurl, then
+   * pushInsteadOf and insteadOf applied by git itself. The first, when there are several.
+   */
+  async remotePushUrl(remote: string): Promise<string | null> {
+    return output(await this.exec(['remote', 'get-url', '--push', remote]));
+  }
+
+  /**
+   * A bare URL after git's insteadOf rewriting (`ls-remote --get-url` contacts nothing).
+   * It reads fetch rules, so a pushInsteadOf on a bare push URL is not applied.
+   */
+  async rewrittenUrl(url: string): Promise<string | null> {
+    if (url.startsWith('-')) return null;
+    return output(await this.exec(['ls-remote', '--get-url', url]));
+  }
+
   async readRemotes(): Promise<Result<string[]>> {
     const listed = await this.exec(['remote']);
     if (!succeeded(listed)) return err(listed.stderr.trim() || 'git remote failed');

@@ -70,9 +70,19 @@ export async function inspectRepo(git: Git): Promise<RepoState> {
 
   return {
     git, isRepo, root, branch, originUrl, url, provider,
-    owner: url ? provider.ownerOf(url) : null,
+    owner: await pushOwner(git, originUrl),
     identity, credentialKeys, guard, hook, helper,
   };
+}
+
+/**
+ * Who origin's pushes go to: the URL git pushes to (pushurl, pushInsteadOf, insteadOf),
+ * which is the one the guard checks, not the configured fetch URL the credentials follow.
+ */
+async function pushOwner(git: Git, originUrl: string | null): Promise<string | null> {
+  if (!originUrl) return null;
+  const pushed = parseGitUrl((await git.remotePushUrl('origin')) ?? originUrl);
+  return pushed ? providerFor(pushed).ownerOf(pushed) : null;
 }
 
 export async function inspectAuth(git: Git, probeUrl?: string): Promise<AuthState> {

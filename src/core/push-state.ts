@@ -102,7 +102,7 @@ async function repointOf(git: Git, branch: string | null): Promise<Repoint | nul
 
 async function destinationOf(git: Git, target: PushTarget | null): Promise<PushDestination | null> {
   if (!target) return null;
-  const raw = target.isRemote ? await pushUrlOf(git, target.name) : target.name;
+  const raw = target.isRemote ? await pushUrlOf(git, target.name) : (await git.rewrittenUrl(target.name)) ?? target.name;
   const url = raw ? parseGitUrl(raw) : null;
   const owner = url ? providerFor(url).ownerOf(url) : null;
   if (!owner) return null;
@@ -110,7 +110,10 @@ async function destinationOf(git: Git, target: PushTarget | null): Promise<PushD
   return { remote: target.isRemote ? target.name : null, owner, allowed };
 }
 
+/** The URL the hook will see; the raw keys only when git can't say (no such remote, an old git). */
 async function pushUrlOf(git: Git, remote: string): Promise<string | null> {
+  const pushed = await git.remotePushUrl(remote);
+  if (pushed) return pushed;
   return (await git.getConfig('remote.' + remote + '.pushurl')) ?? git.getConfig('remote.' + remote + '.url');
 }
 

@@ -4,7 +4,9 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { isGcm } from '../src/core/credential/gcm.ts';
-import { activeAccountLabel, storedAccountsLabel, type AuthState } from '../src/core/inspect.ts';
+import { activeAccountLabel, inspectRepo, storedAccountsLabel, type AuthState } from '../src/core/inspect.ts';
+import { Git } from '../src/core/git.ts';
+import { sandbox } from './helpers.ts';
 import { ok, err } from '../src/core/result.ts';
 
 describe('recognising Git Credential Manager as the helper', () => {
@@ -39,5 +41,21 @@ describe('labels never collapse "unknown" into "none"', () => {
     const none = storedAccountsLabel(auth({ gcmPresent: true, stored: ok([]) }));
     assert.notEqual(unknown, none);
     assert.match(unknown, /unknown/);
+  });
+});
+
+describe('the owner a clone pushes to', () => {
+  test('is read from the URL git pushes to, after insteadOf and pushInsteadOf, as the guard reads it', async () => {
+    const box = sandbox();
+    try {
+      box.git('remote', 'add', 'origin', 'https://github.com/octocat/hello.git');
+      assert.equal((await inspectRepo(new Git(box.dir))).owner, 'octocat');
+      box.git('config', 'url.https://github.com/octo-org/.pushInsteadOf', 'https://github.com/octocat/');
+      const repo = await inspectRepo(new Git(box.dir));
+      assert.equal(repo.owner, 'octo-org', 'pushes go to octo-org');
+      assert.equal(repo.originUrl, 'https://github.com/octocat/hello.git', 'the configured URL still drives the credential probes');
+    } finally {
+      box.dispose();
+    }
   });
 });

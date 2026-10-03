@@ -778,6 +778,10 @@ offered only when unpushed commits carry another address; it reviews one step,
 first screen. Step by step can still reach the same screen after its questions, and
 then Change an answer is there.
 
+The owner setup, `status` and `use` name ("origin's owner", the destination owner) is read from
+the URL git pushes to, `git remote get-url --push`: `pushurl`, `pushInsteadOf` and `insteadOf`
+applied, the same URL the pre-push hook gives the guard. With several push URLs, the first is
+named; the guard checks each. A push straight to a URL is read after `insteadOf` only.
 A username written into a `pushInsteadOf` URL isn't checked.
 
 **Keys.** ↑/↓ choose, Enter confirms, Esc or Ctrl-C cancels (exit 130; with numbered

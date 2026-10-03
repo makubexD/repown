@@ -7,6 +7,8 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-03
+
 A safety release: account lookups can no longer borrow another account's profile, the start
 screen won't ask questions it can't save, and the owner repown names for a push is the one the
 push guard checks.
@@ -235,7 +237,8 @@ and cmd. `status`, `doctor` and the pre-push guard are faster on Windows.
   contract for scripts.
 - Runs on Node 20+ on Windows, macOS and Linux, with zero runtime dependencies.
 
-[Unreleased]: https://github.com/makubexD/repown/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/makubexD/repown/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/makubexD/repown/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/makubexD/repown/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/makubexD/repown/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/makubexD/repown/compare/v0.2.0...v0.3.0

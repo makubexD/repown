@@ -5,7 +5,7 @@
 
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 export type CompileFake = (source: string, outFile: string) => void;
@@ -20,6 +20,16 @@ export function compileFakeExe(name: string, source: string, compile: CompileFak
   const out = build(name, source, compile);
   built.set(key, out);
   return out;
+}
+
+/**
+ * The folder a fake .exe was compiled into, once per test process and outside every
+ * sandbox. Tests put it on PATH instead of copying the .exe into a sandbox: Windows
+ * (Defender scanning a new executable) could keep that copy locked for seconds, so the
+ * sandbox couldn't be deleted (EPERM) when the machine was busy.
+ */
+export function fakeExeDir(name: string, source: string): string {
+  return dirname(compileFakeExe(name, source));
 }
 
 function build(name: string, source: string, compile: CompileFake): string {

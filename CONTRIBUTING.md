@@ -96,7 +96,8 @@ with an installed repown.
   2026-10-02: 920 s before, 674 s after splitting the four longest files, 550-580 s after
   read-only commands read config once per scope (ADR-029), with every test path kept.
 - **Fake executables.** `gh.exe` and `git-credential-manager.exe` are compiled once per
-  test process and then reused ([test/fake-exe.ts](test/fake-exe.ts)).
+  test process, outside every sandbox, and put on `PATH` from there (`fakeExeDir`), never copied
+  into a sandbox: Windows can keep a new executable locked, and the sandbox then can't be deleted. They are reused ([test/fake-exe.ts](test/fake-exe.ts)).
 - **Changing what `repown setup` shows?** [test/wizard-screens.test.ts](test/wizard-screens.test.ts)
   plays it as a newcomer would, pressing arrows, Enter, typed text and Esc on the real
   screens (`play()` in [test/setup-fixtures.ts](test/setup-fixtures.ts)), in one scenario

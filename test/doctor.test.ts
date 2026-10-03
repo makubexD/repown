@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { plainTerminal, sandbox, type Sandbox } from './helpers.ts';
-import { compileFakeExe } from './fake-exe.ts';
+import { fakeExeDir } from './fake-exe.ts';
 import { ok, err } from '../src/core/result.ts';
 import { registryPath, type Account, type Registry } from '../src/core/registry.ts';
 import type { Result } from '../src/core/result.ts';
@@ -477,19 +477,19 @@ function writeRegistry(): void {
 }
 
 function doctorEnv(bin: string): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, PATH: bin + delimiter + (process.env['PATH'] ?? '') };
+  const fakes = process.platform === 'win32'
+    ? [fakeExeDir('gh.exe', FAKE_GH_CS), fakeExeDir('git-credential-manager.exe', FAKE_GCM_CS), bin]
+    : [bin];
+  const env: NodeJS.ProcessEnv = { ...process.env, PATH: [...fakes, process.env['PATH'] ?? ''].join(delimiter) };
   delete env['FORCE_COLOR'];
   delete env['NO_COLOR'];
   env['TERM'] = 'dumb';
   return env;
 }
 
+/** On Windows the compiled fakes stay where they were built; doctorEnv puts those folders on PATH. */
 function installFakes(bin: string): void {
-  if (process.platform === 'win32') {
-    copyFileSync(compileFakeExe('gh.exe', FAKE_GH_CS), join(bin, 'gh.exe'));
-    copyFileSync(compileFakeExe('git-credential-manager.exe', FAKE_GCM_CS), join(bin, 'git-credential-manager.exe'));
-    return;
-  }
+  if (process.platform === 'win32') return;
   writeFileSync(join(bin, 'gh'), FAKE_GH_SH, { mode: 0o755 });
   writeFileSync(join(bin, 'git-credential-manager'), FAKE_GCM_SH, { mode: 0o755 });
 }

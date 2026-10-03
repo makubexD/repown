@@ -7,17 +7,20 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+A safety release: account lookups can no longer borrow another account's profile, the start
+screen won't ask questions it can't save, and the owner repown names for a push is the one the
+push guard checks.
+
 ### Fixed
 - **Security: a typed login can no longer pull in another account's GitHub profile.**
   `repown accounts add ../user` made the lookup GitHub's own `/user`, your signed-in account,
-  and suggested its name and noreply id for a different login. The profile is now looked up
-  only for a login spelled the way GitHub spells one (letters, digits, `-`, `_`), and the
-  login is one URL path segment whatever it holds. Anything else is recorded as typed, with
-  nothing suggested. A profile name with control or bidi characters is dropped instead of
-  drawn and saved, and the warning about a missing account escapes the login. Setup and the
-  start screen refuse a login made only of dots. A login GitHub can't have (with a dot or a
-  slash) is still named as no account on github.com, without asking it. The name question
-  says `GitHub gives no usable name for …` when a profile name was dropped or missing.
+  and suggested its name and noreply id for a different login. Now only a login spelled the way
+  GitHub spells one (letters, digits, `-`, `_`) is looked up, as one URL path segment; anything
+  else is recorded as typed with nothing suggested, and a login GitHub can't have (a dot, a
+  slash) is named as no account on github.com without asking it. A profile name with control or
+  bidi characters is dropped instead of drawn and saved (the name question then says `GitHub
+  gives no usable name for …`), the missing-account warning escapes the login, and setup and the
+  start screen refuse a login made only of dots.
 - The start screen's Record an account checks first that the account list can be saved. When
   it can't be read, or has entries repown can't read, it says why and asks nothing, instead of
   asking four questions and then failing to save (and skipping the "already recorded" check).

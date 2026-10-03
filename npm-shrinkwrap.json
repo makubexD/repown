@@ -1,12 +1,12 @@
 {
   "name": "repown",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "repown",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "license": "MIT",
       "bin": {
         "repown": "dist/cli.js"

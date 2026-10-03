@@ -7,6 +7,8 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-03
+
 The start screen (bare `repown` outside a clone) now records and removes accounts without
 leaving its frame, and warns before you pin a clone to someone else's GitHub account. Every
 command repown prints for you to copy now pastes correctly in sh, bash, zsh, fish, PowerShell
@@ -209,7 +211,8 @@ and cmd. `status`, `doctor` and the pre-push guard are faster on Windows.
   contract for scripts.
 - Runs on Node 20+ on Windows, macOS and Linux, with zero runtime dependencies.
 
-[Unreleased]: https://github.com/makubexD/repown/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/makubexD/repown/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/makubexD/repown/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/makubexD/repown/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/makubexD/repown/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/makubexD/repown/compare/v0.1.1...v0.2.0

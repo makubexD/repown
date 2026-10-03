@@ -140,7 +140,7 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   zsh, fish, pwsh, powershell, cmd) against npm-shaped probes. Build any copyable word with
   `shellWord` or `copyableCommand` (`src/core/guard/check.ts`), never by hand; null means no
   quoting is safe in every shell, so print no command.
-- `test/cli.test.ts` spawns the real entry point. Keep `guard check --remote "$1" --url "$2"`
+- `test/cli.test.ts` (and `cli-*.test.ts`, split off by suite) spawns the real entry point. Keep `guard check --remote "$1" --url "$2"`
   (hooks already on disk) and `--remote="$1" --url="$2"` (new hooks) working.
 - `test/docs.test.ts` checks the README against `repown --help` and `repown help <group>`.
   It fails when a command or user-facing action is missing from README.md (as

@@ -145,7 +145,7 @@ function person(name: string | null, email: string | null, absent: string): stri
 
 function originOf(repo: RepoState): string {
   if (!repo.originUrl) return 'no remote';
-  return (repo.owner ?? 'unknown') + '  ' + out.dim('(' + repo.provider.label + ')');
+  return (repo.owner ?? 'unknown') + '  ' + out.dim('(' + repo.ownerProvider.label + ')');
 }
 
 function pushesAs(repo: RepoState): string {

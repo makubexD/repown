@@ -68,7 +68,7 @@ async function add(args: Args): Promise<number> {
   if (email === null) return 1;
 
   const written = await saveAccount(account, { name, email, host: hostId });
-  if (!written.ok) { out.fail('accounts', written.error); return 1; }
+  if (!written.ok) { out.fail('accounts', out.printable(written.error)); return 1; }
 
   out.pass('accounts', out.printable(account) + '  ' + out.printable(name) + ' <' + out.printable(email) + '>');
   out.line();

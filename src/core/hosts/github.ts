@@ -77,9 +77,14 @@ function accountKind(login: string): Promise<AccountKind | null> {
   return kindFrom(login, ghProfileLookup);
 }
 
-/** What github.com says a GitHub-shaped login is; nothing for any other login. */
-export async function kindFrom(login: string, lookup: (login: string, field: string) => Promise<ProfileLookup>): Promise<AccountKind | null> {
-  if (!githubLogin(login)) return null;
+type LookUp = (login: string, field: string) => Promise<ProfileLookup>;
+
+/**
+ * What github.com says a login is. One GitHub can't have (a dot, a slash, a leading dash)
+ * is missing without asking: the typo still gets its sentence, and nothing reaches the API.
+ */
+export async function kindFrom(login: string, lookup: LookUp): Promise<AccountKind | null> {
+  if (!githubLogin(login)) return 'missing';
   const found = await lookup(login, 'type');
   if (found.missing) return 'missing';
   if (found.value === 'User') return 'user';

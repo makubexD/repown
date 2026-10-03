@@ -38,7 +38,9 @@ test('only a GitHub-shaped login is looked up: a path, dots or other characters 
     return field === 'id' ? '1' : 'Octo Cat';
   };
   assert.equal(await profileFrom('../user', read), null);
-  assert.equal(await kindFrom('../user', async (login, field) => { asked.push(login + ':' + field); return { value: 'User', missing: false }; }), null);
+  const lookup = async (login: string, field: string) => { asked.push(login + ':' + field); return { value: 'User', missing: false }; };
+  assert.equal(await kindFrom('../user', lookup), 'missing', 'no github.com account can be spelled so: named, without asking');
+  assert.equal(await kindFrom('octo.cat', lookup), 'missing');
   assert.deepEqual(asked, [], 'nothing was asked for a login that is not GitHub-shaped');
   assert.deepEqual(await profileFrom('octocat', read), { name: 'Octo Cat', email: '1+octocat@users.noreply.github.com' });
 });

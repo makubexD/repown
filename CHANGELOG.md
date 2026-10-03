@@ -15,14 +15,18 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   login is one URL path segment whatever it holds. Anything else is recorded as typed, with
   nothing suggested. A profile name with control or bidi characters is dropped instead of
   drawn and saved, and the warning about a missing account escapes the login. Setup and the
-  start screen refuse a login made only of dots.
+  start screen refuse a login made only of dots. A login GitHub can't have (with a dot or a
+  slash) is still named as no account on github.com, without asking it. The name question
+  says `GitHub gives no usable name for …` when a profile name was dropped or missing.
 - The start screen's Record an account checks first that the account list can be saved. When
   it can't be read, or has entries repown can't read, it says why and asks nothing, instead of
   asking four questions and then failing to save (and skipping the "already recorded" check).
-- Setup, `repown status`, `repown use` and the push blockers name the owner your pushes really
-  go to, after git's `url.<base>.insteadOf` and `pushInsteadOf` rewrites, the same owner the
-  pre-push guard checks. Before, they read the configured URL and could say a push was fine
-  that the guard then refused, or warn about an owner the push never reaches.
+- Setup, `repown status`, `repown use`, `repown scan` and the push blockers name the owner your
+  pushes really go to, after `pushurl` and git's `url.<base>.insteadOf` / `pushInsteadOf`
+  rewrites, the same owner the pre-push guard checks, with the host of that same URL. Before,
+  they read the configured URL and could say a push was fine that the guard then refused, or
+  warn about an owner the push never reaches. `scan --format json`'s `owner` and `host` now
+  describe that push URL (the same values unless pushes are rewritten).
 
 ## [0.5.0] - 2026-10-03
 

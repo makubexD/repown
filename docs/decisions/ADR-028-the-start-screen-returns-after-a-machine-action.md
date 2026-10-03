@@ -79,3 +79,6 @@ before.
   `src/core/registry.ts`, the same reasons `accounts add` gives on save) and asks nothing, instead
   of asking all four questions for a save that would fail. Remove an account was already hidden
   in that state.
+- **2026-10-03, a login GitHub can't have is named without asking.** One with a dot, a slash or
+  a leading dash gets the "no account named" sentence with no lookup at all: no such account can
+  exist on github.com, and its URL could reach another endpoint.

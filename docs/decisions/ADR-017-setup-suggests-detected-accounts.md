@@ -82,3 +82,7 @@ address ([ADR-011](ADR-011-refuse-vs-warn.md)).
   same for the address). The name question also says when it starts as the login ("GitHub
   shows no name for <login>, so this is the login"), and the email question names a
   prefilled noreply address as GitHub's private one instead of giving the `1234+` example.
+- **2026-10-03, the owner is the push owner, and only a GitHub login is looked up.** "Origin's
+  owner" is read from the URL git pushes to (ADR-026 note), and is classified only when that
+  URL is on GitHub. `users/<owner>` is asked only for a login spelled the GitHub way (letters,
+  digits, `-`, `_`), as one URL segment; any other is not looked up.

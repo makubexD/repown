@@ -163,7 +163,8 @@ async function describe(found: Found, showEmails: boolean): Promise<Row> {
     path: resolve(found.path),
     remote: repo.originUrl !== null,
     owner: repo.owner,
-    host: repo.url ? repo.provider.id : null,
+    // owner and host describe the same URL: where origin's pushes go (ADR-014 note).
+    host: repo.url ? repo.ownerProvider.id : null,
     identity: identityOf(repo),
     guard: repo.guard,
     history: counts.ok ? grouped(counts.value, showEmails) : null,

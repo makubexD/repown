@@ -1,6 +1,6 @@
 # deferred Safety items, round 1
 
-Status: Phase 5 (review) next.
+Status: Phase 5 fixes done; final runs, then GATE 5.
 
 - [x] 1. Plan: branch safety-deferred, SPEC.md, tasks/todo.md
 - [x] 2. #21: lookups and drawing are safe

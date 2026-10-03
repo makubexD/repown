@@ -54,7 +54,7 @@ export default {
     if (!values) return 1;
 
     if (!reportPinned(await pinIdentity(git, { ...values, account }, repo.credentialKeys))) return 1;
-    out.pass('identity', values.name + ' <' + values.email + '>  push-as:' + account);
+    out.pass('identity', out.printable(values.name + ' <' + values.email + '>  push-as:' + account));
 
     if (flagBool(args, 'gh')) await applyGh(account, repo);
     await reportConcerns(account, repo, values.email);
@@ -110,14 +110,19 @@ async function askAndRecord(
   out.line();
   out.line('  No record of "' + account + '" yet. Asking once, then never again.');
   const entry = await askProfile({
-    name: known.name ?? suggested.name ?? account, email: known.email ?? suggested.email,
+    name: offered(known.name) ?? suggested.name ?? offered(account) ?? '', email: offered(known.email) ?? suggested.email,
   }, repo.provider.id);
   if (!entry) return null;
 
   const saved = await saveAccount(account, entry);
-  if (!saved.ok) out.warn('accounts', 'pinned, but not recorded: ' + saved.error);
+  if (!saved.ok) out.warn('accounts', 'pinned, but not recorded: ' + out.printable(saved.error));
   out.line();
   return entry;
+}
+
+/** A default worth offering: one printable() would change would be drawn raw, and saved if accepted. */
+function offered(value: string | null | undefined): string | undefined {
+  return value && out.printable(value) === value ? value : undefined;
 }
 
 async function askProfile(defaults: { name: string; email: string | undefined }, host: string): Promise<Account | null> {

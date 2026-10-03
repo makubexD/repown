@@ -398,7 +398,7 @@ async function notSignedIn(answers: Answers, ctx: AccountContext): Promise<strin
 function loginPrefill(answers: Answers, found: Suggestion, ctx: AccountContext): string | null {
   if (found.name || typeof answers['name'] === 'string') return null;
   const answered = found.email !== undefined && hostOf(answers, ctx) === 'github';
-  return answered ? 'GitHub shows no name for ' + printable(accountOf(answers)) + ', so this is the login' : 'this is the login';
+  return answered ? 'GitHub gives no usable name for ' + printable(accountOf(answers)) + ', so this is the login' : 'this is the login';
 }
 
 function machineName(ctx: AccountContext): string | null {
@@ -542,7 +542,7 @@ const OWNER_UNKNOWN = SOURCE_OWNS + '; may be an organisation';
 
 function accountChoices(ctx: SetupContext): Choice[] {
   const recorded = Object.entries(ctx.recorded).map(([account, entry]) =>
-    ({ value: account, label: account, hint: entry.name + ' <' + entry.email + '>' }));
+    ({ value: account, label: printable(account), hint: printable(entry.name + ' <' + entry.email + '>') }));
   const detected = ctx.detected.map((account) => detectedChoice(account, ctx));
   return [...recorded, ...detected, { value: NEW_ACCOUNT, label: 'a new account', hint: 'record another account on this machine' }];
 }

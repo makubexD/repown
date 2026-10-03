@@ -43,3 +43,10 @@ The fields:
 
 - Renaming or removing a JSON field is a breaking change. Adding one is not.
 - `test/cli.test.ts` locks both shapes, including `[]` for nothing found.
+
+## Notes
+
+- **2026-10-03, `scan`'s `owner` and `host` describe the push URL.** Both now come from
+  `git remote get-url --push origin` (pushurl, pushInsteadOf, insteadOf applied), the URL the
+  guard checks, so they always describe the same URL. No field was renamed or removed; the
+  values differ from before only where pushes are rewritten or have their own `pushurl`.

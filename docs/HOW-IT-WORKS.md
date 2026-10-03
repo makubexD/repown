@@ -778,10 +778,11 @@ offered only when unpushed commits carry another address; it reviews one step,
 first screen. Step by step can still reach the same screen after its questions, and
 then Change an answer is there.
 
-The owner setup, `status` and `use` name ("origin's owner", the destination owner) is read from
-the URL git pushes to, `git remote get-url --push`: `pushurl`, `pushInsteadOf` and `insteadOf`
-applied, the same URL the pre-push hook gives the guard. With several push URLs, the first is
-named; the guard checks each. A push straight to a URL is read after `insteadOf` only.
+The owner setup, `status`, `use` and `scan` name ("origin's owner", the destination owner) is read
+from the URL git pushes to, `git remote get-url --push`: `pushurl`, `pushInsteadOf` and
+`insteadOf` applied, the same URL the pre-push hook gives the guard. The host shown with it
+(`status`'s `(GitHub)`, `scan`'s `host`) comes from that same URL. With several push URLs, the
+first is named; the guard checks each. A push straight to a URL is read after `insteadOf` only.
 A username written into a `pushInsteadOf` URL isn't checked.
 
 **Keys.** ↑/↓ choose, Enter confirms, Esc or Ctrl-C cancels (exit 130; with numbered
@@ -1185,18 +1186,21 @@ own questions for a new account, in the frame:
 your email address`), where it is hosted (GitHub by default), and the name and email
 commits show. On GitHub they start from a lookup: the profile's name (else the login),
 and the noreply address GitHub gives the account. Each question says where its value
-came from: `GitHub shows no name for octocat, so this is the login` (or `this is the
-login` on another host, or when GitHub couldn't be asked), and `prefilled with the private address GitHub
+came from: `GitHub gives no usable name for octocat, so this is the login` (the profile has no
+name, or one with control or bidi characters, which is never offered), or `this is the
+login` on another host or when GitHub couldn't be asked; and `prefilled with the private address GitHub
 gives octocat (github.com/settings/emails)`; with nothing prefilled the email question
 gives a tip with an example (`like 1234+octocat@users.noreply.github.com`). Where this
 machine has a default name or address, they add `your default git name here is Octo
 Cat: use it only if this account does too`. Text questions take `<` to go back,
 and the host question has a Back choice; Back on the login returns to the menu. Esc
 still exits 130. An empty login is `a value is required`. Anything outside letters,
-digits and `. _ @ -` is `use letters, digits and . _ @ - only`. A login already
+digits and `. _ @ -` is `use letters, digits and . _ @ - only`, and one made only of dots is
+`a login can't be only dots`. A login already
 recorded, in any case, is `"octocat" is already recorded on this machine: use it by
 that name`. When github.com has no account by that login (a typo), or it is an
-organisation, the name question says so first, under its hint and before this machine's
+organisation, the name question says so first (a login GitHub can't have, with a dot or a
+slash, is named as no account without asking), under its hint and before this machine's
 default name if there is one:
 
 ```

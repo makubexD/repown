@@ -59,3 +59,29 @@ describe('the owner a clone pushes to', () => {
     }
   });
 });
+
+describe('the owner and the host it is on', () => {
+  test('come from the same push URL, even when fetch and push are on different hosts', async () => {
+    const box = sandbox();
+    try {
+      box.git('remote', 'add', 'origin', 'https://github.com/octo-org/hello.git');
+      box.git('config', 'remote.origin.pushurl', 'https://git.example.invalid/octocat/hello.git');
+      const repo = await inspectRepo(new Git(box.dir));
+      assert.equal(repo.owner, 'octocat');
+      assert.equal(repo.ownerProvider.id, 'generic', 'the push host, not the GitHub fetch host');
+      assert.equal(repo.provider.id, 'github', 'credentials still follow the fetch URL');
+    } finally {
+      box.dispose();
+    }
+  });
+
+  test('a remote whose name reads like an option is still read as a name', async () => {
+    const box = sandbox();
+    try {
+      box.git('config', 'remote.-h.url', 'https://github.com/octo-org/hello.git');
+      assert.equal(await new Git(box.dir).remotePushUrl('-h'), 'https://github.com/octo-org/hello.git');
+    } finally {
+      box.dispose();
+    }
+  });
+});

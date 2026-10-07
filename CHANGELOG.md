@@ -13,9 +13,12 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   (an SSH remote, Azure DevOps, another host): pushes there use that host's own sign-in. Setup
   already said nothing there.
 - `repown doctor` in a clone repown pins no credential for (SSH, Azure DevOps, another host)
-  no longer claims `github.com is served by …`, per-clone sign-in or `each clone signs in as its
-  own account`. It opens with a `This clone` line naming that host's own sign-in, then reports
-  on the machine for github.com, as it does outside a clone.
+  diagnosed that host's helper in words about github.com and per-clone sign-in. It now opens
+  with a `This clone` section (why origin gets no pin, and the helper serving it, with no
+  verdict), then reports on the machine for github.com, as it does outside a clone: no row is
+  marked `(this clone)`, and a passing verdict starts `for github.com, `. So gh serving
+  github.com now fails there too (exit 1), as it does outside a clone. Helper names and gh's
+  active login are drawn escaped.
 - `repown --help` lists exit code 130 (setup or the start screen cancelled), describes
   `accounts` as list, record or forget, and `accounts add` says that on GitHub the name and
   email are suggested from the profile through gh.

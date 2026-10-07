@@ -151,17 +151,23 @@ When the registry, the store or gh could not be read, its WARN is above and the 
 adds ` · 1 warning` (or `N warnings`), as status counts its warnings.
 
 In a clone repown pins no credential for (an SSH remote, Azure DevOps, another host), the
-report opens with that clone, then reports on the machine for github.com, as outside a clone:
+report opens with that clone: why origin gets no pin, read from its configured URL, and the
+helper that serves that URL, named with no verdict. Then it reports on the machine for
+github.com, as outside a clone: no account row is marked `(this clone)`, and a verdict that
+passes starts `for github.com, `. gh serving github.com still fails, with exit 1.
 
 ```
 This clone
-  sign-in        Azure DevOps's own; no credential is pinned here
+  sign-in        origin is on Azure DevOps, so no credential is pinned here
+  helper         manager
 
 This machine, for github.com
   helper         manager
 ```
 
-Over SSH the line says `your SSH key; no credential is pinned here`.
+The reason is `origin is an SSH URL` (with no helper line: SSH asks none), `origin is not an
+HTTPS URL` (GitHub over `http://` or `git://`), or `origin is not on GitHub`. A clone with no
+origin, or one whose origin is a local path, reads as outside a clone.
 
 **Why:** switching gh's account moves the password prompt to your other account's
 clones rather than fixing it ([ADR-001](decisions/ADR-001-credential-manager-not-gh.md)).

@@ -7,6 +7,12 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+### Fixed
+- `repown use` no longer says `No stored credential … the first push signs in` or `gh is still
+  the git credential helper, so this pin is not honoured` in a clone where it pins no credential
+  (an SSH remote, Azure DevOps, another host): pushes there use that host's own sign-in. Setup
+  already said nothing there.
+
 ## [0.5.1] - 2026-10-03
 
 A safety release: account lookups can no longer borrow another account's profile, the start

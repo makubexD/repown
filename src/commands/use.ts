@@ -292,7 +292,9 @@ async function ownerConcern(account: string, repo: RepoState): Promise<void> {
   out.detail('  ' + (allowOwnerCommand(repo.owner) ?? ALLOW_OWNER_BY_HAND));
 }
 
+/** Only where use pinned a credential: elsewhere pushes use the host's own sign-in, as setup's credentialGap says. */
 async function credentialConcern(account: string, repo: RepoState): Promise<void> {
+  if (repo.credentialKeys.length === 0) return;
   const auth = await inspectAuth(repo.git, repo.originUrl ?? undefined);
   if (auth.ghIsHelper) {
     out.warn('helper', 'gh is still the git credential helper, so this pin is not honoured.');

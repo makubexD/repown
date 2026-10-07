@@ -814,34 +814,47 @@ The questions it did not ask are still steps.
 
 ```
 ◇  How should setup work?
-│  Recommended fills in the answers that only change this clone; Step
-│  by step asks each one
-│  ● Recommended
-│  ○ Step by step
+│  Recommended fills in the answers that only change this
+│  clone; Step by step asks each one
+│  Recommended
 │
 ◇  Which account should this clone belong to?
+│  commits made here carry its name and email; on GitHub,
+│  pushes from here also sign in as it
+│  right now this clone isn't pinned to any account
 │  octocat
 │
 ◇  This repository belongs to "octo-org". Let this clone push to it?
-│  Yes if you're a member of that organisation or a collaborator on
-│  it; with No, the push guard refuses pushes there. Saved in this
-│  clone only
+│  Yes if you're a member of that organisation or a
+│  collaborator on it; with No, the push guard refuses pushes
+│  there. Saved in this clone only
 │  Yes
 │
-◇  Review: nothing has changed yet
-│  1. Let this clone push to octo-org's repositories
-│       git config --local --add repown.allowOwner octo-org
-│  2. Pin this clone to octocat, and make it gh's active account
-│       repown use octocat --gh
-│  3. Turn on the push guard: each push is checked first
-│       repown guard on
-│  4. Push branches without -u: the first push sets the upstream (this
-│     clone only)
-│       git config --local push.autoSetupRemote true
+◇  Review: nothing has changed yet ─────────────────────────────────╮
+│                                                                   │
+│  This clone will commit and push as octocat.                      │
+│                                                                   │
+│  When you choose Run:                                             │
+│  1. Let this clone push to octo-org's repositories                │
+│       git config --local --add repown.allowOwner octo-org         │
+│  2. Pin this clone to octocat, and make it gh's active account    │
+│       repown use octocat --gh                                     │
+│  3. Turn on the push guard: each push is checked first            │
+│       repown guard on                                             │
+│  4. Push branches without -u: the first push sets the upstream    │
+│     (this clone only)                                             │
+│       git config --local push.autoSetupRemote true                │
+│                                                                   │
+│  These are ordinary commands: run them yourself, or in a script.  │
+│  This clone's settings go in its .git/config, which is never      │
+│  pushed.                                                          │
+│                                                                   │
+├───────────────────────────────────────────────────────────────────╯
 ```
 
-**Step by step** asks each of those questions. The same clone, after choosing Step by step
-(the review follows, as in the [README](../README.md#quick-start)):
+**Step by step** asks each of those questions, and whether gh should act as this account
+too. The same clone, after choosing Step by step and answering No to gh (the review follows,
+as in the [README](../README.md#quick-start)):
 
 ```
 ┌  repown setup
@@ -849,33 +862,45 @@ The questions it did not ask are still steps.
 ◇  Reading this clone and this machine
 │
 ◇  How should setup work?
+│  Recommended fills in the answers that only change this
+│  clone; Step by step asks each one
 │  Step by step
 │
 ◇  Which account should this clone belong to?
-│  commits made here carry its name and email; on GitHub, pushes from
-│  here also sign in as it
+│  commits made here carry its name and email; on GitHub,
+│  pushes from here also sign in as it
 │  right now this clone isn't pinned to any account
 │  octocat
 │
+◇  Also make this account gh's active account?
+│  gh is GitHub's command-line tool: this changes the account
+│  gh commands use, in every terminal; git is not affected
+│  gh's active account is octo-work
+│  No
+│
 ◇  This repository belongs to "octo-org". Let this clone push to it?
-│  Yes if you're a member of that organisation or a collaborator on
-│  it; with No, the push guard refuses pushes there. Saved in this
-│  clone only
+│  Yes if you're a member of that organisation or a
+│  collaborator on it; with No, the push guard refuses pushes
+│  there. Saved in this clone only
 │  Yes
 │
 ◇  Turn on the push guard?
-│  before each push, it checks that every commit is yours and goes to
-│  the right place, and stops the push if not; turn it off any time:
-│  repown guard off
+│  before each push, it checks that every commit is yours and
+│  goes to the right place, and stops the push if not; turn it
+│  off any time: repown guard off
 │  only your email address is in this repository's commits
 │  Yes
 │
 ◇  Push branches without -u?
-│  sets push.autoSetupRemote in this clone only, so the first push of
-│  a branch without an upstream creates it on origin; the guard still
-│  checks it
+│  sets push.autoSetupRemote in this clone only, so the first
+│  push of a branch without an upstream creates it on origin;
+│  the guard still checks it
 │  Yes
 ```
+
+Its review pins with `repown use octocat` (no `--gh`) and adds, under the steps: `gh still
+acts as octo-work, so gh pr create here would act as that account (git pushes are
+unaffected). If you use gh here: gh auth switch -u octocat.`
 
 **Run:** in Recommended, each step prints what it is, then the command and its own output.
 
@@ -907,8 +932,9 @@ OK    upstream   branches without an upstream push without -u in this clone
          repown.allowOwner: (added) octo-org
          push.autoSetupRemote: (added) true
          push guard: off -> on
+       changed on this machine:
+         gh: octocat is now gh's active account (every terminal)
        check it any time: repown status (this clone), repown doctor (this machine)
-       optional, only if you use gh here: gh auth switch -u octocat
 ```
 
 The last line is only when gh still acts as someone else and the review did not already say so. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh   (signs <account> in to gh)`. The review says the same thing (`gh still acts as <active>, so gh pr create here would act as that account (git pushes are unaffected). If you use gh here: gh auth switch -u <account>.` when gh already lists it, otherwise `If you use gh here: repown use <account> --gh (signs <account> in to gh).`), and that run does not print it again. With `--no-input` there is no review, so the line after the run is the one place it appears. The first push's sign-in is said by `use` when `use` runs. When the pin is left out and Git Credential Manager's store was read and does not list the account, the review says `No stored credential for <account> yet: the first push signs in once (your browser opens).`

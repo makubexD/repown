@@ -55,8 +55,16 @@ describe('output the wizard reuses stays byte for byte', () => {
       '         git config --local --add repown.allowOwner octo-org\n'), run.stderr);
   });
 
-  test('help lists the same exit codes', () => {
-    assert.match(repown(['--help'], box.dir).stdout, /^ {2}Exit codes: 0 success, 1 failure or refusal, 2 usage error\.$/m);
+  test('help lists the same exit codes, and 130 for a cancelled setup or start screen', () => {
+    assert.match(repown(['--help'], box.dir).stdout, /^ {2}Exit codes: 0 success, 1 failure or refusal, 2 usage error,$/m);
+    assert.match(repown(['--help'], box.dir).stdout, /^ {2}130 cancelled \(setup, the start screen\)\.$/m);
+  });
+
+  test('help names every accounts action, and that add looks the login up on GitHub', () => {
+    const top = repown(['--help'], box.dir).stdout;
+    assert.match(top, /^ {2}accounts {2}list, record or forget the accounts this machine knows$/m);
+    const add = repown(['help', 'accounts', 'add'], box.dir).stdout;
+    assert.match(add.replace(/\s+/g, ' '), /asks for its name and email once; on GitHub, suggested from its profile through gh/);
   });
 });
 

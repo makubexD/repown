@@ -14,7 +14,8 @@ export function renderTopHelp(entries: ReadonlyMap<string, Command | CommandGrou
     ...topHeader(entries),
     ...globalOptionsHelp(),
     ...environmentHelp(),
-    '  Exit codes: 0 success, 1 failure or refusal, 2 usage error.',
+    '  Exit codes: 0 success, 1 failure or refusal, 2 usage error,',
+    '  130 cancelled (setup, the start screen).',
     '',
   ];
 }

@@ -280,7 +280,7 @@ note, not a warning. Every warning it can print:
 
 | Command | 0 | 1 | 2 | Other |
 | --- | --- | --- | --- | --- |
-| In general | Success | Failure or refusal | Usage error | |
+| In general | Success | Failure or refusal | Usage error | 130 when setup or the start screen is cancelled |
 | `repown scan` | Whatever it finds (read its output or JSON) | | A missing folder or a bad `--depth` | |
 | `repown setup` | Done, or already set up | Decline, or it can't start | Flags that don't fit, or no terminal without `--no-input` | 130 when cancelled or interrupted; a failing step's own code |
 | `repown status` | Success. Warnings alone exit 0 | A problem | | |

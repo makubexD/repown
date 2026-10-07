@@ -16,6 +16,9 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   no longer claims `github.com is served by …`, per-clone sign-in or `each clone signs in as its
   own account`. It opens with a `This clone` line naming that host's own sign-in, then reports
   on the machine for github.com, as it does outside a clone.
+- `repown --help` lists exit code 130 (setup or the start screen cancelled), describes
+  `accounts` as list, record or forget, and `accounts add` says that on GitHub the name and
+  email are suggested from the profile through gh.
 
 ## [0.5.1] - 2026-10-03
 

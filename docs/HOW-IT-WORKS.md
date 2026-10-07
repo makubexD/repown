@@ -115,14 +115,14 @@ Manager is the helper, the report explains per-clone sign-in and then one senten
 on every such run, because repown cannot see SSO authorization
 ([ADR-013](decisions/ADR-013-deliberately-not-done.md)):
 `If a push fails although the account is stored, the org may need SSO authorization: authorize it in the org's SSO settings on <host>`.
-`<host>` is the origin's host, or github.com outside a clone. Another host says `check <label>'s SSO settings`. The gh-helper and unknown-helper
+`<host>` is the origin's host in a GitHub clone over HTTPS, and github.com anywhere else. The gh-helper and unknown-helper
 screens do not repeat it; they name their own problem. On Windows the clone path
 in status and the GCM path here use backslashes. Elsewhere a path is shown as it
 was read ([ADR-023](decisions/ADR-023-status-and-doctor-say-what-matters-first.md)).
 
 ```mermaid
 flowchart TD
-  D[repown doctor] --> Q{"what serves this clone's host?<br/>(github.com outside a clone)"}
+  D[repown doctor] --> Q{"what serves this clone's host?<br/>(github.com outside a clone, or where no credential is pinned)"}
   Q -->|Git Credential Manager| OK["🟢 nothing to do<br/>one credential per account, picked per clone"]
   Q -->|gh, from gh auth setup-git| BAD["🔴 gh serves only its ACTIVE account<br/>every other clone gets a password prompt"]
   Q -->|anything else| W["🟡 repown has no opinion<br/>the pin works only if that helper honours it"]
@@ -149,6 +149,25 @@ flowchart TD
 
 When the registry, the store or gh could not be read, its WARN is above and the verdict
 adds ` · 1 warning` (or `N warnings`), as status counts its warnings.
+
+In a clone repown pins no credential for (an SSH remote, Azure DevOps, another host), the
+report opens with that clone: why origin gets no pin, read from its configured URL, and the
+helper that serves that URL, named with no verdict. Then it reports on the machine for
+github.com, as outside a clone: no account row is marked `(this clone)`, and a verdict that
+passes starts `for github.com, `. gh serving github.com still fails, with exit 1.
+
+```
+This clone
+  sign-in        origin is on Azure DevOps, so no credential is pinned here
+  helper         manager
+
+This machine, for github.com
+  helper         manager
+```
+
+The reason is `origin is an SSH URL` (with no helper line: SSH asks none), `origin is not an
+HTTPS URL` (GitHub over `http://` or `git://`), or `origin is not on GitHub`. A clone with no
+origin, or one whose origin is a local path, reads as outside a clone.
 
 **Why:** switching gh's account moves the password prompt to your other account's
 clones rather than fixing it ([ADR-001](decisions/ADR-001-credential-manager-not-gh.md)).
@@ -221,8 +240,8 @@ sequenceDiagram
 | SSH remote | no credential key is written, because your SSH key decides; 🟡 `use` says credentials are not pinned for this remote |
 | Azure DevOps or another host | identity and guard work; 🟡 credentials are not pinned ([ADR-009](decisions/ADR-009-hosts-claim-only-measured.md)). On Azure DevOps the owner is the organisation, so allow it with `repown.allowOwner` |
 | Repo owned by an organisation | 🟡 prints the line that allows it ([card 5](#5-check-where-you-are)) |
-| gh is still the credential helper | 🟡 `fix: repown fix` |
-| No stored credential yet | the first push signs in once ([card 6](#6-commit-and-first-push)) |
+| gh is still the credential helper | 🟡 `fix: repown fix`. Only where `use` pins a credential (GitHub over HTTPS) |
+| No stored credential yet | the first push signs in once ([card 6](#6-commit-and-first-push)). Only where `use` pins a credential: an SSH remote or another host signs in its own way, so neither line is said |
 | Unpushed commits by another address | 🟡 `N commits on <branch> not on any remote are by <addresses>; the guard will refuse them`, then `re-author it` (one commit) or `re-author them` (more): `git rebase <base> --exec "git commit --amend --no-edit --reset-author --allow-empty"`, or `git rebase --root --exec "git commit --amend --no-edit --reset-author --allow-empty"` when that commit has no parent, or pin that address (said only when one address made them all). `<base>` is the short hash of the parent of the oldest of those commits by another address, so your own commits before it are left alone. Up to three addresses, then `and N more`. Exit code unchanged. A detached HEAD says nothing. If those commits can't be read, the warning says so and gives no rebase command. Where no remote-tracking ref reaches the branch's push destination (the remote `git push` with no arguments uses), a line comes first and the rebase becomes conditional. A remote never fetched, or empty, or whose tracking refs can't be read: `origin has no remote-tracking refs, so some of these may already be on it (the guard skips any already on the branch you push to): git fetch origin, then repown use <account> to count again`, then `if origin has none of them, re-author them: …`. A remote that pushes to another URL than it fetches from: `origin pushes to another URL than it fetches from, …`. A URL: `this branch pushes to a URL, not a remote, …`, with `git config --local <key> <remote>` and a fetch when a remote has that host and path, and nothing to copy otherwise; the URL is not printed. A name with no remote: `this branch pushes to "<name>", which is not a remote here, …`. Those three continue `if it has none of them, re-author …`. A name starting with `-` gets no command ([ADR-025](decisions/ADR-025-unpushed-advice-behind-an-unknown-destination.md)) |
 
 </details>
@@ -801,34 +820,47 @@ The questions it did not ask are still steps.
 
 ```
 ◇  How should setup work?
-│  Recommended fills in the answers that only change this clone; Step
-│  by step asks each one
-│  ● Recommended
-│  ○ Step by step
+│  Recommended fills in the answers that only change this
+│  clone; Step by step asks each one
+│  Recommended
 │
 ◇  Which account should this clone belong to?
+│  commits made here carry its name and email; on GitHub,
+│  pushes from here also sign in as it
+│  right now this clone isn't pinned to any account
 │  octocat
 │
 ◇  This repository belongs to "octo-org". Let this clone push to it?
-│  Yes if you're a member of that organisation or a collaborator on
-│  it; with No, the push guard refuses pushes there. Saved in this
-│  clone only
+│  Yes if you're a member of that organisation or a
+│  collaborator on it; with No, the push guard refuses pushes
+│  there. Saved in this clone only
 │  Yes
 │
-◇  Review: nothing has changed yet
-│  1. Let this clone push to octo-org's repositories
-│       git config --local --add repown.allowOwner octo-org
-│  2. Pin this clone to octocat, and make it gh's active account
-│       repown use octocat --gh
-│  3. Turn on the push guard: each push is checked first
-│       repown guard on
-│  4. Push branches without -u: the first push sets the upstream (this
-│     clone only)
-│       git config --local push.autoSetupRemote true
+◇  Review: nothing has changed yet ─────────────────────────────────╮
+│                                                                   │
+│  This clone will commit and push as octocat.                      │
+│                                                                   │
+│  When you choose Run:                                             │
+│  1. Let this clone push to octo-org's repositories                │
+│       git config --local --add repown.allowOwner octo-org         │
+│  2. Pin this clone to octocat, and make it gh's active account    │
+│       repown use octocat --gh                                     │
+│  3. Turn on the push guard: each push is checked first            │
+│       repown guard on                                             │
+│  4. Push branches without -u: the first push sets the upstream    │
+│     (this clone only)                                             │
+│       git config --local push.autoSetupRemote true                │
+│                                                                   │
+│  These are ordinary commands: run them yourself, or in a script.  │
+│  This clone's settings go in its .git/config, which is never      │
+│  pushed.                                                          │
+│                                                                   │
+├───────────────────────────────────────────────────────────────────╯
 ```
 
-**Step by step** asks each of those questions. The same clone, after choosing Step by step
-(the review follows, as in the [README](../README.md#quick-start)):
+**Step by step** asks each of those questions, and whether gh should act as this account
+too. The same clone, after choosing Step by step and answering No to gh (the review follows,
+as in the [README](../README.md#quick-start)):
 
 ```
 ┌  repown setup
@@ -836,33 +868,45 @@ The questions it did not ask are still steps.
 ◇  Reading this clone and this machine
 │
 ◇  How should setup work?
+│  Recommended fills in the answers that only change this
+│  clone; Step by step asks each one
 │  Step by step
 │
 ◇  Which account should this clone belong to?
-│  commits made here carry its name and email; on GitHub, pushes from
-│  here also sign in as it
+│  commits made here carry its name and email; on GitHub,
+│  pushes from here also sign in as it
 │  right now this clone isn't pinned to any account
 │  octocat
 │
+◇  Also make this account gh's active account?
+│  gh is GitHub's command-line tool: this changes the account
+│  gh commands use, in every terminal; git is not affected
+│  gh's active account is octo-work
+│  No
+│
 ◇  This repository belongs to "octo-org". Let this clone push to it?
-│  Yes if you're a member of that organisation or a collaborator on
-│  it; with No, the push guard refuses pushes there. Saved in this
-│  clone only
+│  Yes if you're a member of that organisation or a
+│  collaborator on it; with No, the push guard refuses pushes
+│  there. Saved in this clone only
 │  Yes
 │
 ◇  Turn on the push guard?
-│  before each push, it checks that every commit is yours and goes to
-│  the right place, and stops the push if not; turn it off any time:
-│  repown guard off
+│  before each push, it checks that every commit is yours and
+│  goes to the right place, and stops the push if not; turn it
+│  off any time: repown guard off
 │  only your email address is in this repository's commits
 │  Yes
 │
 ◇  Push branches without -u?
-│  sets push.autoSetupRemote in this clone only, so the first push of
-│  a branch without an upstream creates it on origin; the guard still
-│  checks it
+│  sets push.autoSetupRemote in this clone only, so the first
+│  push of a branch without an upstream creates it on origin;
+│  the guard still checks it
 │  Yes
 ```
+
+Its review pins with `repown use octocat` (no `--gh`) and adds, under the steps: `gh still
+acts as octo-work, so gh pr create here would act as that account (git pushes are
+unaffected). If you use gh here: gh auth switch -u octocat.`
 
 **Run:** in Recommended, each step prints what it is, then the command and its own output.
 
@@ -894,8 +938,9 @@ OK    upstream   branches without an upstream push without -u in this clone
          repown.allowOwner: (added) octo-org
          push.autoSetupRemote: (added) true
          push guard: off -> on
+       changed on this machine:
+         gh: octocat is now gh's active account (every terminal)
        check it any time: repown status (this clone), repown doctor (this machine)
-       optional, only if you use gh here: gh auth switch -u octocat
 ```
 
 The last line is only when gh still acts as someone else and the review did not already say so. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh   (signs <account> in to gh)`. The review says the same thing (`gh still acts as <active>, so gh pr create here would act as that account (git pushes are unaffected). If you use gh here: gh auth switch -u <account>.` when gh already lists it, otherwise `If you use gh here: repown use <account> --gh (signs <account> in to gh).`), and that run does not print it again. With `--no-input` there is no review, so the line after the run is the one place it appears. The first push's sign-in is said by `use` when `use` runs. When the pin is left out and Git Credential Manager's store was read and does not list the account, the review says `No stored credential for <account> yet: the first push signs in once (your browser opens).`

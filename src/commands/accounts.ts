@@ -120,7 +120,7 @@ const listAction: Command = {
 };
 
 const addAction: Command = {
-  summary: 'record an account (asks for name/email once, then remembers)',
+  summary: 'record an account (asks for its name and email once; on GitHub, suggested from its profile through gh)',
   positionals: { min: 1, max: 1, label: '<account>' },
   options: [
     { name: 'name', kind: 'string', help: 'the commit author name' },
@@ -143,7 +143,7 @@ const removeAction: Command = {
 };
 
 export default {
-  summary: 'list or record the accounts this machine knows',
+  summary: 'list, record or forget the accounts this machine knows',
   defaultAction: 'list',
   actions: { list: listAction, add: addAction, remove: removeAction },
   // `rm` was the advertised name first; it keeps working, unadvertised.

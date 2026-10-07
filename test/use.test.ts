@@ -437,3 +437,31 @@ function stripAnsi(text: string): string {
 function escapeRe(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+describe('repown use says nothing about a credential pin where it sets none (#2)', () => {
+  let box: Sandbox;
+  beforeEach(() => {
+    box = sandbox();
+    box.writeGlobalConfig('[credential]\n\thelper = !gh auth git-credential\n');
+  });
+  afterEach(() => box.dispose());
+
+  const GH_HELPER = /gh is still the git credential helper, so this pin is not honoured/;
+
+  test('a GitHub clone over HTTPS still hears that gh is the helper', async () => {
+    box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
+    const run = await runUse(box);
+    assert.equal(run.code, 0, run.stderr);
+    assert.match(run.stderr, GH_HELPER);
+  });
+
+  for (const url of ['https://dev.azure.com/octocat/project/_git/repo', 'git@github.com:octocat/project.git', 'https://git.example.invalid/octocat/project.git']) {
+    test('a clone whose pushes use their host\'s own sign-in hears nothing about the pin: ' + url, async () => {
+      box.git('remote', 'add', 'origin', url);
+      const run = await runUse(box);
+      assert.equal(run.code, 0, run.stderr);
+      assert.doesNotMatch(run.stderr, GH_HELPER);
+      assert.doesNotMatch(run.stdout + run.stderr, /No stored credential|repown fix/);
+    });
+  }
+});

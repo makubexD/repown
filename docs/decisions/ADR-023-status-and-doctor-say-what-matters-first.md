@@ -1,6 +1,6 @@
 # ADR-023: Status and doctor say what matters first
 
-**Status:** Accepted. Amended by [ADR-026](ADR-026-setup-says-what-blocks-the-next-push.md): status prints what will stop the next push first among its warnings (`WARN push`), and its closing line says `the next push will fail: …` instead of `ready:` while any remains; the exit code is unchanged.
+**Status:** Accepted. Amended by [ADR-026](ADR-026-setup-says-what-blocks-the-next-push.md): status prints what will stop the next push first among its warnings (`WARN push`), and its closing line says `the next push will fail: …` instead of `ready:` while any remains; the exit code is unchanged. Amended by its 2026-10-07 note: a clone with no credential pin is diagnosed for github.com.
 
 ## Context
 
@@ -96,3 +96,22 @@ It stays.
 - **Where this is written up:** [card 5](../HOW-IT-WORKS.md#5-check-where-you-are)
   for status, [card 1](../HOW-IT-WORKS.md#1-set-up-the-machine) for doctor, the
   README sample, and CHANGELOG.
+
+## Notes
+
+- **2026-10-07, a clone with no credential pin is diagnosed for github.com.** In an SSH,
+  Azure DevOps or other-host clone, doctor used to diagnose that host's helper but said
+  `github.com is served by`, that GCM `picks per repository`, and `each clone signs in as its own
+  account`, about a clone where no credential is pinned (ADR-009). It now opens with a
+  `This clone` section: `sign-in  <reason>, so no credential is pinned here` (read from origin's
+  configured URL, which is what `credentialKeys` follows) and `helper  <the helper for that
+  URL>`, named with no verdict (none over SSH). Then it diagnoses the machine for github.com
+  under `This machine, for github.com`, as outside a clone: no row is marked `(this clone)`, a
+  passing verdict starts `for github.com, `, and the SSO line always names a GitHub host, so
+  `check <label>'s SSO settings` above is gone. A clone with no origin, or a local-path origin,
+  reads as outside a clone.
+  For: each sentence says which host it is about, and status already says `pushes use this
+  host's own sign-in` there. Against: the exit code changes in one case: with gh serving
+  github.com, such a clone now exits 1 (it exited 0), as doctor does outside a clone; and the
+  helper serving the clone's own host is named, not judged.
+

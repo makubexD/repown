@@ -30,6 +30,8 @@ const NONE_YET = 'none recorded, stored or signed in yet';
 const NO_GCM = 'no accounts recorded or signed in to gh; Git Credential Manager isn\'t installed';
 const STORED_UNUSED = 'stored in Git Credential Manager, which git isn\'t using';
 const SETUP_POINTER = 'repown setup';
+const MACHINE = 'This machine';
+const MACHINE_FOR_GITHUB = 'This machine, for github.com';
 
 export default {
   summary: 'what serves credentials on this machine, and to whom',
@@ -39,10 +41,10 @@ export default {
     // Read-only: config reads come from one list per scope (ADR-029).
     const git = snapshotOf(gitFor(args));
     const repo = await inspectRepo(git);
-    const auth = await inspectAuth(git, repo.originUrl ?? undefined);
+    const auth = await inspectAuth(git, probeUrl(repo));
     const warned = printReport(repo, auth, await loadRegistry());
-    const found = diagnose(auth, ssoTarget(repo));
-    closeDoctor(found.verdict + warningTally(warned));
+    const found = diagnose(auth, ssoHost(repo));
+    closeDoctor(scoped(repo, found) + warningTally(warned));
     return found.code;
   },
 } satisfies Command;
@@ -289,16 +291,38 @@ function recordedPhrase(row: AccountRow): string {
 /** Prints the machine and its accounts; returns how many sources could not be read. */
 function printReport(repo: RepoState, auth: AuthState, registry: Result<Registry>): number {
   out.heading(DOCTOR_TITLE);
-  printMachine(auth);
-  const report = accountRows(registry, auth, pinnedOf(repo));
+  const unpinned = unpinnedClone(repo);
+  if (unpinned) printClone(repo);
+  printMachine(auth, unpinned ? MACHINE_FOR_GITHUB : MACHINE);
+  // In an unpinned clone the rows are github.com's sign-ins, none of them this clone's.
+  const report = accountRows(registry, auth, unpinned ? null : pinnedOf(repo));
   printAccounts(report);
   out.line();
   return report.warnings.length;
 }
 
-function printMachine(auth: AuthState): void {
-  out.heading('This machine');
-  out.field('helper', auth.helper ?? 'none configured');
+/**
+ * Said first, since the machine below is github.com's: why origin gets no pin, and the helper
+ * that serves origin's URL, named with no verdict (repown can't judge a helper it doesn't pin for).
+ */
+function printClone(repo: RepoState): void {
+  out.heading('This clone');
+  out.field('sign-in', unpinnedReason(repo) + ', so no credential is pinned here');
+  // Over SSH git asks no credential helper.
+  if (repo.url?.scheme !== 'ssh') out.field('helper', out.printable(repo.helper ?? 'none configured'));
+}
+
+/** Read from origin's configured URL, which is what credentialKeys follows. */
+function unpinnedReason(repo: RepoState): string {
+  if (repo.url?.scheme === 'ssh') return 'origin is an SSH URL';
+  if (repo.provider.id === 'github') return 'origin is not an HTTPS URL';
+  if (repo.provider.id === 'generic') return 'origin is not on GitHub';
+  return 'origin is on ' + repo.provider.label;
+}
+
+function printMachine(auth: AuthState, heading: string): void {
+  out.heading(heading);
+  out.field('helper', out.printable(auth.helper ?? 'none configured'));
   out.field('GCM', auth.gcmPath === null ? 'not found' : out.displayPath(auth.gcmPath));
   out.field('gh active', activeAccountLabel(auth));
 }
@@ -326,16 +350,10 @@ interface Diagnosis {
   readonly verdict: string;
 }
 
-interface SsoTarget {
-  readonly label: string;
-  /** GitHub's host. Null when the line names the provider instead. */
-  readonly host: string | null;
-}
-
-function diagnose(auth: AuthState, target: SsoTarget): Diagnosis {
+function diagnose(auth: AuthState, ssoAt: string): Diagnosis {
   if (auth.ghIsHelper) return diagnoseGhHelper(auth);
   if (!auth.helperIsGcm) return diagnoseUnknownHelper(auth);
-  return diagnoseHealthy(auth, target);
+  return diagnoseHealthy(auth, ssoAt);
 }
 
 const READY = 'ready: each clone signs in as its own account through Git Credential Manager';
@@ -369,7 +387,7 @@ function diagnoseGhHelper(auth: AuthState): Diagnosis {
 
 /** On its own line, and only when known: an empty "()" used to read as a bug. */
 function ghHelperActive(auth: AuthState): void {
-  if (auth.gh.ok && auth.gh.value.active) out.detail('Active right now: ' + auth.gh.value.active);
+  if (auth.gh.ok && auth.gh.value.active) out.detail('Active right now: ' + out.printable(auth.gh.value.active));
 }
 
 function ghHelperFiles(auth: AuthState): void {
@@ -381,7 +399,7 @@ function ghHelperFiles(auth: AuthState): void {
 }
 
 function diagnoseUnknownHelper(auth: AuthState): Diagnosis {
-  const helper = auth.helper ?? 'nothing';
+  const helper = out.printable(auth.helper ?? 'nothing');
   out.warn('helper', 'github.com is served by "' + helper + '", which repown has no opinion about.');
   out.detail('The per-repository pin (credential.<url>.username) only works if');
   out.detail('that helper honours it.');
@@ -392,11 +410,11 @@ function unchecked(helper: string): string {
   return 'unchecked: repown can\'t tell whether ' + helper + ' honours the per-clone pin';
 }
 
-function diagnoseHealthy(auth: AuthState, target: SsoTarget): Diagnosis {
+function diagnoseHealthy(auth: AuthState, ssoAt: string): Diagnosis {
   explainGcm();
   const empty = emptyStore(auth);
   if (empty) warnEmptyStore();
-  ssoNote(target);
+  ssoNote(ssoAt);
   return { code: 0, verdict: empty ? READY_EMPTY : READY };
 }
 
@@ -420,25 +438,34 @@ function warnEmptyStore(): void {
 // not done"). A credential that is otherwise healthy still fails the moment
 // it touches an org it is not SSO-authorized for, and that failure looks
 // identical to a bad token. Printed unconditionally so it is there before it
-// is needed. On GitHub the authorization is the org's SSO settings, named
-// with the origin's host (github.com outside a clone). Any other provider
-// is named only.
-function ssoNote(target: SsoTarget): void {
+// is needed. The authorization is the org's SSO settings on the GitHub host
+// the diagnosis is about.
+function ssoNote(host: string): void {
   out.line('  If a push fails although the account is stored, the org may need SSO');
-  out.line('  authorization: ' + ssoFix(target));
+  out.line('  authorization: authorize it in the org\'s SSO settings on ' + host);
 }
 
-function ssoFix(target: SsoTarget): string {
-  if (target.host !== null) return 'authorize it in the org\'s SSO settings on ' + target.host;
-  return 'check ' + target.label + "'s SSO settings";
+/** The origin's host where repown pins a credential (GitHub over HTTPS), github.com otherwise. */
+function ssoHost(repo: RepoState): string {
+  return pinsCredential(repo) && repo.url ? repo.url.host : 'github.com';
 }
 
-function ssoTarget(repo: RepoState): SsoTarget {
-  return { label: repo.provider.label, host: ssoHost(repo) };
+/** Only GitHub over HTTPS has credential keys; anywhere else pushes use the host's own sign-in (ADR-009). */
+function pinsCredential(repo: RepoState): boolean {
+  return repo.credentialKeys.length > 0;
 }
 
-/** The origin's host on GitHub, github.com outside a clone, null for any other provider. */
-function ssoHost(repo: RepoState): string | null {
-  if (repo.provider.id !== 'github' && repo.isRepo) return null;
-  return repo.url?.host ?? 'github.com';
+/** A clone with an origin repown pins no credential for. No origin reads as outside a clone. */
+function unpinnedClone(repo: RepoState): boolean {
+  return repo.url !== null && !pinsCredential(repo);
+}
+
+/** The origin's URL where repown pins a credential; github.com otherwise, as outside a clone. */
+function probeUrl(repo: RepoState): string | undefined {
+  return pinsCredential(repo) ? repo.originUrl ?? undefined : undefined;
+}
+
+/** In an unpinned clone a passing verdict says it is about github.com, not this clone. */
+function scoped(repo: RepoState, found: Diagnosis): string {
+  return unpinnedClone(repo) && found.code === 0 ? 'for github.com, ' + found.verdict : found.verdict;
 }

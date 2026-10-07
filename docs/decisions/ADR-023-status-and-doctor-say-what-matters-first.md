@@ -96,3 +96,16 @@ It stays.
 - **Where this is written up:** [card 5](../HOW-IT-WORKS.md#5-check-where-you-are)
   for status, [card 1](../HOW-IT-WORKS.md#1-set-up-the-machine) for doctor, the
   README sample, and CHANGELOG.
+
+## Notes
+
+- **2026-10-07, a clone with no credential pin is diagnosed for github.com.** In an SSH,
+  Azure DevOps or other-host clone, doctor used to diagnose that host's helper but still said
+  `github.com is served by`, that GCM `picks per repository`, and `each clone signs in as its own
+  account`: none of which holds where no credential is pinned (ADR-009). It now opens with
+  `This clone` / `sign-in  <host>'s own; no credential is pinned here` (`your SSH key` over SSH)
+  and diagnoses the machine for github.com under `This machine, for github.com`, as outside a
+  clone, so the SSO line always names a GitHub host and `check <label>'s SSO settings` is gone.
+  For: every sentence is true, and status already says `pushes use this host's own sign-in`.
+  Against: doctor no longer reports the helper serving that other host. Exit codes unchanged.
+

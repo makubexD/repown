@@ -115,14 +115,14 @@ Manager is the helper, the report explains per-clone sign-in and then one senten
 on every such run, because repown cannot see SSO authorization
 ([ADR-013](decisions/ADR-013-deliberately-not-done.md)):
 `If a push fails although the account is stored, the org may need SSO authorization: authorize it in the org's SSO settings on <host>`.
-`<host>` is the origin's host, or github.com outside a clone. Another host says `check <label>'s SSO settings`. The gh-helper and unknown-helper
+`<host>` is the origin's host in a GitHub clone over HTTPS, and github.com anywhere else. The gh-helper and unknown-helper
 screens do not repeat it; they name their own problem. On Windows the clone path
 in status and the GCM path here use backslashes. Elsewhere a path is shown as it
 was read ([ADR-023](decisions/ADR-023-status-and-doctor-say-what-matters-first.md)).
 
 ```mermaid
 flowchart TD
-  D[repown doctor] --> Q{"what serves this clone's host?<br/>(github.com outside a clone)"}
+  D[repown doctor] --> Q{"what serves this clone's host?<br/>(github.com outside a clone, or where no credential is pinned)"}
   Q -->|Git Credential Manager| OK["🟢 nothing to do<br/>one credential per account, picked per clone"]
   Q -->|gh, from gh auth setup-git| BAD["🔴 gh serves only its ACTIVE account<br/>every other clone gets a password prompt"]
   Q -->|anything else| W["🟡 repown has no opinion<br/>the pin works only if that helper honours it"]
@@ -149,6 +149,19 @@ flowchart TD
 
 When the registry, the store or gh could not be read, its WARN is above and the verdict
 adds ` · 1 warning` (or `N warnings`), as status counts its warnings.
+
+In a clone repown pins no credential for (an SSH remote, Azure DevOps, another host), the
+report opens with that clone, then reports on the machine for github.com, as outside a clone:
+
+```
+This clone
+  sign-in        Azure DevOps's own; no credential is pinned here
+
+This machine, for github.com
+  helper         manager
+```
+
+Over SSH the line says `your SSH key; no credential is pinned here`.
 
 **Why:** switching gh's account moves the password prompt to your other account's
 clones rather than fixing it ([ADR-001](decisions/ADR-001-credential-manager-not-gh.md)).

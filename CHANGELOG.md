@@ -12,6 +12,10 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   the git credential helper, so this pin is not honoured` in a clone where it pins no credential
   (an SSH remote, Azure DevOps, another host): pushes there use that host's own sign-in. Setup
   already said nothing there.
+- `repown doctor` in a clone repown pins no credential for (SSH, Azure DevOps, another host)
+  no longer claims `github.com is served by …`, per-clone sign-in or `each clone signs in as its
+  own account`. It opens with a `This clone` line naming that host's own sign-in, then reports
+  on the machine for github.com, as it does outside a clone.
 
 ## [0.5.1] - 2026-10-03
 

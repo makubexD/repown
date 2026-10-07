@@ -320,8 +320,10 @@ const SSO_HEAD = 'If a push fails although the account is stored, the org may ne
 const GITHUB_SSO = SSO_HEAD + "authorize it in the org's SSO settings on github.com";
 const READY = 'ready: each clone signs in as its own account through Git Credential Manager';
 
-function ssoFor(host: string): string {
-  return SSO_HEAD + 'check ' + host + '\'s SSO settings';
+/** What a clone with no credential keys opens with: its own sign-in, then the machine for github.com. */
+function unpinned(host: string): string {
+  const how = host === 'GitHub over SSH' ? 'your SSH key' : host + '\'s own';
+  return '\nThis clone\n' + field('sign-in', how + '; no credential is pinned here') + '\n\nThis machine, for github.com\n';
 }
 
 /** The last stderr line, which must stand after a blank line. */
@@ -401,13 +403,31 @@ describe('repown doctor output', () => {
     assert.doesNotMatch(outside.stdout, /<host>|gh auth refresh/);
   });
 
-  test('a non-GitHub origin names that host\'s SSO settings', () => {
-    box.git('remote', 'set-url', 'origin', 'https://dev.azure.com/octocat/project/_git/repo');
+  for (const [url, host] of [
+    ['https://dev.azure.com/octocat/project/_git/repo', 'Azure DevOps'],
+    ['git@github.com:octocat/project.git', 'GitHub over SSH'],
+    ['https://git.example.invalid/octocat/project.git', 'this host'],
+  ]) {
+    test('a clone with no credential pin says so, then reports on github.com as outside a clone: ' + host, () => {
+      box.git('remote', 'set-url', 'origin', url!);
+      box.git('config', '--local', '--unset', 'credential.https://github.com.username');
+      box.writeGlobalConfig('[credential]\n\thelper = manager\n[credential "' + url + '"]\n\thelper = store\n');
+      const run = repown(['doctor'], box.dir, doctorEnv(bin));
+      assert.equal(run.status, 0, run.stderr);
+      assert.ok(run.stdout.includes(unpinned(host!)), run.stdout);
+      assert.ok(run.stdout.includes(field('helper', 'manager')), run.stdout);
+      assert.ok(run.stdout.includes('  ' + GITHUB_SSO), run.stdout);
+      assert.doesNotMatch(run.stdout, /check .*'s SSO settings|<host>/);
+      assert.equal(closing(run.stderr), READY);
+    });
+  }
+
+  test('a GitHub clone over HTTPS reports on its own helper and says nothing about an unpinned host', () => {
+    box.writeGlobalConfig('[credential]\n\thelper = manager\n[credential "https://github.com"]\n\thelper = store\n');
     const run = repown(['doctor'], box.dir, doctorEnv(bin));
-    assert.equal(run.status, 0, run.stderr);
-    assert.ok(run.stdout.includes('  ' + ssoFor('Azure DevOps')), run.stdout);
-    assert.doesNotMatch(run.stdout, /<host>|gh auth refresh/);
-    assert.equal(closing(run.stderr), READY);
+    assert.ok(run.stdout.includes(field('helper', 'store')), run.stdout);
+    assert.doesNotMatch(run.stdout, /This clone|no credential is pinned/);
+    assert.equal(closing(run.stderr), 'unchecked: repown can\'t tell whether store honours the per-clone pin');
   });
 
   test('an empty store stays a warning and says so in the verdict', () => {

@@ -137,10 +137,17 @@ export class Git {
   }
 
   /** Whether any ref exists under `refs/remotes/<remote>/`. A failed read is an error, not "none". */
-  async hasTrackingRefs(remote: string): Promise<Result<boolean>> {
-    const listed = await this.exec(['for-each-ref', '--count=1', '--format=%(refname)', 'refs/remotes/' + remote + '/']);
+  /**
+   * Whether any ref lies under `prefixes` but not under `excluded` (namespaces nested inside
+   * them that belong to someone else). No prefix is no ref. Listing stops at one when
+   * nothing is excluded.
+   */
+  async hasRefsUnder(prefixes: readonly string[], excluded: readonly string[] = []): Promise<Result<boolean>> {
+    if (prefixes.length === 0) return ok(false);
+    const count = excluded.length === 0 ? ['--count=1'] : [];
+    const listed = await this.exec(['for-each-ref', ...count, '--format=%(refname)', ...prefixes]);
     if (!succeeded(listed)) return err(listed.stderr.trim() || 'git for-each-ref failed');
-    return ok(lines(listed).length > 0);
+    return ok(lines(listed).some((ref) => !excluded.some((prefix) => ref.startsWith(prefix))));
   }
 
   /**

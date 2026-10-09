@@ -8,21 +8,27 @@
 // unfetched one, and FETCH_HEAD is no answer: a FAILED fetch writes it too, and it
 // belongs to whichever remote was fetched last. So the destination is only ever
 // "known" (it has tracking refs, and pushes where it fetches from) or "unknown",
-// and a read that fails is unknown.
+// and a read that fails is unknown. A remote that fetches only some branches (a
+// --single-branch clone, a negative refspec) is unknown for a branch it leaves out:
+// pushing that branch updates no tracking ref (refspec.ts).
 
 import type { Git } from './git.ts';
 import { parseGitUrl } from './url.ts';
+import { ok, type Result } from './result.ts';
+import { trackingPrefixes, trackingRefOf } from './refspec.ts';
 
 /**
  * A destination no remote-tracking ref reaches:
  * - `remote`: a configured remote with none (or they could not be read);
  * - `pushurl`: a configured remote whose pushurl is not where it fetches from;
+ * - `untracked`: a configured remote whose fetch refspecs leave out `branch`, the branch pushed to;
  * - `url`: a URL, and `key` is the config key that named it;
  * - `unnamed`: a name no remote has;
  * - `unread`: `git remote` failed.
  */
 export type UnknownDestination =
   | { readonly kind: 'remote' | 'pushurl' | 'unnamed'; readonly name: string }
+  | { readonly kind: 'untracked'; readonly name: string; readonly branch: string }
   | { readonly kind: 'url'; readonly key: string; readonly remote: string | null }
   | { readonly kind: 'unread' };
 
@@ -39,7 +45,7 @@ export async function unknownDestination(git: Git, branch: string): Promise<Unkn
   // No "only remote" fallback: git push has none, it fails "No configured push destination".
   const name = set?.value ?? (listed.value.includes('origin') ? 'origin' : null);
   if (!name || name === '.') return null;
-  if (listed.value.includes(name)) return remoteState(git, name);
+  if (listed.value.includes(name)) return remoteState(git, { name, branch, remotes: listed.value });
   if (!set || !looksLikeUrl(name)) return { kind: 'unnamed', name };
   return { kind: 'url', key: set.key, remote: await remoteWithUrl(git, listed.value, name) };
 }
@@ -73,14 +79,44 @@ async function configuredTarget(git: Git, branch: string): Promise<Configured | 
   return null;
 }
 
-async function remoteState(git: Git, name: string): Promise<UnknownDestination | null> {
-  if (!await isTracked(git, name)) return { kind: 'remote', name };
-  return await pushesElsewhere(git, name) ? { kind: 'pushurl', name } : null;
+interface Named {
+  readonly name: string;
+  readonly branch: string;
+  readonly remotes: readonly string[];
 }
 
-async function isTracked(git: Git, remote: string): Promise<boolean> {
-  const found = await git.hasTrackingRefs(remote);
-  return found.ok && found.value;
+async function remoteState(git: Git, remote: Named): Promise<UnknownDestination | null> {
+  const { name } = remote;
+  const tracked = await trackingRefsOf(git, name, remote.remotes);
+  if (!tracked.ok || !tracked.value) return { kind: 'remote', name };
+  if (await pushesElsewhere(git, name)) return { kind: 'pushurl', name };
+  const branch = await destinationBranch(git, remote);
+  const specs = await git.getAllConfig('remote.' + name + '.fetch');
+  return trackingRefOf(specs, 'refs/heads/' + branch) ? null : { kind: 'untracked', name, branch };
+}
+
+/** Whether the remote has any tracking ref where its own refspecs write them. */
+export async function hasTrackingRefs(git: Git, remote: string): Promise<Result<boolean>> {
+  const listed = await git.readRemotes();
+  if (!listed.ok) return listed;
+  return trackingRefsOf(git, remote, listed.value);
+}
+
+/** Another remote's namespace nested inside this one's (`origin/x` in `origin`'s) is not this one's. */
+async function trackingRefsOf(git: Git, remote: string, remotes: readonly string[]): Promise<Result<boolean>> {
+  const prefixes = trackingPrefixes(await git.getAllConfig('remote.' + remote + '.fetch'));
+  if (prefixes.length === 0) return ok(false);
+  const others = await Promise.all(remotes.filter((other) => other !== remote).map((other) => git.getAllConfig('remote.' + other + '.fetch')));
+  const nested = others.flatMap(trackingPrefixes).filter((other) => prefixes.some((own) => other.length > own.length && other.startsWith(own)));
+  return git.hasRefsUnder(prefixes, nested);
+}
+
+/** The branch a plain push updates: the upstream's under push.default=upstream, else its own name. */
+async function destinationBranch(git: Git, remote: Named): Promise<string> {
+  if (await git.getConfig('push.default') !== 'upstream') return remote.branch;
+  if (await git.getConfig('branch.' + remote.branch + '.remote') !== remote.name) return remote.branch;
+  const merge = await git.getConfig('branch.' + remote.branch + '.merge');
+  return merge ? merge.replace(/^refs\/heads\//, '') : remote.branch;
 }
 
 /** Tracking refs come from the fetch URL; a different pushurl is somewhere never fetched. */

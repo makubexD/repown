@@ -10,7 +10,7 @@
 
 import type { Git } from './git.ts';
 import { ok, err, type Result } from './result.ts';
-import { pushTarget, unknownDestination } from './push-destination.ts';
+import { hasTrackingRefs, pushTarget, unknownDestination } from './push-destination.ts';
 import { AMEND_COMMAND, isOwn, otherAddresses } from './unpushed.ts';
 
 /** What would be rewritten: `count` commits from `base` (a full hash, or `--root`) to HEAD. */
@@ -76,7 +76,7 @@ async function firstRefusal(git: Git, interactive: boolean): Promise<string | nu
 
 /** True only when a successful fetch left no tracking refs AND the remote lists no branches. */
 async function destinationEmpty(git: Git, remote: string): Promise<Result<boolean>> {
-  const tracked = await git.hasTrackingRefs(remote);
+  const tracked = await hasTrackingRefs(git, remote);
   if (!tracked.ok) return tracked;
   if (tracked.value) return ok(false);
   const heads = await git.remoteHeadCount(remote);

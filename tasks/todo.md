@@ -1,9 +1,9 @@
 # Deferred sweep
 
-Status: Phase 4, task 2 (#6) awaiting its doubt pass and "go".
+Status: Phase 4, task 2 done; task 3 (#9) awaiting "go".
 
 - [x] 1. Plan: SPEC.md and this file. Docs: none.
-- [ ] 2. ⚠ #6 (+#12b, #12c) unpushed advice: `@{push}`, `untracked` kind, topo order, remote-prefix fix - Docs: ADR-025 note, HOW-IT-WORKS unpushed card, CHANGELOG
+- [x] 2. ⚠ #6 (+#12b, #12c) unpushed advice: `@{push}`, `untracked` kind, topo order, remote-prefix fix - Docs: ADR-025 note, HOW-IT-WORKS unpushed card, CHANGELOG
 - [ ] 3. ⚠ #9 reauthor excludes what `ls-remote` lists; refuses unknown SHAs - Docs: ADR-026 note, HOW-IT-WORKS reauthor card, CHANGELOG
 - [ ] 4. ⚠ #12a reauthor allows sparse-checkout skip-worktree bits - Docs: ADR-026 note, CHANGELOG
 - [ ] 5. ⚠ credentialKeys follow the push URL - Docs: ADR-009 note, CLAUDE.md, CONFIGURATION, CHANGELOG

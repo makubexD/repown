@@ -8,6 +8,13 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 ## [Unreleased]
 
 ### Fixed
+- In a clone that fetches only some branches (`git clone --single-branch`, `--depth`, or a
+  `^refs/heads/<branch>` refspec), a branch pushed from it gets no remote-tracking ref, yet
+  `repown use`, setup and status offered the plain `git rebase` over commits that push had
+  published. They now say `origin's <branch> is not fetched here (remote.origin.fetch leaves
+  it out), so some of these may already be there` and offer the rebase only for the case where
+  origin has none of them. Tracking refs are also looked for where the remote's own refspecs
+  write them, so a remote fetching into another namespace no longer reads as never fetched.
 - `repown use` no longer says `No stored credential … the first push signs in` or `gh is still
   the git credential helper, so this pin is not honoured` in a clone where it pins no credential
   (an SSH remote, Azure DevOps, another host): pushes there use that host's own sign-in. Setup

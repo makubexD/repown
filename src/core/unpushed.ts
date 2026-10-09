@@ -95,7 +95,7 @@ function advice(fact: UnpushedFact, found: Found, account: string): string[] {
 }
 
 function holderOf(unknown: UnknownDestination): string {
-  return unknown.kind === 'remote' || unknown.kind === 'pushurl' ? show(unknown.name) : 'it';
+  return unknown.kind === 'remote' || unknown.kind === 'pushurl' || unknown.kind === 'untracked' ? show(unknown.name) : 'it';
 }
 
 /** The guard excludes what the pushed branch's remote tip has, not everything the remote holds. */
@@ -106,6 +106,7 @@ function unknownLine(unknown: UnknownDestination, account: string): string {
   switch (unknown.kind) {
     case 'remote': return trackingLine(unknown.name, account);
     case 'pushurl': return show(unknown.name) + ' pushes to another URL than it fetches from' + THERE;
+    case 'untracked': return untrackedLine(unknown.name, unknown.branch);
     case 'url': return urlLine(unknown.key, unknown.remote, account);
     case 'unnamed': return 'this branch pushes to "' + show(unknown.name) + '", which is not a remote here' + THERE;
     case 'unread': return 'the remotes could not be read, so some of these may already be on one' + GUARD;
@@ -116,6 +117,11 @@ function trackingLine(name: string, account: string): string {
   const lead = show(name) + ' has no remote-tracking refs, so some of these may already be on it' + GUARD;
   const fetch = copyable(name) ? copyableCommand(['git', 'fetch', show(name)]) : null;
   return fetch ? lead + ': ' + fetch + ', ' + recount(account) : lead;
+}
+
+/** No fetch helps: the refspec itself leaves the branch out, so no tracking ref ever records it. */
+function untrackedLine(remote: string, branch: string): string {
+  return show(remote) + '\'s ' + show(branch) + ' is not fetched here (remote.' + show(remote) + '.fetch leaves it out)' + THERE;
 }
 
 function urlLine(key: string, remote: string | null, account: string): string {

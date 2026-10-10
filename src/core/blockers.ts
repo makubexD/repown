@@ -25,7 +25,7 @@ export interface PushChoice {
 }
 
 /** Which fact it is, so a report that already shows one of them its own way can leave it out. */
-export type BlockerKind = 'unpushed' | 'elsewhere' | 'signin' | 'env' | 'config' | 'owner' | 'pushurls' | 'divergence' | 'upstream' | 'detached';
+export type BlockerKind = 'unpushed' | 'elsewhere' | 'signin' | 'env' | 'config' | 'owner' | 'pushurls' | 'rewrite' | 'divergence' | 'upstream' | 'detached';
 
 export interface Blocker {
   readonly kind: BlockerKind;
@@ -51,6 +51,7 @@ export function blockers(facts: PushFacts, choice: PushChoice): Blocker[] {
     ...facts.configOverrides.map((key) => configBlocker(key, choice.email)),
     ...ownerBlocker(facts.destination, branch, choice),
     ...laterUrlsBlocker(facts.laterUrls, facts.destination, choice),
+    ...rewriteBlocker(facts.rewritable, branch),
     ...divergenceBlocker(facts.divergence, branch),
     ...upstreamBlocker(facts, branch, choice.autoUpstream),
     ...(facts.detached ? [detachedBlocker()] : []),
@@ -159,6 +160,18 @@ function laterUrlsBlocker(later: LaterUrls | null, first: PushDestination | null
     summary: remote + ' also pushes to "' + printable(refused[0]!.owner) + '"',
     lines: [remote + ' also pushes to ' + names + ', not ' + choice.account + ': ' + guard + '. If you belong there: ' + fix],
     blocks: choice.guarded,
+  }];
+}
+
+/** Said, never blocking: the guard still checks the URL git hands it. */
+function rewriteBlocker(rewritable: { key: string } | null, branch: string): Blocker[] {
+  if (!rewritable) return [];
+  return [{
+    kind: 'rewrite',
+    summary: "repown can't tell where the push goes",
+    lines: [rewritable.key + ' names a URL that a pushInsteadOf rule or a remote section may rewrite, so repown ' +
+      "can't tell where a push from " + branch + ' lands: the guard checks it when you push'],
+    blocks: false,
   }];
 }
 

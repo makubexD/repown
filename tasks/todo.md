@@ -1,6 +1,6 @@
 # Push-URL gaps
 
-Status: Phase 4, task 3 done; next task 4 doubt pass.
+Status: Phase 4 done (tasks 2-5); next Phase 5 review.
 
 - [x] 1. Plan: SPEC.md and this file. Docs: none.
 - [x] 2. ⚠ A sign-in carried by a rewritten push URL is a blocker (item 3)
@@ -17,16 +17,13 @@ Status: Phase 4, task 3 done; next task 4 doubt pass.
     failure, not a pass; JSON unchanged.
   - Where: a new fact in `src/core/push-state.ts`, a new blocker in `src/core/blockers.ts`.
   - Docs: ADR-026 note, HOW-IT-WORKS status card (push row), CHANGELOG.
-- [ ] 4. ⚠ Measure git's pushInsteadOf on a bare-URL push (item 2, spike)
-  - Accept: a test pins, against real git, what `git push <url>` sends to with pushInsteadOf
-    and insteadOf rules (longest prefix; push rule shadows fetch rule; no rule), read from the
-    URL the pre-push hook receives. If git's rules can't be matched offline, task 5 makes the
-    destination unknown instead.
-  - Docs: none (test only; findings go into task 5's ADR note).
-- [ ] 5. ⚠ A bare-URL push resolves pushInsteadOf as git does (item 2)
-  - Accept: task 4's cases give status/setup the same owner the hook sees; `rewrittenUrl`
-    callers unchanged elsewhere.
-    The sign-in check runs on the resolved URL too (moved here from task 2 by its doubt pass).
-  - Where: `bareTargetUrl` in `src/core/push-state.ts`, a new reader beside `rewrittenUrl` in `src/core/git.ts`.
-  - Docs: ADR-026 note (for/against, measured), CLAUDE.md (`rewrittenUrl` line), HOW-IT-WORKS, CHANGELOG.
+- [x] 4. ⚠ Measure git's pushInsteadOf on a bare-URL push (item 2, spike): done by the doubt
+  pass 2026-10-10; git's rules can't be reproduced offline, so task 5 says "can't tell".
+- [x] 5. ⚠ A bare-URL push that git may rewrite says repown can't tell where it lands (item 2)
+  - Accept: branch.main.pushRemote set to a URL; a pushInsteadOf value that prefixes it (or
+    an empty one), or a `remote."<URL>".pushurl`/`url`, gives one non-blocking line naming the
+    key (never the URL) and no owner blocker; a rule that doesn't prefix it changes nothing;
+    a failed config read says "can't tell" too.
+  - Where: a reader beside `rewrittenUrl` in `src/core/git.ts`, `src/core/push-state.ts`, `src/core/blockers.ts`.
+  - Docs: ADR-026 note (measured, for/against), CLAUDE.md (`rewrittenUrl` line), HOW-IT-WORKS status card, CHANGELOG.
 - [ ] 6. Close-out: move facts from SPEC.md, delete SPEC.md and tasks/, memory.

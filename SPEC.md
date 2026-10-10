@@ -15,10 +15,14 @@ changing what the guard refuses (ADR-011): only what is reported changes.
    saying the guard checks each and a push can half-land, and to keep one push URL. The
    first-owner logic, allow flows and JSON stay as they are.
 2. **pushInsteadOf on a bare-URL push.** `bareTargetUrl` uses `rewrittenUrl`
-   (`ls-remote --get-url`), which applies only `insteadOf`. Git, for a push, applies the
-   longest matching `url.<base>.pushInsteadOf` first and `insteadOf` only when none matches.
-   Done: a push straight to a URL is resolved as git would for a push; measured against
-   real git on the three platforms in a test, and recorded with for/against in an ADR note.
+   (`ls-remote --get-url`), which applies only `insteadOf`. Measured 2026-10-10 (git 2.56):
+   no offline git command resolves pushInsteadOf for a bare URL; git's rules include
+   first-read-wins ties, an empty value matching every URL, `remote."<URL>".pushurl`
+   sections and scp-like names looked up as remotes; and git connects before pre-push, so
+   a test of it is not offline. Reproducing them was rejected.
+   Done: when any pushInsteadOf value prefixes the bare URL (an empty or missing value
+   counts), or a `remote."<URL>"` section exists, setup and status say repown can't tell
+   where the push lands (the guard checks it at push time) and make no owner claim for it.
 3. **A sign-in added by a rewrite.** `signinOf` (`push-state.ts:85`) checks the configured
    `pushurl`/`url` for a token. A `pushInsteadOf`/`insteadOf` rule that rewrites to
    `https://<token>@host/` signs the push in unseen.
@@ -34,9 +38,8 @@ changing what the guard refuses (ADR-011): only what is reported changes.
 - HOW-IT-WORKS status/setup cards, CHANGELOG, and an ADR note per behaviour change.
 
 ## Riskiest assumption
-Item 2: that repown can reproduce git's pushInsteadOf matching offline exactly (longest
-prefix, push rules shadow fetch rules). Measured before it's relied on; if git's rules
-can't be matched, the bare-URL destination becomes "unknown" (conditional advice) instead.
+Item 2: that repown can reproduce git's pushInsteadOf matching offline. Failed when measured
+(see item 2); the fallback, "can't tell", is what is built.
 
 ## Decided
 - Item 1: one line naming every push URL's owner and host (2026-10-10), as its own blocker.

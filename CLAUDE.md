@@ -95,7 +95,9 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   `credentialUrl`, `credentialHost` and `helper` follow every URL git fetches or pushes origin
   with (`remote get-url --all`, with and without `--push`), and claim nothing when git can't
   list them (ADR-009). A push
-  straight to a URL goes through `rewrittenUrl` (`ls-remote --get-url`).
+  straight to a URL goes through `rewrittenUrl` (`ls-remote --get-url`), which applies no
+  pushInsteadOf: when a pushInsteadOf value prefixes that URL, push-state says it can't tell
+  (`rewritable`) rather than copy git's rules (ADR-026).
 - `unpushed.ts` counts against remote-tracking refs, so its rebase advice depends on
   `push-destination.ts`: a push destination no tracking ref reaches is unknown, and the
   rebase is then conditional. `FETCH_HEAD` is no proof of a fetch; a failed one writes it (ADR-025).

@@ -17,6 +17,9 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   other, and setup and `repown status` said nothing: they read only the first URL's owner.
   They now name a later URL's owner that this clone isn't allowed to push to, with the
   command that allows it.
+- A branch that pushes straight to a URL was judged by that URL's owner even when a
+  `pushInsteadOf` rule sends the push elsewhere. Setup and `repown status` now say they can't
+  tell where such a push lands, name no owner for it, and leave it to the guard.
 
 ## [0.5.2] - 2026-10-10
 

@@ -2,7 +2,7 @@
 
 **Status:** Accepted. Supersedes in part [ADR-013](ADR-013-deliberately-not-done.md) (rewriting unpushed commits, only when asked). Amends [ADR-022](ADR-022-set-up-clone-opens-on-settled-screen.md) (a
 settled clone with a blocker is not "nothing needs to change"),
-[ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses), [ADR-020](ADR-020-setup-leaves-clone-ready.md) (done only without blockers) and [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md) (`WARN push` first; status's closing line). Amended by its 2026-10-09 note: reauthor leaves alone what the destination's branches and tags reach; by its 2026-10-10 notes: a sparse checkout's left-out files are no hidden change, a timeout stops what git started, a sign-in is judged on the URLs git pushes with, and a later push URL owned by someone else is a blocker.
+[ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses), [ADR-020](ADR-020-setup-leaves-clone-ready.md) (done only without blockers) and [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md) (`WARN push` first; status's closing line). Amended by its 2026-10-09 note: reauthor leaves alone what the destination's branches and tags reach; by its 2026-10-10 notes: a sparse checkout's left-out files are no hidden change, a timeout stops what git started, a sign-in is judged on the URLs git pushes with, a later push URL owned by someone else is a blocker, and a bare URL that pushInsteadOf may rewrite can't be told.
 
 ## Context
 
@@ -189,3 +189,19 @@ problem".
   first URL. Against: the first-owner logic elsewhere (status's `origin` row, `use`'s warning,
   setup's allow question, scan's JSON) still names one owner: reporting every owner there was
   measured as a much wider change and rejected.
+- **2026-10-10, a bare URL that pushInsteadOf may rewrite can't be told.** A branch that
+  pushes straight to a URL (`branch.<b>.pushRemote` or `remote.pushDefault` set to one) had
+  its owner read after `ls-remote --get-url`, which applies `insteadOf` only, so a
+  `pushInsteadOf` rule sent the push somewhere setup and status never named. No offline git
+  command resolves it: `git -c remote.<x>.url=<url> remote get-url --push <x>` says "No such
+  remote". Measured on git 2.56, git's own rules were: the longest matching value wins, the
+  first rule read wins a tie, an empty value matches every URL, a key with no value stops the
+  push, and pushInsteadOf shadows insteadOf. Git also connects before it runs pre-push, so a
+  test of them can't be offline. Now, when any pushInsteadOf value prefixes the URL (an empty
+  or missing one counts), or the rules can't be read, the line is `<key> names a URL that a
+  pushInsteadOf rule or a remote section may rewrite, so repown can't tell where a push from
+  <branch> lands: the guard checks it when you push`. It is said but never blocks, and no
+  owner is claimed for that URL. A `remote."<URL>"` section needs nothing: it makes the URL a
+  remote, and `remote get-url --push` resolves it. For: no owner is named that git won't push
+  to, and nothing copies rules git may change. Against: a rule that would send the push to
+  this clone's own account still gets the line; the guard, which sees the real URL, decides.

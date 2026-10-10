@@ -67,6 +67,8 @@ export interface PushFacts {
   readonly repoint: Repoint | null;
   readonly destination: PushDestination | null;
   readonly laterUrls: LaterUrls | null;
+  /** A push straight to a URL that git may rewrite: the key naming it, never the URL. */
+  readonly rewritable: { readonly key: string } | null;
   /** Against the tracked ref on the destination; ok(null) when there is none. */
   readonly divergence: Result<Divergence | null>;
   readonly detached: boolean;
@@ -80,12 +82,13 @@ export async function readPushFacts(git: Git, unpushed: UnpushedFact, env: NodeJ
   const head = await git.currentBranch();
   const branch = head?.kind === 'branch' ? head.name : null;
   const target = branch ? await pushTarget(git, branch) : null;
+  const rewritable = await rewritableOf(git, target);
   const [configOverrides, signin, repoint, destination, laterUrls, divergence, elsewhere, upstream] = await Promise.all([
-    overridesIn(git), signinOf(git, target), repointOf(git, branch), destinationOf(git, target), laterUrlsOf(git, target),
+    overridesIn(git), signinOf(git, target), repointOf(git, branch), rewritable ? null : destinationOf(git, target), laterUrlsOf(git, target),
     divergenceOf(git, target), elsewhereOf(git, target), upstreamOf(git, branch, target),
   ]);
   return {
-    unpushed, env: hostileSet(env), configOverrides, elsewhere, signin, repoint, destination, laterUrls, divergence,
+    unpushed, env: hostileSet(env), configOverrides, elsewhere, signin, repoint, destination, laterUrls, rewritable, divergence,
     detached: head?.kind === 'detached', upstream,
   };
 }
@@ -173,6 +176,21 @@ async function pushUrlsOf(git: Git, remote: string): Promise<string[]> {
 
 function pushUrlOf(git: Git, remote: string): Promise<string | null> {
   return git.remotePushUrl(remote);
+}
+
+/**
+ * A push straight to a URL that a pushInsteadOf value prefixes (an empty or missing one
+ * matches all). No offline git command resolves pushInsteadOf for a bare URL, and git's
+ * rules (first-read ties, empty values) were measured as too many to copy, so repown says it
+ * can't tell; a failed read can't either. A `remote."<URL>"` section needs nothing here: it
+ * makes the URL a remote, whose push URL git itself resolves.
+ */
+async function rewritableOf(git: Git, target: PushTarget | null): Promise<{ key: string } | null> {
+  if (!target || target.isRemote) return null;
+  const url = target.name;
+  const rules = await git.configValues('^url\\..*\\.pushinsteadof$');
+  const ruled = !rules.ok || rules.value.some((value) => value === null || url.startsWith(value));
+  return ruled ? { key: target.key ?? 'its push URL' } : null;
 }
 
 /** A push straight to a URL, as git rewrites it (insteadOf; see rewrittenUrl). */

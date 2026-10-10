@@ -128,6 +128,29 @@ describe('readPushFacts', () => {
     assert.deepEqual((await read()).destination, { remote: 'upstream', owner: 'octo-org', allowed: ['octo-org'] });
   });
 
+  test('a push straight to a URL that git may rewrite: no owner, only the key that names it', async () => {
+    commit('first');
+    box.git('remote', 'add', 'origin', 'https://github.com/octocat/hello.git');
+    box.git('config', 'branch.main.pushRemote', 'https://github.com/octo-org/hello.git');
+    const plain = await read();
+    assert.equal(plain.rewritable, null);
+    assert.equal(plain.destination?.owner, 'octo-org');
+    box.git('config', 'url.https://gitlab.example.invalid/.pushInsteadOf', 'https://gitlab.example.invalid/x/');
+    assert.equal((await read()).rewritable, null, 'a rule that does not prefix it changes nothing');
+    box.git('config', 'url.https://github.com/octocat/.pushInsteadOf', 'https://github.com/octo-org/');
+    const ruled = await read();
+    assert.deepEqual(ruled.rewritable, { key: 'branch.main.pushRemote' });
+    assert.equal(ruled.destination, null, 'no owner is claimed for it');
+    box.git('config', '--remove-section', 'url.https://github.com/octocat/');
+    box.git('config', 'url.https://github.com/octo-work/.pushInsteadOf', '');
+    assert.deepEqual((await read()).rewritable, { key: 'branch.main.pushRemote' }, 'an empty value matches every URL');
+    box.git('config', '--remove-section', 'url.https://github.com/octo-work/');
+    box.git('config', 'remote.https://github.com/octo-org/hello.git.pushurl', 'https://github.com/octo-work/hello.git');
+    const named = await read();
+    assert.equal(named.rewritable, null, 'a remote section named after the URL makes it a remote');
+    assert.equal(named.destination?.owner, 'octo-work', "and git resolves that remote's push URL");
+  });
+
   test('the destination owner is the one git pushes to: insteadOf, pushInsteadOf and pushurl count', async () => {
     commit('first');
     box.git('remote', 'add', 'origin', 'https://github.com/octocat/hello.git');

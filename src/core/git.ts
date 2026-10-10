@@ -135,6 +135,20 @@ export class Git {
     return output(await this.exec(['ls-remote', '--get-url', '--', url]));
   }
 
+  /**
+   * The values of every key matching `pattern`, null for a key set with no value. A failed
+   * read keeps no git message: one can quote a key that holds a token (`url.<base>.*`).
+   */
+  async configValues(pattern: string): Promise<Result<(string | null)[]>> {
+    const asked = await this.exec(['config', '--get-regexp', '-z', pattern]);
+    if (asked.code === 1 && !asked.stdout) return ok([]);
+    if (!succeeded(asked)) return err('git config could not be read');
+    return ok(asked.stdout.split('\0').filter(Boolean).map((entry) => {
+      const newline = entry.indexOf('\n');
+      return newline < 0 ? null : entry.slice(newline + 1);
+    }));
+  }
+
   /** Remote names, in the order git lists them. A failed read is an error, not "none". */
   async readRemotes(): Promise<Result<string[]>> {
     const listed = await this.exec(['remote']);

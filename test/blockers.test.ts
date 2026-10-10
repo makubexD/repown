@@ -18,6 +18,7 @@ function facts(overrides: Partial<PushFacts> = {}): PushFacts {
     signin: null,
     repoint: null,
     laterUrls: null,
+    rewritable: null,
     destination: { remote: 'origin', owner: 'octocat', allowed: [] },
     divergence: ok(null),
     detached: false,
@@ -146,6 +147,15 @@ test('no later-URL line when every owner is allowed, or when the first URL is al
   const laterUrls = { remote: 'origin', owners: [{ owner: 'octo-work', host: 'GitHub' }], allowed: [] };
   const both = blockers(facts({ laterUrls, destination: { remote: 'origin', owner: 'octo-org', allowed: [] } }), CHOICE);
   assert.deepEqual(both.map((blocker) => blocker.kind), ['owner'], 'the owner line already stops the push');
+});
+
+test('a push straight to a URL git may rewrite says repown cannot tell where it lands, and stops nothing', () => {
+  const [first] = blockers(facts({ rewritable: { key: 'branch.main.pushRemote' }, destination: null }), CHOICE);
+  assert.equal(first!.kind, 'rewrite');
+  assert.equal(first!.summary, "repown can't tell where the push goes");
+  assert.equal(first!.lines[0], 'branch.main.pushRemote names a URL that a pushInsteadOf rule or a remote section may ' +
+    "rewrite, so repown can't tell where a push from main lands: the guard checks it when you push");
+  assert.equal(first!.blocks, false);
 });
 
 test('blockers come in a fixed order: commits, fork commits, sign-in, variables, config, owner, divergence, upstream', () => {

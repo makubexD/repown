@@ -258,6 +258,13 @@ describe('typed `accounts add` warns as setup would, and still records (WIZ-10)'
     assert.match(listed(), /Octocat/);
   });
 
+  test('the login in a warning is drawn escaped, end to end: it can\'t redraw the terminal (#20)', () => {
+    const run = add('octo\x1b[2Jcat');
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /WARN\s+accounts\s+"octo\\u001b\[2Jcat": use letters/);
+    assert.doesNotMatch(run.stderr, /\x1b/);
+  });
+
   // The machine's own Git Credential Manager is found beside git, so a signed-in note may be said.
   test('a plain new login gets neither warning', () => {
     assert.doesNotMatch(add('octocat').stderr, /already recorded|setup would not take/);

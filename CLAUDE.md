@@ -106,7 +106,7 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   Git Credential Manager path. Colour is decided per stream. Decoration (`marked` for ✔/▲,
   `accent` for cyan) returns the text unchanged where that stream has no colour: never add a
   mark to plain output by hand (ADR-027). `unicodeTerminal` copies clack's
-  `isUnicodeSupported`; re-check it when clack is upgraded.
+  `isUnicodeSupported`; test/format.test.ts compares the two in every terminal clack tells apart.
 - Read-only commands (`status`, `doctor`, `scan`, `guard check`, the start screen's clone read,
   setup's `readContext`) read config through `snapshotOf(git)` (`src/core/config-snapshot.ts`):
   one `git config [--scope] --list -z` per scope answers the plain getters (ADR-029). Never hand a

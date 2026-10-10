@@ -271,6 +271,17 @@ test('the global identity is read when Record an account is chosen, and not for 
   assert.deepEqual(reads, ['work']);
 });
 
+// #20: fix's own confirm reads the real terminal, which no test here has; without one fix stops
+// and asks for --yes, and that run counts as much as an answered one (ADR-028).
+test('after Stop gh serving credentials has run, the menu comes back', async () => {
+  const picks = [MENU.fix, MENU.quit];
+  const asked: string[] = [];
+  const prompter: Prompter = { ...cancelPrompter(() => {}), choose: async (message) => { asked.push(message); return picks.shift() ?? CANCEL; } };
+  const read = async (cwd: string): Promise<HomeState> => ({ ...(await emptyRead(cwd)), ghIsHelper: true });
+  assert.equal(await runHome({ prompter, cwd: 'work', read }), 0);
+  assert.equal(asked.length, 2, 'the menu was asked again after fix');
+});
+
 async function shownTitle(cwd: string): Promise<string> {
   let title = '';
   await runHome({ prompter: cancelPrompter((text) => { title = text; }), cwd, read: emptyRead });

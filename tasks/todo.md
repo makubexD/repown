@@ -1,6 +1,6 @@
 # Deferred sweep
 
-Status: Phase 4, task 15 built; task 16 (tests only) next, then Phase 5 review.
+Status: Phase 4 done (task 16 built, awaiting its suite); next Phase 5 review.
 
 - [x] 1. Plan: SPEC.md and this file. Docs: none.
 - [x] 2. ⚠ #6 (+#12c) unpushed advice: refspec-based `untracked` kind, tracking refs where refspecs write; #12b recorded as won't-fix - Docs: ADR-025 note, HOW-IT-WORKS unpushed card, CHANGELOG
@@ -17,5 +17,5 @@ Status: Phase 4, task 15 built; task 16 (tests only) next, then Phase 5 review.
 - [x] 13. #23 + WIZ-10 typed accounts add warnings - Docs: HOW-IT-WORKS card 2, CHANGELOG
 - [x] 14. #24 wrap() by display width - Docs: CHANGELOG
 - [x] 15. #25 mintty winpty note - Docs: FAQ, CHANGELOG
-- [ ] 16. #15 + #20 tests only - Docs: none (test-only)
+- [x] 16. #15 + #20 tests only - Docs: none (test-only)
 - [ ] 17. Close-out: won't-fix notes in ADRs, delete SPEC.md and tasks/, memory

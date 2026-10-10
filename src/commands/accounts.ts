@@ -5,7 +5,7 @@
 
 import { loadRegistry, saveAccount, removeAccount, registryPath, type Account } from '../core/registry.ts';
 import { lookUpProfile, providers, type Profile } from '../core/hosts/index.ts';
-import { copyableCommand } from '../core/guard/check.ts';
+import { copyableCommand } from '../core/shell.ts';
 import { ask, interactive } from '../ui/prompt.ts';
 import { flagString, wantsJson, FORMAT_OPTION, type Args } from '../ui/args.ts';
 import type { Command, CommandGroup } from '../ui/command.ts';

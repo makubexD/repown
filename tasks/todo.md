@@ -1,6 +1,6 @@
 # Deferred sweep
 
-Status: Phase 4, task 9 built; task 10 next, then task 11 (⚠) needs "go".
+Status: Phase 4, task 10 built; task 11 (⚠) approved with the revised design (-- for dash remotes, revised tree kill).
 
 - [x] 1. Plan: SPEC.md and this file. Docs: none.
 - [x] 2. ⚠ #6 (+#12c) unpushed advice: refspec-based `untracked` kind, tracking refs where refspecs write; #12b recorded as won't-fix - Docs: ADR-025 note, HOW-IT-WORKS unpushed card, CHANGELOG
@@ -11,7 +11,7 @@ Status: Phase 4, task 9 built; task 10 next, then task 11 (⚠) needs "go".
 - [x] 7. #8 push-destination reads through one snapshot - Docs: ADR-029 note
 - [x] 8. #17 one gh api call per profile - Docs: none (output unchanged)
 - [x] 9. #18 lazy global identity on the start screen - Docs: none (internal)
-- [ ] 10. shellWord/copyableCommand to src/core/shell.ts - Docs: CLAUDE.md
+- [x] 10. shellWord/copyableCommand to src/core/shell.ts - Docs: CLAUDE.md
 - [ ] 11. ⚠ #10 exec kills the process tree; `-remote` refused - Docs: CLAUDE.md, CHANGELOG
 - [ ] 12. #12d status owner blocker; #12e review fetch wording - Docs: HOW-IT-WORKS status card, CHANGELOG
 - [ ] 13. #23 + WIZ-10 typed accounts add warnings - Docs: HOW-IT-WORKS card 2, CHANGELOG

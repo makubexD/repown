@@ -10,7 +10,8 @@
 import { ghAdvice, upstreamText } from '../commands/status.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { isNoreplyAddress } from '../core/hosts/github.ts';
-import { ALLOW_OWNER_BY_HAND, allowOwnerCommand, shellWord } from '../core/guard/check.ts';
+import { ALLOW_OWNER_BY_HAND, allowOwnerCommand } from '../core/guard/check.ts';
+import { shellWord } from '../core/shell.ts';
 import { printable } from '../ui/format.ts';
 import { foreignAddresses, foreignCount, type UnpushedFact } from '../core/unpushed.ts';
 import type { PushFacts } from '../core/push-state.ts';

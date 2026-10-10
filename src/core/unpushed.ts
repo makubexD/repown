@@ -15,7 +15,7 @@
 import type { CommitIdentity, Git } from './git.ts';
 import { ok, type Result } from './result.ts';
 import { unknownDestination, type UnknownDestination } from './push-destination.ts';
-import { copyableCommand, shellWord } from './guard/check.ts';
+import { copyableCommand, shellWord } from './shell.ts';
 
 export interface UnpushedCommit {
   readonly authorEmail: string;

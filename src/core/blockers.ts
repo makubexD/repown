@@ -8,7 +8,8 @@
 
 import type { Result } from './result.ts';
 import { unpushedLines, foreignCount, type UnpushedCommit, type UnpushedFact } from './unpushed.ts';
-import { ALLOW_OWNER_BY_HAND, allowOwnerCommand, copyableCommand } from './guard/check.ts';
+import { ALLOW_OWNER_BY_HAND, allowOwnerCommand } from './guard/check.ts';
+import { copyableCommand } from './shell.ts';
 import { printable } from '../ui/format.ts';
 import type { Divergence, PushDestination, PushFacts } from './push-state.ts';
 

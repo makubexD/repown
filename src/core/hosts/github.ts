@@ -12,7 +12,7 @@
 import type { AccountKind, HostProvider, Profile } from './types.ts';
 import type { GitUrl } from '../url.ts';
 import { credentialPrefix } from '../url.ts';
-import { ghProfileField, ghProfileLookup, type ProfileLookup } from '../credential/gh.ts';
+import { fieldOf, ghUser, type ProfileLookup, type UserLookup } from '../credential/gh.ts';
 import { printable } from '../../ui/format.ts';
 
 const HOSTS = ['github.com', 'gist.github.com', 'www.github.com', 'ssh.github.com'];
@@ -26,6 +26,7 @@ export function githubProvider(): HostProvider {
     credentialKeys,
     resolveProfile,
     accountKind,
+    lookUp,
   };
 }
 
@@ -45,7 +46,28 @@ export function githubLogin(login: string): boolean {
 type ReadField = (login: string, field: string) => Promise<string | null>;
 
 function resolveProfile(account: string): Promise<Profile | null> {
-  return profileFrom(account, ghProfileField);
+  return profileFrom(account, reader(once(account)));
+}
+
+/** The profile and what kind of account it is, from one `gh api` call. */
+async function lookUp(login: string): Promise<{ profile: Profile | null; kind: AccountKind | null }> {
+  const user = once(login);
+  const [profile, kind] = await Promise.all([profileFrom(login, reader(user)), kindFrom(login, looker(user))]);
+  return { profile, kind };
+}
+
+/** One `gh api users/<login>` however many fields are read, and none if no field is. */
+function once(login: string): () => Promise<UserLookup> {
+  let asked: Promise<UserLookup> | undefined;
+  return () => (asked ??= ghUser(login));
+}
+
+function reader(user: () => Promise<UserLookup>): ReadField {
+  return async (_login, field) => fieldOf(await user(), field).value;
+}
+
+function looker(user: () => Promise<UserLookup>): LookUp {
+  return async (_login, field) => fieldOf(await user(), field);
 }
 
 /**
@@ -74,7 +96,7 @@ export function isNoreplyAddress(email: string): boolean {
  * Anything else, including a failed call, is unknown -- not a user.
  */
 function accountKind(login: string): Promise<AccountKind | null> {
-  return kindFrom(login, ghProfileLookup);
+  return kindFrom(login, looker(once(login)));
 }
 
 type LookUp = (login: string, field: string) => Promise<ProfileLookup>;

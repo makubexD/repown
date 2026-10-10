@@ -14,6 +14,8 @@ import { delimiter, join, resolve } from 'node:path';
 import { pathWithoutGh, plainTerminal, sandbox, type Sandbox } from './helpers.ts';
 import { compileFakeExe } from './fake-exe.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
+import { lookUpProfile } from '../src/core/hosts/index.ts';
+import { githubProvider } from '../src/core/hosts/github.ts';
 import { runProgram, type DefaultChoice, type Loader, type Program } from '../src/ui/dispatch.ts';
 import {
   CLI, repown, fakeProgram, FAKE_GH_CS, FAKE_GH_SH, ghEnv, recordOctocat, installFakeGh, capture, type Run,
@@ -478,6 +480,20 @@ describe('repown use --gh with no terminal', () => {
     recordOctocat(box);
   });
   afterEach(() => box.dispose());
+
+  test('a profile lookup asks github.com once, for every field it needs', async () => {
+    const saved = { PATH: process.env['PATH'], GH_FAKE_LOG: process.env['GH_FAKE_LOG'] };
+    Object.assign(process.env, { PATH: ghEnv(bin, log)['PATH'], GH_FAKE_LOG: log });
+    try {
+      await lookUpProfile(githubProvider(), 'octo-work');
+    } finally {
+      for (const [name, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[name]; else process.env[name] = value;
+      }
+    }
+    const asked = readFileSync(log, 'utf8').split('\n').filter((line) => line.startsWith('api '));
+    assert.deepEqual(asked, ['api --hostname github.com users/octo-work']);
+  });
 
   test('G3: octocat is not in gh, so it warns and still pins', () => {
     const env = ghEnv(bin, log);

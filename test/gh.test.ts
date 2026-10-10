@@ -3,25 +3,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ghProfileArgs, ghLogin, ghLoginVersion, ghStateFrom, profileLookupFrom } from '../src/core/credential/gh.ts';
+import { fieldOf, ghUserArgs, ghLogin, ghLoginVersion, ghStateFrom, userLookupFrom } from '../src/core/credential/gh.ts';
 import { loginKindProblem } from '../src/core/hosts/index.ts';
 import type { ExecResult } from '../src/core/exec.ts';
 import { err } from '../src/core/result.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 
-test('a github.com profile lookup names the host, so GH_HOST cannot redirect it', () => {
-  assert.deepEqual(
-    ghProfileArgs('octocat', 'type'),
-    ['api', '--hostname', 'github.com', 'users/octocat', '--jq', '.type'],
-  );
-  assert.deepEqual(
-    ghProfileArgs('octo-org', 'name'),
-    ['api', '--hostname', 'github.com', 'users/octo-org', '--jq', '.name'],
-  );
-  assert.deepEqual(ghProfileArgs('a b/..', 'name'), ['api', '--hostname', 'github.com', 'users/a%20b%2F..', '--jq', '.name'],
+test('a github.com profile lookup names the host, so GH_HOST cannot redirect it, and asks once for every field', () => {
+  assert.deepEqual(ghUserArgs('octocat'), ['api', '--hostname', 'github.com', 'users/octocat']);
+  assert.deepEqual(ghUserArgs('a b/..'), ['api', '--hostname', 'github.com', 'users/a%20b%2F..'],
     'the login is one path segment, whatever it holds');
   const source = readFileSync(new URL('../src/core/credential/gh.ts', import.meta.url), 'utf8');
-  assert.match(source, /run\('gh', ghProfileArgs\(login, field\)\)/);
+  assert.match(source, /run\('gh', ghUserArgs\(login\)\)/);
 });
 
 test('exit 0 and {"hosts":{}} is nobody signed in, and so is a missing host or an empty list', () => {
@@ -134,14 +127,19 @@ function restore(saved: Record<string, string | undefined>): void {
 
 test('a profile lookup github.com answers with 404 is missing; any other failure is unknown, never missing', () => {
   const notFound = { code: 1, stdout: '{"message":"Not Found","status":"404"}', stderr: 'gh: Not Found (HTTP 404)\n' };
-  assert.deepEqual(profileLookupFrom(notFound), { value: null, missing: true });
-  assert.deepEqual(profileLookupFrom(status('User\n')), { value: 'User', missing: false });
-  assert.deepEqual(profileLookupFrom(status('null\n')), { value: null, missing: false });
+  const field = (result: ExecResult, name: string) => fieldOf(userLookupFrom(result), name);
+  assert.deepEqual(field(notFound, 'type'), { value: null, missing: true });
+  const user = status('{"login":"octocat","id":583231,"type":"User","name":null}\n');
+  assert.deepEqual(field(user, 'type'), { value: 'User', missing: false });
+  assert.deepEqual(field(user, 'id'), { value: '583231', missing: false }, 'a number, in decimal');
+  assert.deepEqual(field(user, 'name'), { value: null, missing: false }, 'null is no name');
+  assert.deepEqual(field(status('not json\n'), 'type'), { value: null, missing: false }, 'an unreadable reply is unknown');
+  assert.deepEqual(field(status('["User"]\n'), 'type'), { value: null, missing: false });
   const offline = { code: 1, stdout: '', stderr: 'error connecting to api.github.com\n' };
-  assert.deepEqual(profileLookupFrom(offline), { value: null, missing: false });
+  assert.deepEqual(field(offline, 'type'), { value: null, missing: false });
   const forbidden = { code: 1, stdout: '', stderr: 'gh: Forbidden (HTTP 403)\n' };
-  assert.deepEqual(profileLookupFrom(forbidden), { value: null, missing: false });
-  assert.deepEqual(profileLookupFrom(status('', 0, Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT' }))), { value: null, missing: false });
+  assert.deepEqual(field(forbidden, 'type'), { value: null, missing: false });
+  assert.deepEqual(field(status('', 0, Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT' })), 'type'), { value: null, missing: false });
 });
 
 test('a login github.com has no account for, or an organisation, gets a sentence; a user or an unknown gets none', () => {

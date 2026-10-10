@@ -1,6 +1,6 @@
 # Deferred sweep
 
-Status: Phase 4, task 7 built; tasks 8-10 run back to back.
+Status: Phase 4, task 8 built; tasks 9-10 run back to back.
 
 - [x] 1. Plan: SPEC.md and this file. Docs: none.
 - [x] 2. ⚠ #6 (+#12c) unpushed advice: refspec-based `untracked` kind, tracking refs where refspecs write; #12b recorded as won't-fix - Docs: ADR-025 note, HOW-IT-WORKS unpushed card, CHANGELOG
@@ -9,7 +9,7 @@ Status: Phase 4, task 7 built; tasks 8-10 run back to back.
 - [x] 5. ⚠ credentialKeys follow the push URL - Docs: ADR-009 note, CLAUDE.md, CONFIGURATION, CHANGELOG
 - [x] 6. use tells the truth: push-as, shared pinsCredential, grammar, README sample - Docs: README, HOW-IT-WORKS use card, CHANGELOG
 - [x] 7. #8 push-destination reads through one snapshot - Docs: ADR-029 note
-- [ ] 8. #17 one gh api call per profile - Docs: none (output unchanged)
+- [x] 8. #17 one gh api call per profile - Docs: none (output unchanged)
 - [ ] 9. #18 lazy global identity on the start screen - Docs: none (internal)
 - [ ] 10. shellWord/copyableCommand to src/core/shell.ts - Docs: CLAUDE.md
 - [ ] 11. ⚠ #10 exec kills the process tree; `-remote` refused - Docs: CLAUDE.md, CHANGELOG

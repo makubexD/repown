@@ -2,7 +2,7 @@
 
 **Status:** Accepted. Supersedes in part [ADR-013](ADR-013-deliberately-not-done.md) (rewriting unpushed commits, only when asked). Amends [ADR-022](ADR-022-set-up-clone-opens-on-settled-screen.md) (a
 settled clone with a blocker is not "nothing needs to change"),
-[ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses), [ADR-020](ADR-020-setup-leaves-clone-ready.md) (done only without blockers) and [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md) (`WARN push` first; status's closing line). Amended by its 2026-10-09 note: reauthor leaves alone what the destination's branches and tags reach.
+[ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses), [ADR-020](ADR-020-setup-leaves-clone-ready.md) (done only without blockers) and [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md) (`WARN push` first; status's closing line). Amended by its 2026-10-09 note: reauthor leaves alone what the destination's branches and tags reach; and by its 2026-10-10 note: a sparse checkout's left-out files are no hidden change.
 
 ## Context
 
@@ -131,3 +131,14 @@ problem".
   through their tracking refs. A tag on a commit this clone lacks could in principle sit on top
   of these commits; that case is accepted. The read-only advice stays offline (ADR-025), so it
   can offer a rebase reauthor then narrows or refuses.
+- **2026-10-10, a sparse checkout is no hidden change.** Reauthor refused any skip-worktree
+  entry, and sparse-checkout sets that bit on every file it leaves out, so it refused in every
+  sparse checkout. With `core.sparseCheckout` on, an entry marked skip-worktree alone (`S` in
+  `git ls-files -v`) whose file is not on disk now counts as left out; a test measured that the
+  rebase keeps every commit's tree and leaves those files out. A skip-worktree file that is on
+  disk, any assume-unchanged bit, and every skip-worktree bit outside a sparse checkout still
+  refuse. The list now covers the whole work tree (`-- :/`), so running from a subfolder no
+  longer misses a hidden file elsewhere.
+  For: a sparse checkout can be re-authored, and nothing a rebase could overwrite is let
+  through. Against: one `lstat` per left-out file, slow in a very large monorepo; and a file
+  written between the check and the rebase is not seen, as with every other check here.

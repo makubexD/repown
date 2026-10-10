@@ -22,6 +22,10 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   fetched (…)`. It now runs in a single-branch clone, where it refused before. A push that
   `pushInsteadOf` or a second `url` sends elsewhere is refused, and `repown use`, setup and
   status make their rebase conditional for it, as they already did for a `pushurl`.
+- `repown reauthor` refused in every sparse checkout (`uncommitted changes (or files hidden with
+  skip-worktree)`), since sparse-checkout marks the files it leaves out that way. Those files no
+  longer count; a skip-worktree file that is on disk, or an assume-unchanged one, still refuses.
+  Run from a subfolder, it saw only that folder's hidden files; it now checks the whole clone.
 - `repown use` no longer says `No stored credential … the first push signs in` or `gh is still
   the git credential helper, so this pin is not honoured` in a clone where it pins no credential
   (an SSH remote, Azure DevOps, another host): pushes there use that host's own sign-in. Setup

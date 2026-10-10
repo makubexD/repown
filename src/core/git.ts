@@ -14,7 +14,7 @@
 // failure, and it is why nothing here treats a non-zero code as an error by
 // itself. See the note in exec.ts.
 
-import { existsSync } from 'node:fs';
+import { existsSync, lstatSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -384,14 +384,32 @@ export class Git {
     return succeeded(counted) && Number.isInteger(count) ? ok(count) : err(counted.stderr.trim() || 'git rev-list failed');
   }
 
-  /** Tracked changes, or entries hidden with skip-worktree / assume-unchanged, that a rebase could clobber. */
+  /**
+   * Tracked changes, or entries hidden with skip-worktree / assume-unchanged, that a rebase could
+   * clobber, anywhere in the work tree. In a sparse checkout a skip-worktree entry whose file is
+   * not on disk is what sparse-checkout left out, and a rebase keeps it out.
+   */
   async hasTrackedChanges(): Promise<Result<boolean>> {
-    const [status, files] = await Promise.all([
-      this.exec(['status', '--porcelain', '--untracked-files=no']), this.exec(['ls-files', '-v']),
+    const [status, files, sparse] = await Promise.all([
+      this.exec(['status', '--porcelain', '--untracked-files=no']), this.exec(['ls-files', '-v', '-z', '--', ':/']),
+      this.getBoolConfig('core.sparseCheckout'),
     ]);
     if (!succeeded(status) || !succeeded(files)) return err('git status failed');
-    const hidden = lines(files).some((line) => /^([a-z]|S) /.test(line));
-    return ok(status.stdout.trim().length > 0 || hidden);
+    const hidden = files.stdout.split('\0').filter((entry) => /^([a-z]|S) /.test(entry));
+    const kept = sparse === true ? hidden.filter((entry) => !this.leftOut(entry)) : hidden;
+    return ok(status.stdout.trim().length > 0 || kept.length > 0);
+  }
+
+  /** An `ls-files -v` entry marked skip-worktree only (`S`) whose file is not there. */
+  private leftOut(entry: string): boolean {
+    if (!entry.startsWith('S ')) return false;
+    try {
+      lstatSync(resolve(this.cwd, entry.slice(2)));
+      return false;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      return code === 'ENOENT' || code === 'ENOTDIR';
+    }
   }
 
   /** The operation a half-finished rebase, merge, cherry-pick, revert or bisect left, or null. */

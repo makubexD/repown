@@ -7,6 +7,8 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-10
+
 ### Fixed
 - In Git Bash's mintty without ConPTY, bare `repown` showed status with no word on why the start
   screen or setup never opened. It now notes on stderr that `winpty repown` asks: setup in a
@@ -304,7 +306,8 @@ and cmd. `status`, `doctor` and the pre-push guard are faster on Windows.
   contract for scripts.
 - Runs on Node 20+ on Windows, macOS and Linux, with zero runtime dependencies.
 
-[Unreleased]: https://github.com/makubexD/repown/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/makubexD/repown/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/makubexD/repown/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/makubexD/repown/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/makubexD/repown/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/makubexD/repown/compare/v0.3.0...v0.4.0

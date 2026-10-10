@@ -8,6 +8,10 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 ## [Unreleased]
 
 ### Fixed
+- Typed `repown accounts add` recorded a login setup refuses, overwrote or doubled one already
+  recorded, and never said whom this machine is signed in as, all silently. It now warns for each
+  (`so setup would not take it (recording it anyway)`, `is already recorded: this replaces its
+  name and email`, `signed in as octo-work, not octocat: …`) and still records.
 - `repown status` said nothing about a push destination owned by someone else when origin's
   own owner already had a warning, though the destination was another remote (a
   `pushRemote` fork): both are now said. Setup's fetch step says `prompts off: a sign-in that

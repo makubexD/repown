@@ -202,6 +202,14 @@ When `add` asks, it looks the login up on GitHub first. If github.com has no acc
 name, it says so before asking (`WARN  accounts   github.com has no account named octocat:
 check the spelling (recording it anyway)`), and an organisation gets the same kind of line.
 It still records: offline, or behind a refused lookup, it says nothing.
+
+Typed with flags or not, `add` also warns, and still records, where setup's questions would have
+stopped or said something: a login setup would not take (`"octo cat": use letters, digits and
+. _ @ - only, so setup would not take it (recording it anyway)`), one already recorded (`this
+replaces its name and email`, or `this records "Octocat" beside it` for another case), and on
+GitHub a login gh and Git Credential Manager are not signed in as (`signed in as octo-work, not
+octocat: if octocat isn't your account, repown accounts remove octocat; …`). Setup and the start
+screen say these while asking, so their own `accounts add` doesn't repeat them.
 </details>
 
 ### 3. Pin a clone

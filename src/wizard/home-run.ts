@@ -7,7 +7,7 @@
 
 import fixCommand from '../commands/fix.ts';
 import doctorCommand from '../commands/doctor.ts';
-import accountsGroup from '../commands/accounts.ts';
+import accountsGroup, { asked } from '../commands/accounts.ts';
 import { COMMANDS } from '../program.ts';
 import { parseArgs, type Args } from '../ui/args.ts';
 import { specFor, type Command } from '../ui/command.ts';
@@ -166,7 +166,8 @@ async function runOwn(prompter: Prompter, command: Command, tokens: readonly str
   prompter.suspend?.();
   const parsed = parseArgs(tokens, specFor(command));
   if (!parsed.ok) { out.fail('repown', parsed.error); return 2; }
-  return command.run(parsed.value);
+  // Record an account said while asking what accounts add would warn about a typed login.
+  return command.run(command === accountsGroup.actions['add'] ? asked(parsed.value) : parsed.value);
 }
 
 function setupArgs(cwd: string): Args {

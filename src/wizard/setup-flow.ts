@@ -386,13 +386,18 @@ async function nameDetail(answers: Answers, ctx: AccountContext): Promise<string
 
 /** On GitHub, when this machine is signed in as other logins only: perhaps not this person's account. */
 async function notSignedIn(answers: Answers, ctx: AccountContext): Promise<string | null> {
-  if (hostOf(answers, ctx) !== 'github') return null;
-  const logins = await ctx.signedIn();
-  const login = accountOf(answers);
+  return hostOf(answers, ctx) === 'github' ? signedInNote(accountOf(answers), await ctx.signedIn(), 'go back') : null;
+}
+
+/**
+ * `signed in as A, not X: if X isn't your account, <undo>; ...`, or null when X is among the
+ * logins or none could be read. Typed `accounts add` says it too, with its own undo.
+ */
+export function signedInNote(login: string, logins: readonly string[] | null, undo: string): string | null {
   if (!logins || logins.length === 0 || logins.some((other) => other.toLowerCase() === login.toLowerCase())) return null;
   const shown = printable(login);
   return 'signed in as ' + logins.map(printable).join(', ') + ', not ' + shown + ': if ' + shown +
-    ' isn\'t your account, go back; otherwise the first push asks you to sign in as it';
+    ' isn\'t your account, ' + undo + '; otherwise the first push asks you to sign in as it';
 }
 
 /** Said when the name question starts as the login: no profile name was found. */

@@ -161,7 +161,7 @@ interface Loaded {
 }
 
 async function loadClone(git: Git, repo: RepoState, options: ReadOptions): Promise<Loaded> {
-  const authPromise = options.auth ? Promise.resolve(options.auth) : inspectAuth(git, repo.originUrl ?? undefined);
+  const authPromise = options.auth ? Promise.resolve(options.auth) : inspectAuth(git, repo.credentialUrl ?? undefined);
   const [auth, pinned, allowed, planned, addresses, helpers, ownerIsUser, upstream, [unpushed, push]] = await Promise.all([
     authPromise,
     git.getConfig('repown.account', 'local'),
@@ -321,11 +321,11 @@ async function pinIntact(git: Git, pinned: string | null, entry: Account | undef
 
 /** The identity and push account git resolves for this clone, from every scope it reads. */
 async function gitUses(git: Git, values: { name: string; email: string; account: string }, repo: RepoState): Promise<boolean> {
-  const pinsCredential = repo.credentialKeys.length > 0 && repo.originUrl !== null;
+  const pinsCredential = repo.credentialKeys.length > 0 && repo.credentialUrl !== null;
   const [name, email, user] = await Promise.all([
     git.getConfig('user.name'),
     git.getConfig('user.email'),
-    pinsCredential ? git.getUrlMatch('credential.username', repo.originUrl!) : Promise.resolve(values.account),
+    pinsCredential ? git.getUrlMatch('credential.username', repo.credentialUrl!) : Promise.resolve(values.account),
   ]);
   return name === values.name && email === values.email && user === values.account;
 }

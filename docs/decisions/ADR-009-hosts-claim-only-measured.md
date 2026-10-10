@@ -1,6 +1,6 @@
 # ADR-009: Hosts are a strategy, and claim only what was measured
 
-**Status:** Accepted
+**Status:** Accepted. Amended by its 2026-10-10 note: the credential keys follow the URLs git uses.
 
 ## Context
 
@@ -53,3 +53,22 @@ Its credentials are left alone because what was probed didn't support pinning:
 - An empty `credentialKeys()` means "can't pin", never a guess. `repown` says so.
 - Pinning Azure DevOps needs the PAT and OAuth paths each checked against a live remote.
   `src/core/hosts/azdo.ts` records the open questions.
+
+## Notes
+
+- **2026-10-10, the credential keys follow the URLs git uses.** The keys came from
+  `remote.origin.url` as written. A clone that fetches over SSH and pushes over https (a
+  `pushurl`, a `pushInsteadOf`) got no pin, though its push asks for a credential; a clone
+  whose https URL a global `url.git@github.com:.insteadOf` sends over SSH got a key no request
+  uses, and was reported as pinned. The keys are now the union of each URL git fetches or
+  pushes origin with (`git remote get-url --all origin`, and again with `--push`), each by its
+  own host's provider; when git can't list them, nothing is claimed. The helper `status`,
+  `use`, `doctor` and setup judge, setup's "pin intact" check and the host named in the
+  wording follow the first of those URLs that has a key, else the one git fetches from.
+  `repown off` removes the keys of those URLs and of the URLs as configured.
+  For: the pin is set exactly where a request to a measured host is made (still GitHub over
+  https only), and an SSH clone is never reported as pinned. Against: one more `git` call per
+  read (`scan` included); a https `pushurl` removed after `use` leaves its key for `off` to
+  miss; and status reads the
+  account from the first key while the guard reads the push URL's, which differ only when
+  keys for two hosts were edited by hand.

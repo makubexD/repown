@@ -804,6 +804,13 @@ from the URL git pushes to, `git remote get-url --push`: `pushurl`, `pushInstead
 first is named; the guard checks each. A push straight to a URL is read after `insteadOf` only.
 A username written into a `pushInsteadOf` URL isn't checked.
 
+The credential pin follows the same rewrites. `credential.https://github.com.username` is set
+when any URL git fetches or pushes origin with is GitHub over https (`git remote get-url --all`,
+and again with `--push`): an SSH clone that pushes over https is pinned, and a clone whose
+https URL an `insteadOf` sends over SSH is not. The helper `status`, `use`, `doctor` and setup
+judge is the one serving that URL. `repown off` also removes the key of the URLs as configured,
+so a rule added since `use` leaves nothing behind.
+
 **Keys.** ↑/↓ choose, Enter confirms, Esc or Ctrl-C cancels (exit 130; with numbered
 choices, Ctrl-C). Once there is a
 question to go back to, each list ends with **← Back** (↑ from the first choice lands on

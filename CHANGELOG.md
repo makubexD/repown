@@ -8,6 +8,12 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 ## [Unreleased]
 
 ### Fixed
+- The credential pin followed origin's URL as written. A clone that fetches over SSH and
+  pushes over https (a `pushurl` or `pushInsteadOf`) is now pinned, and `repown setup` no
+  longer offers `use` again there; a clone whose https URL an `insteadOf` sends over SSH is no
+  longer reported as pinned (`status` says `not pinned by repown on GitHub`). The credential
+  helper `status`, `use`, `doctor` and setup check is the one serving the URL the pin is for,
+  and `repown off` also removes the key of origin's URLs as configured.
 - In a clone that fetches only some branches (`git clone --single-branch`, `--depth`, or a
   `^refs/heads/<branch>` refspec), a branch pushed from it gets no remote-tracking ref, yet
   `repown use`, setup and status offered the plain `git rebase` over commits that push had

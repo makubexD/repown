@@ -88,7 +88,10 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   stdin (excluding what the remote already has), and every tagger, not the current config.
 - The owner shown anywhere (`inspectRepo`'s `owner` with its `ownerProvider`, push-state's
   destination) comes from `Git.remotePushUrl` (`git remote get-url --push`), the URL the hook
-  receives; `provider`, `url` and `credentialKeys` follow the configured fetch URL. A push
+  receives; `provider` and `url` follow the configured fetch URL. `credentialKeys`,
+  `credentialUrl`, `credentialHost` and `helper` follow every URL git fetches or pushes origin
+  with (`remote get-url --all`, with and without `--push`), and claim nothing when git can't
+  list them (ADR-009). A push
   straight to a URL goes through `rewrittenUrl` (`ls-remote --get-url`).
 - `unpushed.ts` counts against remote-tracking refs, so its rebase advice depends on
   `push-destination.ts`: a push destination no tracking ref reaches is unknown, and the

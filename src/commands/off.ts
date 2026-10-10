@@ -5,7 +5,7 @@
 // go back to inheriting the machine default, and it should be able to do that
 // without being able to break anything else.
 
-import { inspectRepo, type RepoState } from '../core/inspect.ts';
+import { inspectRepo, keysOf, type RepoState } from '../core/inspect.ts';
 import { clearIdentity, legacyAccountKey } from '../core/identity.ts';
 import { gitFor, type Args } from '../ui/args.ts';
 import type { Command } from '../ui/command.ts';
@@ -24,7 +24,7 @@ export default {
     const legacy = repo.url ? [legacyAccountKey(repo.url)] : [];
     const had = id.name ?? id.email ?? id.owner ?? id.account ??
       (legacy[0] ? await git.getConfig(legacy[0], 'local') : null);
-    const keys = [...new Set([...repo.credentialKeys, ...legacy])];
+    const keys = [...new Set([...repo.credentialKeys, ...await configuredKeys(repo), ...legacy])];
     const failed = (await clearIdentity(git, keys)).filter((outcome) => !outcome.written);
     if (failed.length > 0) {
       out.fail('off', 'could not remove ' + failed.map((outcome) => outcome.key).join(', '));
@@ -38,6 +38,15 @@ export default {
     return 0;
   },
 } satisfies Command;
+
+/**
+ * The keys of origin's URLs as configured, before insteadOf and pushInsteadOf: a rule
+ * added since `use` changes where git sends origin, not what `use` wrote.
+ */
+async function configuredKeys(repo: RepoState): Promise<string[]> {
+  const pushurls = await repo.git.getAllConfig('remote.origin.pushurl');
+  return [repo.originUrl, ...pushurls].flatMap((url) => (url ? keysOf(url) : []));
+}
 
 /** Read AFTER the clear: before it, the "inherited" value is still the local one. */
 async function reportInherited(git: RepoState['git'], before: RepoState): Promise<void> {

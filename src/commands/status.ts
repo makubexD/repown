@@ -43,7 +43,7 @@ export default {
       out.detail('repown pins an identity per clone, so it needs one to work in.');
       return 1;
     }
-    const auth = await inspectAuth(git, repo.originUrl ?? undefined);
+    const auth = await inspectAuth(git, repo.credentialUrl ?? undefined);
     const registry = await loadRegistry();
 
     await summary(repo, auth, registry);
@@ -150,7 +150,7 @@ function originOf(repo: RepoState): string {
 
 function pushesAs(repo: RepoState): string {
   if (!repo.originUrl) return 'no remote to push to';
-  if (repo.credentialKeys.length === 0) return 'not pinned by repown on ' + repo.provider.label;
+  if (repo.credentialKeys.length === 0) return 'not pinned by repown on ' + repo.credentialHost.label;
   return repo.identity.account ?? 'NOT SET LOCALLY';
 }
 

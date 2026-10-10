@@ -51,7 +51,7 @@ delete it, and saving works again.
 | --- | --- |
 | `user.name`, `user.email` | who **authored** the commit |
 | `repown.account` | whose clone this is; the guard checks the destination against it |
-| `credential.https://github.com.username` | which stored credential serves the **push** (GitHub over https only) |
+| `credential.https://github.com.username` | which stored credential serves the **push** (GitHub over https only: set when origin fetches or pushes over https, after `insteadOf` and `pushInsteadOf`) |
 | `user.useConfigOnly` | git refuses to invent an identity from the hostname |
 
 Three more keys widen what the guard accepts. They are optional and count only in this

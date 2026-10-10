@@ -172,7 +172,7 @@ function storesIn(gcm: boolean, helper: string): string {
 }
 
 async function applyGh(account: string, repo: RepoState): Promise<void> {
-  const auth = await inspectAuth(repo.git, repo.originUrl ?? undefined);
+  const auth = await inspectAuth(repo.git, repo.credentialUrl ?? undefined);
   const action = ghAction(account, auth, interactive());
   if (action === 'advise') return notSignedIn(account);
   if (action === 'login') return signInToGh(account, repo, auth);
@@ -218,7 +218,7 @@ function loginFailed(failure: GhLoginError): void {
 }
 
 async function reportLogin(account: string, repo: RepoState, before: AuthState): Promise<void> {
-  const after = await inspectAuth(repo.git, repo.originUrl ?? undefined);
+  const after = await inspectAuth(repo.git, repo.credentialUrl ?? undefined);
   reportActive(account, after);
   if (!before.ghIsHelper && after.ghIsHelper) helperTakenOver();
 }
@@ -264,7 +264,7 @@ async function switchCli(account: string): Promise<void> {
 async function reportConcerns(account: string, repo: RepoState, email: string): Promise<void> {
   await reportUnpushed(repo, email, account);
   if (repo.credentialKeys.length === 0 && repo.url) {
-    out.warn('host', repo.provider.label + ' credentials are not pinned by repown.');
+    out.warn('host', repo.credentialHost.label + ' credentials are not pinned by repown.');
     out.detail('commits are pinned and the guard still runs; only credential');
     out.detail('selection is left to whatever already serves this host.');
   }
@@ -295,7 +295,7 @@ async function ownerConcern(account: string, repo: RepoState): Promise<void> {
 /** Only where use pinned a credential: elsewhere pushes use the host's own sign-in, as setup's credentialGap says. */
 async function credentialConcern(account: string, repo: RepoState): Promise<void> {
   if (repo.credentialKeys.length === 0) return;
-  const auth = await inspectAuth(repo.git, repo.originUrl ?? undefined);
+  const auth = await inspectAuth(repo.git, repo.credentialUrl ?? undefined);
   if (auth.ghIsHelper) {
     out.warn('helper', 'gh is still the git credential helper, so this pin is not honoured.');
     out.detail('fix: repown fix');

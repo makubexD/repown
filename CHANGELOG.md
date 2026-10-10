@@ -8,6 +8,14 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 ## [Unreleased]
 
 ### Fixed
+- A timed-out `git fetch`, `ls-remote` or `reauthor` rebase was reported only when it finished
+  on its own: on Windows the `git` on PATH is often a wrapper whose real git kept running (and
+  holding the clone's locks) after repown killed the wrapper. A timeout now ends the whole
+  process tree on Windows and is reported within seconds everywhere.
+- A remote whose name starts with `-` (set by hand in config) could not be fetched by
+  `reauthor` or setup, and the advice printed no command for it. git now gets `--` before the
+  name, and printed commands read `git fetch "--" <remote>` and `git push -u "--" <remote>
+  <branch>`.
 - `repown use` printed `push-as:<account>` where it pins no credential (SSH, Azure DevOps,
   another host, no remote). The `identity` line now ends at the address there, and the
   warning reads `credentials on GitHub are not pinned by repown.` (`on this host` for another

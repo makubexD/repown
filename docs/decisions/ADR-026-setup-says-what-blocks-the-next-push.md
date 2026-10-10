@@ -2,7 +2,7 @@
 
 **Status:** Accepted. Supersedes in part [ADR-013](ADR-013-deliberately-not-done.md) (rewriting unpushed commits, only when asked). Amends [ADR-022](ADR-022-set-up-clone-opens-on-settled-screen.md) (a
 settled clone with a blocker is not "nothing needs to change"),
-[ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses), [ADR-020](ADR-020-setup-leaves-clone-ready.md) (done only without blockers) and [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md) (`WARN push` first; status's closing line). Amended by its 2026-10-09 note: reauthor leaves alone what the destination's branches and tags reach; and by its 2026-10-10 note: a sparse checkout's left-out files are no hidden change.
+[ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses), [ADR-020](ADR-020-setup-leaves-clone-ready.md) (done only without blockers) and [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md) (`WARN push` first; status's closing line). Amended by its 2026-10-09 note: reauthor leaves alone what the destination's branches and tags reach; by its 2026-10-10 notes: a sparse checkout's left-out files are no hidden change, and a timeout stops what git started.
 
 ## Context
 
@@ -142,3 +142,18 @@ problem".
   For: a sparse checkout can be re-authored, and nothing a rebase could overwrite is let
   through. Against: one `lstat` per left-out file, slow in a very large monorepo; and a file
   written between the check and the rebase is not seen, as with every other check here.
+- **2026-10-10, a timeout stops what git started.** At its timeout `run` killed only its
+  direct child, then waited for the output pipes to close. On Windows the `git` on PATH is
+  often a wrapper (`cmd\git.exe`) whose real git outlives it, and a git alias's shell
+  outlives git anywhere; both hold the pipes, so a timed-out fetch or rebase was reported only
+  when it finished on its own. Now, on Windows, the whole tree is ended with
+  `taskkill /PID <pid> /T /F` while the child still runs (repown holds its handle, so the PID
+  is still its own), and the child itself is killed after; on POSIX the child gets SIGTERM as
+  before. Either way `run` stops waiting 3 s later, with the result marked timed out. A soft
+  `taskkill` was measured as useless here: a console process can only be ended forcefully.
+  The fetch and `ls-remote` calls also put `--` before the remote (ADR-025's 2026-10-10 note).
+  For: a timed-out command is reported within seconds, and on Windows nothing it started
+  keeps running. Against: a forced end runs no cleanup, so a lock git held (`index.lock`)
+  stays for the person to remove, as the rebase failure message already says how to finish;
+  on POSIX what git started (an `--exec` shell, ssh) can outlive the SIGTERM, since making the
+  child a process-group leader would keep Ctrl-C from reaching it.

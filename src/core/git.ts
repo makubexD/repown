@@ -308,13 +308,13 @@ export class Git {
 
   /** Fetch with every prompt off: a sign-in that would ask fails instead. The reason is cleaned for display. */
   async fetchQuietly(remote: string): Promise<Result<void>> {
-    const fetched = await this.execLong([...QUIET, 'fetch', '--quiet', '--no-recurse-submodules', remote], await this.quietEnvHere(), NETWORK_MS);
+    const fetched = await this.execLong([...QUIET, 'fetch', '--quiet', '--no-recurse-submodules', '--', remote], await this.quietEnvHere(), NETWORK_MS);
     return succeeded(fetched) ? ok(undefined) : err(networkReason(fetched));
   }
 
   /** How many branches the remote lists (network, prompts off). */
   async remoteHeadCount(remote: string): Promise<Result<number>> {
-    const listed = await this.execLong([...QUIET, 'ls-remote', '--heads', remote], await this.quietEnvHere(), NETWORK_MS);
+    const listed = await this.execLong([...QUIET, 'ls-remote', '--heads', '--', remote], await this.quietEnvHere(), NETWORK_MS);
     return succeeded(listed) ? ok(lines(listed).length) : err(networkReason(listed));
   }
 
@@ -323,7 +323,7 @@ export class Git {
    * remote lists them: a tag's peeled `^{}` line when there is one, else the tag itself.
    */
   async remoteTips(remote: string): Promise<Result<RemoteTips>> {
-    const listed = await this.execLong([...QUIET, 'ls-remote', '--heads', '--tags', remote], await this.quietEnvHere(), NETWORK_MS);
+    const listed = await this.execLong([...QUIET, 'ls-remote', '--heads', '--tags', '--', remote], await this.quietEnvHere(), NETWORK_MS);
     return succeeded(listed) ? ok(parseTips(lines(listed))) : err(networkReason(listed));
   }
 

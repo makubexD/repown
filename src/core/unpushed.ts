@@ -15,7 +15,7 @@
 import type { CommitIdentity, Git } from './git.ts';
 import { ok, type Result } from './result.ts';
 import { unknownDestination, type UnknownDestination } from './push-destination.ts';
-import { copyableCommand, shellWord } from './shell.ts';
+import { copyableCommand, positional, shellWord } from './shell.ts';
 
 export interface UnpushedCommit {
   readonly authorEmail: string;
@@ -115,7 +115,7 @@ function unknownLine(unknown: UnknownDestination, account: string): string {
 
 function trackingLine(name: string, account: string): string {
   const lead = show(name) + ' has no remote-tracking refs, so some of these may already be on it' + GUARD;
-  const fetch = copyable(name) ? copyableCommand(['git', 'fetch', show(name)]) : null;
+  const fetch = copyableCommand(['git', 'fetch', ...positional(show(name))]);
   return fetch ? lead + ': ' + fetch + ', ' + recount(account) : lead;
 }
 
@@ -126,9 +126,9 @@ function untrackedLine(remote: string, branch: string): string {
 
 function urlLine(key: string, remote: string | null, account: string): string {
   const lead = 'this branch pushes to a URL, not a remote' + THERE;
-  if (!remote || !copyable(remote)) return lead;
+  if (!remote) return lead;
   const repoint = copyableCommand(['git', 'config', '--local', show(key), show(remote)]);
-  const fetch = copyableCommand(['git', 'fetch', show(remote)]);
+  const fetch = copyableCommand(['git', 'fetch', ...positional(show(remote))]);
   return repoint && fetch ? lead + ': ' + repoint + ', ' + fetch + ', ' + recount(account) : lead;
 }
 
@@ -138,10 +138,6 @@ function recount(account: string): string {
 }
 
 /** Quoting keeps a shell from splitting a word, not git from reading `-x` as an option. */
-function copyable(word: string): boolean {
-  return !word.startsWith('-');
-}
-
 /** Pinning is an alternative only when one address made them all. */
 function reauthorLine(found: Found): string[] {
   const them = found.count === 1 ? 'it' : 'them';

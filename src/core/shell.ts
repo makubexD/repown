@@ -25,3 +25,8 @@ export function copyableCommand(words: readonly string[]): string | null {
   const quoted = words.map(shellWord);
   return quoted.every((word) => word !== null) ? quoted.join(' ') : null;
 }
+
+/** A git positional (a remote name) as argv words: after `--` when git would read it as an option. */
+export function positional(word: string): string[] {
+  return word.startsWith('-') ? ['--', word] : [word];
+}

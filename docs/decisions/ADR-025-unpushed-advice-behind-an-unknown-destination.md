@@ -3,7 +3,8 @@
 **Status:** Accepted. Narrows the advice of [ADR-020](ADR-020-setup-leaves-clone-ready.md)'s
 "pinning names unpushed commits"; the warning itself, its severity and its exit code are
 unchanged. Amended by its 2026-10-09 note: a remote is known only for a branch its fetch
-refspecs map, and its tracking refs are read where those refspecs write them.
+refspecs map, and its tracking refs are read where those refspecs write them; and by its
+2026-10-10 note: a name git would read as an option is printed after `--`.
 
 ## Context
 
@@ -98,3 +99,12 @@ remote, and a `git pull <url>`. The file is also kept per worktree. Each case br
   "maps nothing", which errs towards the conditional line.
   Not changed: the advice lists commits in `git log`'s order, `repown reauthor` in
   `--topo-order`. They differ only around a merge, and reauthor refuses a merge in its range.
+- **2026-10-10, a dashed name is printed after `--`.** A remote named like an option (a
+  leading `-`, set by hand in config) got no command, so the advice could not say how to fetch
+  it. `git fetch` and `git push` read every word after `--` as a positional on every git
+  version (measured: `git fetch -x` is "unknown switch", `git fetch -- -x` fetches), so the
+  commands now print `git fetch "--" <remote>` (`--` quoted, as `shellWord` quotes it for
+  PowerShell). `positional` (`src/core/shell.ts`) builds those words, for repown's own git
+  calls too. For: the advice is complete for every remote, and a name like
+  `--upload-pack=<cmd>` can only be read as a remote. Against: an odd-looking `"--"` in a
+  command most people never see.

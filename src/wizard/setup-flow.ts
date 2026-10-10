@@ -11,7 +11,7 @@ import { ghAdvice, upstreamText } from '../commands/status.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { isNoreplyAddress } from '../core/hosts/github.ts';
 import { ALLOW_OWNER_BY_HAND, allowOwnerCommand } from '../core/guard/check.ts';
-import { shellWord } from '../core/shell.ts';
+import { positional, shellWord } from '../core/shell.ts';
 import { printable } from '../ui/format.ts';
 import { foreignAddresses, foreignCount, type UnpushedFact } from '../core/unpushed.ts';
 import type { PushFacts } from '../core/push-state.ts';
@@ -720,7 +720,7 @@ function repointArgv(answers: Answers, ctx: SetupContext): string[] | null {
 
 function fetchArgv(answers: Answers, ctx: SetupContext): string[] | null {
   const remote = answers['fetch'] === true ? fetchTarget(answers, ctx) : null;
-  return remote ? [...gitIn(ctx), 'fetch', remote] : null;
+  return remote ? [...gitIn(ctx), 'fetch', ...positional(remote)] : null;
 }
 
 /** Which of setup's git lines this is, read from its shape; null for anything setup does not plan. */
@@ -728,7 +728,7 @@ export type GitStep = 'repoint' | 'fetch' | 'upstream' | 'allowOwner';
 
 export function gitStepOf(argv: readonly string[]): GitStep | null {
   const sub = argv[1] === '-C' ? argv.slice(3) : argv.slice(1);
-  if (sub[0] === 'fetch' && sub.length === 2) return 'fetch';
+  if (sub[0] === 'fetch' && (sub.length === 2 || (sub.length === 3 && sub[1] === '--'))) return 'fetch';
   if (sub[0] !== 'config' || sub[1] !== '--local') return null;
   if (sub[2] === '--add' && sub[3] === 'repown.allowOwner' && sub.length === 5) return 'allowOwner';
   if (sub[2] === 'push.autoSetupRemote' && sub.length === 4) return 'upstream';

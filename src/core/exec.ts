@@ -26,6 +26,7 @@
 // branch name or URL containing shell metacharacters cannot be interpreted.
 
 import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { join } from 'node:path';
 
 export interface ExecResult {
   readonly code: number;
@@ -84,18 +85,70 @@ export function run(
       windowsHide: true,
     });
     const output = collect(child);
-    let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; child.kill(); }, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-    const settle = (result: Omit<ExecResult, 'stdout' | 'stderr'>): void => {
-      clearTimeout(timer);
-      resolve({ ...output(), ...result, ...(timedOut ? { timedOut } : {}) });
-    };
+    const clock: Clock = { timedOut: false, timers: [] };
+    const settle = once((result: Omit<ExecResult, 'stdout' | 'stderr'>): void => {
+      for (const timer of clock.timers) clearTimeout(timer);
+      resolve({ ...output(), ...result, ...(clock.timedOut ? { timedOut: true } : {}) });
+    });
+    clock.timers.push(setTimeout(() => expire(child, clock, settle), options.timeoutMs ?? DEFAULT_TIMEOUT_MS));
     child.on('error', (error: NodeJS.ErrnoException) => settle({ code: -1, spawnError: error }));
     child.on('close', (code) => settle({ code: code ?? -1 }));
 
     child.stdin.on('error', () => { /* the child may exit before stdin drains */ });
     child.stdin.end(options.input ?? '');
   });
+}
+
+interface Clock {
+  timedOut: boolean;
+  readonly timers: NodeJS.Timeout[];
+}
+
+/** How long a stopped child's pipes may stay open before repown stops waiting for them. */
+const GRACE_MS = 3_000;
+
+/**
+ * At the timeout: stop the child and what it started, then stop waiting after a grace even
+ * if a process it started still holds the pipes ('close' waits for every holder).
+ */
+function expire(child: ChildProcessWithoutNullStreams, clock: Clock, settle: (result: Omit<ExecResult, 'stdout' | 'stderr'>) => void): void {
+  clock.timedOut = true;
+  stopTree(child);
+  clock.timers.push(setTimeout(() => {
+    child.stdout.destroy();
+    child.stderr.destroy();
+    child.unref();
+    settle({ code: child.exitCode ?? -1 });
+  }, GRACE_MS));
+}
+
+/**
+ * SIGTERM to the child on POSIX. On Windows the git on PATH is often a wrapper (cmd\git.exe)
+ * whose real git outlives TerminateProcess, so the whole tree is ended with taskkill /T /F
+ * while the child still runs (Node holds its handle, so the PID is still ours); the child
+ * itself is killed after, so the tree is still there to walk. A forced end runs no cleanup:
+ * a lock git held stays, as the timeout message's callers say.
+ */
+function stopTree(child: ChildProcessWithoutNullStreams): void {
+  const running = child.exitCode === null && child.signalCode === null;
+  if (process.platform !== 'win32' || child.pid === undefined || !running) { child.kill(); return; }
+  const root = process.env['SystemRoot'] ?? process.env['windir'] ?? 'C:\\Windows';
+  const killer = spawn(join(root, 'System32', 'taskkill.exe'), ['/PID', String(child.pid), '/T', '/F'], {
+    shell: false, windowsHide: true, stdio: 'ignore',
+  });
+  const after = once(() => { child.kill(); });
+  killer.on('error', after);
+  killer.on('close', after);
+}
+
+/** A function that runs only the first time it is called. */
+function once<T extends unknown[]>(act: (...args: T) => void): (...args: T) => void {
+  let done = false;
+  return (...args: T) => {
+    if (done) return;
+    done = true;
+    act(...args);
+  };
 }
 
 /**

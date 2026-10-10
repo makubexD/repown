@@ -146,3 +146,8 @@ test('with the guard off, what only the guard would refuse is said but blocks no
   assert.equal(byKind.get('GIT_AUTHOR_EMAIL is set')!.lines[0], "GIT_AUTHOR_EMAIL is set in this shell: commits made here won't use " + EMAIL + ' (unset it)');
   assert.ok(blockers(facts({ unpushed: foreign(2) }), CHOICE).every((blocker) => blocker.blocks), 'guarded: all block');
 });
+
+test('a remote named like an option gets -- before it in the push to copy, so git reads it as the remote', () => {
+  const [first] = blockers(facts({ upstream: 'missing', destination: { remote: '-x', owner: 'octocat', allowed: [] } }), CHOICE);
+  assert.equal(first!.lines[0], 'main has no upstream: the first push needs git push -u "--" -x main');
+});

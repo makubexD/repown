@@ -9,7 +9,7 @@
 import type { Result } from './result.ts';
 import { unpushedLines, foreignCount, type UnpushedCommit, type UnpushedFact } from './unpushed.ts';
 import { ALLOW_OWNER_BY_HAND, allowOwnerCommand } from './guard/check.ts';
-import { copyableCommand } from './shell.ts';
+import { copyableCommand, positional } from './shell.ts';
 import { printable } from '../ui/format.ts';
 import type { Divergence, PushDestination, PushFacts } from './push-state.ts';
 
@@ -155,7 +155,7 @@ function divergenceBlocker(divergence: Result<Divergence | null>, branch: string
 
 function upstreamBlocker(facts: PushFacts, branch: string, autoUpstream: boolean): Blocker[] {
   if (facts.upstream !== 'missing' || autoUpstream) return [];
-  const push = copyableCommand(['git', 'push', '-u', facts.destination?.remote ?? 'origin', branch]) ?? 'git push -u with the remote and this branch';
+  const push = copyableCommand(['git', 'push', '-u', ...positional(facts.destination?.remote ?? 'origin'), branch]) ?? 'git push -u with the remote and this branch';
   return [{ kind: 'upstream', summary: branch + ' has no upstream', lines: [branch + ' has no upstream: the first push needs ' + push], blocks: true }];
 }
 

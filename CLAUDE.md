@@ -51,7 +51,10 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   it (credential helpers print live passwords). `inherit` hands the terminal to the child
   (`stdio: 'inherit'`) and is used only for `gh auth login`, only in a terminal: repown
   never sees what the child prints, so no credential passes through repown. A spawn error
-  such as ENOENT resolves as not installed, for both.
+  such as ENOENT resolves as not installed, for both. At a timeout `run` ends the child (on
+  Windows its whole tree, `taskkill /T /F`) and resolves 3 s later even if something the child
+  started still holds the pipes (ADR-026). A remote name in git's argv or in a printed command
+  goes through `positional` (`src/core/shell.ts`), which puts `--` before a leading `-`.
 - **Every `git log` passes `--no-show-signature`.** `scan` runs it in repositories
   it merely found, and their config can set `gpg.program`.
 - **A skipped check must never look like a passed one.** Failures that are answers

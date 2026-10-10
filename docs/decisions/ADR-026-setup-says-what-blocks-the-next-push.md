@@ -2,7 +2,7 @@
 
 **Status:** Accepted. Supersedes in part [ADR-013](ADR-013-deliberately-not-done.md) (rewriting unpushed commits, only when asked). Amends [ADR-022](ADR-022-set-up-clone-opens-on-settled-screen.md) (a
 settled clone with a blocker is not "nothing needs to change"),
-[ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses), [ADR-020](ADR-020-setup-leaves-clone-ready.md) (done only without blockers) and [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md) (`WARN push` first; status's closing line). Amended by its 2026-10-09 note: reauthor leaves alone what the destination's branches and tags reach; by its 2026-10-10 notes: a sparse checkout's left-out files are no hidden change, and a timeout stops what git started.
+[ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses), [ADR-020](ADR-020-setup-leaves-clone-ready.md) (done only without blockers) and [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md) (`WARN push` first; status's closing line). Amended by its 2026-10-09 note: reauthor leaves alone what the destination's branches and tags reach; by its 2026-10-10 notes: a sparse checkout's left-out files are no hidden change, a timeout stops what git started, and a sign-in is judged on the URLs git pushes with.
 
 ## Context
 
@@ -163,3 +163,16 @@ problem".
   a remote this clone never fetched is not seen, so setup can say done while the next push is
   non-fast-forward. Finding it needs a network call per remote; git's own refusal at push
   time already names it.
+- **2026-10-10, a sign-in is judged on the URLs git pushes with.** The check read the last
+  `remote.<r>.pushurl` or `url` as configured. A `url.<base>.insteadOf` or `pushInsteadOf`
+  rule whose base holds a token signed every push in unseen, a token in an earlier value of a
+  remote with several URLs was missed, and a rule that took a token out was still reported.
+  Now each URL `git remote get-url --push --all` prints is checked. One that is a configured
+  value is named by its key, as before; any other came from git's own rewriting, and the line
+  names only the remote: `origin's push URL, as git resolves it, carries its own sign-in`.
+  The rule is never named, since its key holds the token in its name. When git can't list the
+  URLs (before 2.7, or config it refuses), the configured key is checked as before, and no
+  error text is kept: git's message can quote the key. A push straight to a URL is unchanged.
+  For: the line agrees with what git sends, rewrites and git 2.46's empty-value reset
+  included, without repown copying git's matching rules. Against: a rewritten sign-in gets no
+  key to fix by hand; `git config --show-origin --get-regexp '^url\.'` lists the rules.

@@ -7,6 +7,13 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+### Fixed
+- Setup and `repown status` missed a push's own sign-in when a `url.<base>.insteadOf` or
+  `pushInsteadOf` rule put a token in origin's push URL, or when a remote with several URLs
+  had the token in one but the last. They now judge every URL git pushes with, and say
+  `origin's push URL, as git resolves it, carries its own sign-in` without printing the rule,
+  whose name holds the token. A rule that takes a token out is no longer reported.
+
 ## [0.5.2] - 2026-10-10
 
 ### Fixed

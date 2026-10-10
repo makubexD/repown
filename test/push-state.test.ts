@@ -37,7 +37,7 @@ describe('readPushFacts', () => {
     const facts = await read();
     assert.deepEqual(facts.env, []);
     assert.deepEqual(facts.configOverrides, []);
-    assert.equal(facts.signinKey, null);
+    assert.equal(facts.signin, null);
     assert.deepEqual(facts.divergence, { ok: true, value: { tracked: 'origin/main', behind: 0, ahead: 0 } });
     assert.deepEqual(facts.elsewhere, { ok: true, value: [] });
     assert.equal(facts.detached, false);
@@ -55,20 +55,41 @@ describe('readPushFacts', () => {
   test('a sign-in in the push path is found by key; a bare username is not a secret', async () => {
     commit('first');
     box.git('remote', 'add', 'origin', 'https://octocat@github.com/octocat/hello.git');
-    assert.equal((await read()).signinKey, null);
+    assert.equal((await read()).signin, null);
     box.git('config', 'branch.main.remote', 'https://octocat:tok@github.com/octocat/hello.git');
-    assert.equal((await read()).signinKey, 'branch.main.remote');
+    assert.deepEqual((await read()).signin, { key: 'branch.main.remote' });
     box.git('config', '--unset', 'branch.main.remote');
     box.git('config', 'remote.origin.pushurl', 'https://ghp_abc@github.com/octocat/hello.git');
-    assert.equal((await read()).signinKey, 'remote.origin.pushurl');
+    assert.deepEqual((await read()).signin, { key: 'remote.origin.pushurl' });
     box.git('config', 'remote.origin.url', 'https://octocat:ghp_abc@github.com/octocat/hello.git');
     box.git('config', 'remote.origin.pushurl', 'https://github.com/octocat/hello.git');
-    assert.equal((await read()).signinKey, null, 'a push uses the clean pushurl; the token in url signs in only fetches');
+    assert.equal((await read()).signin, null, 'a push uses the clean pushurl; the token in url signs in only fetches');
     box.git('config', '--unset', 'remote.origin.pushurl');
-    assert.equal((await read()).signinKey, 'remote.origin.url');
+    assert.deepEqual((await read()).signin, { key: 'remote.origin.url' });
     box.git('config', 'remote.origin.url', 'https://github.com/octocat/hello.git');
     box.git('config', 'http.https://github.com/.extraheader', 'AUTHORIZATION: basic xyz');
-    assert.equal((await read()).signinKey, 'http.https://github.com/.extraheader');
+    assert.deepEqual((await read()).signin, { key: 'http.https://github.com/.extraheader' });
+  });
+
+  test('a sign-in git adds by rewriting the push URL is found by remote, never by rule or URL', async () => {
+    commit('first');
+    box.git('remote', 'add', 'origin', 'https://github.com/octocat/hello.git');
+    box.git('config', 'url.https://octocat:ghp_tok@github.com/.insteadOf', 'https://github.com/');
+    assert.deepEqual((await read()).signin, { remote: 'origin' });
+    box.git('config', '--remove-section', 'url.https://octocat:ghp_tok@github.com/');
+    box.git('config', 'url.https://octocat:ghp_tok@github.com/.pushInsteadOf', 'https://github.com/');
+    assert.deepEqual((await read()).signin, { remote: 'origin' });
+    box.git('config', '--remove-section', 'url.https://octocat:ghp_tok@github.com/');
+    box.git('remote', 'set-url', 'origin', 'https://octocat:ghp_raw@github.com/octocat/hello.git');
+    box.git('config', 'url.https://github.com/.insteadOf', 'https://octocat:ghp_raw@github.com/');
+    assert.equal((await read()).signin, null, 'a rule that takes the token out: git sends none');
+  });
+
+  test('every URL a remote pushes with is checked, not only the last one configured', async () => {
+    commit('first');
+    box.git('remote', 'add', 'origin', 'https://octocat:ghp_tok@github.com/octocat/hello.git');
+    box.git('config', '--add', 'remote.origin.url', 'https://github.com/octocat/hello.git');
+    assert.deepEqual((await read()).signin, { key: 'remote.origin.url' });
   });
 
   test('a URL where a remote would do: the key to repoint and that remote, never the URL', async () => {

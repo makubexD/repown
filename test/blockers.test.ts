@@ -14,7 +14,7 @@ function facts(overrides: Partial<PushFacts> = {}): PushFacts {
     env: [],
     configOverrides: [],
     elsewhere: ok([]),
-    signinKey: null,
+    signin: null,
     repoint: null,
     destination: { remote: 'origin', owner: 'octocat', allowed: [] },
     divergence: ok(null),
@@ -60,10 +60,10 @@ test('each identity variable set in this shell, by name', () => {
 });
 
 test('a branch remote with its own sign-in names the key, never the URL', () => {
-  const [first] = blockers(facts({ signinKey: 'branch.main.remote' }), CHOICE);
+  const [first] = blockers(facts({ signin: { key: 'branch.main.remote' } }), CHOICE);
   assert.equal(first!.summary, 'the branch pushes with its own sign-in');
   assert.equal(first!.lines[0], 'branch.main.remote carries its own sign-in, so pushes from main use it, not octocat');
-  const fixable = blockers(facts({ signinKey: 'branch.main.remote', repoint: { key: 'branch.main.remote', remote: 'origin', tracked: true } }), CHOICE);
+  const fixable = blockers(facts({ signin: { key: 'branch.main.remote' }, repoint: { key: 'branch.main.remote', remote: 'origin', tracked: true } }), CHOICE);
   assert.equal(fixable[0]!.lines[0], 'branch.main.remote carries its own sign-in, so pushes from main use it, not octocat: ' +
     'point it back at origin with repown setup --repoint');
 });
@@ -116,9 +116,16 @@ test('a detached HEAD', () => {
   assert.equal(first!.lines[0], 'HEAD is detached: git pull and a plain git push fail here; git switch to a branch first');
 });
 
+test('a sign-in git adds by rewriting the push URL names the remote, never a rule or a URL', () => {
+  const [first] = blockers(facts({ signin: { remote: 'origin' } }), CHOICE);
+  assert.equal(first!.summary, 'the branch pushes with its own sign-in');
+  assert.equal(first!.lines[0], "origin's push URL, as git resolves it, carries its own sign-in, so pushes from main use it, not octocat");
+  assert.equal(first!.blocks, true);
+});
+
 test('blockers come in a fixed order: commits, fork commits, sign-in, variables, config, owner, divergence, upstream', () => {
   const all = facts({
-    unpushed: foreign(1), elsewhere: ok(theirs(2)), env: ['GH_TOKEN'], configOverrides: ['author.email'], signinKey: 'branch.main.remote',
+    unpushed: foreign(1), elsewhere: ok(theirs(2)), env: ['GH_TOKEN'], configOverrides: ['author.email'], signin: { key: 'branch.main.remote' },
     destination: { remote: 'upstream', owner: 'octo-org', allowed: [] },
     divergence: ok({ tracked: 'origin/main', behind: 1, ahead: 1 }), upstream: 'missing',
   });

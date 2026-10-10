@@ -72,13 +72,15 @@ function unpushedBlocker(fact: UnpushedFact, choice: PushChoice): Blocker[] {
 
 /** Where a remote names the same repository, the fix is setup's repoint. */
 function signinBlocker(facts: PushFacts, branch: string, account: string): Blocker[] {
-  const key = facts.signinKey;
-  if (!key) return [];
-  const fix = facts.repoint?.key === key ? ': point it back at ' + facts.repoint.remote + ' with repown setup --repoint' : '';
+  const signin = facts.signin;
+  if (!signin) return [];
+  // A rewrite rule's key holds the token in its name: only the remote is ever printed for it.
+  const holder = 'key' in signin ? signin.key : signin.remote + "'s push URL, as git resolves it,";
+  const fix = 'key' in signin && facts.repoint?.key === signin.key ? ': point it back at ' + facts.repoint.remote + ' with repown setup --repoint' : '';
   return [{
     kind: 'signin',
     summary: 'the branch pushes with its own sign-in',
-    lines: [key + ' carries its own sign-in, so pushes from ' + branch + ' use it, not ' + account + fix],
+    lines: [holder + ' carries its own sign-in, so pushes from ' + branch + ' use it, not ' + account + fix],
     blocks: true,
   }];
 }

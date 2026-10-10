@@ -36,6 +36,13 @@ export interface Divergence {
   readonly ahead: number;
 }
 
+/**
+ * A sign-in on the push path: the config key that holds it, or, when git's own rewriting
+ * (`url.<base>.insteadOf`, `pushInsteadOf`) put it there, only the remote. The rule's key
+ * holds the token in its name, so it is never named.
+ */
+export type Signin = { readonly key: string } | { readonly remote: string };
+
 export interface PushFacts {
   readonly unpushed: UnpushedFact;
   /** Identity or token variables set in this process's environment, by name. */
@@ -44,8 +51,8 @@ export interface PushFacts {
   readonly configOverrides: readonly string[];
   /** Commits the destination lacks that another remote has: the guard refuses them too. */
   readonly elsewhere: Result<readonly UnpushedCommit[]>;
-  /** The config key that carries its own sign-in on the push path (the value is never kept). */
-  readonly signinKey: string | null;
+  /** What carries its own sign-in on the push path (the value is never kept). */
+  readonly signin: Signin | null;
   readonly repoint: Repoint | null;
   readonly destination: PushDestination | null;
   /** Against the tracked ref on the destination; ok(null) when there is none. */
@@ -61,12 +68,12 @@ export async function readPushFacts(git: Git, unpushed: UnpushedFact, env: NodeJ
   const head = await git.currentBranch();
   const branch = head?.kind === 'branch' ? head.name : null;
   const target = branch ? await pushTarget(git, branch) : null;
-  const [configOverrides, signinKey, repoint, destination, divergence, elsewhere, upstream] = await Promise.all([
+  const [configOverrides, signin, repoint, destination, divergence, elsewhere, upstream] = await Promise.all([
     overridesIn(git), signinOf(git, target), repointOf(git, branch), destinationOf(git, target),
     divergenceOf(git, target), elsewhereOf(git, target), upstreamOf(git, branch, target),
   ]);
   return {
-    unpushed, env: hostileSet(env), configOverrides, elsewhere, signinKey, repoint, destination, divergence,
+    unpushed, env: hostileSet(env), configOverrides, elsewhere, signin, repoint, destination, divergence,
     detached: head?.kind === 'detached', upstream,
   };
 }
@@ -82,15 +89,35 @@ function carriesSecret(raw: string | null): boolean {
   return !!user && (user.includes(':') || /^(gh[pousr]_|github_pat_)/i.test(user));
 }
 
-async function signinOf(git: Git, target: PushTarget | null): Promise<string | null> {
-  if (target && !target.isRemote && carriesSecret(target.name)) return target.key;
-  if (target?.isRemote) {
-    // A push uses pushurl when there is one, so a token in the fetch url does not sign it in.
-    const key = await git.getConfig('remote.' + target.name + '.pushurl') !== null ? 'remote.' + target.name + '.pushurl' : 'remote.' + target.name + '.url';
-    if (carriesSecret(await git.getConfig(key))) return key;
-  }
+async function signinOf(git: Git, target: PushTarget | null): Promise<Signin | null> {
+  if (target && !target.isRemote && carriesSecret(target.name)) return target.key === null ? null : { key: target.key };
+  const found = target?.isRemote ? await remoteSignin(git, target.name) : null;
+  if (found) return found;
   const headers = await git.configOrigins('^http\\.(.*\\.)?extraheader$');
-  return headers[0]?.key ?? null;
+  return headers[0] ? { key: headers[0].key } : null;
+}
+
+/**
+ * Judged on every URL git pushes `remote` with, after its own rewriting, so a token a rule
+ * adds is found and one a rule takes out is not. A URL that is a configured value is named
+ * by its key; any other came from a rewrite, and only the remote is named.
+ */
+async function remoteSignin(git: Git, remote: string): Promise<Signin | null> {
+  const pushed = await git.remoteUrls(remote, true);
+  if (!pushed.ok) return configuredSignin(git, remote);
+  const signed = pushed.value.find(carriesSecret);
+  if (!signed) return null;
+  for (const key of ['remote.' + remote + '.pushurl', 'remote.' + remote + '.url']) {
+    if ((await git.getAllConfig(key)).includes(signed)) return { key };
+  }
+  return { remote };
+}
+
+/** A git that cannot list the URLs (before 2.7, or config it refuses): the configured key, as before. */
+async function configuredSignin(git: Git, remote: string): Promise<Signin | null> {
+  // A push uses pushurl when there is one, so a token in the fetch url does not sign it in.
+  const key = await git.getConfig('remote.' + remote + '.pushurl') !== null ? 'remote.' + remote + '.pushurl' : 'remote.' + remote + '.url';
+  return carriesSecret(await git.getConfig(key)) ? { key } : null;
 }
 
 async function repointOf(git: Git, branch: string | null): Promise<Repoint | null> {

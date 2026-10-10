@@ -331,12 +331,94 @@ describe('repown use when the branch pushes where no tracking ref reaches (ADR-0
     assert.doesNotMatch(run.stderr, /octocat\/fork/);
   });
 
+  test('a pushInsteadOf that sends the push elsewhere is unknown too, and the URL is not printed (#9)', async () => {
+    publishedThenLocal(box);
+    box.git('fetch', '-q', 'origin');
+    box.git('config', 'url.https://github.com/octocat/fork.git.pushInsteadOf', remoteDir(box));
+    const run = await runUse(box);
+    assert.match(run.stderr, new RegExp(escapeRe('origin pushes to another URL than it fetches from, so some of these may already be there' + GUARD)));
+    assert.doesNotMatch(run.stderr, /octocat\/fork/);
+  });
+
   test('a branch remote that names no configured remote says so, not "a URL"', async () => {
     publishedThenLocal(box);
     box.git('config', 'branch.main.remote', 'orign');
     const run = await runUse(box);
     assert.match(run.stderr, new RegExp(escapeRe('this branch pushes to "orign", which is not a remote here, so some of these may already be there' + GUARD)));
     assert.doesNotMatch(run.stderr, /a URL/);
+  });
+
+  // #6: a clone that fetches only some branches gets no tracking ref when another branch is
+  // pushed, so HEAD --not --remotes counts what that push already published.
+  const SKIPPED = (branch: string): string =>
+    'origin\'s ' + branch + ' is not fetched here (remote.origin.fetch leaves it out), so some of these may already be there' + GUARD;
+
+  test('a single-branch clone: a pushed feature branch is not tracked, so the rebase is conditional', async () => {
+    publishedThenLocal(box);
+    box.git('config', 'remote.origin.fetch', '+refs/heads/main:refs/remotes/origin/main');
+    box.git('fetch', '-q', 'origin');
+    box.git('switch', '-q', '-c', 'feature');
+    box.git('push', '-q', 'origin', 'feature');
+    commitAs(box, THEIRS, 'after the push');
+    const run = await runUse(box);
+    assert.equal(run.code, 0, run.stderr);
+    assert.match(run.stderr, new RegExp(escapeRe(SKIPPED('feature'))));
+    assert.match(run.stderr, /if origin has none of them, re-author them: git rebase /);
+    assert.doesNotMatch(run.stderr, /^\s+re-author/m);
+  });
+
+  test('an ordinary clone, a branch never pushed: no new warning, the rebase as before', async () => {
+    const published = publishedThenLocal(box);
+    box.git('fetch', '-q', 'origin');
+    box.git('switch', '-q', '-c', 'feature');
+    commitAs(box, THEIRS, 'feature work');
+    const run = await runUse(box);
+    assert.match(run.stderr, new RegExp('^\\s+' + escapeRe(reauthor('them', box.git('rev-parse', '--short', published))), 'm'));
+    assert.doesNotMatch(run.stderr, /not fetched here|remote-tracking|has none of them/);
+  });
+
+  test('a negative refspec that leaves the branch out counts as not fetched', async () => {
+    publishedThenLocal(box);
+    box.git('fetch', '-q', 'origin');
+    box.git('switch', '-q', '-c', 'feature');
+    box.git('config', '--add', 'remote.origin.fetch', '^refs/heads/feature');
+    commitAs(box, THEIRS, 'feature work');
+    const run = await runUse(box);
+    assert.match(run.stderr, new RegExp(escapeRe(SKIPPED('feature'))));
+  });
+
+  test('push.default=upstream: the upstream branch decides, and it is named', async () => {
+    publishedThenLocal(box);
+    box.git('config', 'remote.origin.fetch', '+refs/heads/main:refs/remotes/origin/main');
+    box.git('fetch', '-q', 'origin');
+    box.git('switch', '-q', '-c', 'feature');
+    box.git('config', 'push.default', 'upstream');
+    box.git('config', 'branch.feature.remote', 'origin');
+    box.git('config', 'branch.feature.merge', 'refs/heads/main');
+    commitAs(box, THEIRS, 'feature work');
+    const quiet = await runUse(box);
+    assert.doesNotMatch(quiet.stderr, /not fetched here|has none of them/);
+    box.git('config', 'branch.feature.merge', 'refs/heads/trunk');
+    const run = await runUse(box);
+    assert.match(run.stderr, new RegExp(escapeRe(SKIPPED('trunk'))));
+  });
+
+  test('tracking refs are read where the remote\'s own refspec writes them (#12c)', async () => {
+    publishedThenLocal(box);
+    box.git('config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/mirror/*');
+    box.git('fetch', '-q', 'origin');
+    const run = await runUse(box);
+    assert.doesNotMatch(run.stderr, /remote-tracking|has none of them/);
+  });
+
+  test('another remote named origin/x does not make origin look fetched (#12c)', async () => {
+    publishedThenLocal(box);
+    // `git remote add` refuses this name now; older git and hand-written config do not.
+    box.git('config', 'remote.origin/x.url', remoteDir(box));
+    box.git('config', 'remote.origin/x.fetch', '+refs/heads/*:refs/remotes/origin/x/*');
+    box.git('fetch', '-q', 'origin/x');
+    const run = await runUse(box);
+    assert.match(run.stderr, new RegExp(escapeRe(UNKNOWN)));
   });
 
   test('one remote not named origin, and nothing configured: git push has no destination, so the advice is unchanged', async () => {

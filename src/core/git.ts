@@ -14,7 +14,7 @@
 // failure, and it is why nothing here treats a non-zero code as an error by
 // itself. See the note in exec.ts.
 
-import { existsSync } from 'node:fs';
+import { existsSync, lstatSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -121,6 +121,12 @@ export class Git {
     return (await this.getConfig('remote.' + remote + '.pushurl')) ?? this.getConfig('remote.' + remote + '.url');
   }
 
+  /** Every URL git pushes (`push`) or fetches with, after insteadOf/pushInsteadOf; offline. */
+  async remoteUrls(remote: string, push: boolean): Promise<Result<string[]>> {
+    const asked = await this.exec(['remote', 'get-url', ...(push ? ['--push'] : []), '--all', '--', remote]);
+    return succeeded(asked) ? ok(lines(asked)) : err(asked.stderr.trim() || 'git remote get-url failed');
+  }
+
   /**
    * A bare URL after git's insteadOf rewriting (`ls-remote --get-url` contacts nothing).
    * It reads fetch rules, so a pushInsteadOf on a bare push URL is not applied.
@@ -137,10 +143,17 @@ export class Git {
   }
 
   /** Whether any ref exists under `refs/remotes/<remote>/`. A failed read is an error, not "none". */
-  async hasTrackingRefs(remote: string): Promise<Result<boolean>> {
-    const listed = await this.exec(['for-each-ref', '--count=1', '--format=%(refname)', 'refs/remotes/' + remote + '/']);
+  /**
+   * Whether any ref lies under `prefixes` but not under `excluded` (namespaces nested inside
+   * them that belong to someone else). No prefix is no ref. Listing stops at one when
+   * nothing is excluded.
+   */
+  async hasRefsUnder(prefixes: readonly string[], excluded: readonly string[] = []): Promise<Result<boolean>> {
+    if (prefixes.length === 0) return ok(false);
+    const count = excluded.length === 0 ? ['--count=1'] : [];
+    const listed = await this.exec(['for-each-ref', ...count, '--format=%(refname)', ...prefixes]);
     if (!succeeded(listed)) return err(listed.stderr.trim() || 'git for-each-ref failed');
-    return ok(lines(listed).length > 0);
+    return ok(lines(listed).some((ref) => !excluded.some((prefix) => ref.startsWith(prefix))));
   }
 
   /**
@@ -243,12 +256,14 @@ export class Git {
 
   /**
    * Author and committer of every commit in `range`, which is passed to git as
-   * separate arguments so a caller can use `<sha> --not --remotes=origin`.
+   * separate arguments so a caller can use `<sha> --not --remotes=origin`. `excluded`
+   * commits (and what they reach) are left out, through stdin (see excludedInput).
    */
-  async identitiesIn(range: readonly string[]): Promise<Result<CommitIdentity[]>> {
+  async identitiesIn(range: readonly string[], excluded: readonly string[] = []): Promise<Result<CommitIdentity[]>> {
+    const [stdin, input] = excludedInput(excluded);
     const [log, count] = await Promise.all([
-      this.exec(['log', '--no-show-signature', `--format=${IDENTITY_FORMAT}`, ...range]),
-      this.exec(['rev-list', '--count', ...range]),
+      this.exec(['log', '--no-show-signature', `--format=${IDENTITY_FORMAT}`, ...range, ...stdin], input),
+      this.exec(['rev-list', '--count', ...range, ...stdin], input),
     ]);
     // An empty list would read as "no foreign commits": a failure must stay one.
     if (!succeeded(log)) return err(log.timedOut ? 'git log timed out reading the range' : log.stderr.trim() || 'git log failed');
@@ -293,14 +308,36 @@ export class Git {
 
   /** Fetch with every prompt off: a sign-in that would ask fails instead. The reason is cleaned for display. */
   async fetchQuietly(remote: string): Promise<Result<void>> {
-    const fetched = await this.execLong([...QUIET, 'fetch', '--quiet', '--no-recurse-submodules', remote], await this.quietEnvHere(), NETWORK_MS);
+    const fetched = await this.execLong([...QUIET, 'fetch', '--quiet', '--no-recurse-submodules', '--', remote], await this.quietEnvHere(), NETWORK_MS);
     return succeeded(fetched) ? ok(undefined) : err(networkReason(fetched));
   }
 
   /** How many branches the remote lists (network, prompts off). */
   async remoteHeadCount(remote: string): Promise<Result<number>> {
-    const listed = await this.execLong([...QUIET, 'ls-remote', '--heads', remote], await this.quietEnvHere(), NETWORK_MS);
+    const listed = await this.execLong([...QUIET, 'ls-remote', '--heads', '--', remote], await this.quietEnvHere(), NETWORK_MS);
     return succeeded(listed) ? ok(lines(listed).length) : err(networkReason(listed));
+  }
+
+  /**
+   * The commits the remote's branches and tags point at (network, prompts off), as the
+   * remote lists them: a tag's peeled `^{}` line when there is one, else the tag itself.
+   */
+  async remoteTips(remote: string): Promise<Result<RemoteTips>> {
+    const listed = await this.execLong([...QUIET, 'ls-remote', '--heads', '--tags', '--', remote], await this.quietEnvHere(), NETWORK_MS);
+    return succeeded(listed) ? ok(parseTips(lines(listed))) : err(networkReason(listed));
+  }
+
+  /**
+   * Each object as the commit it peels to here, or null when this clone has no such commit.
+   * Lazy fetching is off: a partial clone must not reach the network to answer.
+   */
+  async localCommits(objects: readonly string[]): Promise<Result<Array<string | null>>> {
+    if (objects.length === 0) return ok([]);
+    const env = { ...process.env, GIT_NO_LAZY_FETCH: '1' };
+    const input = objects.map((sha) => sha + '^{commit}').join('\n') + '\n';
+    const checked = await run('git', ['--no-replace-objects', 'cat-file', '--batch-check=%(objectname) %(objecttype)'], { cwd: this.cwd, input, env });
+    if (!succeeded(checked)) return err(checked.stderr.trim() || 'git cat-file failed');
+    return ok(lines(checked).map((line) => line.endsWith(' commit') ? line.split(' ')[0]! : null));
   }
 
   /** Prompts off. ssh gets BatchMode only where neither the shell nor this clone names an ssh command. */
@@ -340,20 +377,39 @@ export class Git {
     return output(await this.exec(['rev-parse', '--verify', '--quiet', sha + '^']));
   }
 
-  async countIn(range: readonly string[]): Promise<Result<number>> {
-    const counted = await this.exec(['rev-list', '--count', ...range]);
+  async countIn(range: readonly string[], excluded: readonly string[] = []): Promise<Result<number>> {
+    const [stdin, input] = excludedInput(excluded);
+    const counted = await this.exec(['rev-list', '--count', ...range, ...stdin], input);
     const count = Number(counted.stdout.trim());
     return succeeded(counted) && Number.isInteger(count) ? ok(count) : err(counted.stderr.trim() || 'git rev-list failed');
   }
 
-  /** Tracked changes, or entries hidden with skip-worktree / assume-unchanged, that a rebase could clobber. */
+  /**
+   * Tracked changes, or entries hidden with skip-worktree / assume-unchanged, that a rebase could
+   * clobber, anywhere in the work tree. In a sparse checkout a skip-worktree entry whose file is
+   * not on disk is what sparse-checkout left out, and a rebase keeps it out.
+   */
   async hasTrackedChanges(): Promise<Result<boolean>> {
-    const [status, files] = await Promise.all([
-      this.exec(['status', '--porcelain', '--untracked-files=no']), this.exec(['ls-files', '-v']),
+    const [status, files, sparse] = await Promise.all([
+      this.exec(['status', '--porcelain', '--untracked-files=no']), this.exec(['ls-files', '-v', '-z', '--', ':/']),
+      this.getBoolConfig('core.sparseCheckout'),
     ]);
     if (!succeeded(status) || !succeeded(files)) return err('git status failed');
-    const hidden = lines(files).some((line) => /^([a-z]|S) /.test(line));
-    return ok(status.stdout.trim().length > 0 || hidden);
+    const hidden = files.stdout.split('\0').filter((entry) => /^([a-z]|S) /.test(entry));
+    const kept = sparse === true ? hidden.filter((entry) => !this.leftOut(entry)) : hidden;
+    return ok(status.stdout.trim().length > 0 || kept.length > 0);
+  }
+
+  /** An `ls-files -v` entry marked skip-worktree only (`S`) whose file is not there. */
+  private leftOut(entry: string): boolean {
+    if (!entry.startsWith('S ')) return false;
+    try {
+      lstatSync(resolve(this.cwd, entry.slice(2)));
+      return false;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      return code === 'ENOENT' || code === 'ENOTDIR';
+    }
   }
 
   /** The operation a half-finished rebase, merge, cherry-pick, revert or bisect left, or null. */
@@ -478,4 +534,33 @@ function parseIdentities(stdout: string): Result<CommitIdentity[]> {
       committerName: committerName!, committerEmail: committerEmail! });
   }
   return ok(commits);
+}
+
+/** What a remote's branches and tags point at: objects, not yet peeled here. */
+export interface RemoteTips {
+  readonly heads: readonly string[];
+  readonly tags: readonly string[];
+}
+
+/** `ls-remote` lines: `<object><TAB><ref>`, any hash length; a tag's peeled line wins over the tag. */
+function parseTips(listed: readonly string[]): RemoteTips {
+  const heads: string[] = [];
+  const tags = new Map<string, string>();
+  for (const line of listed) {
+    const [object, ref] = line.split(/\s+/);
+    if (!object || !ref) continue;
+    if (ref.startsWith('refs/heads/')) heads.push(object);
+    else if (ref.endsWith('^{}')) tags.set(ref.slice(0, -3), object);
+    else if (!tags.has(ref)) tags.set(ref, object);
+  }
+  return { heads, tags: [...tags.values()] };
+}
+
+/**
+ * `--stdin` with one `^<sha>` per line: git reads each line with its own flags, so the
+ * caret, not a `--not` on the command line, excludes it; and no command line is too long.
+ */
+function excludedInput(excluded: readonly string[]): [string[], string | undefined] {
+  if (excluded.length === 0) return [[], undefined];
+  return [['--stdin'], excluded.map((sha) => '^' + sha).join('\n') + '\n'];
 }

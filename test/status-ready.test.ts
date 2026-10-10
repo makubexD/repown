@@ -199,6 +199,18 @@ describe('repown status: what will stop the next push', () => {
     assert.match(closing(run.stderr), /^the next push will fail: the push goes to "octo-org"/);
   });
 
+  test('a push to another owner than origin\'s is said too, beside the origin warning', () => {
+    pinGithub(box);
+    guardOn(box);
+    box.git('remote', 'set-url', 'origin', 'https://github.com/octo-org/project.git');
+    box.git('remote', 'add', 'fork', 'https://github.com/octo-work/project.git');
+    box.git('config', 'branch.main.pushRemote', 'fork');
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /WARN\s+origin\s+origin belongs to "octo-org"/);
+    assert.match(run.stderr, /WARN\s+push\s+main pushes to fork, owned by "octo-work"/);
+  });
+
   test('a missing upstream stays in its field, not a warning, and the clone is still ready', () => {
     pinGithub(box);
     guardOn(box);

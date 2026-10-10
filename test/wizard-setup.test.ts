@@ -743,13 +743,14 @@ describe('setup flow', () => {
     assert.doesNotMatch(notes, /^\s*re-author/m);
   });
 
-  test('ADR-025 a name git would read as an option gets no command, and hidden text is shown', () => {
+  test('ADR-025 a name git would read as an option comes after --, and hidden text is shown', () => {
     const dashed = { kind: 'remote', name: '--upload-pack=touch x' } as const;
     const notes = reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: dashed } }));
     assert.match(notes, /--upload-pack=touch x has no remote-tracking refs, so some of these may already be on it \(the guard skips any already on the branch you push to\)/);
-    assert.doesNotMatch(notes, /git fetch/);
+    assert.match(notes, /git fetch "--" "--upload-pack=touch x", then/, 'git reads it as the remote, never as an option (ADR-026)');
     const url = { kind: 'url', key: 'branch.main.remote', remote: '-o' } as const;
-    assert.doesNotMatch(reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: url } })), /git config|git fetch/);
+    const repointed = reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: url } }));
+    assert.match(repointed, /git config --local branch\.main\.remote -o, git fetch "--" -o, then/);
     const bidi = { kind: 'remote', name: 'fork\u202egnp.exe\u200b' } as const;
     assert.match(reviewNotes(context({ unpushed: { ...onBranch(['old@example.invalid']), unknown: bidi } })), /git fetch "fork\?gnp\.exe\?"/);
   });

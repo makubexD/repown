@@ -10,7 +10,8 @@
 import { ghAdvice, upstreamText } from '../commands/status.ts';
 import { providers, type Profile } from '../core/hosts/index.ts';
 import { isNoreplyAddress } from '../core/hosts/github.ts';
-import { ALLOW_OWNER_BY_HAND, allowOwnerCommand, shellWord } from '../core/guard/check.ts';
+import { ALLOW_OWNER_BY_HAND, allowOwnerCommand } from '../core/guard/check.ts';
+import { positional, shellWord } from '../core/shell.ts';
 import { printable } from '../ui/format.ts';
 import { foreignAddresses, foreignCount, type UnpushedFact } from '../core/unpushed.ts';
 import type { PushFacts } from '../core/push-state.ts';
@@ -385,13 +386,18 @@ async function nameDetail(answers: Answers, ctx: AccountContext): Promise<string
 
 /** On GitHub, when this machine is signed in as other logins only: perhaps not this person's account. */
 async function notSignedIn(answers: Answers, ctx: AccountContext): Promise<string | null> {
-  if (hostOf(answers, ctx) !== 'github') return null;
-  const logins = await ctx.signedIn();
-  const login = accountOf(answers);
+  return hostOf(answers, ctx) === 'github' ? signedInNote(accountOf(answers), await ctx.signedIn(), 'go back') : null;
+}
+
+/**
+ * `signed in as A, not X: if X isn't your account, <undo>; ...`, or null when X is among the
+ * logins or none could be read. Typed `accounts add` says it too, with its own undo.
+ */
+export function signedInNote(login: string, logins: readonly string[] | null, undo: string): string | null {
   if (!logins || logins.length === 0 || logins.some((other) => other.toLowerCase() === login.toLowerCase())) return null;
   const shown = printable(login);
   return 'signed in as ' + logins.map(printable).join(', ') + ', not ' + shown + ': if ' + shown +
-    ' isn\'t your account, go back; otherwise the first push asks you to sign in as it';
+    ' isn\'t your account, ' + undo + '; otherwise the first push asks you to sign in as it';
 }
 
 /** Said when the name question starts as the login: no profile name was found. */
@@ -719,7 +725,7 @@ function repointArgv(answers: Answers, ctx: SetupContext): string[] | null {
 
 function fetchArgv(answers: Answers, ctx: SetupContext): string[] | null {
   const remote = answers['fetch'] === true ? fetchTarget(answers, ctx) : null;
-  return remote ? [...gitIn(ctx), 'fetch', remote] : null;
+  return remote ? [...gitIn(ctx), 'fetch', ...positional(remote)] : null;
 }
 
 /** Which of setup's git lines this is, read from its shape; null for anything setup does not plan. */
@@ -727,7 +733,7 @@ export type GitStep = 'repoint' | 'fetch' | 'upstream' | 'allowOwner';
 
 export function gitStepOf(argv: readonly string[]): GitStep | null {
   const sub = argv[1] === '-C' ? argv.slice(3) : argv.slice(1);
-  if (sub[0] === 'fetch' && sub.length === 2) return 'fetch';
+  if (sub[0] === 'fetch' && (sub.length === 2 || (sub.length === 3 && sub[1] === '--'))) return 'fetch';
   if (sub[0] !== 'config' || sub[1] !== '--local') return null;
   if (sub[2] === '--add' && sub[3] === 'repown.allowOwner' && sub.length === 5) return 'allowOwner';
   if (sub[2] === 'push.autoSetupRemote' && sub.length === 4) return 'upstream';
@@ -749,7 +755,7 @@ function whatOf(argv: readonly string[], answers: Answers, ctx: SetupContext): s
 function gitWhat(argv: readonly string[], ctx: SetupContext): string {
   const step = gitStepOf(argv);
   if (step === 'repoint') return 'Push through ' + argv.at(-1) + ' instead of the URL in ' + argv.at(-2) + ' (this clone only)';
-  if (step === 'fetch') return 'Fetch ' + argv.at(-1) + ', so repown can tell which commits it already has';
+  if (step === 'fetch') return 'Fetch ' + argv.at(-1) + ', so repown can tell which commits it already has (prompts off: a sign-in that would ask fails instead)';
   if (step === 'upstream') return 'Push branches without -u: the first push sets the upstream (this clone only)';
   return 'Let this clone push to ' + ctx.owner + '\'s repositories';
 }

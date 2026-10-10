@@ -159,3 +159,17 @@ describe('plain prompter', () => {
     assert.equal(await harness('3\n').prompter.pickStep([text, pick]), BACK);
   });
 });
+
+test('after suspend, as when a command ran in between, the next choice reads the input again (#20)', async () => {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  output.resume();
+  const prompter = plainPrompter({ input, output });
+  const options = [{ value: 'doctor', label: 'Check this machine' }, { value: 'quit', label: 'Quit' }];
+  input.write('1\n');
+  assert.equal(await prompter.choose('What next?', options), 'doctor');
+  prompter.suspend?.();
+  input.write('2\n');
+  assert.equal(await prompter.choose('What next?', options), 'quit');
+  prompter.close();
+});

@@ -2,15 +2,16 @@
 //
 // The one place repown rewrites history, so it refuses rather than guesses. It fetches the
 // push destination first and rewrites only commits no remote has, from the parent of the
-// topologically oldest one by another address; a merge in that range, a commit a remote has
-// inside it, or a destination whose branches this clone does not track is a refusal. The
+// topologically oldest one by another address, leaving out what the destination's branches
+// and tags reach (ls-remote); a merge in that range, a commit a remote has inside it, or a
+// destination with branches this clone has not fetched is a refusal. The
 // rebase runs with no hook at all, without autosquash and without moving other branches,
 // behind a backup ref that is never overwritten, and is checked afterwards: every commit
 // still there, each by the pin. Nothing here pushes.
 
 import type { Git } from './git.ts';
 import { ok, err, type Result } from './result.ts';
-import { pushTarget, unknownDestination } from './push-destination.ts';
+import { hasTrackingRefs, pushTarget, unknownDestination } from './push-destination.ts';
 import { AMEND_COMMAND, isOwn, otherAddresses } from './unpushed.ts';
 
 /** What would be rewritten: `count` commits from `base` (a full hash, or `--root`) to HEAD. */
@@ -40,7 +41,9 @@ export async function planReauthor(git: Git, email: string, interactive: boolean
   if (!fetched.ok) return err('could not fetch ' + remote + ' (' + fetched.error + '); nothing rewritten');
   const empty = await destinationEmpty(git, remote);
   if (!empty.ok) return empty;
-  return foreignRange(git, { branch, remote, email, empty: empty.value });
+  const published = await publishedHere(git, remote);
+  if (!published.ok) return published;
+  return foreignRange(git, { branch, remote, email, empty: empty.value, published: published.value });
 }
 
 interface Ready {
@@ -54,7 +57,7 @@ async function preconditions(git: Git, interactive: boolean): Promise<Result<Rea
   const blocked = await firstRefusal(git, interactive);
   if (blocked) return err(blocked);
   const unknown = await unknownDestination(git, head.name);
-  if (unknown && unknown.kind !== 'remote') return err('this branch does not push to a remote repown can fetch: point the branch at a remote first');
+  if (unknown && unknown.kind !== 'remote' && unknown.kind !== 'untracked') return err('this branch does not push to a remote repown can fetch: point the branch at a remote first');
   const target = await pushTarget(git, head.name);
   if (!target?.isRemote) return err('this branch has no remote to push to');
   return ok({ branch: head.name, remote: target.name });
@@ -76,7 +79,7 @@ async function firstRefusal(git: Git, interactive: boolean): Promise<string | nu
 
 /** True only when a successful fetch left no tracking refs AND the remote lists no branches. */
 async function destinationEmpty(git: Git, remote: string): Promise<Result<boolean>> {
-  const tracked = await git.hasTrackingRefs(remote);
+  const tracked = await hasTrackingRefs(git, remote);
   if (!tracked.ok) return tracked;
   if (tracked.value) return ok(false);
   const heads = await git.remoteHeadCount(remote);
@@ -85,15 +88,38 @@ async function destinationEmpty(git: Git, remote: string): Promise<Result<boolea
   return ok(true);
 }
 
+/**
+ * The commits the remote's branches and tags point at, as commits here: what a fetch
+ * refspec that leaves branches out, or a pushed tag, hides from `--not --remotes`.
+ * A branch tip this clone lacks may sit on top of these commits, so that is a refusal;
+ * a tag on a commit this clone lacks is skipped (tags are fetched only when they follow).
+ */
+async function publishedHere(git: Git, remote: string): Promise<Result<string[]>> {
+  const tips = await git.remoteTips(remote);
+  if (!tips.ok) return err('could not list ' + remote + '\'s branches (' + tips.error + '); nothing rewritten');
+  const [heads, tags] = await Promise.all([git.localCommits(tips.value.heads), git.localCommits(tips.value.tags)]);
+  if (!heads.ok) return heads;
+  if (!tags.ok) return tags;
+  if (heads.value.includes(null)) return err(unfetched(remote));
+  return ok([...heads.value, ...tags.value].filter((sha): sha is string => sha !== null));
+}
+
+function unfetched(remote: string): string {
+  return remote + ' has commits this clone has not fetched (remote.' + remote + '.fetch leaves some of its branches out, ' +
+    'or something was pushed since the fetch), so repown can\'t tell which of these it already has; nothing rewritten';
+}
+
 interface Scope {
   readonly branch: string;
   readonly remote: string;
   readonly email: string;
   readonly empty: boolean;
+  /** Commits the remote's branches and tags reach, beyond its tracking refs. */
+  readonly published: readonly string[];
 }
 
 async function foreignRange(git: Git, scope: Scope): Promise<Result<ReauthorPlan | null>> {
-  const listed = await git.identitiesIn(['--topo-order', 'HEAD', '--not', '--remotes']);
+  const listed = await git.identitiesIn(['--topo-order', 'HEAD', '--not', '--remotes'], scope.published);
   if (!listed.ok) return listed;
   const foreign = listed.value.filter((commit) => !isOwn(commit, scope.email));
   const oldest = foreign.at(-1);
@@ -101,16 +127,16 @@ async function foreignRange(git: Git, scope: Scope): Promise<Result<ReauthorPlan
   const parent = await git.parentOf(oldest.sha);
   if (!parent && !scope.empty) return err('the oldest of these commits is a root, and ' + scope.remote + ' is not empty');
   const base = parent ?? '--root';
-  const checked = await checkRange(git, base);
+  const checked = await checkRange(git, base, scope.published);
   if (!checked.ok) return checked;
   return ok({ branch: scope.branch, remote: scope.remote, base, count: checked.value, addresses: otherAddresses(foreign, scope.email) });
 }
 
 /** The range must be linear and unpublished: a rebase flattens merges and rewrites all it covers. */
-async function checkRange(git: Git, base: string): Promise<Result<number>> {
+async function checkRange(git: Git, base: string, published: readonly string[]): Promise<Result<number>> {
   const range = base === '--root' ? ['HEAD'] : [base + '..HEAD'];
   const [all, merges, unpushed] = await Promise.all([
-    git.countIn(range), git.countIn(['--merges', ...range]), git.countIn([...range, '--not', '--remotes']),
+    git.countIn(range), git.countIn(['--merges', ...range]), git.countIn([...range, '--not', '--remotes'], published),
   ]);
   if (!all.ok) return all;
   if (!merges.ok) return merges;

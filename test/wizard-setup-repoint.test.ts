@@ -54,7 +54,7 @@ describe('repown setup: repoint and fetch, in a real clone', () => {
     at.box.git('config', '--local', '--unset', 'repown.account');
     const run = repown(['setup', 'octocat', '--fetch', '--no-input'], at.box.dir);
     assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stderr, /step 1 of \d: Fetch origin/);
+    assert.match(run.stderr, /step 1 of \d: Fetch origin, so repown can tell which commits it already has \(prompts off: a sign-in that would ask fails instead\)/);
     assert.match(run.stderr, /\$ git fetch origin/);
     assert.notEqual(tracking(), '');
   });

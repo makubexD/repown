@@ -30,7 +30,9 @@ export function loginKindProblem(kind: AccountKind | null | undefined, login: st
 /** The host's profile for a login, and a sentence when the host says it is no account or an organisation. */
 export async function lookUpProfile(provider: HostProvider | undefined, account: string): Promise<{ profile: Profile; problem: string | null }> {
   if (!provider?.resolveProfile) return { profile: {}, problem: null };
-  const [profile, kind] = await Promise.all([provider.resolveProfile(account), provider.accountKind?.(account)]);
+  const { profile, kind } = provider.lookUp
+    ? await provider.lookUp(account)
+    : { profile: await provider.resolveProfile(account), kind: await provider.accountKind?.(account) };
   return { profile: profile ?? {}, problem: loginKindProblem(kind, account) };
 }
 

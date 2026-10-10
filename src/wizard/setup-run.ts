@@ -18,7 +18,7 @@ import useCommand, { NEXT_GUARD } from '../commands/use.ts';
 import fixCommand from '../commands/fix.ts';
 import reauthorCommand from '../commands/reauthor.ts';
 import guardGroup from '../commands/guard.ts';
-import accountsGroup from '../commands/accounts.ts';
+import accountsGroup, { asked } from '../commands/accounts.ts';
 import { wizard, refusedGiven, CANCEL, type Answers, type Prompter, type StepChoice } from './engine.ts';
 import { setupFlow, planCommands, formatCommand, gitStepOf, keptFlags, briefOf, missingFlags, printable, dropFixPrefix, NEW_ACCOUNT, accountOf, pinUnchanged, ghNoted, type PlannedCommand, type SetupContext } from './setup-flow.ts';
 import { cloneChangeLines, machineChangeLines, readCloneSnapshot, type CloneSnapshot } from './setup-changes.ts';
@@ -512,7 +512,8 @@ async function runOne(argv: readonly string[], git: Git): Promise<number> {
   const [command, rest] = found;
   const parsed = parseArgs(rest, specFor(command));
   if (!parsed.ok) { out.fail('setup', 'could not run ' + formatCommand(argv) + ': ' + parsed.error); return 2; }
-  return command.run(parsed.value);
+  // Setup said while asking what accounts add would warn about a typed login.
+  return command.run(command === accountsGroup.actions['add'] ? asked(parsed.value) : parsed.value);
 }
 
 /** The Command a planned argv names, and the arguments after its name; null for anything else. */

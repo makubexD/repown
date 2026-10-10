@@ -2,7 +2,9 @@
 
 **Status:** Accepted. Narrows the advice of [ADR-020](ADR-020-setup-leaves-clone-ready.md)'s
 "pinning names unpushed commits"; the warning itself, its severity and its exit code are
-unchanged.
+unchanged. Amended by its 2026-10-09 note: a remote is known only for a branch its fetch
+refspecs map, and its tracking refs are read where those refspecs write them; and by its
+2026-10-10 note: a name git would read as an option is printed after `--`.
 
 ## Context
 
@@ -72,8 +74,42 @@ remote, and a `git pull <url>`. The file is also kept per worktree. Each case br
 - A push by URL with no remote configured and no branch config leaves no trace; it keeps
   today's advice.
 - A remote whose name nests in another's (`origin` and `origin/fork`, which `git remote add`
-  refuses) can borrow the other's refs.
-- Known means SOME tracking ref, not one for this branch. A `--single-branch` clone
-  (`--depth` implies it) fetches only its first branch, so a feature branch pushed from it has
-  no tracking ref, yet the remote reads as known and the plain rebase is offered. This
-  predates ADR-025 and is not fixed here.
+  refuses) can borrow the other's refs. Narrowed by the 2026-10-09 note.
+- Known meant SOME tracking ref, not one for this branch. Fixed by the 2026-10-09 note.
+
+## Notes
+
+- **2026-10-09, known only for a branch the refspecs map.** A `--single-branch` clone
+  (`--depth` implies it) fetches `+refs/heads/main:refs/remotes/origin/main`, so a feature
+  branch pushed from it gets no tracking ref, yet the remote read as known and the plain
+  rebase was offered over commits that push had published. Now `src/core/refspec.ts` reads
+  `remote.<name>.fetch` as git does (globs, a short source name, `^` negative refspecs), and a
+  remote is unknown (`untracked`) when its refspecs map no tracking ref for the branch a plain
+  push updates: the upstream's under `push.default=upstream`, else the branch's own name. The
+  line is `origin's <branch> is not fetched here (remote.origin.fetch leaves it out), so some
+  of these may already be there (…)`, with no command: a fetch would not help.
+  Tracking refs are now looked for where the remote's own refspecs write them (a remote that
+  fetches into `refs/remotes/mirror/` was "never fetched"), minus any other remote's namespace
+  nested inside (`refs/remotes/origin/x/` for a remote `origin/x`). A branch of origin's own
+  named `x/...` is then not counted either: from refs alone the two can't be told apart.
+  Only refspecs that write under `refs/remotes/` count: `HEAD --not --remotes` sees no other.
+  For: the plain rebase is offered only where a tracking ref would show what is published;
+  asking git (`%(push)`) was measured and rejected: it is empty for any branch with no
+  upstream under the default `push.default=simple`, so every new branch would have warned.
+  Against: repown now reads refspecs itself, so a refspec form git adds later is read as
+  "maps nothing", which errs towards the conditional line.
+  Not changed: the advice lists commits in `git log`'s order, `repown reauthor` in
+  `--topo-order`. They differ only around a merge, and reauthor refuses a merge in its range.
+- **2026-10-10, a dashed name is printed after `--`.** A remote named like an option (a
+  leading `-`, set by hand in config) got no command, so the advice could not say how to fetch
+  it. `git fetch` and `git push` read every word after `--` as a positional on every git
+  version (measured: `git fetch -x` is "unknown switch", `git fetch -- -x` fetches), so the
+  commands now print `git fetch "--" <remote>` (`--` quoted, as `shellWord` quotes it for
+  PowerShell). `positional` (`src/core/shell.ts`) builds those words, for repown's own git
+  calls too. For: the advice is complete for every remote, and a name like
+  `--upload-pack=<cmd>` can only be read as a remote. Against: an odd-looking `"--"` in a
+  command most people never see.
+- **2026-10-10, not changed: two shells a printed command can't serve.** nushell reads `\`
+  escapes inside double quotes, and Git Bash collapses `\\` in the arguments it hands a
+  native program (`node.exe`). Neither is in `test/paste.test.ts`'s set; `shellWord` stays
+  bare, double-quoted or null for the shells that are.

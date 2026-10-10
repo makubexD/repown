@@ -44,4 +44,7 @@ export interface HostProvider {
    * Null means unknown, never "a user".
    */
   accountKind?(login: string): Promise<AccountKind | null>;
+
+  /** resolveProfile and accountKind together, asking the host once. Optional. */
+  lookUp?(login: string): Promise<{ profile: Profile | null; kind: AccountKind | null }>;
 }

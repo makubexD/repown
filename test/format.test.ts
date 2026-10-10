@@ -3,6 +3,8 @@
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { accent, displayPath, marked, printable, unicodeTerminal, useColour, type Mark } from '../src/ui/format.ts';
 
 const TERMINAL = { isTTY: true } as NodeJS.WriteStream;
@@ -118,4 +120,25 @@ describe('marked and accent: decoration only where the stream has colour', () =>
     const kinds: Mark[] = ['ok', 'warn'];
     assert.deepEqual(kinds.map((kind) => plain(marked(kind, TERMINAL, 'z'))), ['+ z', '! z']);
   });
+});
+
+// #15: the marks follow clack's own frame (ADR-027), so unicodeTerminal must agree with clack's
+// `unicode` for every signal clack reads. Each case runs in a fresh process: clack reads the
+// environment once, at import.
+test('unicodeTerminal agrees with @clack/prompts in every terminal it tells apart', () => {
+  const formatUrl = new URL('../src/ui/format.ts', import.meta.url).href;
+  const script = 'const { unicode } = await import("@clack/prompts");' +
+    'const { unicodeTerminal } = await import(' + JSON.stringify(formatUrl) + ');' +
+    'console.log(JSON.stringify([unicode, unicodeTerminal()]));';
+  const cases: NodeJS.ProcessEnv[] = [{}, { TERM: 'linux' }, { TERM: 'xterm-256color' }, { TERM: 'alacritty' }, { WT_SESSION: '1' },
+    { TERM_PROGRAM: 'vscode' }, { TERM_PROGRAM: 'Terminus-Sublime' }, { TERMINUS_SUBLIME: '1' }, { CI: '1' },
+    { ConEmuTask: '{cmd::Cmder}' }, { TERMINAL_EMULATOR: 'JetBrains-JediTerm' }];
+  const base = { PATH: process.env['PATH'], SystemRoot: process.env['SystemRoot'] };
+  for (const env of cases) {
+    const run = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: fileURLToPath(new URL('..', import.meta.url)), env: { ...base, ...env }, encoding: 'utf8',
+    });
+    const [clack, ours] = JSON.parse(run.stdout || 'null') ?? [];
+    assert.equal(ours, clack, JSON.stringify(env) + ' ' + run.stderr);
+  }
 });

@@ -11,7 +11,8 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
-import { allowOwnerCommand, copyableCommand, shellWord } from '../src/core/guard/check.ts';
+import { allowOwnerCommand } from '../src/core/guard/check.ts';
+import { copyableCommand, shellWord } from '../src/core/shell.ts';
 import { formatCommand } from '../src/wizard/setup-flow.ts';
 
 /** Bare, or in double quotes: every shell reads these back unchanged. */

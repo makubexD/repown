@@ -8,6 +8,57 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 ## [Unreleased]
 
 ### Fixed
+- In Git Bash's mintty without ConPTY, bare `repown` showed status with no word on why the start
+  screen or setup never opened. It now notes on stderr that `winpty repown` asks: setup in a
+  clone, the start screen outside one.
+- Setup's and the start screen's text wrapped by character count, so a line holding
+  Chinese, Japanese or Korean characters, or emoji, ran past the frame. It now wraps by the
+  columns a terminal draws.
+- Typed `repown accounts add` recorded a login setup refuses, overwrote or doubled one already
+  recorded, and never said whom this machine is signed in as, all silently. It now warns for each
+  (`so setup would not take it (recording it anyway)`, `is already recorded: this replaces its
+  name and email`, `signed in as octo-work, not octocat: …`) and still records. A question cancelled
+  records nothing and warns of nothing.
+- `repown status` said nothing about a push destination owned by someone else when origin's
+  own owner already had a warning, though the destination was another remote (a
+  `pushRemote` fork): both are now said. Setup's fetch step says `prompts off: a sign-in that
+  would ask fails instead`, as it runs.
+- A timed-out `git fetch`, `ls-remote` or `reauthor` rebase was reported only when it finished
+  on its own: on Windows the `git` on PATH is often a wrapper whose real git kept running (and
+  holding the clone's locks) after repown killed the wrapper. A timeout now ends the whole
+  process tree on Windows and is reported within seconds everywhere.
+- A remote whose name starts with `-` (set by hand in config) could not be fetched by
+  `reauthor` or setup, and the advice printed no command for it. git now gets `--` before the
+  name, and printed commands read `git fetch "--" <remote>` and `git push -u "--" <remote>
+  <branch>`.
+- `repown use` printed `push-as:<account>` where it pins no credential (SSH, Azure DevOps,
+  another host, no remote). The `identity` line now ends at the address there, and the
+  warning reads `credentials on GitHub are not pinned by repown.` (`on this host` for another
+  host) instead of `this host credentials are not pinned by repown.`
+- The credential pin followed origin's URL as written. A clone that fetches over SSH and
+  pushes over https (a `pushurl` or `pushInsteadOf`) is now pinned, and `repown setup` no
+  longer offers `use` again there; a clone whose https URL an `insteadOf` sends over SSH is no
+  longer reported as pinned (`status` says `not pinned by repown on GitHub`). The credential
+  helper `status`, `use`, `doctor` and setup check is the one serving the URL the pin is for,
+  and `repown off` also removes the key of origin's URLs as configured.
+- In a clone that fetches only some branches (`git clone --single-branch`, `--depth`, or a
+  `^refs/heads/<branch>` refspec), a branch pushed from it gets no remote-tracking ref, yet
+  `repown use`, setup and status offered the plain `git rebase` over commits that push had
+  published. They now say `origin's <branch> is not fetched here (remote.origin.fetch leaves
+  it out), so some of these may already be there` and offer the rebase only for the case where
+  origin has none of them. Tracking refs are also looked for where the remote's own refspecs
+  write them, so a remote fetching into another namespace no longer reads as never fetched.
+- `repown reauthor` rewrote commits the destination already had when the clone fetches only
+  some branches or a tag had been pushed, so the next push was refused as non-fast-forward. It
+  now asks the destination which branches and tags it has, leaves alone what they reach, and
+  refuses when a branch there was never fetched here: `origin has commits this clone has not
+  fetched (…)`. It now runs in a single-branch clone, where it refused before. A push that
+  `pushInsteadOf` or a second `url` sends elsewhere is refused, and `repown use`, setup and
+  status make their rebase conditional for it, as they already did for a `pushurl`.
+- `repown reauthor` refused in every sparse checkout (`uncommitted changes (or files hidden with
+  skip-worktree)`), since sparse-checkout marks the files it leaves out that way. Those files no
+  longer count; a skip-worktree file that is on disk, or an assume-unchanged one, still refuses.
+  Run from a subfolder, it saw only that folder's hidden files; it now checks the whole clone.
 - `repown use` no longer says `No stored credential … the first push signs in` or `gh is still
   the git credential helper, so this pin is not honoured` in a clone where it pins no credential
   (an SSH remote, Azure DevOps, another host): pushes there use that host's own sign-in. Setup

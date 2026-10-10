@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { Git } from '../src/core/git.ts';
 import { readUnpushed } from '../src/core/unpushed.ts';
 import { readPushFacts } from '../src/core/push-state.ts';
+import { pushTarget, unknownDestination } from '../src/core/push-destination.ts';
 import { sandbox, type Sandbox } from './helpers.ts';
 
 const THEIRS = 'other@example.invalid';
@@ -161,5 +162,26 @@ describe('readPushFacts', () => {
     const facts = await read();
     assert.equal(facts.detached, true);
     assert.equal(facts.upstream, null);
+  });
+});
+
+describe('where a plain push goes, read through one config list (ADR-029)', () => {
+  test('unknownDestination and pushTarget each spawn one git config, however many keys they read', async () => {
+    const box = sandbox();
+    const trace = join(box.dir, '..', 'trace.log');
+    try {
+      box.git('remote', 'add', 'origin', 'https://github.com/octocat/hello.git');
+      box.git('remote', 'add', 'fork', 'https://github.com/octo-org/hello.git');
+      box.git('config', 'branch.main.remote', 'origin');
+      process.env['GIT_TRACE'] = trace;
+      await unknownDestination(new Git(box.dir), 'main');
+      await pushTarget(new Git(box.dir), 'main');
+      delete process.env['GIT_TRACE'];
+      const configs = readFileSync(trace, 'utf8').split('\n').filter((line) => /built-in: git config /.test(line));
+      assert.equal(configs.length, 2, configs.join('\n'));
+    } finally {
+      delete process.env['GIT_TRACE'];
+      box.dispose();
+    }
   });
 });

@@ -51,7 +51,10 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   it (credential helpers print live passwords). `inherit` hands the terminal to the child
   (`stdio: 'inherit'`) and is used only for `gh auth login`, only in a terminal: repown
   never sees what the child prints, so no credential passes through repown. A spawn error
-  such as ENOENT resolves as not installed, for both.
+  such as ENOENT resolves as not installed, for both. At a timeout `run` ends the child (on
+  Windows its whole tree, `taskkill /T /F`) and resolves 3 s later even if something the child
+  started still holds the pipes; once the child exits, the same 3 s apply (ADR-026). A remote name in git's argv or in a printed command
+  goes through `positional` (`src/core/shell.ts`), which puts `--` before a leading `-`.
 - **Every `git log` passes `--no-show-signature`.** `scan` runs it in repositories
   it merely found, and their config can set `gpg.program`.
 - **A skipped check must never look like a passed one.** Failures that are answers
@@ -88,7 +91,10 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   stdin (excluding what the remote already has), and every tagger, not the current config.
 - The owner shown anywhere (`inspectRepo`'s `owner` with its `ownerProvider`, push-state's
   destination) comes from `Git.remotePushUrl` (`git remote get-url --push`), the URL the hook
-  receives; `provider`, `url` and `credentialKeys` follow the configured fetch URL. A push
+  receives; `provider` and `url` follow the configured fetch URL. `credentialKeys`,
+  `credentialUrl`, `credentialHost` and `helper` follow every URL git fetches or pushes origin
+  with (`remote get-url --all`, with and without `--push`), and claim nothing when git can't
+  list them (ADR-009). A push
   straight to a URL goes through `rewrittenUrl` (`ls-remote --get-url`).
 - `unpushed.ts` counts against remote-tracking refs, so its rebase advice depends on
   `push-destination.ts`: a push destination no tracking ref reaches is unknown, and the
@@ -100,7 +106,7 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   Git Credential Manager path. Colour is decided per stream. Decoration (`marked` for ✔/▲,
   `accent` for cyan) returns the text unchanged where that stream has no colour: never add a
   mark to plain output by hand (ADR-027). `unicodeTerminal` copies clack's
-  `isUnicodeSupported`; re-check it when clack is upgraded.
+  `isUnicodeSupported`; test/format.test.ts compares the two in every terminal clack tells apart.
 - Read-only commands (`status`, `doctor`, `scan`, `guard check`, the start screen's clone read,
   setup's `readContext`) read config through `snapshotOf(git)` (`src/core/config-snapshot.ts`):
   one `git config [--scope] --list -z` per scope answers the plain getters (ADR-029). Never hand a
@@ -151,7 +157,7 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - Split test files share their helpers through `test/<name>-helpers.ts` (moved, not copied).
 - `test/paste.test.ts` runs printed commands through every shell present (sh, bash, dash,
   zsh, fish, pwsh, powershell, cmd) against npm-shaped probes. Build any copyable word with
-  `shellWord` or `copyableCommand` (`src/core/guard/check.ts`), never by hand; null means no
+  `shellWord` or `copyableCommand` (`src/core/shell.ts`), never by hand; null means no
   quoting is safe in every shell, so print no command.
 - `test/cli.test.ts` (and `cli-*.test.ts`, split off by suite) spawns the real entry point. Keep `guard check --remote "$1" --url "$2"`
   (hooks already on disk) and `--remote="$1" --url="$2"` (new hooks) working.

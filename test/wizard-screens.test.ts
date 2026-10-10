@@ -564,6 +564,7 @@ describe('start screen, played with key presses', () => {
       }
       assert.match(run.screen, /└ {2}\$ repown accounts add octocat --name "Octo Cat" --email octocat@example\.invalid/);
       assert.doesNotMatch(run.stderr, /Commit name|Commit email/, 'no prompt is left for accounts add');
+      assert.doesNotMatch(run.stderr, /WARN\s+accounts/, 'what the questions said is not warned again (WIZ-10)');
       assert.match(run.stdout, /OK\s+accounts\s+octocat {2}Octo Cat <octocat@example\.invalid>/);
       assert.match(readFileSync(registryPath(), 'utf8'), /"octocat"/);
     });

@@ -14,6 +14,8 @@ import { delimiter, join, resolve } from 'node:path';
 import { pathWithoutGh, plainTerminal, sandbox, type Sandbox } from './helpers.ts';
 import { compileFakeExe } from './fake-exe.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
+import { lookUpProfile } from '../src/core/hosts/index.ts';
+import { githubProvider } from '../src/core/hosts/github.ts';
 import { runProgram, type DefaultChoice, type Loader, type Program } from '../src/ui/dispatch.ts';
 import {
   CLI, repown, fakeProgram, FAKE_GH_CS, FAKE_GH_SH, ghEnv, recordOctocat, installFakeGh, capture, type Run,
@@ -229,6 +231,43 @@ describe('accounts add --host', () => {
     assert.equal(run.status, 2);
     assert.match(run.stderr, /--host must be one of: github, azdo, generic/);
     assert.equal(existsSync(join(configDir, 'accounts.json')), false);
+  });
+});
+
+describe('typed `accounts add` warns as setup would, and still records (WIZ-10)', () => {
+  let box: Sandbox;
+  beforeEach(() => { box = sandbox(); });
+  afterEach(() => box.dispose());
+  const add = (login: string) => repown(['accounts', 'add', login, '--name', 'Octo Cat', '--email', 'octocat@example.invalid'],
+    { cwd: box.dir, env: { ...process.env, PATH: pathWithoutGh() } });
+  const listed = (): string => repown(['accounts', 'list'], { cwd: box.dir }).stdout;
+
+  test('a login setup would refuse is recorded with a warning', () => {
+    const run = add('octo cat');
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /WARN\s+accounts\s+"octo cat": use letters, digits and \. _ @ - only, so setup would not take it \(recording it anyway\)/);
+    assert.match(listed(), /octo cat/);
+  });
+
+  test('one already recorded: replaced, or recorded beside it under another case, each with a warning', () => {
+    assert.equal(add('octocat').status, 0);
+    assert.match(add('octocat').stderr, /WARN\s+accounts\s+"octocat" is already recorded: this replaces its name and email/);
+    const cased = add('Octocat');
+    assert.equal(cased.status, 0, cased.stderr);
+    assert.match(cased.stderr, /WARN\s+accounts\s+"octocat" is already recorded on this machine: this records "Octocat" beside it/);
+    assert.match(listed(), /Octocat/);
+  });
+
+  test('the login in a warning is drawn escaped, end to end: it can\'t redraw the terminal (#20)', () => {
+    const run = add('octo\x1b[2Jcat');
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /WARN\s+accounts\s+"octo\\u001b\[2Jcat": use letters/);
+    assert.doesNotMatch(run.stderr, /\x1b/);
+  });
+
+  // The machine's own Git Credential Manager is found beside git, so a signed-in note may be said.
+  test('a plain new login gets neither warning', () => {
+    assert.doesNotMatch(add('octocat').stderr, /already recorded|setup would not take/);
   });
 });
 
@@ -479,13 +518,36 @@ describe('repown use --gh with no terminal', () => {
   });
   afterEach(() => box.dispose());
 
+  test('typed accounts add says whom this machine is signed in as, when it is not that login', () => {
+    const env = ghEnv(bin, log);
+    const run = repown(['accounts', 'add', 'octocat', '--name', 'Octo Cat', '--email', 'octocat@example.invalid'], { cwd: box.dir, env });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /WARN\s+accounts\s+signed in as octo-work(?:, [^,\n]+)*, not octocat: if octocat isn't your account, repown accounts remove octocat; otherwise the first push asks you to sign in as it/);
+    const own = repown(['accounts', 'add', 'octo-work', '--name', 'Octo Work', '--email', 'work@example.invalid'], { cwd: box.dir, env });
+    assert.doesNotMatch(own.stderr, /signed in as/);
+  });
+
+  test('a profile lookup asks github.com once, for every field it needs', async () => {
+    const saved = { PATH: process.env['PATH'], GH_FAKE_LOG: process.env['GH_FAKE_LOG'] };
+    Object.assign(process.env, { PATH: ghEnv(bin, log)['PATH'], GH_FAKE_LOG: log });
+    try {
+      await lookUpProfile(githubProvider(), 'octo-work');
+    } finally {
+      for (const [name, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[name]; else process.env[name] = value;
+      }
+    }
+    const asked = readFileSync(log, 'utf8').split('\n').filter((line) => line.startsWith('api '));
+    assert.deepEqual(asked, ['api --hostname github.com users/octo-work']);
+  });
+
   test('G3: octocat is not in gh, so it warns and still pins', () => {
     const env = ghEnv(bin, log);
     const version = spawnSync('gh', ['--version'], { env, encoding: 'utf8' });
     assert.match(version.stdout, /repown-fake-gh/, version.stderr + (version.error?.message ?? ''));
     const run = repown(['use', 'octocat', '--gh'], { cwd: box.dir, env });
     assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stdout, /OK\s+identity\s+Octo Cat <octocat@example\.invalid>\s+push-as:octocat/);
+    assert.match(run.stdout, /OK\s+identity\s+Octo Cat <octocat@example\.invalid>\n/, 'no remote, so no push-as');
     assert.match(run.stderr, /WARN\s+gh\s+octocat isn't signed in to gh/);
     assert.match(run.stderr, /fix: gh auth login, then repown use octocat --gh/);
     assert.equal(box.git('config', '--local', '--get', 'repown.account'), 'octocat');

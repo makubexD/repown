@@ -18,7 +18,7 @@
 // and, in a terminal, `gh auth login` when it does not. After `repown fix`
 // neither changes which account git pushes as.
 
-import { inspectRepo, inspectAuth, type AuthState, type RepoState } from '../core/inspect.ts';
+import { inspectRepo, inspectAuth, pinsCredential, type AuthState, type RepoState } from '../core/inspect.ts';
 import { pinIdentity, type PinOutcome } from '../core/identity.ts';
 import { lookupAccount, saveAccount, type Account } from '../core/registry.ts';
 import {
@@ -54,7 +54,7 @@ export default {
     if (!values) return 1;
 
     if (!reportPinned(await pinIdentity(git, { ...values, account }, repo.credentialKeys))) return 1;
-    out.pass('identity', out.printable(values.name + ' <' + values.email + '>  push-as:' + account));
+    out.pass('identity', out.printable(values.name + ' <' + values.email + '>' + (pinsCredential(repo) ? '  push-as:' + account : '')));
 
     if (flagBool(args, 'gh')) await applyGh(account, repo);
     await reportConcerns(account, repo, values.email);
@@ -172,7 +172,7 @@ function storesIn(gcm: boolean, helper: string): string {
 }
 
 async function applyGh(account: string, repo: RepoState): Promise<void> {
-  const auth = await inspectAuth(repo.git, repo.originUrl ?? undefined);
+  const auth = await inspectAuth(repo.git, repo.credentialUrl ?? undefined);
   const action = ghAction(account, auth, interactive());
   if (action === 'advise') return notSignedIn(account);
   if (action === 'login') return signInToGh(account, repo, auth);
@@ -218,7 +218,7 @@ function loginFailed(failure: GhLoginError): void {
 }
 
 async function reportLogin(account: string, repo: RepoState, before: AuthState): Promise<void> {
-  const after = await inspectAuth(repo.git, repo.originUrl ?? undefined);
+  const after = await inspectAuth(repo.git, repo.credentialUrl ?? undefined);
   reportActive(account, after);
   if (!before.ghIsHelper && after.ghIsHelper) helperTakenOver();
 }
@@ -263,8 +263,8 @@ async function switchCli(account: string): Promise<void> {
 /** Everything that is now true but not yet right. Warnings, never refusals. */
 async function reportConcerns(account: string, repo: RepoState, email: string): Promise<void> {
   await reportUnpushed(repo, email, account);
-  if (repo.credentialKeys.length === 0 && repo.url) {
-    out.warn('host', repo.provider.label + ' credentials are not pinned by repown.');
+  if (!pinsCredential(repo) && repo.url) {
+    out.warn('host', 'credentials on ' + repo.credentialHost.label + ' are not pinned by repown.');
     out.detail('commits are pinned and the guard still runs; only credential');
     out.detail('selection is left to whatever already serves this host.');
   }
@@ -294,8 +294,8 @@ async function ownerConcern(account: string, repo: RepoState): Promise<void> {
 
 /** Only where use pinned a credential: elsewhere pushes use the host's own sign-in, as setup's credentialGap says. */
 async function credentialConcern(account: string, repo: RepoState): Promise<void> {
-  if (repo.credentialKeys.length === 0) return;
-  const auth = await inspectAuth(repo.git, repo.originUrl ?? undefined);
+  if (!pinsCredential(repo)) return;
+  const auth = await inspectAuth(repo.git, repo.credentialUrl ?? undefined);
   if (auth.ghIsHelper) {
     out.warn('helper', 'gh is still the git credential helper, so this pin is not honoured.');
     out.detail('fix: repown fix');

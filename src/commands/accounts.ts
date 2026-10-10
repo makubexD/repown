@@ -5,9 +5,11 @@
 
 import { loadRegistry, saveAccount, removeAccount, registryPath, type Account } from '../core/registry.ts';
 import { lookUpProfile, providers, type Profile } from '../core/hosts/index.ts';
-import { copyableCommand } from '../core/guard/check.ts';
+import { copyableCommand } from '../core/shell.ts';
 import { ask, interactive } from '../ui/prompt.ts';
-import { flagString, wantsJson, FORMAT_OPTION, type Args } from '../ui/args.ts';
+import { flagBool, flagString, wantsJson, FORMAT_OPTION, type Args } from '../ui/args.ts';
+import { loginProblem, signedInNote } from '../wizard/setup-flow.ts';
+import { readSignedIn } from '../wizard/home-context.ts';
 import type { Command, CommandGroup } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
@@ -66,7 +68,8 @@ async function add(args: Args): Promise<number> {
   if (name === null) return 1;
   const email = flagString(args, 'email') ?? await askFor('Commit email', suggested.email);
   if (email === null) return 1;
-
+  // After the questions: a cancelled one records nothing, so nothing says "recording it anyway".
+  if (!flagBool(args, ASKED)) await warnLogin(account, hostId);
   const written = await saveAccount(account, { name, email, host: hostId });
   if (!written.ok) { out.fail('accounts', out.printable(written.error)); return 1; }
 
@@ -75,6 +78,39 @@ async function add(args: Args): Promise<number> {
   out.line('  Use it in any clone:  ' + out.accent(process.stdout, useCommand(account)));
   out.line();
   return 0;
+}
+
+/** Set by setup and the start screen, which said what warnLogin says while asking. Not an option, so argv can't set it. */
+export const ASKED = 'asked';
+
+/** The same arguments, marked as already asked (ASKED). */
+export function asked(args: Args): Args {
+  return { ...args, flags: new Map([...args.flags, [ASKED, true]]) };
+}
+
+/** What setup says while asking, said for a typed login: warnings only, it is still recorded (WIZ-10). */
+async function warnLogin(account: string, hostId: string): Promise<void> {
+  const shown = out.printable(account);
+  const problem = loginProblem(account);
+  if (problem) out.warn('accounts', '"' + shown + '": ' + problem + ', so setup would not take it (recording it anyway)');
+  const clash = await recordedClash(account);
+  if (clash) out.warn('accounts', clash);
+  const note = hostId === 'github' ? signedInNote(account, await readSignedIn(process.cwd()), removeCommand(account)) : null;
+  if (note) out.warn('accounts', note);
+}
+
+/** A recorded login spelt the same, any case: this replaces it, or sits beside it. */
+async function recordedClash(account: string): Promise<string | null> {
+  const loaded = await loadRegistry();
+  const same = loaded.ok ? Object.keys(loaded.value.accounts).find((key) => key.toLowerCase() === account.toLowerCase()) : undefined;
+  if (same === undefined) return null;
+  if (same === account) return '"' + out.printable(account) + '" is already recorded: this replaces its name and email';
+  return '"' + out.printable(same) + '" is already recorded on this machine: this records "' + out.printable(account) + '" beside it';
+}
+
+function removeCommand(account: string): string {
+  const words = account.startsWith('-') ? ['repown', 'accounts', 'remove', '--', account] : ['repown', 'accounts', 'remove', account];
+  return copyableCommand(words) ?? 'remove it with repown accounts remove';
 }
 
 /** `repown use <account>` to paste, `--` first for a dashed login; described when it can't be printed safely. */

@@ -15,12 +15,13 @@
 // the warnings, and `ready:` is said only without it (ADR-026). It is still a warning:
 // the exit code is unchanged (ADR-020). This reports; it changes nothing.
 
-import { inspectRepo, inspectAuth, activeAccountLabel, type RepoState, type AuthState } from '../core/inspect.ts';
+import { inspectRepo, inspectAuth, activeAccountLabel, pinsCredential, type RepoState, type AuthState } from '../core/inspect.ts';
 import { isPinned } from '../core/identity.ts';
 import { loadRegistry, type Account, type Registry } from '../core/registry.ts';
 import { snapshotOf } from '../core/config-snapshot.ts';
 import type { Result } from '../core/result.ts';
-import { ALLOW_OWNER_BY_HAND, allowOwnerCommand, allowedOwners, copyableCommand } from '../core/guard/check.ts';
+import { ALLOW_OWNER_BY_HAND, allowOwnerCommand, allowedOwners } from '../core/guard/check.ts';
+import { copyableCommand, positional } from '../core/shell.ts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { gitFor, type Args } from '../ui/args.ts';
@@ -43,7 +44,7 @@ export default {
       out.detail('repown pins an identity per clone, so it needs one to work in.');
       return 1;
     }
-    const auth = await inspectAuth(git, repo.originUrl ?? undefined);
+    const auth = await inspectAuth(git, repo.credentialUrl ?? undefined);
     const registry = await loadRegistry();
 
     await summary(repo, auth, registry);
@@ -61,7 +62,7 @@ export default {
 /** "Honours it" only where the helper is GCM, the one measured to read the pin (ADR-001). */
 function verdict(repo: RepoState, auth: AuthState, problems: readonly Problem[]): number {
   if (problems.length === 0) {
-    out.pass('identity', repo.credentialKeys.length > 0 && auth.helperIsGcm
+    out.pass('identity', pinsCredential(repo) && auth.helperIsGcm
       ? 'this clone is pinned, and its credential mechanism honours it'
       : 'this clone\'s commit identity is pinned; its credentials are left to ' + (repo.helper ?? 'nothing'));
     return 0;
@@ -123,7 +124,8 @@ async function upstreamField(repo: RepoState): Promise<string | null> {
   if (remotes.length === 0) return null;
   const tracked = await repo.git.upstreamRef();
   const enabled = tracked === null ? await repo.git.getBoolConfig('push.autoSetupRemote') : null;
-  return upstreamText(tracked, enabled) ?? 'none yet: git push -u ' + pushRemote(remotes) + ' ' + branch.name;
+  const push = copyableCommand(['git', 'push', '-u', ...positional(pushRemote(remotes)), branch.name]) ?? 'git push -u with the remote and this branch';
+  return upstreamText(tracked, enabled) ?? 'none yet: ' + push;
 }
 
 function pushRemote(remotes: readonly string[]): string {
@@ -150,7 +152,7 @@ function originOf(repo: RepoState): string {
 
 function pushesAs(repo: RepoState): string {
   if (!repo.originUrl) return 'no remote to push to';
-  if (repo.credentialKeys.length === 0) return 'not pinned by repown on ' + repo.provider.label;
+  if (!pinsCredential(repo)) return 'not pinned by repown on ' + repo.credentialHost.label;
   return repo.identity.account ?? 'NOT SET LOCALLY';
 }
 
@@ -210,10 +212,10 @@ async function pushBlockers(repo: RepoState, account: string): Promise<Blocker[]
   return blockers(facts, { email: repo.identity.email ?? '', account, autoUpstream: true, guarded });
 }
 
-/** First among the warnings. An owner the origin warning names is not said twice. */
-function printBlockers(found: readonly Blocker[], ownerWarned: boolean): void {
+/** First among the warnings. The owner the origin warning names is not said twice; another one is. */
+function printBlockers(found: readonly Blocker[], warnedOwner: string | null): void {
   for (const blocker of found) {
-    if (blocker.kind === 'owner' && ownerWarned) continue;
+    if (blocker.kind === 'owner' && blocker.owner?.toLowerCase() === warnedOwner?.toLowerCase()) continue;
     const [first = '', ...rest] = blocker.lines;
     out.warn('push', printable(first));
     for (const line of rest) out.detail(printable(line));
@@ -248,7 +250,7 @@ function closingLine(end: StatusEnd): string {
 const GH_OPTIONAL = ' · gh: optional (see the note above)';
 
 function readyLine(repo: RepoState, account: string, warnings: readonly string[], ghNote: boolean): string {
-  const head = repo.credentialKeys.length === 0
+  const head = !pinsCredential(repo)
     ? 'ready: commits use ' + account + '; pushes use this host\'s own sign-in'
     : 'ready: commits and pushes use ' + account;
   if (warnings.length > 0) return head + ' · ' + howMany(warnings.length, 'warning');
@@ -289,7 +291,7 @@ export function identityProblems(repo: RepoState): Problem[] {
       fix: SETUP_FIX,
     }];
   }
-  if (repo.credentialKeys.length === 0 || id.account) return [];
+  if (!pinsCredential(repo) || id.account) return [];
   return [{
     what: 'No account is pinned, so pushes fall back to the machine default (' +
           (id.inheritedAccount ?? 'nothing') + ').',
@@ -300,7 +302,7 @@ export function identityProblems(repo: RepoState): Problem[] {
 async function reportWarnings(repo: RepoState, auth: AuthState, registry: LoadedRegistry, found: readonly Blocker[]): Promise<readonly string[]> {
   const tags = ['origin', 'account', 'guard', 'submodule', 'helper', 'gh'] as const;
   const foreignOwner = await originForeign(repo);
-  printBlockers(found, foreignOwner);
+  printBlockers(found, foreignOwner ? repo.owner : null);
   const fired = [
     foreignOwner && ownerWarning(repo),
     accountWarning(repo, registry),
@@ -333,7 +335,7 @@ function accountWarning(repo: RepoState, registry: LoadedRegistry): boolean {
 
 /** A pinned credential key is only as good as the helper reading it. gh as helper is a problem, reported elsewhere. */
 function helperWarning(repo: RepoState, auth: AuthState): boolean {
-  if (repo.credentialKeys.length === 0 || auth.helperIsGcm || auth.ghIsHelper) return false;
+  if (!pinsCredential(repo) || auth.helperIsGcm || auth.ghIsHelper) return false;
   if (!auth.helper) {
     out.warn('helper', 'no credential helper is set, so the pinned account selects no credential; git will prompt on push.');
   } else {

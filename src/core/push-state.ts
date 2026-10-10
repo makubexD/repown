@@ -8,7 +8,7 @@
 
 import type { Git } from './git.ts';
 import { ok, type Result } from './result.ts';
-import { pushTarget, unknownDestination, type PushTarget } from './push-destination.ts';
+import { hasTrackingRefs, pushTarget, unknownDestination, type PushTarget } from './push-destination.ts';
 import { parseGitUrl } from './url.ts';
 import { providerFor } from './hosts/index.ts';
 import { hostileSet } from './guard/check.ts';
@@ -96,7 +96,7 @@ async function signinOf(git: Git, target: PushTarget | null): Promise<string | n
 async function repointOf(git: Git, branch: string | null): Promise<Repoint | null> {
   const unknown = branch ? await unknownDestination(git, branch) : null;
   if (unknown?.kind !== 'url' || !unknown.remote) return null;
-  const tracked = await git.hasTrackingRefs(unknown.remote);
+  const tracked = await hasTrackingRefs(git, unknown.remote);
   return { key: unknown.key, remote: unknown.remote, tracked: tracked.ok && tracked.value };
 }
 

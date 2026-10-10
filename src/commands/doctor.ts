@@ -14,11 +14,12 @@
 // Under that diagnosis, one row per account the registry, GCM or gh knows.
 // accountRows decides the cells. A failed lookup stays `unknown`.
 
-import { inspectRepo, inspectAuth, activeAccountLabel, type AuthState, type RepoState } from '../core/inspect.ts';
+import { inspectRepo, inspectAuth, activeAccountLabel, pinsCredential, type AuthState, type RepoState } from '../core/inspect.ts';
 import { loadRegistry, type Account, type Registry } from '../core/registry.ts';
 import type { Result } from '../core/result.ts';
 import { gitFor, type Args } from '../ui/args.ts';
 import { snapshotOf } from '../core/config-snapshot.ts';
+import { parseGitUrl, type GitUrl } from '../core/url.ts';
 import type { Command } from '../ui/command.ts';
 import * as out from '../ui/format.ts';
 
@@ -309,15 +310,19 @@ function printClone(repo: RepoState): void {
   out.heading('This clone');
   out.field('sign-in', unpinnedReason(repo) + ', so no credential is pinned here');
   // Over SSH git asks no credential helper.
-  if (repo.url?.scheme !== 'ssh') out.field('helper', out.printable(repo.helper ?? 'none configured'));
+  if (credentialTarget(repo)?.scheme !== 'ssh') out.field('helper', out.printable(repo.helper ?? 'none configured'));
 }
 
-/** Read from origin's configured URL, which is what credentialKeys follows. */
+/** Read from the URL git uses for origin, after insteadOf, which is what credentialKeys follows. */
 function unpinnedReason(repo: RepoState): string {
-  if (repo.url?.scheme === 'ssh') return 'origin is an SSH URL';
-  if (repo.provider.id === 'github') return 'origin is not an HTTPS URL';
-  if (repo.provider.id === 'generic') return 'origin is not on GitHub';
-  return 'origin is on ' + repo.provider.label;
+  if (credentialTarget(repo)?.scheme === 'ssh') return 'origin is an SSH URL';
+  if (repo.credentialHost.id === 'github') return 'origin is not an HTTPS URL';
+  if (repo.credentialHost.id === 'generic') return 'origin is not on GitHub';
+  return 'origin is on ' + repo.credentialHost.label;
+}
+
+function credentialTarget(repo: RepoState): GitUrl | null {
+  return repo.credentialUrl ? parseGitUrl(repo.credentialUrl) : null;
 }
 
 function printMachine(auth: AuthState, heading: string): void {
@@ -447,12 +452,7 @@ function ssoNote(host: string): void {
 
 /** The origin's host where repown pins a credential (GitHub over HTTPS), github.com otherwise. */
 function ssoHost(repo: RepoState): string {
-  return pinsCredential(repo) && repo.url ? repo.url.host : 'github.com';
-}
-
-/** Only GitHub over HTTPS has credential keys; anywhere else pushes use the host's own sign-in (ADR-009). */
-function pinsCredential(repo: RepoState): boolean {
-  return repo.credentialKeys.length > 0;
+  return (pinsCredential(repo) ? credentialTarget(repo)?.host : null) ?? 'github.com';
 }
 
 /** A clone with an origin repown pins no credential for. No origin reads as outside a clone. */
@@ -462,7 +462,7 @@ function unpinnedClone(repo: RepoState): boolean {
 
 /** The origin's URL where repown pins a credential; github.com otherwise, as outside a clone. */
 function probeUrl(repo: RepoState): string | undefined {
-  return pinsCredential(repo) ? repo.originUrl ?? undefined : undefined;
+  return pinsCredential(repo) ? repo.credentialUrl ?? undefined : undefined;
 }
 
 /** In an unpinned clone a passing verdict says it is about github.com, not this clone. */

@@ -5,7 +5,7 @@
 
 import type { CurrentBranch, Git } from '../core/git.ts';
 import { gitSupportsAutoUpstream } from '../core/version.ts';
-import { inspectRepo, inspectAuth, type AuthState, type RepoState } from '../core/inspect.ts';
+import { inspectRepo, inspectAuth, pinsCredential, type AuthState, type RepoState } from '../core/inspect.ts';
 import { pinHolds } from '../core/identity.ts';
 import { loadRegistry, type Account, type Registry } from '../core/registry.ts';
 import { planRepair, type RemovalOutcome } from '../core/credential/repair.ts';
@@ -161,7 +161,7 @@ interface Loaded {
 }
 
 async function loadClone(git: Git, repo: RepoState, options: ReadOptions): Promise<Loaded> {
-  const authPromise = options.auth ? Promise.resolve(options.auth) : inspectAuth(git, repo.originUrl ?? undefined);
+  const authPromise = options.auth ? Promise.resolve(options.auth) : inspectAuth(git, repo.credentialUrl ?? undefined);
   const [auth, pinned, allowed, planned, addresses, helpers, ownerIsUser, upstream, [unpushed, push]] = await Promise.all([
     authPromise,
     git.getConfig('repown.account', 'local'),
@@ -226,7 +226,7 @@ function assemble(cwd: string | null, recorded: Readonly<Record<string, Account>
     detected: facts.detected,
     ownerIsUser: facts.ownerIsUser,
     allowed: facts.allowed.map((owner) => owner.toLowerCase()),
-    credentialPinned: repo.credentialKeys.length > 0, credentialKeys: repo.credentialKeys,
+    credentialPinned: pinsCredential(repo), credentialKeys: repo.credentialKeys,
     gh: facts.gh, ghIsHelper: facts.ghIsHelper,
     guard: repo.guard,
     redirected: repo.hook?.redirected ?? false, hookPath: repo.hook?.path ?? null,
@@ -321,11 +321,11 @@ async function pinIntact(git: Git, pinned: string | null, entry: Account | undef
 
 /** The identity and push account git resolves for this clone, from every scope it reads. */
 async function gitUses(git: Git, values: { name: string; email: string; account: string }, repo: RepoState): Promise<boolean> {
-  const pinsCredential = repo.credentialKeys.length > 0 && repo.originUrl !== null;
+  const pinned = pinsCredential(repo) && repo.credentialUrl !== null;
   const [name, email, user] = await Promise.all([
     git.getConfig('user.name'),
     git.getConfig('user.email'),
-    pinsCredential ? git.getUrlMatch('credential.username', repo.originUrl!) : Promise.resolve(values.account),
+    pinned ? git.getUrlMatch('credential.username', repo.credentialUrl!) : Promise.resolve(values.account),
   ]);
   return name === values.name && email === values.email && user === values.account;
 }

@@ -4,13 +4,13 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { ok } from '../src/core/result.ts';
 import { registryPath } from '../src/core/registry.ts';
 import { CANCEL, type Prompter } from '../src/wizard/engine.ts';
 import { readHome, type HomeState } from '../src/wizard/home-context.ts';
-import { accountChoices, commandFor, homeNote, listedClones, menuItems, summaryLines } from '../src/wizard/home-flow.ts';
+import { MENU, accountChoices, commandFor, homeNote, listedClones, menuItems, summaryLines } from '../src/wizard/home-flow.ts';
 import { runHome } from '../src/wizard/home-run.ts';
 import { formatCommand, printable } from '../src/wizard/setup-flow.ts';
 import { displayPath } from '../src/ui/format.ts';
@@ -30,6 +30,19 @@ describe('start screen', () => {
     restore = holdCeiling(join(box.dir, '..'));
   });
   afterEach(() => { restore?.(); box.dispose(); });
+
+  test('the read leaves the global user.name and user.email to Record an account, the one action that shows them', async () => {
+    cloneAt(root, 'alpha', true);
+    const trace = join(box.dir, '..', 'trace.log');
+    process.env['GIT_TRACE'] = trace;
+    try {
+      await readHome(root);
+    } finally {
+      delete process.env['GIT_TRACE'];
+    }
+    const read = readFileSync(trace, 'utf8').split('\n').filter((line) => /built-in: git config .*user\.(name|email)\b/.test(line));
+    assert.deepEqual(read, []);
+  });
 
   test('H5: two clones, one set up and one not, list the unset one first', async () => {
     const unset = cloneAt(root, 'zeta', false);
@@ -189,7 +202,7 @@ describe('start screen', () => {
       'octo\x1bcat': { name: 'Octo Cat', email: 'octocat@example.invalid' },
     };
     const home: HomeState = {
-      cwd: 'work', registry: ok({ accounts, unreadable: [] }), ghIsHelper: false, clones: [], identity: { name: null, email: null },
+      cwd: 'work', registry: ok({ accounts, unreadable: [] }), ghIsHelper: false, clones: [],
     };
     const line = shown(home, 'Accounts');
     const escaped = [printable('octo\ncat'), printable('octo\x1bcat')].join(', ');
@@ -209,7 +222,7 @@ describe('start screen', () => {
     const path = join(cwd, 'odd\tname');
     const home: HomeState = {
       cwd, registry: ok({ accounts: {}, unreadable: [] }), ghIsHelper: false,
-      clones: [{ path, setUp: false }], identity: { name: null, email: null },
+      clones: [{ path, setUp: false }],
     };
     const [choice] = listedClones(home).clones;
     assert.equal(choice!.value, path);
@@ -248,6 +261,27 @@ describe('start screen commands', () => {
   });
 });
 
+test('the global identity is read when Record an account is chosen, and not for Quit', async () => {
+  const reads: string[] = [];
+  const identity = async (cwd: string) => { reads.push(cwd); return { name: 'Octo Work', email: null }; };
+  const picking = (choice: string): Prompter => ({ ...cancelPrompter(() => {}), choose: async () => choice });
+  await runHome({ prompter: picking(MENU.quit), cwd: 'work', read: emptyRead, identity });
+  assert.deepEqual(reads, []);
+  await runHome({ prompter: picking(MENU.account), cwd: 'work', read: emptyRead, identity });
+  assert.deepEqual(reads, ['work']);
+});
+
+// #20: fix's own confirm reads the real terminal, which no test here has; without one fix stops
+// and asks for --yes, and that run counts as much as an answered one (ADR-028).
+test('after Stop gh serving credentials has run, the menu comes back', async () => {
+  const picks = [MENU.fix, MENU.quit];
+  const asked: string[] = [];
+  const prompter: Prompter = { ...cancelPrompter(() => {}), choose: async (message) => { asked.push(message); return picks.shift() ?? CANCEL; } };
+  const read = async (cwd: string): Promise<HomeState> => ({ ...(await emptyRead(cwd)), ghIsHelper: true });
+  assert.equal(await runHome({ prompter, cwd: 'work', read }), 0);
+  assert.equal(asked.length, 2, 'the menu was asked again after fix');
+});
+
 async function shownTitle(cwd: string): Promise<string> {
   let title = '';
   await runHome({ prompter: cancelPrompter((text) => { title = text; }), cwd, read: emptyRead });
@@ -264,7 +298,7 @@ function cancelPrompter(intro: (title: string) => void): Prompter {
 }
 
 function emptyRead(cwd: string): Promise<HomeState> {
-  return Promise.resolve({ cwd, registry: ok({ accounts: {}, unreadable: [] }), ghIsHelper: false, clones: [], identity: { name: null, email: null } });
+  return Promise.resolve({ cwd, registry: ok({ accounts: {}, unreadable: [] }), ghIsHelper: false, clones: [] });
 }
 
 function writeRegistry(raw: string): string {

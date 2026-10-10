@@ -7,7 +7,7 @@
 
 import fixCommand from '../commands/fix.ts';
 import doctorCommand from '../commands/doctor.ts';
-import accountsGroup from '../commands/accounts.ts';
+import accountsGroup, { asked } from '../commands/accounts.ts';
 import { COMMANDS } from '../program.ts';
 import { parseArgs, type Args } from '../ui/args.ts';
 import { specFor, type Command } from '../ui/command.ts';
@@ -15,7 +15,7 @@ import { loadEntries } from '../ui/dispatch.ts';
 import * as out from '../ui/format.ts';
 import { renderTopHelp } from '../ui/help.ts';
 import { CANCEL, runFlow, type Pass, type Prompter } from './engine.ts';
-import { readHome, readSignedIn, type HomeState } from './home-context.ts';
+import { identityOf, readHome, readSignedIn, type HomeState, type Identity } from './home-context.ts';
 import { BACK as HOME_BACK, MENU, accountChoices, accountOfChoice, commandFor, homeNote, listedClones, menuItems, summaryLines } from './home-flow.ts';
 import { BACK_LABEL, BUSY, CANCELLED, QUIT, WHAT_NEXT, WHICH_ACCOUNT, WHICH_CLONE, homeTitle, recordBlocked, removeLabel, removeNote, removeQuestion } from './home-text.ts';
 import { writeProblem } from '../core/registry.ts';
@@ -36,6 +36,8 @@ export interface HomeRunDeps {
   readonly suggest?: AccountContext['suggest'];
   /** Tests pass fixed sign-ins. Production reads gh and GCM once, when the name question first asks. */
   readonly signedIn?: AccountContext['signedIn'];
+  /** Tests pass a fixed global identity. Production reads it when Record an account is chosen. */
+  readonly identity?: (cwd: string) => Promise<Identity>;
 }
 
 /** The account questions from the top. Back from the login returns to the menu, as `opening`. */
@@ -116,7 +118,7 @@ async function recordAccount(prompter: Prompter, home: HomeState, deps: HomeRunD
   // The same reasons accounts add would give on save, before anyone answers four questions for nothing.
   const blocked = writeProblem(home.registry);
   if (blocked) { prompter.note(recordBlocked(printable(blocked))); return null; }
-  const ctx = accountContext(home, deps);
+  const ctx = accountContext(home, deps, await (deps.identity ?? identityOf)(home.cwd));
   const walk = await runFlow({ steps: [loginStep(ctx), ...profileSteps(ctx)] }, ctx, FIRST_PASS, prompter);
   if (walk.status === 'cancelled') return finish(prompter, CANCELLED, CANCELLED_CODE);
   if (walk.status === 'opening') return null;
@@ -146,10 +148,10 @@ async function again(ran: Promise<number>): Promise<typeof AGAIN> {
   return AGAIN;
 }
 
-function accountContext(home: HomeState, deps: HomeRunDeps): AccountContext {
+function accountContext(home: HomeState, deps: HomeRunDeps, machineIdentity: Identity): AccountContext {
   const recorded = home.registry.ok ? home.registry.value.accounts : {};
   return {
-    recorded, host: 'github', machineIdentity: home.identity,
+    recorded, host: 'github', machineIdentity,
     suggest: deps.suggest ?? suggester(), signedIn: deps.signedIn ?? once(() => readSignedIn(home.cwd)),
   };
 }
@@ -164,7 +166,8 @@ async function runOwn(prompter: Prompter, command: Command, tokens: readonly str
   prompter.suspend?.();
   const parsed = parseArgs(tokens, specFor(command));
   if (!parsed.ok) { out.fail('repown', parsed.error); return 2; }
-  return command.run(parsed.value);
+  // Record an account said while asking what accounts add would warn about a typed login.
+  return command.run(command === accountsGroup.actions['add'] ? asked(parsed.value) : parsed.value);
 }
 
 function setupArgs(cwd: string): Args {

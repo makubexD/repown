@@ -21,7 +21,7 @@
 // installed" and from "gh is active as nobody". Collapsing it into either is the
 // bug this shape exists to prevent.
 
-import { run, inherit, succeeded, notInstalled, output, type ExecResult, type InheritFn } from '../exec.ts';
+import { run, inherit, succeeded, notInstalled, type ExecResult, type InheritFn } from '../exec.ts';
 import { ok, err, type Result } from '../result.ts';
 import { versionAtLeast } from '../version.ts';
 
@@ -112,10 +112,16 @@ function toAccount(raw: unknown): GhAccount[] {
   return [{ login: entry.login, active: entry.active === true }];
 }
 
-/** Arguments for a github.com profile field. `--hostname` so GH_HOST cannot redirect the call. */
-export function ghProfileArgs(login: string, field: string): readonly string[] {
+/** Arguments for a github.com profile, every field at once. `--hostname` so GH_HOST cannot redirect the call. */
+export function ghUserArgs(login: string): readonly string[] {
   // One path segment, whatever the login holds (callers also look up only GitHub-shaped logins).
-  return ['api', '--hostname', 'github.com', `users/${encodeURIComponent(login)}`, '--jq', `.${field}`];
+  return ['api', '--hostname', 'github.com', `users/${encodeURIComponent(login)}`];
+}
+
+/** github.com's profile for a login (null when unknown), and whether it said there is no such account. */
+export interface UserLookup {
+  readonly fields: Readonly<Record<string, unknown>> | null;
+  readonly missing: boolean;
 }
 
 /** A profile field's value, and whether github.com said there is no such account. */
@@ -124,20 +130,31 @@ export interface ProfileLookup {
   readonly missing: boolean;
 }
 
-/** A profile field from github.com, or null. Absence here is unremarkable. */
-export async function ghProfileField(login: string, field: string): Promise<string | null> {
-  return (await ghProfileLookup(login, field)).value;
+export async function ghUser(login: string): Promise<UserLookup> {
+  return userLookupFrom(await run('gh', ghUserArgs(login)));
 }
 
-export async function ghProfileLookup(login: string, field: string): Promise<ProfileLookup> {
-  return profileLookupFrom(await run('gh', ghProfileArgs(login, field)));
-}
-
-/** Only github.com's own 404 means missing: offline, refused or no gh is unknown. */
-export function profileLookupFrom(result: ExecResult): ProfileLookup {
-  const value = output(result);
+/** Only github.com's own 404 means missing: offline, refused, no gh or an unreadable reply is unknown. */
+export function userLookupFrom(result: ExecResult): UserLookup {
   const missing = !succeeded(result) && /\(HTTP 404\)/.test(result.stderr);
-  return { value: value && value !== 'null' ? value : null, missing };
+  return { fields: succeeded(result) ? objectIn(result.stdout) : null, missing };
+}
+
+/** One field as text: a non-empty string as it is, a number in decimal, anything else null. */
+export function fieldOf(user: UserLookup, field: string): ProfileLookup {
+  const value = user.fields?.[field];
+  const text = typeof value === 'string' && value ? value : typeof value === 'number' ? String(value) : null;
+  return { value: text, missing: user.missing };
+}
+
+/** The JSON object gh printed, or null: a reply that is not one is an unknown, like a failed call. */
+function objectIn(text: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function ghSwitch(login: string): Promise<Result<void>> {

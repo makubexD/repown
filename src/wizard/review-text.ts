@@ -4,6 +4,7 @@
 // comes from the flow (setup-flow.ts).
 
 import type { Review, ReviewChoice, StepChoice } from './engine.ts';
+import { displayWidth } from '../ui/format.ts';
 
 export interface ReviewOption {
   readonly value: Exclude<ReviewChoice, symbol>;
@@ -95,12 +96,12 @@ export function labelOf(text: string): string {
  * past any indent, a "1. " step number, or a "label   " column.
  */
 export function wrap(text: string, width: number): string[] {
-  if (text.length <= width) return [text];
-  const hang = ' '.repeat(HANG.exec(text)![0].length);
+  if (displayWidth(text) <= width) return [text];
+  const hang = ' '.repeat(displayWidth(HANG.exec(text)![0]));
   const lines: string[] = [];
   let line = '';
   for (const word of text.split(/(?<=\S) (?=\S)/)) {
-    if (line && line.length + 1 + word.length > width) { lines.push(line); line = hang + word.trimStart(); }
+    if (line && displayWidth(line) + 1 + displayWidth(word) > width) { lines.push(line); line = hang + word.trimStart(); }
     else line = line ? line + ' ' + word : word;
   }
   return [...lines, line];

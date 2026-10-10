@@ -76,3 +76,8 @@ and the tests compare it byte for byte. NO_COLOR, FORCE_COLOR and TERM=dumb are 
   it. Pasted whole, `>` is a redirect in sh, bash, zsh, fish, PowerShell and cmd alike: it
   leaves an empty file named `repown` and runs nothing; `$` there is only a harmless
   error. The colour decision itself is unchanged.
+- **2026-10-10, not changed: two things only a patch to clack fixes.** clack styles through
+  `node:util`'s `styleText`, which checks stdout, while setup's closing marks follow stderr,
+  so `repown setup > out.log` draws the frame plain and the closing line coloured. clack's
+  ASCII mode still prints `↑/↓` and `•` in its key hint, and its gutter colour is fixed.
+  repown keeps clack unpatched (ADR-016).

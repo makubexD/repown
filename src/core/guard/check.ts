@@ -19,6 +19,7 @@ import type { Git, CommitIdentity } from '../git.ts';
 import { parseGitUrl } from '../url.ts';
 import { providerFor } from '../hosts/index.ts';
 import { readIdentity, legacyAccountKey } from '../identity.ts';
+import { copyableCommand } from '../shell.ts';
 
 /** The null object id: 40 zeros, or 64 in a SHA-256 repository. */
 const isZero = (sha: string): boolean => /^0+$/.test(sha);
@@ -299,31 +300,6 @@ function printable(text: string): string {
  */
 function redacted(raw: string): string {
   return raw.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/]*@/i, '$1***@');
-}
-
-/**
- * A word of a command printed to copy, as sh, bash, dash, zsh, fish, PowerShell and cmd all
- * read it (test/paste.test.ts runs each). Bare when no shell treats any of it specially: a
- * leading `@` is a PowerShell splat, and PowerShell splits a dashed word at `.` or `:`.
- * `--` is quoted, since PowerShell drops a bare one from the `$args` of repown.ps1.
- * Otherwise double quotes, unless they would expand or end early somewhere: `$` and a
- * backtick (POSIX, PowerShell), `%` and `!` (cmd), a curly double quote (PowerShell), a
- * backslash that escapes (`\\`, or one before the closing quote), a control character, or
- * nothing at all (Windows PowerShell drops `""`). Then it is null and the caller prints no
- * command: single quotes are no quotes in cmd, and PowerShell would run the rest of a
- * POSIX `'\''` as code.
- */
-export function shellWord(value: string): string | null {
-  if (value === '--') return '"--"';
-  if (/^(?:-[\w-]*|[\w./][\w.@+/:-]*)$/.test(value)) return value;
-  if (value === '' || /["$`%!“”„\x00-\x1f\x7f-\x9f]|\\\\|\\$/.test(value)) return null;
-  return '"' + value + '"';
-}
-
-/** A whole command to copy, or null when one of its words can't be printed safely (shellWord). */
-export function copyableCommand(words: readonly string[]): string | null {
-  const quoted = words.map(shellWord);
-  return quoted.every((word) => word !== null) ? quoted.join(' ') : null;
 }
 
 /** Said instead of the allow-owner command when that command can't be printed safely. */

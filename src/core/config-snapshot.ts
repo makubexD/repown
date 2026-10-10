@@ -50,6 +50,14 @@ export class ConfigSnapshot extends Git {
 }
 
 /**
+ * For read-only code handed any Git: a snapshot of a plain one (or the snapshot itself), and a
+ * subclass as it is, since a snapshot would drop what it overrides.
+ */
+export function readerOf(git: Git): Git {
+  return git instanceof ConfigSnapshot || Object.getPrototypeOf(git) === Git.prototype ? snapshotOf(git) : git;
+}
+
+/**
  * A snapshot of a plain `git`, or `git` itself when it already is one. A subclass is refused:
  * the snapshot keeps only the cwd, so whatever the subclass overrides would be dropped.
  */

@@ -1,6 +1,6 @@
 # ADR-029: Read-only commands read git config once per scope
 
-**Status:** Accepted.
+**Status:** Accepted. Amended by its 2026-10-10 note: push-destination reads through a snapshot of its own.
 
 ## Context
 
@@ -62,3 +62,14 @@ was bound by process starts: about 22,800 git spawns per run, 13,500 of them `gi
 - **`--type=bool`, `--get-urlmatch` and `--show-origin` reads still start a process each.**
 - **A snapshot is never stored** past the read it serves (the start screen re-reads each round,
   ADR-028), so a cached list can't outlive a write.
+
+## Notes
+
+- **2026-10-10, push-destination reads through a snapshot of its own.** `use` and `reauthor`
+  write config, so they hold a plain `Git`, and working out where a plain push goes read about
+  eight keys there, one `git config` each. `unknownDestination`, `pushTarget` and
+  `hasTrackingRefs` now take a snapshot (`readerOf`) for their own reads: one list per call.
+  A `Git` subclass (a test's failing rebase) is used as it is, since a snapshot keeps only the
+  cwd. For: the same answers from one process instead of eight. Against: a snapshot made
+  inside each call, so a caller reading the destination twice lists config twice; never one
+  kept across a write.

@@ -16,6 +16,7 @@ import type { Git } from './git.ts';
 import { parseGitUrl } from './url.ts';
 import { ok, type Result } from './result.ts';
 import { trackingPrefixes, trackingRefOf } from './refspec.ts';
+import { readerOf } from './config-snapshot.ts';
 
 /**
  * A destination no remote-tracking ref reaches:
@@ -38,7 +39,9 @@ interface Configured {
 }
 
 /** Null when the branch pushes nowhere, to `.` (this repository), or where tracking refs reach. */
-export async function unknownDestination(git: Git, branch: string): Promise<UnknownDestination | null> {
+export async function unknownDestination(given: Git, branch: string): Promise<UnknownDestination | null> {
+  // Read-only: one config list answers every key read below (ADR-029).
+  const git = readerOf(given);
   const listed = await git.readRemotes();
   if (!listed.ok) return { kind: 'unread' };
   const set = await configuredTarget(git, branch);
@@ -60,7 +63,8 @@ export interface PushTarget {
 }
 
 /** Null when there is no destination, it is `.`, or the remotes could not be listed. */
-export async function pushTarget(git: Git, branch: string): Promise<PushTarget | null> {
+export async function pushTarget(given: Git, branch: string): Promise<PushTarget | null> {
+  const git = readerOf(given);
   const listed = await git.readRemotes();
   if (!listed.ok) return null;
   const set = await configuredTarget(git, branch);
@@ -96,7 +100,8 @@ async function remoteState(git: Git, remote: Named): Promise<UnknownDestination 
 }
 
 /** Whether the remote has any tracking ref where its own refspecs write them. */
-export async function hasTrackingRefs(git: Git, remote: string): Promise<Result<boolean>> {
+export async function hasTrackingRefs(given: Git, remote: string): Promise<Result<boolean>> {
+  const git = readerOf(given);
   const listed = await git.readRemotes();
   if (!listed.ok) return listed;
   return trackingRefsOf(git, remote, listed.value);

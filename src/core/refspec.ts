@@ -5,26 +5,31 @@
 // (`^refs/heads/x`) leaves a branch out. A push of such a branch updates no tracking ref,
 // so `HEAD --not --remotes` cannot see what that push published.
 
+/** `HEAD --not --remotes` counts only these: a tracking ref anywhere else proves nothing. */
+const REMOTES = 'refs/remotes/';
+
 interface Refspec {
   readonly src: string;
   readonly dst: string | null;
   readonly negative: boolean;
 }
 
-/** The tracking ref the refspecs give `ref` (a full `refs/heads/...` name), or null. */
+/** The tracking ref the refspecs give `ref` (a full `refs/heads/...` name) under refs/remotes/, or null. */
 export function trackingRefOf(specs: readonly string[], ref: string): string | null {
   const parsed = specs.map(parse);
   if (parsed.some((spec) => spec.negative && matched(spec.src, ref) !== null)) return null;
   for (const spec of parsed) {
     const middle = spec.negative || !spec.dst ? null : matched(spec.src, ref);
-    if (middle !== null) return spec.dst!.replace('*', middle);
+    const tracking = middle === null ? null : spec.dst!.replace('*', middle);
+    if (tracking?.startsWith(REMOTES)) return tracking;
   }
   return null;
 }
 
-/** Where the refspecs write: the namespace before a glob's star, or the exact ref. */
+/** Where the refspecs write under refs/remotes/: the namespace before a glob's star, or the exact ref. */
 export function trackingPrefixes(specs: readonly string[]): string[] {
-  return specs.map(parse).flatMap((spec) => spec.negative || !spec.dst ? [] : [spec.dst.split('*')[0]!]);
+  const written = specs.map(parse).flatMap((spec) => spec.negative || !spec.dst ? [] : [spec.dst.split('*')[0]!]);
+  return written.filter((prefix) => prefix.startsWith(REMOTES));
 }
 
 function parse(raw: string): Refspec {

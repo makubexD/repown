@@ -137,7 +137,6 @@ function recount(account: string): string {
   return word ? 'then repown use ' + word + ' to count again' : 'then run repown use again to count again';
 }
 
-/** Quoting keeps a shell from splitting a word, not git from reading `-x` as an option. */
 /** Pinning is an alternative only when one address made them all. */
 function reauthorLine(found: Found): string[] {
   const them = found.count === 1 ? 'it' : 'them';

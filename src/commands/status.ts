@@ -21,7 +21,7 @@ import { loadRegistry, type Account, type Registry } from '../core/registry.ts';
 import { snapshotOf } from '../core/config-snapshot.ts';
 import type { Result } from '../core/result.ts';
 import { ALLOW_OWNER_BY_HAND, allowOwnerCommand, allowedOwners } from '../core/guard/check.ts';
-import { copyableCommand } from '../core/shell.ts';
+import { copyableCommand, positional } from '../core/shell.ts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { gitFor, type Args } from '../ui/args.ts';
@@ -124,7 +124,8 @@ async function upstreamField(repo: RepoState): Promise<string | null> {
   if (remotes.length === 0) return null;
   const tracked = await repo.git.upstreamRef();
   const enabled = tracked === null ? await repo.git.getBoolConfig('push.autoSetupRemote') : null;
-  return upstreamText(tracked, enabled) ?? 'none yet: git push -u ' + pushRemote(remotes) + ' ' + branch.name;
+  const push = copyableCommand(['git', 'push', '-u', ...positional(pushRemote(remotes)), branch.name]) ?? 'git push -u with the remote and this branch';
+  return upstreamText(tracked, enabled) ?? 'none yet: ' + push;
 }
 
 function pushRemote(remotes: readonly string[]): string {

@@ -59,7 +59,6 @@ function hostSuffix(entry: Account): string {
 async function add(args: Args): Promise<number> {
   const account = args.positional[0]!;
   const hostId = flagString(args, 'host') ?? 'github';
-  if (!flagBool(args, ASKED)) await warnLogin(account, hostId);
   // Only when something is left to ask, and someone is there to answer: the
   // suggestion is a network call.
   const complete = flagString(args, 'name') !== null && flagString(args, 'email') !== null;
@@ -69,6 +68,8 @@ async function add(args: Args): Promise<number> {
   if (name === null) return 1;
   const email = flagString(args, 'email') ?? await askFor('Commit email', suggested.email);
   if (email === null) return 1;
+  // After the questions: a cancelled one records nothing, so nothing says "recording it anyway".
+  if (!flagBool(args, ASKED)) await warnLogin(account, hostId);
   const written = await saveAccount(account, { name, email, host: hostId });
   if (!written.ok) { out.fail('accounts', out.printable(written.error)); return 1; }
 

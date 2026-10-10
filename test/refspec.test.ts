@@ -41,3 +41,14 @@ describe('trackingPrefixes', () => {
     assert.deepEqual(trackingPrefixes(specs), ['refs/remotes/origin/', 'refs/remotes/pin/main']);
   });
 });
+
+describe('a destination outside refs/remotes/', () => {
+  // `HEAD --not --remotes` counts only refs/remotes/*, so tracking refs elsewhere prove nothing (ADR-025).
+  test('maps nothing and lives nowhere: refs/upstream/*, and a mirror refspec onto refs/*', () => {
+    assert.equal(trackingRefOf(['+refs/heads/*:refs/upstream/origin/*'], 'refs/heads/main'), null);
+    assert.deepEqual(trackingPrefixes(['+refs/heads/*:refs/upstream/origin/*']), []);
+    assert.equal(trackingRefOf(['+refs/*:refs/*'], 'refs/heads/main'), null);
+    assert.deepEqual(trackingPrefixes(['+refs/*:refs/*']), []);
+    assert.deepEqual(trackingPrefixes(['+refs/heads/*:refs/remotes/mirror/*']), ['refs/remotes/mirror/']);
+  });
+});

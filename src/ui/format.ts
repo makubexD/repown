@@ -143,7 +143,7 @@ export function printable(text: string): string {
 /** No column: combining marks, format characters (zero-width, bidi), variation selectors. */
 const ZERO_WIDTH = /[\p{Mn}\p{Me}\p{Cf}\u{fe00}-\u{fe0f}]/u;
 /** Two columns: East Asian Wide and Fullwidth, and the emoji blocks. */
-const WIDE = /[\u{1100}-\u{115f}\u{2e80}-\u{303e}\u{3041}-\u{33ff}\u{3400}-\u{4dbf}\u{4e00}-\u{9fff}\u{a000}-\u{a4cf}\u{ac00}-\u{d7a3}\u{f900}-\u{faff}\u{fe30}-\u{fe4f}\u{ff00}-\u{ff60}\u{ffe0}-\u{ffe6}\u{1f300}-\u{1f64f}\u{1f900}-\u{1f9ff}\u{20000}-\u{3fffd}]/u;
+const WIDE = /[\u{1100}-\u{115f}\u{2e80}-\u{303e}\u{3041}-\u{33ff}\u{3400}-\u{4dbf}\u{4e00}-\u{9fff}\u{a000}-\u{a4cf}\u{ac00}-\u{d7a3}\u{f900}-\u{faff}\u{fe30}-\u{fe4f}\u{ff00}-\u{ff60}\u{ffe0}-\u{ffe6}\u{1f004}\u{1f0cf}\u{1f300}-\u{1f64f}\u{1f680}-\u{1f6ff}\u{1f900}-\u{1f9ff}\u{1fa70}-\u{1faff}\u{20000}-\u{3fffd}]/u;
 
 /** The columns `text` takes in a terminal, for wrapping: not its length in UTF-16 units. */
 export function displayWidth(text: string): number {

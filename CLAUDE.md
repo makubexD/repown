@@ -53,7 +53,7 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   never sees what the child prints, so no credential passes through repown. A spawn error
   such as ENOENT resolves as not installed, for both. At a timeout `run` ends the child (on
   Windows its whole tree, `taskkill /T /F`) and resolves 3 s later even if something the child
-  started still holds the pipes (ADR-026). A remote name in git's argv or in a printed command
+  started still holds the pipes; once the child exits, the same 3 s apply (ADR-026). A remote name in git's argv or in a printed command
   goes through `positional` (`src/core/shell.ts`), which puts `--` before a leading `-`.
 - **Every `git log` passes `--no-show-signature`.** `scan` runs it in repositories
   it merely found, and their config can set `gpg.program`.

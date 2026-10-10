@@ -33,3 +33,18 @@ test('a child that answers in time is untouched', async () => {
   assert.equal(result.stdout.trim(), 'ok');
   assert.equal(result.timedOut, undefined);
 });
+
+test('a child that exits while something it started holds the pipes is answered after a grace, not the whole timeout', async () => {
+  const started = Date.now();
+  const result = await run('git', ['-c', 'alias.leave=!sleep ' + LINGER_S + ' & exit 0', 'leave'], { cwd: tmpdir(), timeoutMs: 30_000 });
+  const elapsed = Date.now() - started;
+  assert.equal(result.code, 0);
+  assert.equal(result.timedOut, undefined);
+  assert.ok(elapsed < (LINGER_S - 2) * 1000, 'run() answered after ' + elapsed + ' ms');
+});
+
+test('a timed-out run never reads as succeeded, whatever the child last exited with', async () => {
+  const result = await run('git', ['-c', 'alias.linger=!sleep ' + LINGER_S, 'linger'], { cwd: tmpdir(), timeoutMs: 1000 });
+  assert.equal(result.timedOut, true);
+  assert.notEqual(result.code, 0);
+});

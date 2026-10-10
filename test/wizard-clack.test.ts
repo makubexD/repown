@@ -234,4 +234,5 @@ test('wrap measures display columns: a wide character takes two, a combining one
   assert.equal(displayWidth('漢字'), 4);
   assert.equal(displayWidth('é'), 1);
   assert.equal(displayWidth('octocat'), 7);
+  assert.equal(displayWidth('\u{1f680}'), 2, 'the transport emoji block too');
 });

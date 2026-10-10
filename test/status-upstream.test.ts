@@ -43,6 +43,13 @@ describe('repown status upstream', () => {
     assert.equal(upstreamLine(run.stdout), fieldLine('upstream', 'none yet: git push -u work main'));
   });
 
+  test('a remote named like an option is copied after --, as every printed command quotes it (ADR-025)', () => {
+    box.git('config', 'remote.-x.url', 'https://github.com/octocat/project.git');
+    guardOn(box);
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.equal(upstreamLine(run.stdout), fieldLine('upstream', 'none yet: git push -u "--" -x main'));
+  });
+
   test('S1: origin wins over another remote in the push -u form', () => {
     box.git('remote', 'add', 'work', 'https://github.com/octocat/other.git');
     pinGithub(box);

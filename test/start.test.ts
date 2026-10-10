@@ -155,7 +155,7 @@ describe('Git Bash on mintty without a console (#25)', () => {
       const plain = await captured(() => startDefault({ interactive: false, stdoutIsTerminal: false, git: new Git(box.dir) }));
       assert.equal(plain.choice, 'status', 'anywhere else, status as before');
       const ran = await captured(() => (picked.choice as () => Promise<number>)());
-      assert.match(ran.stderr, /mintty gives repown no console here, so it shows status: winpty repown opens the start screen/);
+      assert.match(ran.stderr, /mintty gives repown no console here, so it shows status: run winpty repown to be asked \(setup in a clone, the start screen outside one\)/);
     } finally {
       box.dispose();
     }

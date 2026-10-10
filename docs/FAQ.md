@@ -84,8 +84,8 @@ and exits 0. Without a terminal on stdin or stderr it prints status and exits 1
 
 **In Git Bash, `repown` only shows status, never the start screen or setup.** Git Bash's
 mintty without ConPTY hands programs pipes instead of a console, so nothing can ask there.
-repown says so on stderr (`mintty gives repown no console here, so it shows status: winpty
-repown opens the start screen`); run `winpty repown` (Git for Windows ships winpty), or use
+repown says so on stderr (`mintty gives repown no console here, so it shows status: run
+winpty repown to be asked (setup in a clone, the start screen outside one)`); run `winpty repown` (Git for Windows ships winpty), or use
 Windows Terminal. Commands with flags work either way.
 
 **Can I run it in CI or a script?** Yes, with flags instead of questions:

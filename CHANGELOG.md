@@ -9,15 +9,16 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ### Fixed
 - In Git Bash's mintty without ConPTY, bare `repown` showed status with no word on why the start
-  screen or setup never opened. It now notes on stderr that `winpty repown` opens the start
-  screen.
+  screen or setup never opened. It now notes on stderr that `winpty repown` asks: setup in a
+  clone, the start screen outside one.
 - Setup's and the start screen's text wrapped by character count, so a line holding
   Chinese, Japanese or Korean characters, or emoji, ran past the frame. It now wraps by the
   columns a terminal draws.
 - Typed `repown accounts add` recorded a login setup refuses, overwrote or doubled one already
   recorded, and never said whom this machine is signed in as, all silently. It now warns for each
   (`so setup would not take it (recording it anyway)`, `is already recorded: this replaces its
-  name and email`, `signed in as octo-work, not octocat: …`) and still records.
+  name and email`, `signed in as octo-work, not octocat: …`) and still records. A question cancelled
+  records nothing and warns of nothing.
 - `repown status` said nothing about a push destination owned by someone else when origin's
   own owner already had a warning, though the destination was another remote (a
   `pushRemote` fork): both are now said. Setup's fetch step says `prompts off: a sign-in that

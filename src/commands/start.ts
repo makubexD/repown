@@ -61,7 +61,7 @@ export function minttyWithoutConsole(env: NodeJS.ProcessEnv, platform: string, s
 }
 
 function statusInMintty(): Promise<number> {
-  out.noted('repown', 'mintty gives repown no console here, so it shows status: winpty repown opens the start screen');
+  out.noted('repown', 'mintty gives repown no console here, so it shows status: run winpty repown to be asked (setup in a clone, the start screen outside one)');
   return statusCommand.run(bareArgs());
 }
 

@@ -86,13 +86,15 @@ export function run(
     });
     const output = collect(child);
     const clock: Clock = { timedOut: false, timers: [] };
-    const settle = once((result: Omit<ExecResult, 'stdout' | 'stderr'>): void => {
+    const settle = once<Parameters<Settle>>((result): void => {
       for (const timer of clock.timers) clearTimeout(timer);
       resolve({ ...output(), ...result, ...(clock.timedOut ? { timedOut: true } : {}) });
     });
     clock.timers.push(setTimeout(() => expire(child, clock, settle), options.timeoutMs ?? DEFAULT_TIMEOUT_MS));
     child.on('error', (error: NodeJS.ErrnoException) => settle({ code: -1, spawnError: error }));
     child.on('close', (code) => settle({ code: code ?? -1 }));
+    // Exited, but something it started may still hold the pipes ('close' waits for every holder).
+    child.on('exit', () => clock.timers.push(setTimeout(() => abandon(child, clock, settle), GRACE_MS)));
 
     child.stdin.on('error', () => { /* the child may exit before stdin drains */ });
     child.stdin.end(options.input ?? '');
@@ -104,22 +106,24 @@ interface Clock {
   readonly timers: NodeJS.Timeout[];
 }
 
-/** How long a stopped child's pipes may stay open before repown stops waiting for them. */
+/** How long an exited or stopped child's pipes may stay open before repown stops waiting for them. */
 const GRACE_MS = 3_000;
 
-/**
- * At the timeout: stop the child and what it started, then stop waiting after a grace even
- * if a process it started still holds the pipes ('close' waits for every holder).
- */
-function expire(child: ChildProcessWithoutNullStreams, clock: Clock, settle: (result: Omit<ExecResult, 'stdout' | 'stderr'>) => void): void {
+type Settle = (result: Omit<ExecResult, 'stdout' | 'stderr'>) => void;
+
+/** At the timeout: stop the child and what it started, then stop waiting after a grace. */
+function expire(child: ChildProcessWithoutNullStreams, clock: Clock, settle: Settle): void {
   clock.timedOut = true;
   stopTree(child);
-  clock.timers.push(setTimeout(() => {
-    child.stdout.destroy();
-    child.stderr.destroy();
-    child.unref();
-    settle({ code: child.exitCode ?? -1 });
-  }, GRACE_MS));
+  clock.timers.push(setTimeout(() => abandon(child, clock, settle), GRACE_MS));
+}
+
+/** Stop waiting for the pipes. A timed-out run never reads as succeeded, whatever the child exited with. */
+function abandon(child: ChildProcessWithoutNullStreams, clock: Clock, settle: Settle): void {
+  child.stdout.destroy();
+  child.stderr.destroy();
+  child.unref();
+  settle({ code: clock.timedOut ? -1 : child.exitCode ?? -1 });
 }
 
 /**
@@ -136,6 +140,7 @@ function stopTree(child: ChildProcessWithoutNullStreams): void {
   const killer = spawn(join(root, 'System32', 'taskkill.exe'), ['/PID', String(child.pid), '/T', '/F'], {
     shell: false, windowsHide: true, stdio: 'ignore',
   });
+  killer.unref();
   const after = once(() => { child.kill(); });
   killer.on('error', after);
   killer.on('close', after);

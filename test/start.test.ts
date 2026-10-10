@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Git } from '../src/core/git.ts';
 import { registryPath } from '../src/core/registry.ts';
-import { chooseStart, startDefault } from '../src/commands/start.ts';
+import { chooseStart, minttyWithoutConsole, startDefault } from '../src/commands/start.ts';
 import { sandbox, type Sandbox } from './helpers.ts';
 
 describe('chooseStart', () => {
@@ -137,6 +137,31 @@ describe('startDefault', () => {
   });
 });
 
+describe('Git Bash on mintty without a console (#25)', () => {
+  test('is mintty on Windows with stdin not a terminal, and nothing else', () => {
+    assert.equal(minttyWithoutConsole({ TERM_PROGRAM: 'mintty' }, 'win32', false), true);
+    assert.equal(minttyWithoutConsole({ TERM_PROGRAM: 'mintty' }, 'win32', true), false, 'winpty or ConPTY gives it one');
+    assert.equal(minttyWithoutConsole({ TERM_PROGRAM: 'mintty' }, 'linux', false), false);
+    assert.equal(minttyWithoutConsole({ TERM_PROGRAM: 'vscode' }, 'win32', false), false);
+    assert.equal(minttyWithoutConsole({}, 'win32', false), false, 'a script or a pipe elsewhere');
+  });
+
+  test('there, bare repown still shows status, after a note that winpty repown opens the start screen', async () => {
+    const box = sandbox();
+    try {
+      const picked = await captured(() => startDefault({ interactive: false, stdoutIsTerminal: false, git: new Git(box.dir), mintty: true }));
+      assert.equal(typeof picked.choice, 'function');
+      assert.equal(picked.stderr, '', 'nothing until it runs');
+      const plain = await captured(() => startDefault({ interactive: false, stdoutIsTerminal: false, git: new Git(box.dir) }));
+      assert.equal(plain.choice, 'status', 'anywhere else, status as before');
+      const ran = await captured(() => (picked.choice as () => Promise<number>)());
+      assert.match(ran.stderr, /mintty gives repown no console here, so it shows status: winpty repown opens the start screen/);
+    } finally {
+      box.dispose();
+    }
+  });
+});
+
 function deps(box: Sandbox, interactive: boolean, stdoutIsTerminal: boolean): { interactive: boolean; stdoutIsTerminal: boolean; git: Git } {
   return { interactive, stdoutIsTerminal, git: new Git(box.dir) };
 }
@@ -153,7 +178,7 @@ function breakRegistry(): void {
   writeFileSync(path, '{');
 }
 
-async function captured(run: () => Promise<string | (() => Promise<number>)>): Promise<{ choice: string | (() => Promise<number>); stderr: string }> {
+async function captured<T>(run: () => Promise<T>): Promise<{ choice: T; stderr: string }> {
   const chunks: string[] = [];
   const write = process.stderr.write.bind(process.stderr);
   process.stderr.write = ((chunk: string | Uint8Array) => {

@@ -8,6 +8,9 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 ## [Unreleased]
 
 ### Fixed
+- In Git Bash's mintty without ConPTY, bare `repown` showed status with no word on why the start
+  screen or setup never opened. It now notes on stderr that `winpty repown` opens the start
+  screen.
 - Setup's and the start screen's text wrapped by character count, so a line holding
   Chinese, Japanese or Korean characters, or emoji, ran past the frame. It now wraps by the
   columns a terminal draws.

@@ -82,6 +82,12 @@ and exits 0. Without a terminal on stdin or stderr it prints status and exits 1
 ([card 14](HOW-IT-WORKS.md#14-outside-a-clone),
 [ADR-024](decisions/ADR-024-bare-repown-outside-a-clone-opens-a-start-screen.md)).
 
+**In Git Bash, `repown` only shows status, never the start screen or setup.** Git Bash's
+mintty without ConPTY hands programs pipes instead of a console, so nothing can ask there.
+repown says so on stderr (`mintty gives repown no console here, so it shows status: winpty
+repown opens the start screen`); run `winpty repown` (Git for Windows ships winpty), or use
+Windows Terminal. Commands with flags work either way.
+
 **Can I run it in CI or a script?** Yes, with flags instead of questions:
 [Scripts and CI](CONFIGURATION.md#scripts-and-ci).
 

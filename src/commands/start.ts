@@ -10,9 +10,10 @@
 
 import { Git } from '../core/git.ts';
 import { inspectRepo } from '../core/inspect.ts';
-import { identityProblems } from './status.ts';
+import statusCommand, { identityProblems } from './status.ts';
 import type { Args } from '../ui/args.ts';
 import { interactive } from '../ui/prompt.ts';
+import * as out from '../ui/format.ts';
 
 export const SETUP_NOTE =
   'This clone isn\'t set up yet, so repown is starting setup (repown status shows its settings).';
@@ -23,6 +24,8 @@ interface StartDeps {
   readonly interactive: boolean;
   readonly stdoutIsTerminal: boolean;
   readonly git: Git;
+  /** Git Bash's mintty without a console (minttyWithoutConsole). */
+  readonly mintty?: boolean;
 }
 
 type StartChoice = 'setup' | 'status' | 'help' | 'home';
@@ -45,7 +48,21 @@ export async function startDefault(deps: StartDeps = realDeps()): Promise<StartR
   const pick = await pickStart(deps);
   if (pick.choice === 'setup') return () => startSetup(pick.pinned);
   if (pick.choice === 'home') return startHome;
+  if (pick.choice === 'status' && !deps.interactive && deps.mintty) return statusInMintty;
   return pick.choice;
+}
+
+/**
+ * mintty without ConPTY hands its programs pipes, not a console, so nothing can ask there and
+ * bare repown shows status; winpty gives it a console (Git for Windows ships it).
+ */
+export function minttyWithoutConsole(env: NodeJS.ProcessEnv, platform: string, stdinIsTerminal: boolean): boolean {
+  return platform === 'win32' && !stdinIsTerminal && env['TERM_PROGRAM'] === 'mintty';
+}
+
+function statusInMintty(): Promise<number> {
+  out.noted('repown', 'mintty gives repown no console here, so it shows status: winpty repown opens the start screen');
+  return statusCommand.run(bareArgs());
 }
 
 function startHome(): Promise<number> {
@@ -76,5 +93,8 @@ function outsideClone(stdoutIsTerminal: boolean): StartChoice {
 }
 
 function realDeps(): StartDeps {
-  return { interactive: interactive(), stdoutIsTerminal: process.stdout.isTTY === true, git: new Git(process.cwd()) };
+  return {
+    interactive: interactive(), stdoutIsTerminal: process.stdout.isTTY === true, git: new Git(process.cwd()),
+    mintty: minttyWithoutConsole(process.env, process.platform, process.stdin.isTTY === true),
+  };
 }

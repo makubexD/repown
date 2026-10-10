@@ -8,6 +8,9 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 ## [Unreleased]
 
 ### Fixed
+- Setup's and the start screen's text wrapped by character count, so a line holding
+  Chinese, Japanese or Korean characters, or emoji, ran past the frame. It now wraps by the
+  columns a terminal draws.
 - Typed `repown accounts add` recorded a login setup refuses, overwrote or doubled one already
   recorded, and never said whom this machine is signed in as, all silently. It now warns for each
   (`so setup would not take it (recording it anyway)`, `is already recorded: this replaces its

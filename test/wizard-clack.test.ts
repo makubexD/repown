@@ -10,6 +10,7 @@ import { PassThrough } from 'node:stream';
 import { clackPrompter } from '../src/wizard/clack.ts';
 import { BACK, CANCEL, type Drawn, type Prompter } from '../src/wizard/engine.ts';
 import { COMMAND_MARK, labelOf, stepConfirmLines, wrap } from '../src/wizard/review-text.ts';
+import { displayWidth } from '../src/ui/format.ts';
 
 const ENTER = '\r';
 const DOWN = '\x1b[B';
@@ -225,4 +226,12 @@ test('a detail is drawn in its question\'s block, under the hint and before "typ
   assert.ok(at('shown on every commit') < at('GitHub shows no name'), plain);
   assert.ok(at('GitHub shows no name') < at('type < to go back'), plain);
   assert.doesNotMatch(plain, /[●•]\s+GitHub shows no name/, 'not a log line of its own');
+});
+
+test('wrap measures display columns: a wide character takes two, a combining one none', () => {
+  assert.deepEqual(wrap('漢字 漢字 漢字', 8), ['漢字', '漢字', '漢字'], 'each word is 4 columns wide');
+  assert.deepEqual(wrap('Café au lait', 12), ['Café au lait'], 'the accent adds no column');
+  assert.equal(displayWidth('漢字'), 4);
+  assert.equal(displayWidth('é'), 1);
+  assert.equal(displayWidth('octocat'), 7);
 });

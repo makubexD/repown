@@ -8,6 +8,10 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 ## [Unreleased]
 
 ### Fixed
+- `repown status` said nothing about a push destination owned by someone else when origin's
+  own owner already had a warning, though the destination was another remote (a
+  `pushRemote` fork): both are now said. Setup's fetch step says `prompts off: a sign-in that
+  would ask fails instead`, as it runs.
 - A timed-out `git fetch`, `ls-remote` or `reauthor` rebase was reported only when it finished
   on its own: on Windows the `git` on PATH is often a wrapper whose real git kept running (and
   holding the clone's locks) after repown killed the wrapper. A timeout now ends the whole

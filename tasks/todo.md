@@ -1,6 +1,6 @@
 # Deferred sweep
 
-Status: Phase 4, task 11 built; awaiting the suite, then tasks 12-16 run back to back.
+Status: Phase 4, task 12 built; tasks 13-16 run back to back.
 
 - [x] 1. Plan: SPEC.md and this file. Docs: none.
 - [x] 2. ⚠ #6 (+#12c) unpushed advice: refspec-based `untracked` kind, tracking refs where refspecs write; #12b recorded as won't-fix - Docs: ADR-025 note, HOW-IT-WORKS unpushed card, CHANGELOG
@@ -13,7 +13,7 @@ Status: Phase 4, task 11 built; awaiting the suite, then tasks 12-16 run back to
 - [x] 9. #18 lazy global identity on the start screen - Docs: none (internal)
 - [x] 10. shellWord/copyableCommand to src/core/shell.ts - Docs: CLAUDE.md
 - [x] 11. ⚠ #10 exec kills the process tree; `-remote` refused - Docs: CLAUDE.md, CHANGELOG
-- [ ] 12. #12d status owner blocker; #12e review fetch wording - Docs: HOW-IT-WORKS status card, CHANGELOG
+- [x] 12. #12d status owner blocker; #12e review fetch wording - Docs: HOW-IT-WORKS status card, CHANGELOG
 - [ ] 13. #23 + WIZ-10 typed accounts add warnings - Docs: HOW-IT-WORKS card 2, CHANGELOG
 - [ ] 14. #24 wrap() by display width - Docs: CHANGELOG
 - [ ] 15. #25 mintty winpty note - Docs: FAQ, CHANGELOG

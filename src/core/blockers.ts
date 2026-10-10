@@ -35,6 +35,8 @@ export interface Blocker {
   readonly lines: readonly string[];
   /** False: said, but it stops nothing, since only the guard would refuse it and the guard is off. */
   readonly blocks: boolean;
+  /** The destination's owner, on an `owner` blocker. */
+  readonly owner?: string;
 }
 
 const TOKENS = ['GH_TOKEN', 'GITHUB_TOKEN'];
@@ -131,6 +133,7 @@ function ownerBlocker(destination: PushDestination | null, branch: string, choic
   const guard = choice.guarded ? 'the guard will refuse it' : 'the guard is off, so it pushes there anyway';
   return [{
     kind: 'owner',
+    owner: destination.owner,
     summary: 'the push goes to "' + printable(destination.owner) + '"',
     lines: [branch + ' pushes to ' + where + ', owned by "' + printable(destination.owner) + '", not ' + choice.account +
       ': ' + guard + '. If you belong there: ' + (allowOwnerCommand(destination.owner) ?? ALLOW_OWNER_BY_HAND)],

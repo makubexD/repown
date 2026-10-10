@@ -211,10 +211,10 @@ async function pushBlockers(repo: RepoState, account: string): Promise<Blocker[]
   return blockers(facts, { email: repo.identity.email ?? '', account, autoUpstream: true, guarded });
 }
 
-/** First among the warnings. An owner the origin warning names is not said twice. */
-function printBlockers(found: readonly Blocker[], ownerWarned: boolean): void {
+/** First among the warnings. The owner the origin warning names is not said twice; another one is. */
+function printBlockers(found: readonly Blocker[], warnedOwner: string | null): void {
   for (const blocker of found) {
-    if (blocker.kind === 'owner' && ownerWarned) continue;
+    if (blocker.kind === 'owner' && blocker.owner?.toLowerCase() === warnedOwner?.toLowerCase()) continue;
     const [first = '', ...rest] = blocker.lines;
     out.warn('push', printable(first));
     for (const line of rest) out.detail(printable(line));
@@ -301,7 +301,7 @@ export function identityProblems(repo: RepoState): Problem[] {
 async function reportWarnings(repo: RepoState, auth: AuthState, registry: LoadedRegistry, found: readonly Blocker[]): Promise<readonly string[]> {
   const tags = ['origin', 'account', 'guard', 'submodule', 'helper', 'gh'] as const;
   const foreignOwner = await originForeign(repo);
-  printBlockers(found, foreignOwner);
+  printBlockers(found, foreignOwner ? repo.owner : null);
   const fired = [
     foreignOwner && ownerWarning(repo),
     accountWarning(repo, registry),

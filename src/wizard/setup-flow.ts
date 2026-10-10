@@ -750,7 +750,7 @@ function whatOf(argv: readonly string[], answers: Answers, ctx: SetupContext): s
 function gitWhat(argv: readonly string[], ctx: SetupContext): string {
   const step = gitStepOf(argv);
   if (step === 'repoint') return 'Push through ' + argv.at(-1) + ' instead of the URL in ' + argv.at(-2) + ' (this clone only)';
-  if (step === 'fetch') return 'Fetch ' + argv.at(-1) + ', so repown can tell which commits it already has';
+  if (step === 'fetch') return 'Fetch ' + argv.at(-1) + ', so repown can tell which commits it already has (prompts off: a sign-in that would ask fails instead)';
   if (step === 'upstream') return 'Push branches without -u: the first push sets the upstream (this clone only)';
   return 'Let this clone push to ' + ctx.owner + '\'s repositories';
 }

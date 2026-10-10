@@ -149,7 +149,9 @@ problem".
   when it finished on its own. Now, on Windows, the whole tree is ended with
   `taskkill /PID <pid> /T /F` while the child still runs (repown holds its handle, so the PID
   is still its own), and the child itself is killed after; on POSIX the child gets SIGTERM as
-  before. Either way `run` stops waiting 3 s later, with the result marked timed out. A soft
+  before. Either way `run` stops waiting 3 s later, with the result marked timed out and never exit
+  0. A child that exits in time while something it started still holds the pipes gets the
+  same 3 s, then resolves with its own exit code. A soft
   `taskkill` was measured as useless here: a console process can only be ended forcefully.
   The fetch and `ls-remote` calls also put `--` before the remote (ADR-025's 2026-10-10 note).
   For: a timed-out command is reported within seconds, and on Windows nothing it started
@@ -157,3 +159,7 @@ problem".
   stays for the person to remove, as the rebase failure message already says how to finish;
   on POSIX what git started (an `--exec` shell, ssh) can outlive the SIGTERM, since making the
   child a process-group leader would keep Ctrl-C from reaching it.
+- **2026-10-10, not changed: setup stays offline after its one fetch.** A teammate's commit on
+  a remote this clone never fetched is not seen, so setup can say done while the next push is
+  non-fast-forward. Finding it needs a network call per remote; git's own refusal at push
+  time already names it.

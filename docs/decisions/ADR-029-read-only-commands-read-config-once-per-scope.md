@@ -73,3 +73,7 @@ was bound by process starts: about 22,800 git spawns per run, 13,500 of them `gi
   cwd. For: the same answers from one process instead of eight. Against: a snapshot made
   inside each call, so a caller reading the destination twice lists config twice; never one
   kept across a write.
+- **2026-10-10, not changed: writers still write one key per `git config` call.** `use` and
+  setup's run set each key in its own process, and URL-match and origin reads still ask git
+  per key: git has no multi-key config write, and those reads follow rules a snapshot does not
+  copy.

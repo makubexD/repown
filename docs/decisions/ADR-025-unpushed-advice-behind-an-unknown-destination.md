@@ -92,6 +92,7 @@ remote, and a `git pull <url>`. The file is also kept per worktree. Each case br
   fetches into `refs/remotes/mirror/` was "never fetched"), minus any other remote's namespace
   nested inside (`refs/remotes/origin/x/` for a remote `origin/x`). A branch of origin's own
   named `x/...` is then not counted either: from refs alone the two can't be told apart.
+  Only refspecs that write under `refs/remotes/` count: `HEAD --not --remotes` sees no other.
   For: the plain rebase is offered only where a tracking ref would show what is published;
   asking git (`%(push)`) was measured and rejected: it is empty for any branch with no
   upstream under the default `push.default=simple`, so every new branch would have warned.
@@ -108,3 +109,7 @@ remote, and a `git pull <url>`. The file is also kept per worktree. Each case br
   calls too. For: the advice is complete for every remote, and a name like
   `--upload-pack=<cmd>` can only be read as a remote. Against: an odd-looking `"--"` in a
   command most people never see.
+- **2026-10-10, not changed: two shells a printed command can't serve.** nushell reads `\`
+  escapes inside double quotes, and Git Bash collapses `\\` in the arguments it hands a
+  native program (`node.exe`). Neither is in `test/paste.test.ts`'s set; `shellWord` stays
+  bare, double-quoted or null for the shells that are.

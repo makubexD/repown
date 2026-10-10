@@ -331,6 +331,15 @@ describe('repown use when the branch pushes where no tracking ref reaches (ADR-0
     assert.doesNotMatch(run.stderr, /octocat\/fork/);
   });
 
+  test('a pushInsteadOf that sends the push elsewhere is unknown too, and the URL is not printed (#9)', async () => {
+    publishedThenLocal(box);
+    box.git('fetch', '-q', 'origin');
+    box.git('config', 'url.https://github.com/octocat/fork.git.pushInsteadOf', remoteDir(box));
+    const run = await runUse(box);
+    assert.match(run.stderr, new RegExp(escapeRe('origin pushes to another URL than it fetches from, so some of these may already be there' + GUARD)));
+    assert.doesNotMatch(run.stderr, /octocat\/fork/);
+  });
+
   test('a branch remote that names no configured remote says so, not "a URL"', async () => {
     publishedThenLocal(box);
     box.git('config', 'branch.main.remote', 'orign');

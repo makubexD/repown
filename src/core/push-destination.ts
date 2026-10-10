@@ -119,11 +119,15 @@ async function destinationBranch(git: Git, remote: Named): Promise<string> {
   return merge ? merge.replace(/^refs\/heads\//, '') : remote.branch;
 }
 
-/** Tracking refs come from the fetch URL; a different pushurl is somewhere never fetched. */
+/**
+ * Tracking refs come from the first fetch URL; any push URL elsewhere (a pushurl, a second
+ * url, a pushInsteadOf rewrite) is somewhere never fetched. A failed read is elsewhere.
+ */
 async function pushesElsewhere(git: Git, remote: string): Promise<boolean> {
-  const push = await git.getConfig('remote.' + remote + '.pushurl');
-  if (!push) return false;
-  return urlKey(push) !== urlKey(await git.getConfig('remote.' + remote + '.url') ?? '');
+  const [push, fetch] = await Promise.all([git.remoteUrls(remote, true), git.remoteUrls(remote, false)]);
+  if (!push.ok || !fetch.ok) return true;
+  const fetched = urlKey(fetch.value[0] ?? '');
+  return push.value.some((url) => urlKey(url) !== fetched);
 }
 
 /** A URL or a path, as git would read it where a remote name was expected. */

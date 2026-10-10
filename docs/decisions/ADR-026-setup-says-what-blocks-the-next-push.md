@@ -2,7 +2,7 @@
 
 **Status:** Accepted. Supersedes in part [ADR-013](ADR-013-deliberately-not-done.md) (rewriting unpushed commits, only when asked). Amends [ADR-022](ADR-022-set-up-clone-opens-on-settled-screen.md) (a
 settled clone with a blocker is not "nothing needs to change"),
-[ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses), [ADR-020](ADR-020-setup-leaves-clone-ready.md) (done only without blockers) and [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md) (`WARN push` first; status's closing line).
+[ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses), [ADR-020](ADR-020-setup-leaves-clone-ready.md) (done only without blockers) and [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md) (`WARN push` first; status's closing line). Amended by its 2026-10-09 note: reauthor leaves alone what the destination's branches and tags reach.
 
 ## Context
 
@@ -112,3 +112,22 @@ problem".
   the URL the pre-push hook hands the guard, instead of the raw `remote.<r>.pushurl`/`url`. A
   push straight to a URL is read through `ls-remote --get-url` (`insteadOf` only). Credentials
   written into a rewritten URL are still not read (the gap listed above).
+- **2026-10-09, reauthor asks the destination what it has.** `--not --remotes` only sees
+  tracking refs, so a clone that fetches only some branches (`--single-branch`, `--depth`, a
+  negative refspec), or a pushed tag, hid commits the destination already had, and reauthor
+  rewrote them. After its fetch, reauthor now lists the destination's branches and tags
+  (`git ls-remote --heads --tags`), peels each to a commit here (`cat-file`, lazy fetching off),
+  and leaves out what they reach, on stdin as `^<sha>` lines. A branch tip this clone lacks is
+  a refusal (`<remote> has commits this clone has not fetched (…)`), with no command: a
+  one-off fetch of every branch would leave refs no `fetch --prune` removes. A tag on a commit
+  this clone lacks is skipped, since tags are fetched only when they follow a fetched branch.
+  The `untracked` destination (ADR-025) is accepted on these terms. A destination whose push
+  URLs, after `pushInsteadOf` and with every `url`, differ from its fetch URL is refused, and
+  the advice treats it as unknown.
+  For: the rewrite skips everything the destination's branches and tags reach, which is what
+  the next push would otherwise collide with. Against: one more network call, and only heads
+  and tags are listed (Gerrit's `refs/changes/*` and other namespaces are not: listing every
+  ref would make GitHub's `refs/pull/*` a refusal everywhere). Other remotes still count only
+  through their tracking refs. A tag on a commit this clone lacks could in principle sit on top
+  of these commits; that case is accepted. The read-only advice stays offline (ADR-025), so it
+  can offer a rebase reauthor then narrows or refuses.

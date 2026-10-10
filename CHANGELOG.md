@@ -15,6 +15,13 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   it out), so some of these may already be there` and offer the rebase only for the case where
   origin has none of them. Tracking refs are also looked for where the remote's own refspecs
   write them, so a remote fetching into another namespace no longer reads as never fetched.
+- `repown reauthor` rewrote commits the destination already had when the clone fetches only
+  some branches or a tag had been pushed, so the next push was refused as non-fast-forward. It
+  now asks the destination which branches and tags it has, leaves alone what they reach, and
+  refuses when a branch there was never fetched here: `origin has commits this clone has not
+  fetched (…)`. It now runs in a single-branch clone, where it refused before. A push that
+  `pushInsteadOf` or a second `url` sends elsewhere is refused, and `repown use`, setup and
+  status make their rebase conditional for it, as they already did for a `pushurl`.
 - `repown use` no longer says `No stored credential … the first push signs in` or `gh is still
   the git credential helper, so this pin is not honoured` in a clone where it pins no credential
   (an SSH remote, Azure DevOps, another host): pushes there use that host's own sign-in. Setup

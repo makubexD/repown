@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { blockers, type PushFacts } from '../src/core/blockers.ts';
 import { ok, err } from '../src/core/result.ts';
+import { allowOwnerCommand } from '../src/core/guard/check.ts';
 
 const EMAIL = 'octocat@example.invalid';
 const CHOICE = { email: EMAIL, account: 'octocat', autoUpstream: false, guarded: true };
@@ -16,6 +17,7 @@ function facts(overrides: Partial<PushFacts> = {}): PushFacts {
     elsewhere: ok([]),
     signin: null,
     repoint: null,
+    laterUrls: null,
     destination: { remote: 'origin', owner: 'octocat', allowed: [] },
     divergence: ok(null),
     detached: false,
@@ -121,6 +123,29 @@ test('a sign-in git adds by rewriting the push URL names the remote, never a rul
   assert.equal(first!.summary, 'the branch pushes with its own sign-in');
   assert.equal(first!.lines[0], "origin's push URL, as git resolves it, carries its own sign-in, so pushes from main use it, not octocat");
   assert.equal(first!.blocks, true);
+});
+
+test('a later push URL the guard refuses is named by owner and host, with the command that allows it', () => {
+  const laterUrls = { remote: 'origin', owners: [{ owner: 'octo-org', host: 'GitHub' }], allowed: [] };
+  const [first] = blockers(facts({ laterUrls }), CHOICE);
+  assert.equal(first!.kind, 'pushurls');
+  assert.equal(first!.summary, 'origin also pushes to "octo-org"');
+  assert.equal(first!.lines[0], 'origin also pushes to "octo-org" (GitHub), not octocat: the guard will refuse that URL ' +
+    'while the first takes the push. If you belong there: ' + allowOwnerCommand('octo-org'));
+  assert.equal(first!.blocks, true);
+  const off = blockers(facts({ laterUrls }), { ...CHOICE, guarded: false });
+  assert.match(off[0]!.lines[0]!, /the guard is off, so the push goes there too\./);
+  assert.equal(off[0]!.blocks, false);
+});
+
+test('no later-URL line when every owner is allowed, or when the first URL is already refused', () => {
+  const allowed = { remote: 'origin', owners: [{ owner: 'Octo-Org', host: 'GitHub' }], allowed: ['octo-org'] };
+  assert.deepEqual(blockers(facts({ laterUrls: allowed }), CHOICE), []);
+  const mine = { remote: 'origin', owners: [{ owner: 'OctoCat', host: 'GitHub' }], allowed: [] };
+  assert.deepEqual(blockers(facts({ laterUrls: mine }), CHOICE), []);
+  const laterUrls = { remote: 'origin', owners: [{ owner: 'octo-work', host: 'GitHub' }], allowed: [] };
+  const both = blockers(facts({ laterUrls, destination: { remote: 'origin', owner: 'octo-org', allowed: [] } }), CHOICE);
+  assert.deepEqual(both.map((blocker) => blocker.kind), ['owner'], 'the owner line already stops the push');
 });
 
 test('blockers come in a fixed order: commits, fork commits, sign-in, variables, config, owner, divergence, upstream', () => {

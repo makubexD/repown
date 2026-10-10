@@ -6,14 +6,14 @@ remain where they describe less than the guard (or git) will act on. Close them 
 changing what the guard refuses (ADR-011): only what is reported changes.
 
 ## Items
-1. **Every push URL's owner.** `inspectRepo`'s `pushSide` (`src/core/inspect.ts:111`) and
-   push-state's destination (`src/core/push-state.ts:113`, `remotePushUrl`) take the first
-   URL. Git runs the pre-push hook once per push URL, so the guard checks each. With two
-   `pushurl`s owned by different accounts, status/setup name only the first and miss a
-   refusal the second push will meet.
-   Done: status and setup name every distinct owner among origin's push URLs (from
-   `remoteUrls(remote, true)`); a foreign owner on any one is the same blocker it is today
-   on the first. JSON fields unchanged (ADR-014); text only.
+1. **Several push URLs.** Git runs the pre-push hook once per push URL, so a push can land
+   on one URL and be refused on another, and the tracking ref then moves as if all landed.
+   repown's reports read only the first URL's owner.
+   Done (narrowed 2026-10-10 after the doubt pass; full multi-owner reporting rejected as
+   too wide): when origin pushes to more than one URL and they don't all share one readable
+   owner, setup and status show one blocker naming each URL's owner and host (never the URL),
+   saying the guard checks each and a push can half-land, and to keep one push URL. The
+   first-owner logic, allow flows and JSON stay as they are.
 2. **pushInsteadOf on a bare-URL push.** `bareTargetUrl` uses `rewrittenUrl`
    (`ls-remote --get-url`), which applies only `insteadOf`. Git, for a push, applies the
    longest matching `url.<base>.pushInsteadOf` first and `insteadOf` only when none matches.
@@ -39,5 +39,4 @@ prefix, push rules shadow fetch rules). Measured before it's relied on; if git's
 can't be matched, the bare-URL destination becomes "unknown" (conditional advice) instead.
 
 ## Decided
-- Item 1: when push URLs disagree, setup's review and status show one line naming every
-  owner, foreign ones marked (2026-10-10).
+- Item 1: one line naming every push URL's owner and host (2026-10-10), as its own blocker.

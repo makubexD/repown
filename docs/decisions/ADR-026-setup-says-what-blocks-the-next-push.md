@@ -2,7 +2,7 @@
 
 **Status:** Accepted. Supersedes in part [ADR-013](ADR-013-deliberately-not-done.md) (rewriting unpushed commits, only when asked). Amends [ADR-022](ADR-022-set-up-clone-opens-on-settled-screen.md) (a
 settled clone with a blocker is not "nothing needs to change"),
-[ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses), [ADR-020](ADR-020-setup-leaves-clone-ready.md) (done only without blockers) and [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md) (`WARN push` first; status's closing line). Amended by its 2026-10-09 note: reauthor leaves alone what the destination's branches and tags reach; by its 2026-10-10 notes: a sparse checkout's left-out files are no hidden change, a timeout stops what git started, and a sign-in is judged on the URLs git pushes with.
+[ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses), [ADR-020](ADR-020-setup-leaves-clone-ready.md) (done only without blockers) and [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md) (`WARN push` first; status's closing line). Amended by its 2026-10-09 note: reauthor leaves alone what the destination's branches and tags reach; by its 2026-10-10 notes: a sparse checkout's left-out files are no hidden change, a timeout stops what git started, a sign-in is judged on the URLs git pushes with, and a later push URL owned by someone else is a blocker.
 
 ## Context
 
@@ -176,3 +176,16 @@ problem".
   For: the line agrees with what git sends, rewrites and git 2.46's empty-value reset
   included, without repown copying git's matching rules. Against: a rewritten sign-in gets no
   key to fix by hand; `git config --show-origin --get-regexp '^url\.'` lists the rules.
+- **2026-10-10, a later push URL owned by someone else is a blocker.** Git runs the pre-push
+  hook once per push URL, so with two `pushurl`s (or two `url`s and none) the guard can refuse
+  one while the other takes the push; the tracking ref then moves as if all of it landed.
+  Setup and status read only the first URL's owner. Now a `pushurls` blocker, right after the
+  owner one, names each later URL's owner and host (never the URL) that the chosen account and
+  `repown.allowOwner` don't cover, with the command that allows it, and blocks while the guard
+  is on. URLs come from `git remote get-url --push --all`, deduplicated, or from the
+  configured values when git can't list them. A URL with no owner (a local path) is skipped,
+  as the guard skips it. When the first URL is refused itself, the owner line speaks alone.
+  For: the half-landed push is said before it happens, judged as the owner line judges the
+  first URL. Against: the first-owner logic elsewhere (status's `origin` row, `use`'s warning,
+  setup's allow question, scan's JSON) still names one owner: reporting every owner there was
+  measured as a much wider change and rejected.

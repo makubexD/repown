@@ -11,7 +11,7 @@ import { unpushedLines, foreignCount, type UnpushedCommit, type UnpushedFact } f
 import { ALLOW_OWNER_BY_HAND, allowOwnerCommand } from './guard/check.ts';
 import { copyableCommand, positional } from './shell.ts';
 import { printable } from '../ui/format.ts';
-import type { Divergence, PushDestination, PushFacts } from './push-state.ts';
+import type { Divergence, LaterUrls, PushDestination, PushFacts } from './push-state.ts';
 
 export type { PushFacts } from './push-state.ts';
 
@@ -25,7 +25,7 @@ export interface PushChoice {
 }
 
 /** Which fact it is, so a report that already shows one of them its own way can leave it out. */
-export type BlockerKind = 'unpushed' | 'elsewhere' | 'signin' | 'env' | 'config' | 'owner' | 'divergence' | 'upstream' | 'detached';
+export type BlockerKind = 'unpushed' | 'elsewhere' | 'signin' | 'env' | 'config' | 'owner' | 'pushurls' | 'divergence' | 'upstream' | 'detached';
 
 export interface Blocker {
   readonly kind: BlockerKind;
@@ -50,6 +50,7 @@ export function blockers(facts: PushFacts, choice: PushChoice): Blocker[] {
     ...facts.env.map((name) => envBlocker(name, choice)),
     ...facts.configOverrides.map((key) => configBlocker(key, choice.email)),
     ...ownerBlocker(facts.destination, branch, choice),
+    ...laterUrlsBlocker(facts.laterUrls, facts.destination, choice),
     ...divergenceBlocker(facts.divergence, branch),
     ...upstreamBlocker(facts, branch, choice.autoUpstream),
     ...(facts.detached ? [detachedBlocker()] : []),
@@ -128,9 +129,7 @@ function envBlocker(name: string, choice: PushChoice): Blocker {
 }
 
 function ownerBlocker(destination: PushDestination | null, branch: string, choice: PushChoice): Blocker[] {
-  if (!destination) return [];
-  const owner = destination.owner.toLowerCase();
-  if (owner === choice.account.toLowerCase() || destination.allowed.includes(owner)) return [];
+  if (!destination || allows(destination.owner, destination.allowed, choice.account)) return [];
   const where = destination.remote ?? 'its URL';
   const guard = choice.guarded ? 'the guard will refuse it' : 'the guard is off, so it pushes there anyway';
   return [{
@@ -141,6 +140,30 @@ function ownerBlocker(destination: PushDestination | null, branch: string, choic
       ': ' + guard + '. If you belong there: ' + (allowOwnerCommand(destination.owner) ?? ALLOW_OWNER_BY_HAND)],
     blocks: choice.guarded,
   }];
+}
+
+/**
+ * A later push URL the guard refuses while the first takes the push: the push half-lands.
+ * Judged as ownerBlocker judges the first URL, which speaks alone when it is refused itself.
+ */
+function laterUrlsBlocker(later: LaterUrls | null, first: PushDestination | null, choice: PushChoice): Blocker[] {
+  if (!later || (first && !allows(first.owner, first.allowed, choice.account))) return [];
+  const refused = later.owners.filter(({ owner }) => !allows(owner, later.allowed, choice.account));
+  if (refused.length === 0) return [];
+  const names = refused.map(({ owner, host }) => '"' + printable(owner) + '" (' + host + ')').join(', ');
+  const guard = choice.guarded ? 'the guard will refuse that URL while the first takes the push' : 'the guard is off, so the push goes there too';
+  const fix = refused.length === 1 ? allowOwnerCommand(refused[0]!.owner) ?? ALLOW_OWNER_BY_HAND : ALLOW_OWNER_BY_HAND;
+  const remote = printable(later.remote);
+  return [{
+    kind: 'pushurls',
+    summary: remote + ' also pushes to "' + printable(refused[0]!.owner) + '"',
+    lines: [remote + ' also pushes to ' + names + ', not ' + choice.account + ': ' + guard + '. If you belong there: ' + fix],
+    blocks: choice.guarded,
+  }];
+}
+
+function allows(owner: string, allowed: readonly string[], account: string): boolean {
+  return owner.toLowerCase() === account.toLowerCase() || allowed.includes(owner.toLowerCase());
 }
 
 function divergenceBlocker(divergence: Result<Divergence | null>, branch: string): Blocker[] {

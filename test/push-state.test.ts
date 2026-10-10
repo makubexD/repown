@@ -92,6 +92,21 @@ describe('readPushFacts', () => {
     assert.deepEqual((await read()).signin, { key: 'remote.origin.url' });
   });
 
+  test('a remote that pushes to several URLs: the owners after the first, never a URL', async () => {
+    commit('first');
+    box.git('remote', 'add', 'origin', 'https://github.com/octocat/hello.git');
+    assert.equal((await read()).laterUrls, null, 'one URL');
+    box.git('config', '--add', 'remote.origin.pushurl', 'https://github.com/octocat/hello.git');
+    box.git('config', '--add', 'remote.origin.pushurl', 'https://github.com/octocat/hello.git');
+    assert.equal((await read()).laterUrls, null, 'the same URL twice is one destination');
+    box.git('config', '--add', 'remote.origin.pushurl', 'https://github.com/octo-org/hello.git');
+    box.git('config', '--add', 'remote.origin.pushurl', bare('mirror'));
+    const expected = { remote: 'origin', owners: [{ owner: 'octo-org', host: 'GitHub' }], allowed: [] };
+    assert.deepEqual((await read()).laterUrls, expected, 'a local path has no owner to check');
+    box.git('config', 'repown.allowOwner', 'Octo-Org');
+    assert.deepEqual((await read()).laterUrls, { ...expected, allowed: ['octo-org'] });
+  });
+
   test('a URL where a remote would do: the key to repoint and that remote, never the URL', async () => {
     commit('first');
     box.git('remote', 'add', 'origin', 'https://github.com/octocat/hello.git');

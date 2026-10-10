@@ -1,6 +1,6 @@
 # Push-URL gaps
 
-Status: Phase 4, task 2 done; next task 3 doubt pass.
+Status: Phase 4, task 3 done; next task 4 doubt pass.
 
 - [x] 1. Plan: SPEC.md and this file. Docs: none.
 - [x] 2. ⚠ A sign-in carried by a rewritten push URL is a blocker (item 3)
@@ -10,12 +10,13 @@ Status: Phase 4, task 2 done; next task 3 doubt pass.
     named (its key holds the token).
   - Where: `signinOf`/`carriesSecret` in `src/core/push-state.ts`, over `remoteUrls(remote, true)`.
   - Docs: ADR-026 note, CHANGELOG (no user doc lists sign-in sources).
-- [ ] 3. ⚠ Every push URL's owner is named (item 1)
-  - Accept: origin with two pushurls owned by octocat and octo-org: status and setup's review
-    show one line naming both, the foreign one marked, and it is a blocker as the first URL's
-    foreign owner is today; one push URL prints exactly as before; JSON unchanged.
-  - Where: `pushSide` in `src/core/inspect.ts`, the destination in `src/core/push-state.ts`.
-  - Docs: ADR-004 note, CLAUDE.md (owner line says "the first"), HOW-IT-WORKS status card, CHANGELOG.
+- [x] 3. ⚠ Several push URLs that don't share one owner are a blocker (item 1, narrowed)
+  - Accept: origin with pushurls owned by octocat and octo-org, or octocat and a local path:
+    setup and status show one line naming each URL's owner and host, never a URL; one push
+    URL, or several with one readable owner, print exactly as before; a failed read is a
+    failure, not a pass; JSON unchanged.
+  - Where: a new fact in `src/core/push-state.ts`, a new blocker in `src/core/blockers.ts`.
+  - Docs: ADR-026 note, HOW-IT-WORKS status card (push row), CHANGELOG.
 - [ ] 4. ⚠ Measure git's pushInsteadOf on a bare-URL push (item 2, spike)
   - Accept: a test pins, against real git, what `git push <url>` sends to with pushInsteadOf
     and insteadOf rules (longest prefix; push rule shadows fetch rule; no rule), read from the

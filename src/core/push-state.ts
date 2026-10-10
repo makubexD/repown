@@ -43,6 +43,17 @@ export interface Divergence {
  */
 export type Signin = { readonly key: string } | { readonly remote: string };
 
+/**
+ * The URLs a remote pushes to after its first: git runs the pre-push hook once per URL, so
+ * the guard can refuse one while another takes the push. Owners only, never a URL.
+ */
+export interface LaterUrls {
+  readonly remote: string;
+  /** Each later URL with an owner the guard can check, once per URL. */
+  readonly owners: readonly { readonly owner: string; readonly host: string }[];
+  readonly allowed: readonly string[];
+}
+
 export interface PushFacts {
   readonly unpushed: UnpushedFact;
   /** Identity or token variables set in this process's environment, by name. */
@@ -55,6 +66,7 @@ export interface PushFacts {
   readonly signin: Signin | null;
   readonly repoint: Repoint | null;
   readonly destination: PushDestination | null;
+  readonly laterUrls: LaterUrls | null;
   /** Against the tracked ref on the destination; ok(null) when there is none. */
   readonly divergence: Result<Divergence | null>;
   readonly detached: boolean;
@@ -68,12 +80,12 @@ export async function readPushFacts(git: Git, unpushed: UnpushedFact, env: NodeJ
   const head = await git.currentBranch();
   const branch = head?.kind === 'branch' ? head.name : null;
   const target = branch ? await pushTarget(git, branch) : null;
-  const [configOverrides, signin, repoint, destination, divergence, elsewhere, upstream] = await Promise.all([
-    overridesIn(git), signinOf(git, target), repointOf(git, branch), destinationOf(git, target),
+  const [configOverrides, signin, repoint, destination, laterUrls, divergence, elsewhere, upstream] = await Promise.all([
+    overridesIn(git), signinOf(git, target), repointOf(git, branch), destinationOf(git, target), laterUrlsOf(git, target),
     divergenceOf(git, target), elsewhereOf(git, target), upstreamOf(git, branch, target),
   ]);
   return {
-    unpushed, env: hostileSet(env), configOverrides, elsewhere, signin, repoint, destination, divergence,
+    unpushed, env: hostileSet(env), configOverrides, elsewhere, signin, repoint, destination, laterUrls, divergence,
     detached: head?.kind === 'detached', upstream,
   };
 }
@@ -135,6 +147,28 @@ async function destinationOf(git: Git, target: PushTarget | null): Promise<PushD
   if (!owner) return null;
   const allowed = (await git.getAllConfig('repown.allowOwner', 'local')).map((value) => value.toLowerCase());
   return { remote: target.isRemote ? target.name : null, owner, allowed };
+}
+
+async function laterUrlsOf(git: Git, target: PushTarget | null): Promise<LaterUrls | null> {
+  if (!target?.isRemote) return null;
+  const urls = [...new Set(await pushUrlsOf(git, target.name))];
+  if (urls.length < 2) return null;
+  const owners = urls.slice(1).flatMap((raw) => {
+    const url = parseGitUrl(raw);
+    const provider = providerFor(url);
+    const owner = url ? provider.ownerOf(url) : null;
+    return owner ? [{ owner, host: provider.label }] : [];
+  });
+  const allowed = (await git.getAllConfig('repown.allowOwner', 'local')).map((value) => value.toLowerCase());
+  return { remote: target.name, owners, allowed };
+}
+
+/** Every URL git pushes `remote` with; a git that cannot list them gets the configured values. */
+async function pushUrlsOf(git: Git, remote: string): Promise<string[]> {
+  const listed = await git.remoteUrls(remote, true);
+  if (listed.ok) return listed.value;
+  const pushurls = await git.getAllConfig('remote.' + remote + '.pushurl');
+  return pushurls.length > 0 ? pushurls : git.getAllConfig('remote.' + remote + '.url');
 }
 
 function pushUrlOf(git: Git, remote: string): Promise<string | null> {

@@ -13,6 +13,10 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   had the token in one but the last. They now judge every URL git pushes with, and say
   `origin's push URL, as git resolves it, carries its own sign-in` without printing the rule,
   whose name holds the token. A rule that takes a token out is no longer reported.
+- With two push URLs for origin, a push could land on one and be refused by the guard on the
+  other, and setup and `repown status` said nothing: they read only the first URL's owner.
+  They now name a later URL's owner that this clone isn't allowed to push to, with the
+  command that allows it.
 
 ## [0.5.2] - 2026-10-10
 

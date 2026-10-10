@@ -110,6 +110,17 @@ describe('the credential side follows the URLs git uses', () => {
     assert.doesNotMatch(localConfig(at), /username = octocat/);
   });
 
+  test('use names push-as only where it pinned a credential, and says on which host it did not', () => {
+    origin(SSH);
+    const ssh = repown(['use', 'octocat'], at.box.dir);
+    assert.equal(ssh.status, 0, ssh.stderr);
+    assert.match(ssh.stdout, /OK\s+identity\s+Octo Cat <octocat@example\.invalid>\n/);
+    assert.doesNotMatch(ssh.stdout, /push-as/);
+    assert.match(ssh.stderr, /credentials on GitHub are not pinned by repown\./);
+    at.box.git('remote', 'set-url', 'origin', 'https://git.example.invalid/octocat/project.git');
+    assert.match(repown(['use', 'octocat'], at.box.dir).stderr, /credentials on this host are not pinned by repown\./);
+  });
+
   test('off still removes the key use wrote when an insteadOf sends origin elsewhere since', () => {
     origin(HTTPS);
     assert.equal(repown(['use', 'octocat'], at.box.dir).status, 0);

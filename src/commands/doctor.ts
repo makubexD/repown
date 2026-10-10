@@ -14,7 +14,7 @@
 // Under that diagnosis, one row per account the registry, GCM or gh knows.
 // accountRows decides the cells. A failed lookup stays `unknown`.
 
-import { inspectRepo, inspectAuth, activeAccountLabel, type AuthState, type RepoState } from '../core/inspect.ts';
+import { inspectRepo, inspectAuth, activeAccountLabel, pinsCredential, type AuthState, type RepoState } from '../core/inspect.ts';
 import { loadRegistry, type Account, type Registry } from '../core/registry.ts';
 import type { Result } from '../core/result.ts';
 import { gitFor, type Args } from '../ui/args.ts';
@@ -453,11 +453,6 @@ function ssoNote(host: string): void {
 /** The origin's host where repown pins a credential (GitHub over HTTPS), github.com otherwise. */
 function ssoHost(repo: RepoState): string {
   return (pinsCredential(repo) ? credentialTarget(repo)?.host : null) ?? 'github.com';
-}
-
-/** Only GitHub over HTTPS has credential keys; anywhere else pushes use the host's own sign-in (ADR-009). */
-function pinsCredential(repo: RepoState): boolean {
-  return repo.credentialKeys.length > 0;
 }
 
 /** A clone with an origin repown pins no credential for. No origin reads as outside a clone. */

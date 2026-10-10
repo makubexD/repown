@@ -15,7 +15,7 @@
 // the warnings, and `ready:` is said only without it (ADR-026). It is still a warning:
 // the exit code is unchanged (ADR-020). This reports; it changes nothing.
 
-import { inspectRepo, inspectAuth, activeAccountLabel, type RepoState, type AuthState } from '../core/inspect.ts';
+import { inspectRepo, inspectAuth, activeAccountLabel, pinsCredential, type RepoState, type AuthState } from '../core/inspect.ts';
 import { isPinned } from '../core/identity.ts';
 import { loadRegistry, type Account, type Registry } from '../core/registry.ts';
 import { snapshotOf } from '../core/config-snapshot.ts';
@@ -61,7 +61,7 @@ export default {
 /** "Honours it" only where the helper is GCM, the one measured to read the pin (ADR-001). */
 function verdict(repo: RepoState, auth: AuthState, problems: readonly Problem[]): number {
   if (problems.length === 0) {
-    out.pass('identity', repo.credentialKeys.length > 0 && auth.helperIsGcm
+    out.pass('identity', pinsCredential(repo) && auth.helperIsGcm
       ? 'this clone is pinned, and its credential mechanism honours it'
       : 'this clone\'s commit identity is pinned; its credentials are left to ' + (repo.helper ?? 'nothing'));
     return 0;
@@ -150,7 +150,7 @@ function originOf(repo: RepoState): string {
 
 function pushesAs(repo: RepoState): string {
   if (!repo.originUrl) return 'no remote to push to';
-  if (repo.credentialKeys.length === 0) return 'not pinned by repown on ' + repo.credentialHost.label;
+  if (!pinsCredential(repo)) return 'not pinned by repown on ' + repo.credentialHost.label;
   return repo.identity.account ?? 'NOT SET LOCALLY';
 }
 
@@ -248,7 +248,7 @@ function closingLine(end: StatusEnd): string {
 const GH_OPTIONAL = ' · gh: optional (see the note above)';
 
 function readyLine(repo: RepoState, account: string, warnings: readonly string[], ghNote: boolean): string {
-  const head = repo.credentialKeys.length === 0
+  const head = !pinsCredential(repo)
     ? 'ready: commits use ' + account + '; pushes use this host\'s own sign-in'
     : 'ready: commits and pushes use ' + account;
   if (warnings.length > 0) return head + ' · ' + howMany(warnings.length, 'warning');
@@ -289,7 +289,7 @@ export function identityProblems(repo: RepoState): Problem[] {
       fix: SETUP_FIX,
     }];
   }
-  if (repo.credentialKeys.length === 0 || id.account) return [];
+  if (!pinsCredential(repo) || id.account) return [];
   return [{
     what: 'No account is pinned, so pushes fall back to the machine default (' +
           (id.inheritedAccount ?? 'nothing') + ').',
@@ -333,7 +333,7 @@ function accountWarning(repo: RepoState, registry: LoadedRegistry): boolean {
 
 /** A pinned credential key is only as good as the helper reading it. gh as helper is a problem, reported elsewhere. */
 function helperWarning(repo: RepoState, auth: AuthState): boolean {
-  if (repo.credentialKeys.length === 0 || auth.helperIsGcm || auth.ghIsHelper) return false;
+  if (!pinsCredential(repo) || auth.helperIsGcm || auth.ghIsHelper) return false;
   if (!auth.helper) {
     out.warn('helper', 'no credential helper is set, so the pinned account selects no credential; git will prompt on push.');
   } else {

@@ -237,8 +237,8 @@ sequenceDiagram
 | `--gh`, gh becomes the helper | 🟡 when gh was not the helper before the login and is afterwards: `fix: repown fix` |
 | `--gh`, no terminal, not signed in | 🟡 `<account> isn't signed in to gh`. `fix: gh auth login, then repown use <account> --gh`. No login |
 | No terminal and no record | 🔴 stops and tells you to run `repown accounts add <account> …` |
-| SSH remote | no credential key is written, because your SSH key decides; 🟡 `use` says credentials are not pinned for this remote |
-| Azure DevOps or another host | identity and guard work; 🟡 credentials are not pinned ([ADR-009](decisions/ADR-009-hosts-claim-only-measured.md)). On Azure DevOps the owner is the organisation, so allow it with `repown.allowOwner` |
+| SSH remote | no credential key is written, because your SSH key decides; the `identity` line has no `push-as:`, and 🟡 `credentials on GitHub are not pinned by repown.` (an SSH clone that pushes over https is pinned) |
+| Azure DevOps or another host | identity and guard work; no `push-as:`, and 🟡 `credentials on Azure DevOps are not pinned by repown.` (`on this host` elsewhere) ([ADR-009](decisions/ADR-009-hosts-claim-only-measured.md)). On Azure DevOps the owner is the organisation, so allow it with `repown.allowOwner` |
 | Repo owned by an organisation | 🟡 prints the line that allows it ([card 5](#5-check-where-you-are)) |
 | gh is still the credential helper | 🟡 `fix: repown fix`. Only where `use` pins a credential (GitHub over HTTPS) |
 | No stored credential yet | the first push signs in once ([card 6](#6-commit-and-first-push)). Only where `use` pins a credential: an SSH remote or another host signs in its own way, so neither line is said |

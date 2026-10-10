@@ -126,6 +126,11 @@ function credentialSide(originUrl: string, listed: readonly Result<string[]>[]):
   return { keys: [...new Set(keyed.flatMap((entry) => entry.keys))], url, host: providerFor(parseGitUrl(url)) };
 }
 
+/** Whether repown pins a credential for this clone: only where it measured one (ADR-009). */
+export function pinsCredential(repo: RepoState): boolean {
+  return repo.credentialKeys.length > 0;
+}
+
 /** The credential keys repown pins for one URL; empty where it can't pin (ADR-009). */
 export function keysOf(raw: string): readonly string[] {
   const url = parseGitUrl(raw);

@@ -337,6 +337,9 @@ The same commands `repown setup` runs, if you'd rather type them:
    ([card 3](docs/HOW-IT-WORKS.md#3-pin-a-clone)). If the repository belongs to another
    owner, such as an organisation, `use` prints the line that allows it.
 
+In a GitHub clone over https (elsewhere the `identity` line has no `push-as:`, and `use` says
+repown pins no credential there):
+
 ```
 $ cd ~/code/dotfiles
 $ repown use octocat

@@ -8,6 +8,10 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 ## [Unreleased]
 
 ### Fixed
+- `repown use` printed `push-as:<account>` where it pins no credential (SSH, Azure DevOps,
+  another host, no remote). The `identity` line now ends at the address there, and the
+  warning reads `credentials on GitHub are not pinned by repown.` (`on this host` for another
+  host) instead of `this host credentials are not pinned by repown.`
 - The credential pin followed origin's URL as written. A clone that fetches over SSH and
   pushes over https (a `pushurl` or `pushInsteadOf`) is now pinned, and `repown setup` no
   longer offers `use` again there; a clone whose https URL an `insteadOf` sends over SSH is no

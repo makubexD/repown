@@ -5,7 +5,7 @@
 // go back to inheriting the machine default, and it should be able to do that
 // without being able to break anything else.
 
-import { inspectRepo, keysOf, type RepoState } from '../core/inspect.ts';
+import { inspectRepo, keysOf, pinsCredential, type RepoState } from '../core/inspect.ts';
 import { clearIdentity, legacyAccountKey } from '../core/identity.ts';
 import { gitFor, type Args } from '../ui/args.ts';
 import type { Command } from '../ui/command.ts';
@@ -54,7 +54,7 @@ async function reportInherited(git: RepoState['git'], before: RepoState): Promis
   out.line();
   out.line('  This clone now inherits the machine default:');
   out.field('commits as', describe(id.inheritedName, id.inheritedEmail));
-  if (before.credentialKeys.length > 0) out.field('pushes as', id.inheritedAccount ?? 'nothing pinned');
+  if (pinsCredential(before)) out.field('pushes as', id.inheritedAccount ?? 'nothing pinned');
   out.line();
   if (before.guard === 'on') {
     out.warn('guard', 'still installed, and with no identity pinned it will refuse every push.');

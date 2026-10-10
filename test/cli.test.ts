@@ -485,7 +485,7 @@ describe('repown use --gh with no terminal', () => {
     assert.match(version.stdout, /repown-fake-gh/, version.stderr + (version.error?.message ?? ''));
     const run = repown(['use', 'octocat', '--gh'], { cwd: box.dir, env });
     assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stdout, /OK\s+identity\s+Octo Cat <octocat@example\.invalid>\s+push-as:octocat/);
+    assert.match(run.stdout, /OK\s+identity\s+Octo Cat <octocat@example\.invalid>\n/, 'no remote, so no push-as');
     assert.match(run.stderr, /WARN\s+gh\s+octocat isn't signed in to gh/);
     assert.match(run.stderr, /fix: gh auth login, then repown use octocat --gh/);
     assert.equal(box.git('config', '--local', '--get', 'repown.account'), 'octocat');

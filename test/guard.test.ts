@@ -25,6 +25,8 @@ const ORIGIN = 'https://github.com/pinned-account/project.git';
 describe('guard check', () => {
   let box: Sandbox;
   let git: Git;
+  // Nothing in this suite moves HEAD, so the base commit and its tree are read once.
+  let base: { readonly tree: string; readonly parent: string };
 
   before(() => {
     box = sandbox();
@@ -34,6 +36,7 @@ describe('guard check', () => {
     box.git('config', '--local', 'credential.https://github.com.username', 'pinned-account');
     box.git('config', '--local', 'remote.origin.url', ORIGIN);
     box.git('commit', '--allow-empty', '-m', 'base');
+    base = { tree: box.git('rev-parse', 'HEAD^{tree}'), parent: box.git('rev-parse', 'HEAD') };
   });
   after(() => box.dispose());
 
@@ -44,15 +47,11 @@ describe('guard check', () => {
   });
 
   /** A commit object with the given author, built without moving HEAD. */
-  const commitAs = (email: string, message: string): string => {
-    const tree = box.git('rev-parse', 'HEAD^{tree}');
-    const parent = box.git('rev-parse', 'HEAD');
-    return box.git(
-      '-c', `user.name=Author`, '-c', `user.email=${email}`,
-      '-c', `committer.name=Author`,
-      'commit-tree', tree, '-p', parent, '-m', message,
-    );
-  };
+  const commitAs = (email: string, message: string): string => box.git(
+    '-c', `user.name=Author`, '-c', `user.email=${email}`,
+    '-c', `committer.name=Author`,
+    'commit-tree', base.tree, '-p', base.parent, '-m', message,
+  );
 
   const push = (sha: string, remoteRef: string, url = ORIGIN) => check({
     git,

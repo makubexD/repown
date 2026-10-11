@@ -1,6 +1,6 @@
 # Test speed, and two push-URL leftovers
 
-Status: Phase 4 (build), task 4. Wall: baseline ~809 s; after task 2: 799 s.
+Status: Phase 4 (build), task 5. Wall: baseline ~809 s; task 2: 799 s; tasks 3-4: 805 s (spawn throughput bound).
 
 Every test-speed task: no assertion removed or loosened, each test keeps a fresh directory,
 full suite green, wall time measured after it (baseline median ~809 s).
@@ -11,7 +11,7 @@ full suite green, wall time measured after it (baseline median ~809 s).
   - Docs: CLAUDE.md Tests (sandbox copies a per-process template).
 - [x] 3. Fixture config written to `.git/config` in one write (pinGithub and the like)
   - Docs: none (test-only).
-- [ ] 4. Read-only suites build once: config-snapshot `before()` + parallel reads; guard
+- [x] 4. Read-only suites build once: config-snapshot `before()` + parallel reads; guard
   check's `commitAs` caches HEAD and its tree
   - Docs: none (test-only).
 - [ ] 5. Built fixtures copied per test: use's `publishedThenLocal`, reauthor's `field()` (one

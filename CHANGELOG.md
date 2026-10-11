@@ -7,6 +7,8 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-10-11
+
 ### Fixed
 - Setup and `repown status` missed a push's own sign-in when a `url.<base>.insteadOf` or
   `pushInsteadOf` rule put a token in origin's push URL, or when a remote with several URLs
@@ -324,7 +326,8 @@ and cmd. `status`, `doctor` and the pre-push guard are faster on Windows.
   contract for scripts.
 - Runs on Node 20+ on Windows, macOS and Linux, with zero runtime dependencies.
 
-[Unreleased]: https://github.com/makubexD/repown/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/makubexD/repown/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/makubexD/repown/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/makubexD/repown/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/makubexD/repown/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/makubexD/repown/compare/v0.4.0...v0.5.0

@@ -350,7 +350,7 @@ ready: commits and pushes use octocat · gh: optional (see the note above)
 | 🔴 `gh is the git credential helper` | only gh's active account can push | `repown fix` |
 | 🟡 `no credential helper is set` / `cannot tell whether it honours` | a GitHub https clone, and the helper isn't Git Credential Manager | `repown doctor` ([card 1](#1-set-up-the-machine)) |
 | NOTE `gh active as "…"` | the gh CLI would act as another account; git pushes are unaffected. Printed after the identity line, and not counted as a warning | `gh auth switch -u <account>` when that account is signed in to gh; `repown use <account> --gh` when it is not |
-| 🟡 `push …` (first among the warnings) | something will stop the next push: commits by another address the guard will refuse (no remote has them, or another remote has them but the destination lacks them), a sign-in in the push URL, an identity or token variable in this shell, `author.email` in config, a destination owner (said once, by the `origin` row when that fires for the same owner; a `pushRemote` owned by someone else is said here too), a diverged branch, a detached HEAD. Read only when status finds no problem; a missing upstream stays in the `upstream` field. With the guard off, what only the guard would refuse (commits by another address, an owner, `GH_TOKEN`) says `the guard is off, so …`, counts as a warning, and the clone is still `ready` | the line under it: the `git rebase` advice (or `repown reauthor`), `git config --unset …`, unset the variable, `git pull --rebase`; a sign-in in the push URL: `repown setup --repoint` ([card 8](#8-push-refused-and-the-fix)) |
+| 🟡 `push …` (first among the warnings) | something will stop the next push: commits by another address the guard will refuse (no remote has them, or another remote has them but the destination lacks them), a sign-in in the push URL, an identity or token variable in this shell, `author.email` in config, a destination owner (said once, by the `origin` row when that fires for the same owner; a `pushRemote` owned by someone else is said here too), a later push URL owned by someone else (git pushes to every URL and the guard checks each, so the push would land on one and be refused on the other; with the guard off it goes to both), a branch that pushes straight to a URL a `pushInsteadOf` rule may rewrite, or whose rules can't be read (repown can't tell where it lands; said, never blocking, since the guard checks it at push time), a diverged branch, a detached HEAD. Read only when status finds no problem; a missing upstream stays in the `upstream` field. With the guard off, what only the guard would refuse (commits by another address, an owner, `GH_TOKEN`) says `the guard is off, so …`, counts as a warning, and the clone is still `ready` | the line under it: the `git rebase` advice (or `repown reauthor`), `git config --unset …`, unset the variable, `git pull --rebase`; a sign-in in the push URL: `repown setup --repoint` ([card 8](#8-push-refused-and-the-fix)), or, when a rewrite rule added it, that rule (`git config --show-origin --get-regexp '^url\.'` lists them); a later push URL: the `git config --local --add repown.allowOwner …` it prints |
 | 🟡 `gh could not be queried` | who `gh pr create` acts as is unknown | `gh auth status` |
 | 🟡 `origin belongs to "octo-org"` | an organisation repository | `git config --local --add repown.allowOwner octo-org` |
 | 🟡 `guard off` | pushes are not checked | `repown guard on` |
@@ -809,8 +809,12 @@ The owner setup, `status`, `use` and `scan` name ("origin's owner", the destinat
 from the URL git pushes to, `git remote get-url --push`: `pushurl`, `pushInsteadOf` and
 `insteadOf` applied, the same URL the pre-push hook gives the guard. The host shown with it
 (`status`'s `(GitHub)`, `scan`'s `host`) comes from that same URL. With several push URLs, the
-first is named; the guard checks each. A push straight to a URL is read after `insteadOf` only.
-A username written into a `pushInsteadOf` URL isn't checked.
+first is named there; the guard checks each, so setup and `status` also name any later URL's
+owner this clone isn't allowed to push to (the `push` warning). A push straight to a URL is
+read after `insteadOf` only; when a `pushInsteadOf` value may rewrite it, no owner is named and
+setup and `status` say they can't tell where it lands. A token a rewrite puts in the push URL
+is found (the `push` warning's sign-in line); a plain username written there isn't checked
+against the credential pin.
 
 The credential pin follows the same rewrites. `credential.https://github.com.username` is set
 when any URL git fetches or pushes origin with is GitHub over https (`git remote get-url --all`,

@@ -94,8 +94,11 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   receives; `provider` and `url` follow the configured fetch URL. `credentialKeys`,
   `credentialUrl`, `credentialHost` and `helper` follow every URL git fetches or pushes origin
   with (`remote get-url --all`, with and without `--push`), and claim nothing when git can't
-  list them (ADR-009). A push
-  straight to a URL goes through `rewrittenUrl` (`ls-remote --get-url`).
+  list them (ADR-009). push-state's sign-in and later-URL checks read `remote get-url --push
+  --all` too, falling back to the configured values when git can't list them. A push
+  straight to a URL goes through `rewrittenUrl` (`ls-remote --get-url`), which applies no
+  pushInsteadOf: when a pushInsteadOf value prefixes that URL, push-state says it can't tell
+  (`rewritable`) rather than copy git's rules (ADR-026).
 - `unpushed.ts` counts against remote-tracking refs, so its rebase advice depends on
   `push-destination.ts`: a push destination no tracking ref reaches is unknown, and the
   rebase is then conditional. `FETCH_HEAD` is no proof of a fetch; a failed one writes it (ADR-025).
@@ -110,7 +113,7 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
 - Read-only commands (`status`, `doctor`, `scan`, `guard check`, the start screen's clone read,
   setup's `readContext`) read config through `snapshotOf(git)` (`src/core/config-snapshot.ts`):
   one `git config [--scope] --list -z` per scope answers the plain getters (ADR-029). Never hand a
-  snapshot to code that writes config; it throws. Booleans, URL matches and origins still go to git.
+  snapshot to code that writes config; it throws. Booleans, URL matches, origins and `configValues` (`--get-regexp -z`) still go to git.
 - `--format json` (`scan`, `accounts list`) is a stable contract for scripts; the text
   layout isn't. Renaming a JSON field is breaking (ADR-014).
 - `src/wizard/` is `repown setup`: `engine.ts` owns Back, the review loop, the opening

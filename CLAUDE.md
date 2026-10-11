@@ -139,6 +139,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`, the registry (`REPOWN_CONFIG_DIR`) and gh's accounts (`GH_CONFIG_DIR`), and clears `GIT_DIR`, `GIT_*_EMAIL`, `GH_TOKEN`
   and friends, so neither the machine's config nor the shell running `npm test` leaks in.
   It also clears `NO_COLOR`, `FORCE_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE`, `COLORTERM` and `TERM`.
+  Its repository is a copy of one initialised once per process (cheaper than a `git init` per test),
+  so a test that needs another starting state changes its own copy, never the template.
 - `plainTerminal()` clears those same six in a file that does not use `sandbox()`.
   A test that wants colour sets it explicitly.
 - `test/fake-exe.ts` compiles the fake `gh.exe` and `git-credential-manager.exe` once

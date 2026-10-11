@@ -4,7 +4,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
@@ -84,13 +84,24 @@ export function fieldsUnder(stdout: string, heading: string): string[] {
   return labels;
 }
 
+/**
+ * What `git remote add origin` and five `git config --local` calls leave, written at once
+ * (one write instead of six git spawns): the sandbox's [user] values replaced in place, the
+ * other sections appended, as git does while none of them exists yet.
+ */
+const SANDBOX_USER = '\tname = Sandbox\n\temail = sandbox@example.invalid\n';
+const PINNED_USER = '\tname = Octo Cat\n\temail = octocat@example.invalid\n';
+const PINNED_SECTIONS = '[remote "origin"]\n\turl = https://github.com/octocat/project.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n' +
+  '[repown]\n\taccount = octocat\n' +
+  '[credential "https://github.com"]\n\tusername = octocat\n' +
+  '[credential]\n\thelper = manager\n';
+
 export function pinGithub(box: Sandbox): void {
-  box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
-  box.git('config', '--local', 'user.name', 'Octo Cat');
-  box.git('config', '--local', 'user.email', 'octocat@example.invalid');
-  box.git('config', '--local', 'repown.account', 'octocat');
-  box.git('config', '--local', 'credential.https://github.com.username', 'octocat');
-  box.git('config', '--local', 'credential.helper', 'manager');
+  const config = join(box.dir, '.git', 'config');
+  const before = readFileSync(config, 'utf8');
+  assert.ok(before.includes('[user]\n' + SANDBOX_USER), 'pinGithub expects the sandbox identity');
+  assert.ok(!/^\[(remote "origin"|repown|credential)/m.test(before), 'pinGithub expects none of its sections yet');
+  writeFileSync(config, before.replace(SANDBOX_USER, PINNED_USER) + PINNED_SECTIONS);
 }
 
 export function unpin(box: Sandbox): void {

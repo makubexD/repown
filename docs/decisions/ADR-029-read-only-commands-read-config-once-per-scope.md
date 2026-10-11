@@ -1,6 +1,6 @@
 # ADR-029: Read-only commands read git config once per scope
 
-**Status:** Accepted. Amended by its 2026-10-10 note: push-destination reads through a snapshot of its own.
+**Status:** Accepted. Amended by its 2026-10-10 note: push-destination reads through a snapshot of its own; by its 2026-10-11 note: push-state reads a remote's push URLs once for two checks.
 
 ## Context
 
@@ -77,3 +77,10 @@ was bound by process starts: about 22,800 git spawns per run, 13,500 of them `gi
   setup's run set each key in its own process, and URL-match and origin reads still ask git
   per key: git has no multi-key config write, and those reads follow rules a snapshot does not
   copy.
+- **2026-10-11, push-state reads a remote's push URLs once for two checks.** The sign-in and
+  later-URL checks each ran `git remote get-url --push --all`; they now share one read,
+  started alongside the pushInsteadOf rules. The destination keeps its own
+  `get-url --push`: the shared list is trimmed line by line, so a blank or multi-line push URL
+  would name a different owner (measured on git 2.56), and the repoint check keeps its own,
+  where a failed read means "elsewhere". For: one spawn fewer per read, output unchanged by
+  construction. Against: three reads of the same list remain in one `readPushFacts`.

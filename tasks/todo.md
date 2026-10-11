@@ -1,6 +1,6 @@
 # Test speed, and two push-URL leftovers
 
-Status: Phase 4 (build), task 8 (doubt pass).
+Status: Phase 4 (build), task 11. Wall: baseline ~809 s; task 2: 799; 3-4: 805; 8: 818 s (noise).
 
 Every test-speed task: no assertion removed or loosened, each test keeps a fresh directory,
 full suite green, wall time measured after it (baseline median ~809 s).
@@ -18,7 +18,7 @@ full suite green, wall time measured after it (baseline median ~809 s).
 - [-] 6. Dropped: in-process `run()` for fixture-only CLI spawns (same reason).
 - [-] 7. Won't fix after the doubt pass: ADR-026 already skips ownerless URLs; a mirror path
   would carry a warning nothing clears. ADR-026 2026-10-11 note.
-- [ ] 8. ⚠ readPushFacts reads the push URL list once for sign-in, later URLs and destination
+- [x] 8. ⚠ (narrowed after the doubt pass) sign-in and later URLs share one push URL read
   (also: on git < 2.7 the destination and later URLs use different fallbacks; one list fixes it)
   - Docs: ADR-029 note (output unchanged).
 - [ ] 11. Spawn budget test: status, use, setup --no-input in a pinned clone, counted per

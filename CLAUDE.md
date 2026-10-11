@@ -94,8 +94,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   receives; `provider` and `url` follow the configured fetch URL. `credentialKeys`,
   `credentialUrl`, `credentialHost` and `helper` follow every URL git fetches or pushes origin
   with (`remote get-url --all`, with and without `--push`), and claim nothing when git can't
-  list them (ADR-009). push-state's sign-in and later-URL checks read `remote get-url --push
-  --all` too, falling back to the configured values when git can't list them. A push
+  list them (ADR-009). push-state's sign-in and later-URL checks share one `remote get-url
+  --push --all` read, falling back to the configured values when git can't list them. A push
   straight to a URL goes through `rewrittenUrl` (`ls-remote --get-url`), which applies no
   pushInsteadOf: when a pushInsteadOf value prefixes that URL, push-state says it can't tell
   (`rewritable`) rather than copy git's rules (ADR-026).

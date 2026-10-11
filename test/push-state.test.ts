@@ -138,6 +138,29 @@ describe('readPushFacts', () => {
     const facts = await readPushFacts(git, await readUnpushed(git), {});
     assert.deepEqual(facts.laterUrls, { remote: 'origin', owners: [{ owner: 'octo-work', host: 'GitHub' }], allowed: [] });
     assert.deepEqual(facts.signin, { key: 'remote.origin.pushurl' }, 'every configured pushurl, not only the last');
+    assert.equal(facts.destination?.owner, 'octocat', 'the destination still asks git remote get-url --push');
+  });
+
+  test('the sign-in and later-URL checks share one read of the push URLs', async () => {
+    let listed = 0;
+    class Counting extends Git {
+      override async remoteUrls(remote: string, push: boolean): ReturnType<Git['remoteUrls']> {
+        if (push) listed += 1;
+        return super.remoteUrls(remote, push);
+      }
+    }
+    commit('first');
+    box.git('remote', 'add', 'origin', 'https://github.com/octocat/hello.git');
+    box.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    box.git('config', 'branch.main.remote', 'origin');
+    box.git('config', 'branch.main.merge', 'refs/heads/main');
+    box.git('config', '--add', 'remote.origin.pushurl', 'https://octocat:ghp_tok@github.com/octocat/hello.git');
+    box.git('config', '--add', 'remote.origin.pushurl', 'https://github.com/octo-org/hello.git');
+    const git = new Counting(box.dir);
+    const facts = await readPushFacts(git, await readUnpushed(new Git(box.dir)), {});
+    assert.deepEqual(facts.signin, { key: 'remote.origin.pushurl' });
+    assert.deepEqual(facts.laterUrls?.owners, [{ owner: 'octo-org', host: 'GitHub' }]);
+    assert.equal(listed, 2, "one shared read, and the repoint check's own (where a failed read means elsewhere)");
   });
 
   test('a URL where a remote would do: the key to repoint and that remote, never the URL', async () => {

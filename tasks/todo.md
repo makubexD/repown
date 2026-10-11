@@ -1,6 +1,6 @@
 # Test speed, and two push-URL leftovers
 
-Status: Phase 4 (build), task 7 (doubt pass).
+Status: Phase 4 (build), task 8 (doubt pass).
 
 Every test-speed task: no assertion removed or loosened, each test keeps a fresh directory,
 full suite green, wall time measured after it (baseline median ~809 s).
@@ -16,9 +16,10 @@ full suite green, wall time measured after it (baseline median ~809 s).
   - Docs: none (test-only).
 - [-] 5. Dropped: built fixtures copied per test (test setup is 10% of spawns).
 - [-] 6. Dropped: in-process `run()` for fixture-only CLI spawns (same reason).
-- [ ] 7. ⚠ A later push URL with no readable owner is said, never blocking (leftover)
-  - Docs: ADR-026 note, HOW-IT-WORKS status card, CHANGELOG.
+- [-] 7. Won't fix after the doubt pass: ADR-026 already skips ownerless URLs; a mirror path
+  would carry a warning nothing clears. ADR-026 2026-10-11 note.
 - [ ] 8. ⚠ readPushFacts reads the push URL list once for sign-in, later URLs and destination
+  (also: on git < 2.7 the destination and later URLs use different fallbacks; one list fixes it)
   - Docs: ADR-029 note (output unchanged).
 - [ ] 11. Spawn budget test: status, use, setup --no-input in a pinned clone, counted per
   command; RED at the target, lowered as 12-14 land

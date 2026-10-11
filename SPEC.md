@@ -9,22 +9,38 @@ Baseline (2026-10-10, this Windows machine, `npm test`, four full runs): 798–8
 costs ~200–300 ms here, a node child ~500 ms (CI Linux runs the whole suite in ~2 min).
 
 ## Test speed: what changes
-1. **A template repository.** `sandbox()` (`test/helpers.ts`) runs `git init` per test. Build
-   one initialised repository per process and copy it (`fs.cpSync`) into each new sandbox.
-2. **Fixture config written to the file.** Helpers that run one `git config` per key
-   (`pinGithub` in `test/status-helpers.ts`, similar ones) append the same lines to
-   `.git/config` in one write, as `sandbox()` already does for `[user]`.
-3. **Read-only suites build once.** `config-snapshot`'s describe (`before()` instead of
-   `beforeEach`); guard check's `commitAs` caches `HEAD^{tree}`/`HEAD`.
-4. **Built fixtures copied per test.** `publishedThenLocal` (use.test.ts), reauthor's `field()`
-   (shared across its split files through `test/reauthor-helpers.ts`), setup-closing's `clean()`,
-   push-state's first commit: build once per file, `cpSync` per test, rewrite absolute
-   paths (`remote.origin.url`) after the copy.
-5. **Parallel reads inside one test.** config-snapshot's ~320 sequential reads use `Promise.all`.
-6. **In-process where a CLI spawn only builds a fixture.** `use`/`guard on|off` calls that set
-   up wizard-setup-terminal and setup-context fixtures call the command's own `run()`.
-   Tests whose subject is the real entry point (`test/cli*.test.ts`, colour/TERM spawns,
-   no-terminal behaviour) keep spawning.
+Done (tasks 2-4): `sandbox()` copies a per-process template, `pinGithub` writes its config at
+once, read-only suites build once. Full suite after them: 799-805 s, so no visible gain.
+
+Measured after task 4 (every spawn in one full run, attributed by test file and caller):
+21,960 spawns. **10% are test setup; 37% are repown called in-process, 53% repown run as
+the CLI.** Spawns are throughput-bound here (git peaks near 40/s on an idle machine), so wall
+time follows the spawn count, not any one file. Test-fixture work (old tasks 5-6) can win a
+few percent at most: dropped.
+
+Within one command repown reads the same facts again (one run each, pinned clone):
+`repown status` 23 spawns, 20 distinct; `repown use` 38, 34 distinct; `repown setup ... --no-input`
+148, only 51 distinct (`rev-parse --git-path hooks` and `--git-common-dir` 9 times each,
+`remote` 7, `gh --version`, `gh auth status`, `git-credential-manager --version` 3 each).
+
+11. **A spawn budget, measured.** A test runs `status`, `use` and non-interactive `setup` in a
+    pinned clone and counts git/gh/GCM spawns per command against a budget: it fails today
+    and guards against regressions after.
+12. **A clone's layout is read once per run.** `--git-dir`, `--git-common-dir`, `--show-toplevel`,
+    `--git-path hooks` and `--is-bare-repository` don't change during a run: repown writes no
+    `core.*` key and never moves a repository. Remembered per directory for the process, so
+    setup's commands (each building its own `Git`) share them. The start screen's re-read
+    after an action (ADR-028) reads them again.
+13. **Tool probes once per run.** `gh --version` and `git-credential-manager --version` don't
+    change while repown runs; remembered per PATH. `gh auth status` is NOT remembered: setup's
+    `gh` login changes it.
+14. **Exact repeats inside one read.** Where one report asks git the same question twice
+    (status's `credential.helper` URL match, setup's per-step re-reads of facts no step
+    changes), read once and pass the answer down. Facts a step can change (config,
+    commits, refs, hooks) are always read again after it.
+
+Every item: output byte-identical (existing tests unchanged), the spawn budget lowered to
+what was reached, and the full suite timed.
 
 ## Push-URL leftovers
 7. **A later push URL with no readable owner is said.** `laterUrlsOf` drops it today; the
@@ -36,20 +52,24 @@ costs ~200–300 ms here, a node child ~500 ms (CI Linux runs the whole suite in
 ## Out of scope
 - Concurrency inside a file: `sandbox()` changes `process.env` for the process.
 - `--test-concurrency` changes and CI sharding.
-- Any product behaviour change beyond items 7–8.
+- Any change to what repown prints or decides; items 12-14 change only how often it asks.
+- Merging per-scope `config --list` reads into one `--show-scope` read (git 2.26; ADR-029's
+  snapshot is compared against git and would need its own measurement).
 
 ## Success criteria
 - No assertion removed or loosened; each test still gets its own fresh directory; full
   suite green after every task; CI green on Linux, Windows, macOS.
-- Wall time measured after each task, same machine; target under 500 s (≥ 40% cut).
-- ADR-029 note with the before/after numbers; CLAUDE.md Tests section updated for the
-  template and copy helpers; CHANGELOG entry for items 7–8 only.
+- Wall time measured after each task, same machine; target: spawns per `setup` run down by a
+  third and the suite under 650 s (≥ 20% cut). The 500 s target assumed test setup was the cost.
+- ADR-029 note with the before/after numbers and the spawn split; CLAUDE.md for the layout and
+  probe memo; CHANGELOG for items 7-8 and a "faster on Windows" line for 12-14.
 
 ## Riskiest assumption
-That a copied repository behaves exactly like a freshly built one on Windows: absolute paths
-inside `.git/config` and remotes, file locks on a just-written directory, and the index's
-stat data (a copied index can make git re-hash or see files as modified). Measured on the
-first copy task before it spreads.
+That a remembered layout fact can't go stale within one process: no repown command changes
+it, and tests that rebuild a repository at the same path in one process (none known) would
+read the old answer. Checked by grepping for repository rebuilds in tests and by the
+start screen's ADR-028 re-read, which must forget. (The copied-repository assumption held:
+task 2 green on Windows.)
 
 ## Decided
 - Item 7 wording and whether it blocks: non-blocking, like the guard's own "not checked" note.

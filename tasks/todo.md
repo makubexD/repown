@@ -1,6 +1,6 @@
 # Test speed, and two push-URL leftovers
 
-Status: Phase 4 (build), task 5. Wall: baseline ~809 s; task 2: 799 s; tasks 3-4: 805 s (spawn throughput bound).
+Status: Phase 4 (build), task 7 (doubt pass).
 
 Every test-speed task: no assertion removed or loosened, each test keeps a fresh directory,
 full suite green, wall time measured after it (baseline median ~809 s).
@@ -14,15 +14,21 @@ full suite green, wall time measured after it (baseline median ~809 s).
 - [x] 4. Read-only suites build once: config-snapshot `before()` + parallel reads; guard
   check's `commitAs` caches HEAD and its tree
   - Docs: none (test-only).
-- [ ] 5. Built fixtures copied per test: use's `publishedThenLocal`, reauthor's `field()` (one
-  copy in `test/reauthor-helpers.ts`), setup-closing's `clean()`, push-state's first commit
-  - Docs: CLAUDE.md Tests (the copy helper; absolute paths rewritten after a copy).
-- [ ] 6. In-process `run()` where a CLI spawn only builds a fixture (wizard-setup-terminal,
-  setup-context `pin`, status helpers where the spawn isn't the subject)
-  - Docs: none (test-only).
+- [-] 5. Dropped: built fixtures copied per test (test setup is 10% of spawns).
+- [-] 6. Dropped: in-process `run()` for fixture-only CLI spawns (same reason).
 - [ ] 7. ⚠ A later push URL with no readable owner is said, never blocking (leftover)
   - Docs: ADR-026 note, HOW-IT-WORKS status card, CHANGELOG.
 - [ ] 8. ⚠ readPushFacts reads the push URL list once for sign-in, later URLs and destination
   - Docs: ADR-029 note (output unchanged).
-- [ ] 9. Record before/after wall times - Docs: ADR-029 note.
+- [ ] 11. Spawn budget test: status, use, setup --no-input in a pinned clone, counted per
+  command; RED at the target, lowered as 12-14 land
+  - Docs: none (test-only).
+- [ ] 12. ⚠ A clone's layout (git dir, common dir, toplevel, hooks path, bare) read once per run
+  - Docs: CLAUDE.md (where the memo lives, who forgets it), ADR-029 note.
+- [ ] 13. ⚠ gh and GCM version probes once per run (per PATH); `gh auth status` never remembered
+  - Docs: ADR-029 note.
+- [ ] 14. ⚠ Exact repeats inside one read passed down (status URL match, setup's re-reads of
+  facts no step changes)
+  - Docs: ADR-029 note; CHANGELOG "faster on Windows" line for 12-14.
+- [ ] 9. Record before/after wall times and spawn counts - Docs: ADR-029 note.
 - [ ] 10. Close-out: move facts from SPEC.md, delete SPEC.md and tasks/, memory.

@@ -77,7 +77,7 @@ function signinBlocker(facts: PushFacts, branch: string, account: string): Block
   const signin = facts.signin;
   if (!signin) return [];
   // A rewrite rule's key holds the token in its name: only the remote is ever printed for it.
-  const holder = 'key' in signin ? signin.key : signin.remote + "'s push URL, as git resolves it,";
+  const holder = 'key' in signin ? signin.key : 'named' in signin ? signin.named : printable(signin.remote) + "'s push URL, as git resolves it,";
   const fix = 'key' in signin && facts.repoint?.key === signin.key ? ': point it back at ' + facts.repoint.remote + ' with repown setup --repoint' : '';
   return [{
     kind: 'signin',
@@ -149,11 +149,12 @@ function ownerBlocker(destination: PushDestination | null, branch: string, choic
  */
 function laterUrlsBlocker(later: LaterUrls | null, first: PushDestination | null, choice: PushChoice): Blocker[] {
   if (!later || (first && !allows(first.owner, first.allowed, choice.account))) return [];
-  const refused = later.owners.filter(({ owner }) => !allows(owner, later.allowed, choice.account));
+  const refused = onceEach(later.owners.filter(({ owner }) => !allows(owner, later.allowed, choice.account)));
   if (refused.length === 0) return [];
   const names = refused.map(({ owner, host }) => '"' + printable(owner) + '" (' + host + ')').join(', ');
-  const guard = choice.guarded ? 'the guard will refuse that URL while the first takes the push' : 'the guard is off, so the push goes there too';
-  const fix = refused.length === 1 ? allowOwnerCommand(refused[0]!.owner) ?? ALLOW_OWNER_BY_HAND : ALLOW_OWNER_BY_HAND;
+  const urls = refused.length === 1 ? 'that URL' : 'those URLs';
+  const guard = choice.guarded ? 'the guard will refuse ' + urls + ' while the first takes the push' : 'the guard is off, so the push goes there too';
+  const fix = refused.map(({ owner }) => allowOwnerCommand(owner) ?? ALLOW_OWNER_BY_HAND).join(' and ');
   const remote = printable(later.remote);
   return [{
     kind: 'pushurls',
@@ -163,13 +164,18 @@ function laterUrlsBlocker(later: LaterUrls | null, first: PushDestination | null
   }];
 }
 
+/** One per owner, compared as the guard compares them (case-insensitively), first spelling kept. */
+function onceEach(owners: LaterUrls['owners']): LaterUrls['owners'] {
+  return owners.filter(({ owner }, index) => owners.findIndex((other) => other.owner.toLowerCase() === owner.toLowerCase()) === index);
+}
+
 /** Said, never blocking: the guard still checks the URL git hands it. */
 function rewriteBlocker(rewritable: { key: string } | null, branch: string): Blocker[] {
   if (!rewritable) return [];
   return [{
     kind: 'rewrite',
     summary: "repown can't tell where the push goes",
-    lines: [rewritable.key + ' names a URL that a pushInsteadOf rule or a remote section may rewrite, so repown ' +
+    lines: [rewritable.key + ' names a URL that a pushInsteadOf rule may rewrite, so repown ' +
       "can't tell where a push from " + branch + ' lands: the guard checks it when you push'],
     blocks: false,
   }];

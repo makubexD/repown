@@ -176,6 +176,11 @@ problem".
   For: the line agrees with what git sends, rewrites and git 2.46's empty-value reset
   included, without repown copying git's matching rules. Against: a rewritten sign-in gets no
   key to fix by hand; `git config --show-origin --get-regexp '^url\.'` lists the rules.
+  The Phase 5 review of the same day added two more of the kind: an `http.<url>.extraheader`
+  key holding `@` (its `<url>` can carry a password) is printed as `an http.<url>.extraheader
+  setting`, and a push straight to a URL is also checked after `insteadOf`, named by the key
+  that holds the URL (`branch.main.pushRemote's push URL, as git resolves it, …`), unless a
+  `pushInsteadOf` may apply, where repown already says it can't tell.
 - **2026-10-10, a later push URL owned by someone else is a blocker.** Git runs the pre-push
   hook once per push URL, so with two `pushurl`s (or two `url`s and none) the guard can refuse
   one while the other takes the push; the tracking ref then moves as if all of it landed.
@@ -183,7 +188,10 @@ problem".
   owner one, names each later URL's owner and host (never the URL) that the chosen account and
   `repown.allowOwner` don't cover, with the command that allows it, and blocks while the guard
   is on. URLs come from `git remote get-url --push --all`, deduplicated, or from the
-  configured values when git can't list them. A URL with no owner (a local path) is skipped,
+  configured values when git can't list them (git before 2.7, or config git refuses, where a
+  push fails too); a "could not be read" line there was rejected, since it would stand on
+  every clone with one URL. The sign-in check falls back the same way, over every value.
+  Each refused owner is named once, with its own allow command. A URL with no owner (a local path) is skipped,
   as the guard skips it. When the first URL is refused itself, the owner line speaks alone.
   For: the half-landed push is said before it happens, judged as the owner line judges the
   first URL. Against: the first-owner logic elsewhere (status's `origin` row, `use`'s warning,
@@ -199,8 +207,8 @@ problem".
   push, and pushInsteadOf shadows insteadOf. Git also connects before it runs pre-push, so a
   test of them can't be offline. Now, when any pushInsteadOf value prefixes the URL (an empty
   or missing one counts), or the rules can't be read, the line is `<key> names a URL that a
-  pushInsteadOf rule or a remote section may rewrite, so repown can't tell where a push from
-  <branch> lands: the guard checks it when you push`. It is said but never blocks, and no
+  pushInsteadOf rule may rewrite, so repown can't tell where a push from <branch> lands: the
+  guard checks it when you push`. It is said but never blocks, and no
   owner is claimed for that URL. A `remote."<URL>"` section needs nothing: it makes the URL a
   remote, and `remote get-url --push` resolves it. For: no owner is named that git won't push
   to, and nothing copies rules git may change. Against: a rule that would send the push to

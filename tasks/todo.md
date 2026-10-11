@@ -1,6 +1,6 @@
 # Push-URL gaps
 
-Status: Phase 4 done (tasks 2-5); next Phase 5 review.
+Status: Phase 5 done; next Phase 6 close-out (GATE 6).
 
 - [x] 1. Plan: SPEC.md and this file. Docs: none.
 - [x] 2. ⚠ A sign-in carried by a rewritten push URL is a blocker (item 3)

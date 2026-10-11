@@ -13,6 +13,10 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
   had the token in one but the last. They now judge every URL git pushes with, and say
   `origin's push URL, as git resolves it, carries its own sign-in` without printing the rule,
   whose name holds the token. A rule that takes a token out is no longer reported.
+- The same check printed an `http.<url>.extraheader` key whole, password included when that
+  `<url>` held one; such a key is now printed as `an http.<url>.extraheader setting`. A push
+  straight to a URL that an `insteadOf` rule gives a token is now found too, named by the key
+  that holds the URL.
 - With two push URLs for origin, a push could land on one and be refused by the guard on the
   other, and setup and `repown status` said nothing: they read only the first URL's owner.
   They now name a later URL's owner that this clone isn't allowed to push to, with the

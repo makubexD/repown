@@ -8,6 +8,7 @@ import { Git } from '../src/core/git.ts';
 import { readUnpushed } from '../src/core/unpushed.ts';
 import { readPushFacts } from '../src/core/push-state.ts';
 import { pushTarget, unknownDestination } from '../src/core/push-destination.ts';
+import { err } from '../src/core/result.ts';
 import { sandbox, type Sandbox } from './helpers.ts';
 
 const THEIRS = 'other@example.invalid';
@@ -85,6 +86,23 @@ describe('readPushFacts', () => {
     assert.equal((await read()).signin, null, 'a rule that takes the token out: git sends none');
   });
 
+  test('a sign-in never names a key that holds a token in its own name', async () => {
+    commit('first');
+    box.git('remote', 'add', 'origin', 'https://github.com/octocat/hello.git');
+    box.git('config', 'http.https://octocat:ghp_tok@github.com/.extraheader', 'AUTHORIZATION: basic xyz');
+    assert.deepEqual((await read()).signin, { named: 'an http.<url>.extraheader setting' });
+  });
+
+  test('a push straight to a URL that insteadOf gives a token is found, named by the key', async () => {
+    commit('first');
+    box.git('remote', 'add', 'origin', 'https://github.com/octocat/hello.git');
+    box.git('config', 'branch.main.pushRemote', 'https://github.com/octo-org/hello.git');
+    box.git('config', 'url.https://octocat:ghp_tok@github.com/.insteadOf', 'https://github.com/');
+    assert.deepEqual((await read()).signin, { remote: 'branch.main.pushRemote' });
+    box.git('config', 'url.https://github.com/octo-work/.pushInsteadOf', 'https://github.com/');
+    assert.equal((await read()).signin, null, 'a pushInsteadOf may apply instead: repown says it cannot tell');
+  });
+
   test('every URL a remote pushes with is checked, not only the last one configured', async () => {
     commit('first');
     box.git('remote', 'add', 'origin', 'https://octocat:ghp_tok@github.com/octocat/hello.git');
@@ -105,6 +123,21 @@ describe('readPushFacts', () => {
     assert.deepEqual((await read()).laterUrls, expected, 'a local path has no owner to check');
     box.git('config', 'repown.allowOwner', 'Octo-Org');
     assert.deepEqual((await read()).laterUrls, { ...expected, allowed: ['octo-org'] });
+  });
+
+  test('a git that cannot list the push URLs: the configured values are read instead', async () => {
+    class Unlisting extends Git {
+      override async remoteUrls(): ReturnType<Git['remoteUrls']> { return err('git remote get-url failed'); }
+    }
+    commit('first');
+    box.git('remote', 'add', 'origin', 'https://github.com/octocat/hello.git');
+    box.git('config', '--add', 'remote.origin.url', 'https://github.com/octo-org/hello.git');
+    box.git('config', '--add', 'remote.origin.pushurl', 'https://octocat:ghp_tok@github.com/octocat/hello.git');
+    box.git('config', '--add', 'remote.origin.pushurl', 'https://github.com/octo-work/hello.git');
+    const git = new Unlisting(box.dir);
+    const facts = await readPushFacts(git, await readUnpushed(git), {});
+    assert.deepEqual(facts.laterUrls, { remote: 'origin', owners: [{ owner: 'octo-work', host: 'GitHub' }], allowed: [] });
+    assert.deepEqual(facts.signin, { key: 'remote.origin.pushurl' }, 'every configured pushurl, not only the last');
   });
 
   test('a URL where a remote would do: the key to repoint and that remote, never the URL', async () => {

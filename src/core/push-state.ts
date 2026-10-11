@@ -37,11 +37,12 @@ export interface Divergence {
 }
 
 /**
- * A sign-in on the push path: the config key that holds it, or, when git's own rewriting
- * (`url.<base>.insteadOf`, `pushInsteadOf`) put it there, only the remote. The rule's key
- * holds the token in its name, so it is never named.
+ * A sign-in on the push path: the config key that holds it; when git's own rewriting
+ * (`url.<base>.insteadOf`, `pushInsteadOf`) put it there, only what names the URL (the
+ * remote, or the key naming a bare URL); a key that holds a token in its own name only
+ * by a fixed description. Such a key is never printed.
  */
-export type Signin = { readonly key: string } | { readonly remote: string };
+export type Signin = { readonly key: string } | { readonly remote: string } | { readonly named: string };
 
 /**
  * The URLs a remote pushes to after its first: git runs the pre-push hook once per URL, so
@@ -84,7 +85,7 @@ export async function readPushFacts(git: Git, unpushed: UnpushedFact, env: NodeJ
   const target = branch ? await pushTarget(git, branch) : null;
   const rewritable = await rewritableOf(git, target);
   const [configOverrides, signin, repoint, destination, laterUrls, divergence, elsewhere, upstream] = await Promise.all([
-    overridesIn(git), signinOf(git, target), repointOf(git, branch), rewritable ? null : destinationOf(git, target), laterUrlsOf(git, target),
+    overridesIn(git), signinOf(git, target, rewritable !== null), repointOf(git, branch), rewritable ? null : destinationOf(git, target), laterUrlsOf(git, target),
     divergenceOf(git, target), elsewhereOf(git, target), upstreamOf(git, branch, target),
   ]);
   return {
@@ -104,12 +105,20 @@ function carriesSecret(raw: string | null): boolean {
   return !!user && (user.includes(':') || /^(gh[pousr]_|github_pat_)/i.test(user));
 }
 
-async function signinOf(git: Git, target: PushTarget | null): Promise<Signin | null> {
-  if (target && !target.isRemote && carriesSecret(target.name)) return target.key === null ? null : { key: target.key };
-  const found = target?.isRemote ? await remoteSignin(git, target.name) : null;
+async function signinOf(git: Git, target: PushTarget | null, rewritable: boolean): Promise<Signin | null> {
+  const found = target?.isRemote ? await remoteSignin(git, target.name) : target && !rewritable ? await bareSignin(git, target) : null;
   if (found) return found;
   const headers = await git.configOrigins('^http\\.(.*\\.)?extraheader$');
-  return headers[0] ? { key: headers[0].key } : null;
+  if (!headers[0]) return null;
+  // The key's <url> can hold a password: then only a fixed description is printed.
+  return headers[0].key.includes('@') ? { named: 'an http.<url>.extraheader setting' } : { key: headers[0].key };
+}
+
+/** A push straight to a URL, as typed and after insteadOf; a pushInsteadOf one is not judged (rewritableOf). */
+async function bareSignin(git: Git, target: PushTarget): Promise<Signin | null> {
+  if (target.key === null) return null;
+  if (carriesSecret(target.name)) return { key: target.key };
+  return carriesSecret(await bareTargetUrl(git, target.name)) ? { remote: target.key } : null;
 }
 
 /**
@@ -128,11 +137,13 @@ async function remoteSignin(git: Git, remote: string): Promise<Signin | null> {
   return { remote };
 }
 
-/** A git that cannot list the URLs (before 2.7, or config it refuses): the configured key, as before. */
+/** A git that cannot list the URLs (before 2.7, or config it refuses): every configured value, without rewrites. */
 async function configuredSignin(git: Git, remote: string): Promise<Signin | null> {
   // A push uses pushurl when there is one, so a token in the fetch url does not sign it in.
-  const key = await git.getConfig('remote.' + remote + '.pushurl') !== null ? 'remote.' + remote + '.pushurl' : 'remote.' + remote + '.url';
-  return carriesSecret(await git.getConfig(key)) ? { key } : null;
+  const pushurl = 'remote.' + remote + '.pushurl';
+  const pushurls = await git.getAllConfig(pushurl);
+  const [key, values] = pushurls.length > 0 ? [pushurl, pushurls] : ['remote.' + remote + '.url', await git.getAllConfig('remote.' + remote + '.url')];
+  return values.some(carriesSecret) ? { key } : null;
 }
 
 async function repointOf(git: Git, branch: string | null): Promise<Repoint | null> {
@@ -193,7 +204,7 @@ async function rewritableOf(git: Git, target: PushTarget | null): Promise<{ key:
   return ruled ? { key: target.key ?? 'its push URL' } : null;
 }
 
-/** A push straight to a URL, as git rewrites it (insteadOf; see rewrittenUrl). */
+/** A push straight to a URL after insteadOf (see rewrittenUrl); only when no pushInsteadOf may apply (rewritableOf). */
 async function bareTargetUrl(git: Git, url: string): Promise<string> {
   return (await git.rewrittenUrl(url)) ?? url;
 }

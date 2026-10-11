@@ -139,6 +139,14 @@ test('a later push URL the guard refuses is named by owner and host, with the co
   assert.equal(off[0]!.blocks, false);
 });
 
+test('later URLs name each refused owner once, with one command each', () => {
+  const owners = [{ owner: 'octo-org', host: 'GitHub' }, { owner: 'Octo-Org', host: 'GitHub' }, { owner: 'octo-work', host: 'GitHub' }];
+  const [first] = blockers(facts({ laterUrls: { remote: 'origin', owners, allowed: [] } }), CHOICE);
+  assert.equal(first!.lines[0], 'origin also pushes to "octo-org" (GitHub), "octo-work" (GitHub), not octocat: the guard ' +
+    'will refuse those URLs while the first takes the push. If you belong there: ' +
+    allowOwnerCommand('octo-org') + ' and ' + allowOwnerCommand('octo-work'));
+});
+
 test('no later-URL line when every owner is allowed, or when the first URL is already refused', () => {
   const allowed = { remote: 'origin', owners: [{ owner: 'Octo-Org', host: 'GitHub' }], allowed: ['octo-org'] };
   assert.deepEqual(blockers(facts({ laterUrls: allowed }), CHOICE), []);
@@ -153,9 +161,17 @@ test('a push straight to a URL git may rewrite says repown cannot tell where it 
   const [first] = blockers(facts({ rewritable: { key: 'branch.main.pushRemote' }, destination: null }), CHOICE);
   assert.equal(first!.kind, 'rewrite');
   assert.equal(first!.summary, "repown can't tell where the push goes");
-  assert.equal(first!.lines[0], 'branch.main.pushRemote names a URL that a pushInsteadOf rule or a remote section may ' +
-    "rewrite, so repown can't tell where a push from main lands: the guard checks it when you push");
+  assert.equal(first!.lines[0], 'branch.main.pushRemote names a URL that a pushInsteadOf rule may rewrite, so repown ' +
+    "can't tell where a push from main lands: the guard checks it when you push");
   assert.equal(first!.blocks, false);
+});
+
+test('a later push URL and a rewritable URL come after the owner and before divergence', () => {
+  const all = facts({
+    laterUrls: { remote: 'origin', owners: [{ owner: 'octo-org', host: 'GitHub' }], allowed: [] },
+    rewritable: { key: 'branch.main.pushRemote' }, divergence: ok({ tracked: 'origin/main', behind: 1, ahead: 1 }),
+  });
+  assert.deepEqual(blockers(all, CHOICE).map((blocker) => blocker.kind), ['pushurls', 'rewrite', 'divergence']);
 });
 
 test('blockers come in a fixed order: commits, fork commits, sign-in, variables, config, owner, divergence, upstream', () => {

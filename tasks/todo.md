@@ -1,6 +1,6 @@
 # Test speed, and two push-URL leftovers
 
-Status: Phase 4 (build), task 11. Wall: baseline ~809 s; task 2: 799; 3-4: 805; 8: 818 s (noise).
+Status: Phase 4 (build), task 12 (doubt pass). Wall: baseline ~809 s; task 2: 799; 3-4: 805; 8: 818 s (noise).
 
 Every test-speed task: no assertion removed or loosened, each test keeps a fresh directory,
 full suite green, wall time measured after it (baseline median ~809 s).
@@ -21,7 +21,7 @@ full suite green, wall time measured after it (baseline median ~809 s).
 - [x] 8. ⚠ (narrowed after the doubt pass) sign-in and later URLs share one push URL read
   (also: on git < 2.7 the destination and later URLs use different fallbacks; one list fixes it)
   - Docs: ADR-029 note (output unchanged).
-- [ ] 11. Spawn budget test: status, use, setup --no-input in a pinned clone, counted per
+- [x] 11. Spawn budget test: status, use, setup --no-input in a pinned clone, counted per
   command; RED at the target, lowered as 12-14 land
   - Docs: none (test-only).
 - [ ] 12. ⚠ A clone's layout (git dir, common dir, toplevel, hooks path, bare) read once per run

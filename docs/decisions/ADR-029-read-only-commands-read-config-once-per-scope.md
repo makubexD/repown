@@ -1,6 +1,6 @@
 # ADR-029: Read-only commands read git config once per scope
 
-**Status:** Accepted. Amended by its 2026-10-10 note: push-destination reads through a snapshot of its own; by its 2026-10-11 note: push-state reads a remote's push URLs once for two checks, no layout cache across a run, and one hook location per read.
+**Status:** Accepted. Amended by its 2026-10-10 note: push-destination reads through a snapshot of its own; by its 2026-10-11 note: push-state reads a remote's push URLs once for two checks, no layout cache across a run, one hook location per read, and why the suite takes ~13 minutes on Windows.
 
 ## Context
 
@@ -96,3 +96,11 @@ was bound by process starts: about 22,800 git spawns per run, 13,500 of them `gi
   hook location once and take the guard's state from it (`guardStateAt`), instead of a second
   `hookDirs` read that could disagree with the first. Setup's before/after snapshot and
   `repown guard status` keep their own read. Two `rev-parse` spawns fewer per clone read.
+- **2026-10-11, measured: why the suite takes ~13 minutes on Windows.** One full run started
+  21,960 processes: 10% test setup, 37% repown called in the test process, 53% repown run as
+  the CLI. On this Windows machine a git spawn costs ~75 ms alone and the suite is bound by how
+  many start per second (git peaks near 40/s), not by any one file: wall time follows the
+  spawn count. Before this work: 798-847 s over four runs (CI Linux, ~2 min). After the test
+  setup changes and the reads above: 787-818 s, within that noise. The remaining repeats are
+  reads across a prompt or a write, which this ADR keeps asking git; `test/spawn-budget.test.ts`
+  counts them per command so a new repeat shows.

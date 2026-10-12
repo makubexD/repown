@@ -67,10 +67,6 @@ async function hookDirs(git: Git): Promise<HookDirs | null> {
 }
 
 /** The pre-push hook git will actually RUN -- through core.hooksPath if that is set. */
-export async function hookPath(git: Git): Promise<string | null> {
-  return (await hookLocation(git))?.path ?? null;
-}
-
 export interface HookLocation {
   readonly path: string;
   /** core.hooksPath points elsewhere, so `guard on` will not write there. */
@@ -109,8 +105,12 @@ function redirectMessage(dirs: HookDirs): string {
 }
 
 export async function guardState(git: Git): Promise<GuardState> {
-  const path = await hookPath(git);
-  return path ? stateOf(path) : 'off';
+  return guardStateAt(await hookLocation(git));
+}
+
+/** The guard's state at a location already read, so one read needs not ask git twice. */
+export async function guardStateAt(location: HookLocation | null): Promise<GuardState> {
+  return location ? stateOf(location.path) : 'off';
 }
 
 /**

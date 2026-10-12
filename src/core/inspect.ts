@@ -11,7 +11,7 @@ import { Git, type ConfigEntry, type CurrentBranch } from './git.ts';
 import { parseGitUrl, type GitUrl } from './url.ts';
 import { providerFor, type HostProvider } from './hosts/index.ts';
 import { readIdentity, type RepoIdentity } from './identity.ts';
-import { guardState, hookLocation, type GuardState, type HookLocation } from './guard/hook.ts';
+import { guardStateAt, hookLocation, type GuardState, type HookLocation } from './guard/hook.ts';
 import { findGcm, listAccounts, isGcm } from './credential/gcm.ts';
 import { ghState, ghInstalled, isGh, type GhState } from './credential/gh.ts';
 import type { Result } from './result.ts';
@@ -66,14 +66,14 @@ export async function inspectRepo(git: Git): Promise<RepoState> {
   const url = originUrl ? parseGitUrl(originUrl) : null;
   const sides = await originSides(git, originUrl);
 
-  const [root, branch, hook, identity, guard, helper] = await Promise.all([
+  const [root, branch, hook, identity, helper] = await Promise.all([
     isRepo ? git.root() : Promise.resolve(null),
     isRepo ? git.currentBranch() : Promise.resolve(null),
     isRepo ? hookLocation(git) : Promise.resolve(null),
     readIdentity(git, sides.credential.keys[0] ?? null),
-    isRepo ? guardState(git) : Promise.resolve<GuardState>('off'),
     git.getUrlMatch('credential.helper', sides.credential.url ?? DEFAULT_PROBE_URL),
   ]);
+  const guard = await guardStateAt(hook);
 
   return {
     git, isRepo, root, branch, originUrl, url, provider: providerFor(url),

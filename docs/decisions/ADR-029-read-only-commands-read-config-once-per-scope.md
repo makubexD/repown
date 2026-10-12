@@ -1,6 +1,6 @@
 # ADR-029: Read-only commands read git config once per scope
 
-**Status:** Accepted. Amended by its 2026-10-10 note: push-destination reads through a snapshot of its own; by its 2026-10-11 note: push-state reads a remote's push URLs once for two checks, and no layout cache across a run.
+**Status:** Accepted. Amended by its 2026-10-10 note: push-destination reads through a snapshot of its own; by its 2026-10-11 note: push-state reads a remote's push URLs once for two checks, no layout cache across a run, and one hook location per read.
 
 ## Context
 
@@ -92,3 +92,7 @@ was bound by process starts: about 22,800 git spawns per run, 13,500 of them `gi
   line call it on. `gh --version` and GCM's probe stay per read too. Only an answer computed
   inside one read is passed down. For: every write path still asks git. Against: the repeats
   stay (test/spawn-budget.test.ts counts them).
+- **2026-10-11, one hook location per read.** `inspectRepo` and setup's closing check read the
+  hook location once and take the guard's state from it (`guardStateAt`), instead of a second
+  `hookDirs` read that could disagree with the first. Setup's before/after snapshot and
+  `repown guard status` keep their own read. Two `rev-parse` spawns fewer per clone read.

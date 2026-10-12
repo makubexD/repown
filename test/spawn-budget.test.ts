@@ -14,7 +14,7 @@ import { quietEnv, repown } from './status-helpers.ts';
 
 const COUNTER = pathToFileURL(join(import.meta.dirname, 'fixtures', 'count-spawns.ts')).href;
 
-const BUDGET = { setup: 138, use: 38, status: 41 };
+const BUDGET = { setup: 132, use: 36, status: 39 };
 
 function spawnsOf(box: Sandbox, args: readonly string[]): { count: number; repeated: string[]; stderr: string } {
   const log = join(box.dir, '..', 'spawns.log');

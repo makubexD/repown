@@ -160,8 +160,9 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   what prints the gh NOTE on `repown status`.
 - `test/spawn-budget.test.ts` counts the git processes `setup` (in a fresh clone), then `use` and
   `status` start (through `test/fixtures/count-spawns.ts`, loaded with `--import`; GCM's
-  `git --exec-path` probe is left out, since it depends on PATH). Lower a budget when a
-  change reads less (every run prints the counts); raising one needs a reason in ADR-029.
+  `git --exec-path` probe is left out, since it depends on PATH). Each budget is exact, the same
+  on every OS CI runs: it fails when a count drops too, so lower the budget; raising one needs
+  a reason in ADR-029.
 - `test/config-snapshot.test.ts` reads every config key, in every scope, through a plain `Git`
   and a `ConfigSnapshot` and compares (ADR-029); add a case when a getter or git's rules change.
 - Split test files share their helpers through `test/<name>-helpers.ts` (moved, not copied).

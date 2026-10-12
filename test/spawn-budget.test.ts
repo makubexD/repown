@@ -1,8 +1,9 @@
 // How many git processes one command starts: setup in a fresh clone, then use and status in
 // the clone it pinned (ADR-029). On Windows a git spawn costs ~75 ms idle, so a read repeated
-// inside one run is time the user waits. Each budget is what the command needs today: lower it
-// when a change reads less, never raise it without a reason recorded in ADR-029. Only git is
-// counted, and not `git --exec-path`: GCM's search runs it only when GCM is not on PATH.
+// inside one run is time the user waits. Each budget is exactly what the command needs today,
+// the same on Linux, macOS and Windows: a change that reads less fails until the budget is
+// lowered, and raising one needs a reason recorded in ADR-029. Only git is counted, and not
+// `git --exec-path`: GCM's search runs it only when GCM is not on PATH.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -42,6 +43,8 @@ test('setup, use and status stay within their git spawn budgets', (t) => {
     t.diagnostic(said.join(', '));
     const repeats = over.map(([name, found]) => name + ' repeats: ' + found.repeated.join(' '));
     assert.deepEqual(over.map(([name]) => name), [], [said.join(', '), ...repeats].join('\n'));
+    const under = Object.entries(counts).filter(([name, found]) => found.count < BUDGET[name as keyof typeof BUDGET]);
+    assert.deepEqual(under.map(([name]) => name), [], said.join(', ') + '\nfewer than budgeted: lower BUDGET to these counts');
   } finally {
     box.dispose();
   }

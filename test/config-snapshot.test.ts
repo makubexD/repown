@@ -2,7 +2,7 @@
 // list, raw list or boolean as `git config [--scope] [--type=bool] --get[-all]`, from one
 // `git config [--scope] --list -z` per scope. Each case below is read both ways and compared.
 
-import { test, describe, beforeEach, afterEach } from 'node:test';
+import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -29,9 +29,11 @@ async function readAll(git: Git, key: string, scope: ConfigScope | undefined): P
   return out;
 }
 
+// Every test here only reads (a write is refused, and the last test checks nothing was written),
+// so the suite builds its repository once.
 describe('a config snapshot reads what git reads', () => {
   let box: Sandbox;
-  beforeEach(() => {
+  before(() => {
     box = sandbox();
     for (const value of ['one', '', '  spaced  ']) box.git('config', '--add', 'a.b', value);
     box.git('config', 'a.ml', 'x\ny');
@@ -47,15 +49,17 @@ describe('a config snapshot reads what git reads', () => {
     box.git('config', '--global', 'over.ride', 'global');
     box.git('config', '--system', 's.only', 'system');
   });
-  afterEach(() => box.dispose());
+  after(() => box.dispose());
 
   test('every read of every key, in every scope, matches git', async () => {
     const git = new Git(box.dir);
     const snapshot = new ConfigSnapshot(box.dir);
+    // One scope at a time, its keys together: fast, without dozens of git processes at once.
     for (const scope of SCOPES) {
-      for (const key of KEYS) {
-        assert.deepEqual(await readAll(snapshot, key, scope), await readAll(git, key, scope), (scope ?? 'effective') + ' ' + key);
-      }
+      const read = await Promise.all(KEYS.map(async (key) => ({
+        key, snapshot: await readAll(snapshot, key, scope), git: await readAll(git, key, scope),
+      })));
+      for (const found of read) assert.deepEqual(found.snapshot, found.git, (scope ?? 'effective') + ' ' + found.key);
     }
   });
 

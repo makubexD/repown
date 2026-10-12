@@ -27,7 +27,7 @@ import { plainPrompter } from './plain.ts';
 import { COMMAND_MARK } from './review-text.ts';
 import { blockers, type Blocker } from '../core/blockers.ts';
 import { readPushFacts } from '../core/push-state.ts';
-import { guardState, hookLocation } from '../core/guard/hook.ts';
+import { guardStateAt, hookLocation } from '../core/guard/hook.ts';
 import { readUnpushed } from '../core/unpushed.ts';
 
 export interface SetupDeps {
@@ -429,7 +429,8 @@ function closing(account: string, found: readonly Blocker[]): void {
 /** Re-read after the run: a step may have fixed what the review showed, or not. */
 async function blockersNow(git: Git, account: string): Promise<Blocker[]> {
   const email = await git.getConfig('user.email', 'local') ?? '';
-  const [facts, guard, hook] = await Promise.all([readPushFacts(git, await readUnpushed(git)), guardState(git), hookLocation(git)]);
+  const [facts, hook] = await Promise.all([readPushFacts(git, await readUnpushed(git)), hookLocation(git)]);
+  const guard = await guardStateAt(hook);
   return blockers(facts, { email, account, autoUpstream: false, guarded: guard !== 'off' || hook?.redirected === true });
 }
 

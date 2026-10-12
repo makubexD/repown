@@ -84,8 +84,14 @@ export async function readPushFacts(git: Git, unpushed: UnpushedFact, env: NodeJ
   const branch = head?.kind === 'branch' ? head.name : null;
   const target = branch ? await pushTarget(git, branch) : null;
   const rewritable = await rewritableOf(git, target);
+  // A remote target's push URLs, read once for the sign-in and later-URL checks.
+  const pushed = target?.isRemote ? git.remoteUrls(target.name, true) : null;
   const [configOverrides, signin, repoint, destination, laterUrls, divergence, elsewhere, upstream] = await Promise.all([
-    overridesIn(git), signinOf(git, target, rewritable !== null), repointOf(git, branch), rewritable ? null : destinationOf(git, target), laterUrlsOf(git, target),
+    overridesIn(git),
+    signinOf(git, target, { rewritable: rewritable !== null, pushed }),
+    repointOf(git, branch),
+    rewritable ? null : destinationOf(git, target),
+    laterUrlsOf(git, target, pushed),
     divergenceOf(git, target), elsewhereOf(git, target), upstreamOf(git, branch, target),
   ]);
   return {
@@ -105,8 +111,15 @@ function carriesSecret(raw: string | null): boolean {
   return !!user && (user.includes(':') || /^(gh[pousr]_|github_pat_)/i.test(user));
 }
 
-async function signinOf(git: Git, target: PushTarget | null, rewritable: boolean): Promise<Signin | null> {
-  const found = target?.isRemote ? await remoteSignin(git, target.name) : target && !rewritable ? await bareSignin(git, target) : null;
+/** `pushed`: a remote target's `get-url --push --all` (null for any other target), shared with laterUrlsOf. */
+interface PushUrlRead {
+  readonly rewritable: boolean;
+  readonly pushed: Promise<Result<string[]>> | null;
+}
+
+async function signinOf(git: Git, target: PushTarget | null, { rewritable, pushed }: PushUrlRead): Promise<Signin | null> {
+  const found = pushed && target ? await remoteSignin(git, target.name, await pushed)
+    : target && !rewritable ? await bareSignin(git, target) : null;
   if (found) return found;
   const headers = await git.configOrigins('^http\\.(.*\\.)?extraheader$');
   if (!headers[0]) return null;
@@ -126,8 +139,7 @@ async function bareSignin(git: Git, target: PushTarget): Promise<Signin | null> 
  * adds is found and one a rule takes out is not. A URL that is a configured value is named
  * by its key; any other came from a rewrite, and only the remote is named.
  */
-async function remoteSignin(git: Git, remote: string): Promise<Signin | null> {
-  const pushed = await git.remoteUrls(remote, true);
+async function remoteSignin(git: Git, remote: string, pushed: Result<string[]>): Promise<Signin | null> {
   if (!pushed.ok) return configuredSignin(git, remote);
   const signed = pushed.value.find(carriesSecret);
   if (!signed) return null;
@@ -163,9 +175,9 @@ async function destinationOf(git: Git, target: PushTarget | null): Promise<PushD
   return { remote: target.isRemote ? target.name : null, owner, allowed };
 }
 
-async function laterUrlsOf(git: Git, target: PushTarget | null): Promise<LaterUrls | null> {
-  if (!target?.isRemote) return null;
-  const urls = [...new Set(await pushUrlsOf(git, target.name))];
+async function laterUrlsOf(git: Git, target: PushTarget | null, pushed: Promise<Result<string[]>> | null): Promise<LaterUrls | null> {
+  if (!target?.isRemote || !pushed) return null;
+  const urls = [...new Set(await pushUrlsOf(git, target.name, await pushed))];
   if (urls.length < 2) return null;
   const owners = urls.slice(1).flatMap((raw) => {
     const url = parseGitUrl(raw);
@@ -178,8 +190,7 @@ async function laterUrlsOf(git: Git, target: PushTarget | null): Promise<LaterUr
 }
 
 /** Every URL git pushes `remote` with; a git that cannot list them gets the configured values. */
-async function pushUrlsOf(git: Git, remote: string): Promise<string[]> {
-  const listed = await git.remoteUrls(remote, true);
+async function pushUrlsOf(git: Git, remote: string, listed: Result<string[]>): Promise<string[]> {
   if (listed.ok) return listed.value;
   const pushurls = await git.getAllConfig('remote.' + remote + '.pushurl');
   return pushurls.length > 0 ? pushurls : git.getAllConfig('remote.' + remote + '.url');

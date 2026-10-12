@@ -94,8 +94,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   receives; `provider` and `url` follow the configured fetch URL. `credentialKeys`,
   `credentialUrl`, `credentialHost` and `helper` follow every URL git fetches or pushes origin
   with (`remote get-url --all`, with and without `--push`), and claim nothing when git can't
-  list them (ADR-009). push-state's sign-in and later-URL checks read `remote get-url --push
-  --all` too, falling back to the configured values when git can't list them. A push
+  list them (ADR-009). push-state's sign-in and later-URL checks share one `remote get-url
+  --push --all` read, falling back to the configured values when git can't list them. A push
   straight to a URL goes through `rewrittenUrl` (`ls-remote --get-url`), which applies no
   pushInsteadOf: when a pushInsteadOf value prefixes that URL, push-state says it can't tell
   (`rewritable`) rather than copy git's rules (ADR-026).
@@ -139,6 +139,9 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`, the registry (`REPOWN_CONFIG_DIR`) and gh's accounts (`GH_CONFIG_DIR`), and clears `GIT_DIR`, `GIT_*_EMAIL`, `GH_TOKEN`
   and friends, so neither the machine's config nor the shell running `npm test` leaks in.
   It also clears `NO_COLOR`, `FORCE_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE`, `COLORTERM` and `TERM`.
+  Its repository is a copy of one initialised once per process (cheaper than a `git init` per test),
+  so a test that needs another starting state changes its own copy, never the template.
+  It sets all this in `process.env`, so the tests inside one file must not run concurrently.
 - `plainTerminal()` clears those same six in a file that does not use `sandbox()`.
   A test that wants colour sets it explicitly.
 - `test/fake-exe.ts` compiles the fake `gh.exe` and `git-credential-manager.exe` once
@@ -155,6 +158,11 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   (a refused `.git` at any depth, a bare repository that is not walked).
 - `test/format.test.ts` checks `displayPath` and which streams are coloured. `noted` is
   what prints the gh NOTE on `repown status`.
+- `test/spawn-budget.test.ts` counts the git processes `setup` (in a fresh clone), then `use` and
+  `status` start (through `test/fixtures/count-spawns.ts`, loaded with `--import`; GCM's
+  `git --exec-path` probe is left out, since it depends on PATH). Each budget is exact, the same
+  on every OS CI runs: it fails when a count drops too, so lower the budget; raising one needs
+  a reason in ADR-029.
 - `test/config-snapshot.test.ts` reads every config key, in every scope, through a plain `Git`
   and a `ConfigSnapshot` and compares (ADR-029); add a case when a getter or git's rules change.
 - Split test files share their helpers through `test/<name>-helpers.ts` (moved, not copied).

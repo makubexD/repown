@@ -6,7 +6,7 @@
 // REPOWN_CONFIG_DIR is the same idea for the account registry: an empty directory
 // inside the sandbox, so a test never reads or writes this machine's accounts.
 
-import { appendFileSync, existsSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -83,11 +83,28 @@ function isolate(dir: string, globalConfig: string, systemConfig: string): Recor
 }
 
 // The [user] block `git config --local` writes: a tab before each key, and LF.
-const SANDBOX_USER = '[user]\n\tname = Sandbox\n\temail = sandbox@example.invalid\n';
+/** The sandbox identity's lines: helpers that rewrite `[user]` match them, never a copy. */
+export const SANDBOX_IDENTITY = '\tname = Sandbox\n\temail = sandbox@example.invalid\n';
+const SANDBOX_USER = '[user]\n' + SANDBOX_IDENTITY;
 
+let template: string | undefined;
+
+/**
+ * Copies a repository initialised once per process: a copy costs a fraction of a `git init`
+ * spawn. It is built under the first sandbox's isolated environment, so no machine config
+ * reaches it, and holds no absolute path, so a copy works anywhere.
+ */
 function initRepo(work: string): void {
-  execFileSync('git', ['init', '-q', '-b', 'main', work], { encoding: 'utf8' });
-  appendFileSync(join(work, '.git', 'config'), SANDBOX_USER);
+  cpSync(template ??= buildTemplate(), work, { recursive: true });
+}
+
+function buildTemplate(): string {
+  const root = mkdtempSync(join(tmpdir(), 'repown-template-'));
+  process.on('exit', () => rmSync(root, { recursive: true, force: true }));
+  const repo = join(root, 'repo');
+  execFileSync('git', ['init', '-q', '-b', 'main', repo], { encoding: 'utf8' });
+  appendFileSync(join(repo, '.git', 'config'), SANDBOX_USER);
+  return repo;
 }
 
 function restore(saved: Record<string, string | undefined>): void {

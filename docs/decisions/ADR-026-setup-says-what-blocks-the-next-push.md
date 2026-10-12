@@ -2,7 +2,7 @@
 
 **Status:** Accepted. Supersedes in part [ADR-013](ADR-013-deliberately-not-done.md) (rewriting unpushed commits, only when asked). Amends [ADR-022](ADR-022-set-up-clone-opens-on-settled-screen.md) (a
 settled clone with a blocker is not "nothing needs to change"),
-[ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses), [ADR-020](ADR-020-setup-leaves-clone-ready.md) (done only without blockers) and [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md) (`WARN push` first; status's closing line). Amended by its 2026-10-09 note: reauthor leaves alone what the destination's branches and tags reach; by its 2026-10-10 notes: a sparse checkout's left-out files are no hidden change, a timeout stops what git started, a sign-in is judged on the URLs git pushes with, a later push URL owned by someone else is a blocker, and a bare URL that pushInsteadOf may rewrite can't be told.
+[ADR-011](ADR-011-refuse-vs-warn.md) (setup warns about the variables the guard refuses), [ADR-020](ADR-020-setup-leaves-clone-ready.md) (done only without blockers) and [ADR-023](ADR-023-status-and-doctor-say-what-matters-first.md) (`WARN push` first; status's closing line). Amended by its 2026-10-09 note: reauthor leaves alone what the destination's branches and tags reach; by its 2026-10-10 notes: a sparse checkout's left-out files are no hidden change, a timeout stops what git started, a sign-in is judged on the URLs git pushes with, a later push URL owned by someone else is a blocker, and a bare URL that pushInsteadOf may rewrite can't be told; by its 2026-10-11 notes: a later push URL with no owner stays unsaid, and the fallbacks disagree where git can't list push URLs.
 
 ## Context
 
@@ -213,3 +213,15 @@ problem".
   remote, and `remote get-url --push` resolves it. For: no owner is named that git won't push
   to, and nothing copies rules git may change. Against: a rule that would send the push to
   this clone's own account still gets the line; the guard, which sees the real URL, decides.
+- **2026-10-11, a later push URL with no owner stays unsaid.** Reconsidered and kept. An owner
+  can't be read from a local path, a `file:` or `ext::` URL, a URL with no path, or some Azure
+  DevOps URLs; a local mirror as a second push URL is the common case. A line for it would stand
+  on every such clone for good, and nothing clears it (`repown.allowOwner` names owners, not
+  paths). The 2026-10-10 note's "as the guard skips it" means its owner check: the guard still
+  checks the variables, the pinned identity and every author, committer and tagger pushed there.
+  For: no warning without a fix. Against: a push to such a URL is said nowhere before it happens.
+- **2026-10-11, known: the fallbacks disagree where git can't list push URLs.** Before git 2.7
+  (or with config git refuses), the destination reads `git config --get`, the last configured
+  value, while the later-URL check skips the first; with several pushurls the first is never
+  judged as an owner. Kept: one shared list would change the shown owner for a blank or
+  multi-line push URL on current git (ADR-029's 2026-10-11 note).

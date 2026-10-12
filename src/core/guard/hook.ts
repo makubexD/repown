@@ -108,7 +108,10 @@ export async function guardState(git: Git): Promise<GuardState> {
   return guardStateAt(await hookLocation(git));
 }
 
-/** The guard's state at a location already read, so one read need not ask git twice. */
+/**
+ * The guard's state at a location already read, so one read need not ask git twice. Only a
+ * location from this same read: after a write or a wait, read it again (ADR-029).
+ */
 export async function guardStateAt(location: HookLocation | null): Promise<GuardState> {
   return location ? stateOf(location.path) : 'off';
 }

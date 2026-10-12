@@ -27,7 +27,7 @@ function spawnsOf(box: Sandbox, args: readonly string[]): { count: number; repea
   return { count: calls.length, repeated, stderr: run.stderr };
 }
 
-test('setup, use and status stay within their git spawn budgets', () => {
+test('setup, use and status stay within their git spawn budgets', (t) => {
   const box = sandbox();
   try {
     box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
@@ -39,6 +39,7 @@ test('setup, use and status stay within their git spawn budgets', () => {
     };
     const over = Object.entries(counts).filter(([name, found]) => found.count > BUDGET[name as keyof typeof BUDGET]);
     const said = Object.entries(counts).map(([name, found]) => name + ' ' + found.count + ' (budget ' + BUDGET[name as keyof typeof BUDGET] + ')');
+    t.diagnostic(said.join(', '));
     const repeats = over.map(([name, found]) => name + ' repeats: ' + found.repeated.join(' '));
     assert.deepEqual(over.map(([name]) => name), [], [said.join(', '), ...repeats].join('\n'));
   } finally {

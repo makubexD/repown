@@ -1,8 +1,8 @@
-// How many git processes one command starts in a plain pinned clone (ADR-029). On Windows a
-// git spawn costs ~75 ms idle, so a read repeated inside one run is time the user waits. Each
-// budget is what the command needs today: lower it when a change reads less, never raise it
-// without a reason recorded in ADR-029. Only git is counted; gh and Git Credential Manager
-// depend on what this machine has installed.
+// How many git processes one command starts: setup in a fresh clone, then use and status in
+// the clone it pinned (ADR-029). On Windows a git spawn costs ~75 ms idle, so a read repeated
+// inside one run is time the user waits. Each budget is what the command needs today: lower it
+// when a change reads less, never raise it without a reason recorded in ADR-029. Only git is
+// counted, and not `git --exec-path`: GCM's search runs it only when GCM is not on PATH.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,7 +22,7 @@ function spawnsOf(box: Sandbox, args: readonly string[]): { count: number; repea
   const env = { ...quietEnv(), REPOWN_SPAWN_LOG: log, NODE_OPTIONS: '--import ' + COUNTER };
   const run = repown(args, box.dir, env);
   assert.equal(run.status, 0, run.stderr);
-  const calls = readFileSync(log, 'utf8').trim().split('\n');
+  const calls = readFileSync(log, 'utf8').trim().split('\n').filter((call) => call !== '["--exec-path"]');
   const repeated = [...new Set(calls.filter((call, index) => calls.indexOf(call) !== index))];
   return { count: calls.length, repeated, stderr: run.stderr };
 }

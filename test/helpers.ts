@@ -83,7 +83,9 @@ function isolate(dir: string, globalConfig: string, systemConfig: string): Recor
 }
 
 // The [user] block `git config --local` writes: a tab before each key, and LF.
-const SANDBOX_USER = '[user]\n\tname = Sandbox\n\temail = sandbox@example.invalid\n';
+/** The sandbox identity's lines: helpers that rewrite `[user]` match them, never a copy. */
+export const SANDBOX_IDENTITY = '\tname = Sandbox\n\temail = sandbox@example.invalid\n';
+const SANDBOX_USER = '[user]\n' + SANDBOX_IDENTITY;
 
 let template: string | undefined;
 

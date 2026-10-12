@@ -66,7 +66,7 @@ async function hookDirs(git: Git): Promise<HookDirs | null> {
   return { own: join(resolve(git.cwd, common), 'hooks'), effective: resolve(git.cwd, hooks) };
 }
 
-/** The pre-push hook git will actually RUN -- through core.hooksPath if that is set. */
+/** Where the pre-push hook git will actually RUN is: through core.hooksPath if that is set. */
 export interface HookLocation {
   readonly path: string;
   /** core.hooksPath points elsewhere, so `guard on` will not write there. */
@@ -108,7 +108,7 @@ export async function guardState(git: Git): Promise<GuardState> {
   return guardStateAt(await hookLocation(git));
 }
 
-/** The guard's state at a location already read, so one read needs not ask git twice. */
+/** The guard's state at a location already read, so one read need not ask git twice. */
 export async function guardStateAt(location: HookLocation | null): Promise<GuardState> {
   return location ? stateOf(location.path) : 'off';
 }

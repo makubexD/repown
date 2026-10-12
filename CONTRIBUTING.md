@@ -85,7 +85,8 @@ with an installed repown.
   that would leak your identity into a test. `sandbox()` and `plainTerminal()` also clear
   `NO_COLOR`, `FORCE_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE`, `COLORTERM` and `TERM`.
   `plainTerminal()` is what a file uses when it does not call `sandbox()`. A test that
-  wants colour sets it explicitly. `node --test test/guard.test.ts` runs one file;
+  wants colour sets it explicitly. Each sandbox is a copy of a repository initialised once per
+  test process: a test that needs another starting state changes its own copy. `node --test test/guard.test.ts` runs one file;
   `node --test --test-name-pattern="<regex>" test/guard.test.ts` one test;
   `node --test --test-shard=1/3 "test/*.test.ts"` one shard. CI runs the Windows suite
   as three of those.
@@ -94,7 +95,11 @@ with an installed repown.
   150 s (`*-helpers.ts` holds what the parts share; a suite split by test keeps its name).
   The cost per test is process starts, mostly git. Measured on Windows, 8 cores, on
   2026-10-02: 920 s before, 674 s after splitting the four longest files, 550-580 s after
-  read-only commands read config once per scope (ADR-029), with every test path kept.
+  read-only commands read config once per scope (ADR-029), with every test path kept. The
+  suite has grown since: 787-847 s on 2026-10-10/11, bound by how many processes start per
+  second, 90% of them repown's own (ADR-029). `test/spawn-budget.test.ts` fails when `setup`,
+  `use` or `status` starts more git processes than its budget: lower a budget when a change
+  reads less; raising one needs a reason in ADR-029.
 - **Fake executables.** `gh.exe` and `git-credential-manager.exe` are compiled once per
   test process, outside every sandbox, and put on `PATH` from there (`fakeExeDir`), never copied
   into a sandbox: Windows can keep a new executable locked, and the sandbox then can't be deleted. They are reused ([test/fake-exe.ts](test/fake-exe.ts)).

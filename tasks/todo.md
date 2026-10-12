@@ -1,6 +1,6 @@
 # Test speed, and two push-URL leftovers
 
-Status: Phase 5 (review).
+Status: Phase 5 (review) awaiting GATE 5.
 
 Every test-speed task: no assertion removed or loosened, each test keeps a fresh directory,
 full suite green, wall time measured after it (baseline median ~809 s).

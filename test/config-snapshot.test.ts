@@ -54,13 +54,13 @@ describe('a config snapshot reads what git reads', () => {
   test('every read of every key, in every scope, matches git', async () => {
     const git = new Git(box.dir);
     const snapshot = new ConfigSnapshot(box.dir);
-    const pairs = SCOPES.flatMap((scope) => KEYS.map((key) => ({ scope, key })));
-    const read = await Promise.all(pairs.map(async ({ scope, key }) => ({
-      name: (scope ?? 'effective') + ' ' + key,
-      snapshot: await readAll(snapshot, key, scope),
-      git: await readAll(git, key, scope),
-    })));
-    for (const { name, snapshot: fromSnapshot, git: fromGit } of read) assert.deepEqual(fromSnapshot, fromGit, name);
+    // One scope at a time, its keys together: fast, without dozens of git processes at once.
+    for (const scope of SCOPES) {
+      const read = await Promise.all(KEYS.map(async (key) => ({
+        key, snapshot: await readAll(snapshot, key, scope), git: await readAll(git, key, scope),
+      })));
+      for (const found of read) assert.deepEqual(found.snapshot, found.git, (scope ?? 'effective') + ' ' + found.key);
+    }
   });
 
   test('includes are followed only when no scope is given, as git does', async () => {

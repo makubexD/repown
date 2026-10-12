@@ -1,6 +1,6 @@
 # ADR-029: Read-only commands read git config once per scope
 
-**Status:** Accepted. Amended by its 2026-10-10 note: push-destination reads through a snapshot of its own; by its 2026-10-11 note: push-state reads a remote's push URLs once for two checks, no layout cache across a run, one hook location per read, and why the suite takes ~13 minutes on Windows.
+**Status:** Accepted. Amended by its 2026-10-10 note: push-destination reads through a snapshot of its own; by its 2026-10-11 notes: push-state reads a remote's push URLs once for two checks, no layout cache across a run, one hook location per read, and why the suite takes ~13 minutes on Windows.
 
 ## Context
 
@@ -78,20 +78,22 @@ was bound by process starts: about 22,800 git spawns per run, 13,500 of them `gi
   per key: git has no multi-key config write, and those reads follow rules a snapshot does not
   copy.
 - **2026-10-11, push-state reads a remote's push URLs once for two checks.** The sign-in and
-  later-URL checks each ran `git remote get-url --push --all`; they now share one read,
-  started alongside the pushInsteadOf rules. The destination keeps its own
+  later-URL checks each ran `git remote get-url --push --all`; for a remote target they now
+  share one read. The destination keeps its own
   `get-url --push`: the shared list is trimmed line by line, so a blank or multi-line push URL
   would name a different owner (measured on git 2.56), and the repoint check keeps its own,
-  where a failed read means "elsewhere". For: one spawn fewer per read, output unchanged by
-  construction. Against: three reads of the same list remain in one `readPushFacts`.
+  where a failed read means "elsewhere" (it runs only once the remote has tracking refs). For:
+  one spawn fewer per read, output unchanged by construction. Against: the destination's
+  `get-url --push` and, with tracking refs, the repoint check's list are still read apart.
 - **2026-10-11, not changed: no layout or tool-probe cache across a run.** Measured: setup
-  runs `rev-parse --git-common-dir` and `--git-path hooks` 9 times each. A memo for the run was
+  ran `rev-parse --git-common-dir` and `--git-path hooks` 9 times each (6 after the next
+  note). A memo for the run was
   reviewed and rejected, as the cache above was: `--git-path hooks` follows `core.hooksPath`, and
   setup can wait minutes at a prompt or a gh login while another tool (husky's `prepare`) sets
   it; a remembered answer would let the guard install where git never runs it, and the closing
   line call it on. `gh --version` and GCM's probe stay per read too. Only an answer computed
   inside one read is passed down. For: every write path still asks git. Against: the repeats
-  stay (test/spawn-budget.test.ts counts them).
+  stay, within test/spawn-budget.test.ts's budgets.
 - **2026-10-11, one hook location per read.** `inspectRepo` and setup's closing check read the
   hook location once and take the guard's state from it (`guardStateAt`), instead of a second
   `hookDirs` read that could disagree with the first. Setup's before/after snapshot and
@@ -100,7 +102,8 @@ was bound by process starts: about 22,800 git spawns per run, 13,500 of them `gi
   21,960 processes: 10% test setup, 37% repown called in the test process, 53% repown run as
   the CLI. On this Windows machine a git spawn costs ~75 ms alone and the suite is bound by how
   many start per second (git peaks near 40/s), not by any one file: wall time follows the
-  spawn count. Before this work: 798-847 s over four runs (CI Linux, ~2 min). After the test
-  setup changes and the reads above: 787-818 s, within that noise. The remaining repeats are
-  reads across a prompt or a write, which this ADR keeps asking git; `test/spawn-budget.test.ts`
-  counts them per command so a new repeat shows.
+  spawn count. Before this work: 798-847 s over four runs, up from CONTRIBUTING's 550-580 s of
+  2026-10-02 as the suite grew (CI Linux, ~2 min). After the test setup changes and the reads
+  above: 787-818 s, within that noise. The remaining repeats are reads across a prompt or a
+  write, which this ADR keeps asking git; `test/spawn-budget.test.ts` fails when a command
+  starts more git processes than its budget, and lists the repeated calls.

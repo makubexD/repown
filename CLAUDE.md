@@ -157,8 +157,9 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   (a refused `.git` at any depth, a bare repository that is not walked).
 - `test/format.test.ts` checks `displayPath` and which streams are coloured. `noted` is
   what prints the gh NOTE on `repown status`.
-- `test/spawn-budget.test.ts` counts the git processes `setup`, `use` and `status` start in a pinned
-  clone (through `test/fixtures/count-spawns.ts`, loaded with `--import`). Lower a budget when a
+- `test/spawn-budget.test.ts` counts the git processes `setup` (in a fresh clone), then `use` and
+  `status` start (through `test/fixtures/count-spawns.ts`, loaded with `--import`; GCM's
+  `git --exec-path` probe is left out, since it depends on PATH). Lower a budget when a
   change reads less; raising one needs a reason in ADR-029.
 - `test/config-snapshot.test.ts` reads every config key, in every scope, through a plain `Git`
   and a `ConfigSnapshot` and compares (ADR-029); add a case when a getter or git's rules change.

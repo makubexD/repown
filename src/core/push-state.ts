@@ -83,11 +83,15 @@ export async function readPushFacts(git: Git, unpushed: UnpushedFact, env: NodeJ
   const head = await git.currentBranch();
   const branch = head?.kind === 'branch' ? head.name : null;
   const target = branch ? await pushTarget(git, branch) : null;
-  // Started before rewritableOf so the spawn overlaps it; only a remote target reads it.
-  const pushed = target?.isRemote ? git.remoteUrls(target.name, true) : null;
   const rewritable = await rewritableOf(git, target);
+  // A remote target's push URLs, read once for the sign-in and later-URL checks.
+  const pushed = target?.isRemote ? git.remoteUrls(target.name, true) : null;
   const [configOverrides, signin, repoint, destination, laterUrls, divergence, elsewhere, upstream] = await Promise.all([
-    overridesIn(git), signinOf(git, target, { rewritable: rewritable !== null, pushed }), repointOf(git, branch), rewritable ? null : destinationOf(git, target), laterUrlsOf(git, target, pushed),
+    overridesIn(git),
+    signinOf(git, target, { rewritable: rewritable !== null, pushed }),
+    repointOf(git, branch),
+    rewritable ? null : destinationOf(git, target),
+    laterUrlsOf(git, target, pushed),
     divergenceOf(git, target), elsewhereOf(git, target), upstreamOf(git, branch, target),
   ]);
   return {
@@ -107,14 +111,14 @@ function carriesSecret(raw: string | null): boolean {
   return !!user && (user.includes(':') || /^(gh[pousr]_|github_pat_)/i.test(user));
 }
 
-/** `pushed`: the remote target's `get-url --push --all`, read once for this check and laterUrlsOf. */
+/** `pushed`: a remote target's `get-url --push --all` (null for any other target), shared with laterUrlsOf. */
 interface PushUrlRead {
   readonly rewritable: boolean;
   readonly pushed: Promise<Result<string[]>> | null;
 }
 
 async function signinOf(git: Git, target: PushTarget | null, { rewritable, pushed }: PushUrlRead): Promise<Signin | null> {
-  const found = target?.isRemote && pushed ? await remoteSignin(git, target.name, await pushed)
+  const found = pushed && target ? await remoteSignin(git, target.name, await pushed)
     : target && !rewritable ? await bareSignin(git, target) : null;
   if (found) return found;
   const headers = await git.configOrigins('^http\\.(.*\\.)?extraheader$');

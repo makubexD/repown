@@ -14,7 +14,7 @@ import { ghStateFrom } from '../src/core/credential/gh.ts';
 import { GH_EMPTY_HOSTS } from './fixtures/gh-empty-hosts.ts';
 import { loadRegistry, registryPath } from '../src/core/registry.ts';
 import { err, ok } from '../src/core/result.ts';
-import { pathWithoutGh, plainTerminal, sandbox, type Sandbox } from './helpers.ts';
+import { SANDBOX_IDENTITY, pathWithoutGh, plainTerminal, sandbox, type Sandbox } from './helpers.ts';
 import { fakeExeDir } from './fake-exe.ts';
 
 export const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
@@ -89,7 +89,6 @@ export function fieldsUnder(stdout: string, heading: string): string[] {
  * (one write instead of six git spawns): the sandbox's [user] values replaced in place, the
  * other sections appended, as git does while none of them exists yet.
  */
-const SANDBOX_USER = '\tname = Sandbox\n\temail = sandbox@example.invalid\n';
 const PINNED_USER = '\tname = Octo Cat\n\temail = octocat@example.invalid\n';
 const PINNED_SECTIONS = '[remote "origin"]\n\turl = https://github.com/octocat/project.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n' +
   '[repown]\n\taccount = octocat\n' +
@@ -99,9 +98,9 @@ const PINNED_SECTIONS = '[remote "origin"]\n\turl = https://github.com/octocat/p
 export function pinGithub(box: Sandbox): void {
   const config = join(box.dir, '.git', 'config');
   const before = readFileSync(config, 'utf8');
-  assert.ok(before.includes('[user]\n' + SANDBOX_USER), 'pinGithub expects the sandbox identity');
+  assert.ok(before.includes('[user]\n' + SANDBOX_IDENTITY), 'pinGithub expects the sandbox identity');
   assert.ok(!/^\[(remote "origin"|repown|credential)/m.test(before), 'pinGithub expects none of its sections yet');
-  writeFileSync(config, before.replace(SANDBOX_USER, PINNED_USER) + PINNED_SECTIONS);
+  writeFileSync(config, before.replace(SANDBOX_IDENTITY, PINNED_USER) + PINNED_SECTIONS);
 }
 
 export function unpin(box: Sandbox): void {

@@ -7,6 +7,12 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+### Changed
+- Reading a clone starts up to three fewer git processes (about 75 ms each on
+  Windows): the guard's state now comes from the hook location already read, and the
+  sign-in and later-push-URL checks share one read of origin's push URLs. Output is
+  unchanged.
+
 ## [0.5.3] - 2026-10-11
 
 ### Fixed

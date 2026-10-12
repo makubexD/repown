@@ -141,6 +141,7 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   It also clears `NO_COLOR`, `FORCE_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE`, `COLORTERM` and `TERM`.
   Its repository is a copy of one initialised once per process (cheaper than a `git init` per test),
   so a test that needs another starting state changes its own copy, never the template.
+  It sets all this in `process.env`, so the tests inside one file must not run concurrently.
 - `plainTerminal()` clears those same six in a file that does not use `sandbox()`.
   A test that wants colour sets it explicitly.
 - `test/fake-exe.ts` compiles the fake `gh.exe` and `git-credential-manager.exe` once

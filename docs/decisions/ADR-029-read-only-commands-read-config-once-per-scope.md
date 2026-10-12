@@ -1,6 +1,6 @@
 # ADR-029: Read-only commands read git config once per scope
 
-**Status:** Accepted. Amended by its 2026-10-10 note: push-destination reads through a snapshot of its own; by its 2026-10-11 note: push-state reads a remote's push URLs once for two checks.
+**Status:** Accepted. Amended by its 2026-10-10 note: push-destination reads through a snapshot of its own; by its 2026-10-11 note: push-state reads a remote's push URLs once for two checks, and no layout cache across a run.
 
 ## Context
 
@@ -84,3 +84,11 @@ was bound by process starts: about 22,800 git spawns per run, 13,500 of them `gi
   would name a different owner (measured on git 2.56), and the repoint check keeps its own,
   where a failed read means "elsewhere". For: one spawn fewer per read, output unchanged by
   construction. Against: three reads of the same list remain in one `readPushFacts`.
+- **2026-10-11, not changed: no layout or tool-probe cache across a run.** Measured: setup
+  runs `rev-parse --git-common-dir` and `--git-path hooks` 9 times each. A memo for the run was
+  reviewed and rejected, as the cache above was: `--git-path hooks` follows `core.hooksPath`, and
+  setup can wait minutes at a prompt or a gh login while another tool (husky's `prepare`) sets
+  it; a remembered answer would let the guard install where git never runs it, and the closing
+  line call it on. `gh --version` and GCM's probe stay per read too. Only an answer computed
+  inside one read is passed down. For: every write path still asks git. Against: the repeats
+  stay (test/spawn-budget.test.ts counts them).

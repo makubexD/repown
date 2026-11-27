@@ -22,6 +22,7 @@ import { run, succeeded, output, lines, type ExecResult } from './exec.ts';
 import { ok, err, type Result } from './result.ts';
 
 export type ConfigScope = 'local' | 'global' | 'system';
+/** Where a config write (or a read of one file alone) goes: a scope, or a file named outright. */export type ConfigTarget = ConfigScope | { readonly file: string };
 
 export interface CommitIdentity {
   readonly sha: string;
@@ -192,23 +193,35 @@ export class Git {
 
   // ---- config -------------------------------------------------------------
 
-  private scoped(scope: ConfigScope | undefined, args: readonly string[]): string[] {
-    return scope ? ['config', `--${scope}`, ...args] : ['config', ...args];
+  /** A write's argv: to a scope's own file, or to one file named outright. */
+  private scoped(target: ConfigTarget | undefined, args: readonly string[]): string[] {
+    if (target === undefined) return ['config', ...args];
+    return ['config', typeof target === 'string' ? `--${target}` : `--file=${target.file}`, ...args];
+  }
+
+  /**
+   * A read's argv. git follows include.path only when no scope is named, unless told to:
+   * without --includes a scoped read misses a value kept in a file the scope includes,
+   * which git itself applies (ADR-030). A file named outright is read on its own.
+   */
+  private reading(target: ConfigTarget | undefined, args: readonly string[]): string[] {
+    const scoped = this.scoped(target, args);
+    return typeof target === 'string' ? [...scoped.slice(0, 2), '--includes', ...scoped.slice(2)] : scoped;
   }
 
   /** The value, or null when unset. Omit `scope` to read what git would EFFECTIVELY use. */
   async getConfig(key: string, scope?: ConfigScope): Promise<string | null> {
-    return output(await this.exec(this.scoped(scope, ['--get', key])));
+    return output(await this.exec(this.reading(scope, ['--get', key])));
   }
 
   /** Effective boolean, or null when unset or not a bool. Omit `scope` for any-scope. */
   async getBoolConfig(key: string, scope?: ConfigScope): Promise<boolean | null> {
-    const value = output(await this.exec(this.scoped(scope, ['--type=bool', '--get', key])));
+    const value = output(await this.exec(this.reading(scope, ['--type=bool', '--get', key])));
     return value === 'true' ? true : value === 'false' ? false : null;
   }
 
   async getAllConfig(key: string, scope?: ConfigScope): Promise<string[]> {
-    return lines(await this.exec(this.scoped(scope, ['--get-all', key])));
+    return lines(await this.exec(this.reading(scope, ['--get-all', key])));
   }
 
   /**
@@ -221,8 +234,8 @@ export class Git {
    * stopped working. Filtering it out made `repown fix` preview two values while
    * removing four, and hid the one the explanation is actually about.
    */
-  async getAllConfigRaw(key: string, scope?: ConfigScope): Promise<string[]> {
-    const result = await this.exec(this.scoped(scope, ['--get-all', key]));
+  async getAllConfigRaw(key: string, target?: ConfigTarget): Promise<string[]> {
+    const result = await this.exec(this.reading(target, ['--get-all', key]));
     if (!succeeded(result)) return [];
     // git ends every value with LF on every platform, so a CR is part of a value: kept.
     const split = result.stdout.split('\n');
@@ -237,13 +250,13 @@ export class Git {
   }
 
   /** Appends one more value to a multi-valued key. */
-  async addConfig(key: string, value: string, scope: ConfigScope): Promise<boolean> {
-    return succeeded(await this.exec(this.scoped(scope, ['--add', key, value])));
+  async addConfig(key: string, value: string, target: ConfigTarget): Promise<boolean> {
+    return succeeded(await this.exec(this.scoped(target, ['--add', key, value])));
   }
 
   /** True when the key is gone afterwards -- including when it was never set. */
-  async unsetConfig(key: string, scope: ConfigScope = 'local'): Promise<boolean> {
-    const result = await this.exec(this.scoped(scope, ['--unset-all', key]));
+  async unsetConfig(key: string, target: ConfigTarget = 'local'): Promise<boolean> {
+    const result = await this.exec(this.scoped(target, ['--unset-all', key]));
     return succeeded(result) || result.code === 5; // 5 = the key did not exist
   }
 
@@ -262,7 +275,7 @@ export class Git {
 
   /** Which FILE each matching key lives in, so a repair edits the scope that holds it. */
   async configOrigins(pattern: string, scope?: ConfigScope): Promise<ConfigEntry[]> {
-    const args = this.scoped(scope, ['--show-origin', '--get-regexp', pattern]);
+    const args = this.reading(scope, ['--show-origin', '--get-regexp', pattern]);
     return lines(await this.exec(args)).flatMap(parseOriginLine);
   }
 

@@ -1,5 +1,5 @@
-// Config reads answered from one `git config [--scope] --list -z` per scope, read on first
-// use, for code that only reads (ADR-029). A plain `--get` or `--get-all` is answered with
+// Config reads answered from one `git config [--scope --includes] --list -z` per scope, read on
+// first use, for code that only reads (ADR-029, ADR-030). A plain `--get` or `--get-all` is answered with
 // the output git itself would print for it, so Git's parsing of that output is unchanged.
 // Other config queries (`--type=bool`, `--get-urlmatch`, `--show-origin --get-regexp`) and
 // every non-config call go to git. A config write refuses.
@@ -23,9 +23,10 @@ export class ConfigSnapshot extends Git {
 
   protected override exec(args: readonly string[], input?: string): Promise<ExecResult> {
     if (args[0] !== 'config') return this.spawnGit(args, input);
-    const read = configRead(args);
+    const query = withoutIncludes(args);
+    const read = configRead(query);
     if (read) return this.answer(read);
-    if (PASSED_THROUGH.has(actionOf(args) ?? '')) return this.spawnGit(args, input);
+    if (PASSED_THROUGH.has(actionOf(query) ?? '')) return this.spawnGit(args, input);
     return Promise.reject(new Error('a config snapshot only reads: git ' + args.join(' ')));
   }
 
@@ -67,8 +68,17 @@ export function snapshotOf(git: Git): ConfigSnapshot {
   return new ConfigSnapshot(git.cwd);
 }
 
+/** A scoped list follows includes, as every scoped read Git sends does (ADR-030). */
 function listArgs(scope: ConfigScope | undefined): string[] {
-  return scope ? ['config', '--' + scope, '--list', '-z'] : ['config', '--list', '-z'];
+  return scope ? ['config', '--' + scope, '--includes', '--list', '-z'] : ['config', '--list', '-z'];
+}
+
+/**
+ * The query without the `--includes` a scoped read carries: a snapshot's lists already follow
+ * includes. Only the flag right after the scope is dropped, so a value is never touched.
+ */
+function withoutIncludes(args: readonly string[]): readonly string[] {
+  return SCOPE_FLAGS.has(args[1] ?? '') && args[2] === '--includes' ? [...args.slice(0, 2), ...args.slice(3)] : args;
 }
 
 function missingFileIsEmpty(listed: ExecResult): ExecResult {

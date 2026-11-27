@@ -63,10 +63,12 @@ describe('a config snapshot reads what git reads', () => {
     }
   });
 
-  test('includes are followed only when no scope is given, as git does', async () => {
-    const snapshot = new ConfigSnapshot(box.dir);
-    assert.equal(await snapshot.getConfig('x.inc'), '1');
-    assert.equal(await snapshot.getConfig('x.inc', 'global'), null);
+  test('includes are followed in every scope: a scope is what it contributes, includes and all (ADR-030)', async () => {
+    for (const git of [new ConfigSnapshot(box.dir), new Git(box.dir)]) {
+      assert.equal(await git.getConfig('x.inc'), '1', git.constructor.name);
+      assert.equal(await git.getConfig('x.inc', 'global'), '1', git.constructor.name + ' global');
+      assert.equal(await git.getConfig('x.inc', 'local'), null, git.constructor.name + ' local');
+    }
   });
 
   test('a snapshot reads each scope once for its plain getters; a boolean still asks git', async () => {

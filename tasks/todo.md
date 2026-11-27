@@ -1,9 +1,9 @@
 # Config read through include.path
 
-Status: plan written; next task 2.
+Status: task 2 done; next task 3.
 
 - [x] 1. Plan: SPEC.md and this file. Docs: none.
-- [ ] 2. Scoped reads follow include.path (item 1)
+- [x] 2. Scoped reads follow include.path (item 1)
   - Accept: a key only in a file included from the global config is read by every scoped
     getter and by a snapshot; the machine default identity sees an included `user.email`.
   - Where: `scoped` reads in `src/core/git.ts`, `listArgs`/`configRead` in `src/core/config-snapshot.ts`.

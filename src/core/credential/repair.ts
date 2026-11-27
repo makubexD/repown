@@ -26,12 +26,13 @@
 // The system scope is the realistic case: reading it needs nothing, editing it is
 // machine-wide and needs an elevated shell.
 
-// WHERE IT IS. gh writes to the global file, but the pair may sit in any file a scope
-// includes (a `~/.gitconfig.local` behind `include.path`), and git applies it from there.
-// So each scope is read with its includes, and each key is edited in the file that holds
-// it: `--global --unset-all` leaves an included file as it was (ADR-030).
+// WHERE IT IS. gh writes to the global file, but the pair may sit in a file the global or
+// system config includes (a `~/.gitconfig.local` behind `include.path`), and git applies it
+// from there. So those scopes are read with their includes, and each key is edited in the
+// file that holds it: `--global --unset-all` leaves an included file as it was (ADR-030).
+// A clone's local includes are not followed (see `reading` in git.ts).
 
-import type { Git, ConfigScope, ConfigEntry } from '../git.ts';
+import type { Git, ConfigScope, ConfigEntry, ConfigTarget } from '../git.ts';
 import { isGh } from './gh.ts';
 
 const SCOPES: readonly ConfigScope[] = ['local', 'global', 'system'];
@@ -93,13 +94,18 @@ export async function repair(git: Git): Promise<RemovalOutcome[]> {
   return results;
 }
 
-/** That file's own values of the key (named outright, so not its includes), gh's left out. */
+/**
+ * That file's own values of the key, gh's left out. A local entry goes through `--local`:
+ * git prints its origin relative to the worktree (`.git/config`), which `--file=` would
+ * resolve against the cwd, and local reads don't follow includes. A global or system origin
+ * is absolute, and named outright, so its own includes are not read.
+ */
 async function rewrite(git: Git, entry: RemovalOutcome): Promise<boolean> {
-  const file = { file: entry.file };
-  const all = await git.getAllConfigRaw(entry.key, file);
+  const target: ConfigTarget = entry.scope === 'local' ? 'local' : { file: entry.file };
+  const all = await git.getAllConfigRaw(entry.key, target);
   const kept = all.filter((_, index) => !isGhEntry(all, index));
-  let removed = await git.unsetConfig(entry.key, file);
-  for (const value of kept) removed = await git.addConfig(entry.key, value, file) && removed;
+  let removed = await git.unsetConfig(entry.key, target);
+  for (const value of kept) removed = await git.addConfig(entry.key, value, target) && removed;
   return removed;
 }
 

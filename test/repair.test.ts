@@ -5,7 +5,7 @@
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { sandbox, type Sandbox } from './helpers.ts';
 import { Git } from '../src/core/git.ts';
@@ -94,6 +94,19 @@ describe('repown fix: what it plans and what it removes', () => {
       await repair(git);
       assert.equal(await git.getUrlMatch('credential.helper', 'https://github.com'), 'manager');
     });
+  });
+
+  test('a local pair is removed from a subdirectory too, where git names .git/config relatively', async () => {
+    box.git('config', '--local', '--add', KEY, '');
+    box.git('config', '--local', '--add', KEY, GH);
+    box.git('config', '--local', '--add', KEY, 'manager');
+    const sub = join(box.dir, 'sub');
+    mkdirSync(sub);
+    const inSub = new Git(sub);
+    assert.equal((await planRepair(inSub)).length, 1);
+    const results = await repair(inSub);
+    assert.ok(results.every((result) => result.removed), JSON.stringify(results));
+    assert.deepEqual(await git.getAllConfigRaw(KEY, 'local'), ['manager']);
   });
 
   test('beside gh, another helper on the same key survives the repair', async () => {

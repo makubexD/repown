@@ -1,10 +1,10 @@
-// Config reads answered from one `git config [--scope --includes] --list -z` per scope, read on
+// Config reads answered from one `git config [--scope [--includes]] --list -z` per scope, read on
 // first use, for code that only reads (ADR-029, ADR-030). A plain `--get` or `--get-all` is answered with
 // the output git itself would print for it, so Git's parsing of that output is unchanged.
 // Other config queries (`--type=bool`, `--get-urlmatch`, `--show-origin --get-regexp`) and
 // every non-config call go to git. A config write refuses.
 
-import { Git, type ConfigScope } from './git.ts';
+import { Git, followsIncludes, type ConfigScope } from './git.ts';
 import { succeeded, type ExecResult } from './exec.ts';
 
 interface ConfigRead {
@@ -68,9 +68,10 @@ export function snapshotOf(git: Git): ConfigSnapshot {
   return new ConfigSnapshot(git.cwd);
 }
 
-/** A scoped list follows includes, as every scoped read Git sends does (ADR-030). */
+/** A global or system list follows includes, as those reads from Git do; local does not (ADR-030). */
 function listArgs(scope: ConfigScope | undefined): string[] {
-  return scope ? ['config', '--' + scope, '--includes', '--list', '-z'] : ['config', '--list', '-z'];
+  if (!scope) return ['config', '--list', '-z'];
+  return ['config', '--' + scope, ...(followsIncludes(scope) ? ['--includes'] : []), '--list', '-z'];
 }
 
 /**

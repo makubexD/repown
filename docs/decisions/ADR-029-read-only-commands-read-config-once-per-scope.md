@@ -1,6 +1,6 @@
 # ADR-029: Read-only commands read git config once per scope
 
-**Status:** Accepted. Amended by its 2026-10-10 note: push-destination reads through a snapshot of its own; by its 2026-10-11 notes: push-state reads a remote's push URLs once for two checks, no layout cache across a run, one hook location per read, and why the suite takes ~13 minutes on Windows. Its "Includes" line is superseded by ADR-030: every scoped read, and each scope's list, follows includes.
+**Status:** Accepted. Amended by its 2026-10-10 note: push-destination reads through a snapshot of its own; by its 2026-10-11 notes: push-state reads a remote's push URLs once for two checks, no layout cache across a run, one hook location per read, and why the suite takes ~13 minutes on Windows. Its "Includes" line is superseded by ADR-030: global and system reads, and their lists, follow includes; local ones still do not.
 
 ## Context
 
@@ -107,7 +107,7 @@ was bound by process starts: about 22,800 git spawns per run, 13,500 of them `gi
   above: 787-818 s, within that noise. The remaining repeats are reads across a prompt or a
   write, which this ADR keeps asking git; `test/spawn-budget.test.ts` fails when a command
   starts more git processes than its budget, and lists the repeated calls.
-- **2026-11-27, superseded: the "Includes" line.** A scoped read and each scope's list now pass
+- **2026-11-27, superseded: the "Includes" line.** A global or system read, and that scope's list, now pass
   `--includes`, so a value kept in a file the scope includes is read under that scope
   (ADR-030). The snapshot still matches a plain `Git` read for every key in every scope.
 - **2026-11-27, setup's budget 132 -> 135.** Setup's `planRepair` read each scope's gh helper

@@ -22,7 +22,8 @@ import { run, succeeded, output, lines, type ExecResult } from './exec.ts';
 import { ok, err, type Result } from './result.ts';
 
 export type ConfigScope = 'local' | 'global' | 'system';
-/** Where a config write (or a read of one file alone) goes: a scope, or a file named outright. */export type ConfigTarget = ConfigScope | { readonly file: string };
+/** Where a config write (or a read of one file alone) goes: a scope, or a file named outright. */
+export type ConfigTarget = ConfigScope | { readonly file: string };
 
 export interface CommitIdentity {
   readonly sha: string;
@@ -193,7 +194,7 @@ export class Git {
 
   // ---- config -------------------------------------------------------------
 
-  /** A write's argv: to a scope's own file, or to one file named outright. */
+  /** argv addressed to a scope's own file, or to one file named outright: every write. */
   private scoped(target: ConfigTarget | undefined, args: readonly string[]): string[] {
     if (target === undefined) return ['config', ...args];
     return ['config', typeof target === 'string' ? `--${target}` : `--file=${target.file}`, ...args];
@@ -201,12 +202,14 @@ export class Git {
 
   /**
    * A read's argv. git follows include.path only when no scope is named, unless told to:
-   * without --includes a scoped read misses a value kept in a file the scope includes,
-   * which git itself applies (ADR-030). A file named outright is read on its own.
+   * without --includes a global or system read misses a value kept in a file it includes,
+   * which git itself applies (ADR-030). A local read stays bare: a clone's include can name a
+   * file the repository tracks, and committed content must not set the guard's own keys.
+   * A file named outright is read on its own.
    */
   private reading(target: ConfigTarget | undefined, args: readonly string[]): string[] {
     const scoped = this.scoped(target, args);
-    return typeof target === 'string' ? [...scoped.slice(0, 2), '--includes', ...scoped.slice(2)] : scoped;
+    return followsIncludes(target) ? [...scoped.slice(0, 2), '--includes', ...scoped.slice(2)] : scoped;
   }
 
   /** The value, or null when unset. Omit `scope` to read what git would EFFECTIVELY use. */
@@ -496,6 +499,11 @@ export class Git {
     }
     return ok(counts);
   }
+}
+
+/** The machine's own scopes, whose includes are the user's files (ADR-030). */
+export function followsIncludes(target: ConfigTarget | undefined): boolean {
+  return target === 'global' || target === 'system';
 }
 
 /**

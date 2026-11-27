@@ -112,7 +112,7 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   `isUnicodeSupported`; test/format.test.ts compares the two in every terminal clack tells apart.
 - Read-only commands (`status`, `doctor`, `scan`, `guard check`, the start screen's clone read,
   setup's `readContext`) read config through `snapshotOf(git)` (`src/core/config-snapshot.ts`):
-  one `git config [--scope] --list -z` per scope answers the plain getters (ADR-029). Never hand a
+  one `git config [--scope] --list -z` per scope answers the plain getters (ADR-029); global and system reads (and lists) pass `--includes`, local ones never do (ADR-030). Never hand a
   snapshot to code that writes config; it throws. Booleans, URL matches, origins and `configValues` (`--get-regexp -z`) still go to git.
 - `--format json` (`scan`, `accounts list`) is a stable contract for scripts; the text
   layout isn't. Renaming a JSON field is breaking (ADR-014).

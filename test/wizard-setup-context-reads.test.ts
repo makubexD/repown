@@ -60,6 +60,13 @@ describe('setup context: would `use` change anything here?', () => {
     assert.deepEqual((await read()).machineIdentity, { name: 'Octo Cat', email: 'octocat@example.invalid' });
   });
 
+  test('machine identity kept in a file the global config includes is read (ADR-030)', async () => {
+    const included = join(at.box.dir, '..', 'gitconfig-included');
+    writeFileSync(included, '[user]\n\tname = Octo Cat\n\temail = octocat@example.invalid\n');
+    at.box.git('config', '--global', 'include.path', included);
+    assert.deepEqual((await read()).machineIdentity, { name: 'Octo Cat', email: 'octocat@example.invalid' });
+  });
+
   test('reads the git version gate and the effective push.autoSetupRemote', async () => {
     const ctx = await read();
     assert.equal(ctx.upstream.supported, gitSupportsAutoUpstream(at.box.git('--version')));

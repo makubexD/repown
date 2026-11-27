@@ -7,6 +7,14 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+### Fixed
+- `repown fix` said "nothing to undo -- gh is not installed as a credential helper" while
+  `repown doctor` reported gh as the helper, when `gh auth setup-git`'s entries sat in a
+  file your git config includes (`include.path`, for example `~/.gitconfig.local`). `fix`
+  now finds them there, removes them from that file, and its preview names the file.
+- A `user.name` or `user.email` kept in a file your global config includes is now shown as
+  the machine default by setup and `repown status`.
+
 ## [0.5.4] - 2026-10-12
 
 ### Changed

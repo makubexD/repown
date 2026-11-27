@@ -22,6 +22,8 @@ import { run, succeeded, output, lines, type ExecResult } from './exec.ts';
 import { ok, err, type Result } from './result.ts';
 
 export type ConfigScope = 'local' | 'global' | 'system';
+/** Where a config write (or a read of one file alone) goes: a scope, or a file named outright. */
+export type ConfigTarget = ConfigScope | { readonly file: string };
 
 export interface CommitIdentity {
   readonly sha: string;
@@ -192,23 +194,37 @@ export class Git {
 
   // ---- config -------------------------------------------------------------
 
-  private scoped(scope: ConfigScope | undefined, args: readonly string[]): string[] {
-    return scope ? ['config', `--${scope}`, ...args] : ['config', ...args];
+  /** argv addressed to a scope's own file, or to one file named outright: every write. */
+  private scoped(target: ConfigTarget | undefined, args: readonly string[]): string[] {
+    if (target === undefined) return ['config', ...args];
+    return ['config', typeof target === 'string' ? `--${target}` : `--file=${target.file}`, ...args];
+  }
+
+  /**
+   * A read's argv. git follows include.path only when no scope is named, unless told to:
+   * without --includes a global or system read misses a value kept in a file it includes,
+   * which git itself applies (ADR-030). A local read stays bare: a clone's include can name a
+   * file the repository tracks, and committed content must not set the guard's own keys.
+   * A file named outright is read on its own.
+   */
+  private reading(target: ConfigTarget | undefined, args: readonly string[]): string[] {
+    const scoped = this.scoped(target, args);
+    return followsIncludes(target) ? [...scoped.slice(0, 2), '--includes', ...scoped.slice(2)] : scoped;
   }
 
   /** The value, or null when unset. Omit `scope` to read what git would EFFECTIVELY use. */
   async getConfig(key: string, scope?: ConfigScope): Promise<string | null> {
-    return output(await this.exec(this.scoped(scope, ['--get', key])));
+    return output(await this.exec(this.reading(scope, ['--get', key])));
   }
 
   /** Effective boolean, or null when unset or not a bool. Omit `scope` for any-scope. */
   async getBoolConfig(key: string, scope?: ConfigScope): Promise<boolean | null> {
-    const value = output(await this.exec(this.scoped(scope, ['--type=bool', '--get', key])));
+    const value = output(await this.exec(this.reading(scope, ['--type=bool', '--get', key])));
     return value === 'true' ? true : value === 'false' ? false : null;
   }
 
   async getAllConfig(key: string, scope?: ConfigScope): Promise<string[]> {
-    return lines(await this.exec(this.scoped(scope, ['--get-all', key])));
+    return lines(await this.exec(this.reading(scope, ['--get-all', key])));
   }
 
   /**
@@ -221,8 +237,8 @@ export class Git {
    * stopped working. Filtering it out made `repown fix` preview two values while
    * removing four, and hid the one the explanation is actually about.
    */
-  async getAllConfigRaw(key: string, scope?: ConfigScope): Promise<string[]> {
-    const result = await this.exec(this.scoped(scope, ['--get-all', key]));
+  async getAllConfigRaw(key: string, target?: ConfigTarget): Promise<string[]> {
+    const result = await this.exec(this.reading(target, ['--get-all', key]));
     if (!succeeded(result)) return [];
     // git ends every value with LF on every platform, so a CR is part of a value: kept.
     const split = result.stdout.split('\n');
@@ -237,13 +253,13 @@ export class Git {
   }
 
   /** Appends one more value to a multi-valued key. */
-  async addConfig(key: string, value: string, scope: ConfigScope): Promise<boolean> {
-    return succeeded(await this.exec(this.scoped(scope, ['--add', key, value])));
+  async addConfig(key: string, value: string, target: ConfigTarget): Promise<boolean> {
+    return succeeded(await this.exec(this.scoped(target, ['--add', key, value])));
   }
 
   /** True when the key is gone afterwards -- including when it was never set. */
-  async unsetConfig(key: string, scope: ConfigScope = 'local'): Promise<boolean> {
-    const result = await this.exec(this.scoped(scope, ['--unset-all', key]));
+  async unsetConfig(key: string, target: ConfigTarget = 'local'): Promise<boolean> {
+    const result = await this.exec(this.scoped(target, ['--unset-all', key]));
     return succeeded(result) || result.code === 5; // 5 = the key did not exist
   }
 
@@ -260,10 +276,13 @@ export class Git {
     return output(await this.exec(['config', '--get-urlmatch', key, url]));
   }
 
-  /** Which FILE each matching key lives in, so a repair edits the scope that holds it. */
+  /**
+   * Which FILE each matching value lives in, so a repair edits the file that holds it: with a
+   * scope, an included file too, under the scope that includes it (ADR-030).
+   */
   async configOrigins(pattern: string, scope?: ConfigScope): Promise<ConfigEntry[]> {
-    const args = this.scoped(scope, ['--show-origin', '--get-regexp', pattern]);
-    return lines(await this.exec(args)).flatMap(parseOriginLine);
+    const result = await this.exec(this.reading(scope, ['--show-origin', '-z', '--get-regexp', pattern]));
+    return succeeded(result) ? parseOrigins(result.stdout) : [];
   }
 
   // ---- history ------------------------------------------------------------
@@ -482,15 +501,28 @@ export class Git {
   }
 }
 
+/** The machine's own scopes, whose includes are the user's files (ADR-030). */
+export function followsIncludes(target: ConfigTarget | undefined): boolean {
+  return target === 'global' || target === 'system';
+}
+
 /**
- * `file:<path>\t<key> <value>`. The path is printed UNQUOTED and may hold
- * spaces (`C:/Program Files/Git/etc/gitconfig`), so it ends at the TAB, not at
- * the first space.
+ * `--show-origin -z --get-regexp`: `<origin>\0<key>\n<value>\0` per value, a key with no
+ * `=` written without the newline. NUL can't occur in a path, key or value, so a path with
+ * spaces or a value with a tab or newline comes back whole. Only a `file:` origin can be
+ * edited; a command-line or blob one is left out.
  */
-function parseOriginLine(line: string): ConfigEntry[] {
-  const match = /^file:([^\t]+)\t(\S+)(?: (.*))?$/.exec(line);
-  if (!match) return [];
-  return [{ file: match[1]!, key: match[2]!, value: match[3] ?? '' }];
+function parseOrigins(stdout: string): ConfigEntry[] {
+  const fields = stdout.split('\0');
+  const entries: ConfigEntry[] = [];
+  for (let index = 0; index + 1 < fields.length; index += 2) {
+    const origin = fields[index]!;
+    const pair = fields[index + 1]!;
+    if (!origin.startsWith('file:')) continue;
+    const newline = pair.indexOf('\n');
+    entries.push({ file: origin.slice('file:'.length), key: newline < 0 ? pair : pair.slice(0, newline), value: newline < 0 ? '' : pair.slice(newline + 1) });
+  }
+  return entries;
 }
 
 /**

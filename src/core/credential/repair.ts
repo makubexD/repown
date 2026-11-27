@@ -26,36 +26,51 @@
 // The system scope is the realistic case: reading it needs nothing, editing it is
 // machine-wide and needs an elevated shell.
 
-import type { Git, ConfigScope } from '../git.ts';
+// WHERE IT IS. gh writes to the global file, but the pair may sit in a file the global or
+// system config includes (a `~/.gitconfig.local` behind `include.path`), and git applies it
+// from there. So those scopes are read with their includes, and each key is edited in the
+// file that holds it: `--global --unset-all` leaves an included file as it was (ADR-030).
+// A clone's local includes are not followed (see `reading` in git.ts).
+
+import type { Git, ConfigScope, ConfigEntry, ConfigTarget } from '../git.ts';
 import { isGh } from './gh.ts';
 
 const SCOPES: readonly ConfigScope[] = ['local', 'global', 'system'];
-const HOSTS = ['https://github.com', 'https://gist.github.com'];
+/** The helper key of github.com and gist.github.com, the two hosts gh writes. */
+const HELPER_KEYS = '^credential\\.https://(gist\\.)?github\\.com\\.helper$';
 
 export interface RemovalOutcome {
   readonly scope: ConfigScope;
+  /** The file that holds the key: the scope's own, or one it includes. */
+  readonly file: string;
   readonly key: string;
   readonly values: readonly string[];
   readonly removed: boolean;
 }
 
 /**
- * What `repair` would remove, without removing it: on each key, gh's values and
- * the empty reset gh writes with them. A key holding no gh value is not listed,
- * and any other helper on a listed key stays -- `gh auth setup-git`, the undo,
+ * What `repair` would remove, without removing it: on each key in each file, gh's
+ * values and the empty reset gh writes with them. A key holding no gh value is not
+ * listed, and any other helper on a listed key stays -- `gh auth setup-git`, the undo,
  * would never bring it back.
  */
 export async function planRepair(git: Git): Promise<RemovalOutcome[]> {
-  const found: RemovalOutcome[] = [];
-  for (const scope of SCOPES) {
-    for (const host of HOSTS) {
-      const key = 'credential.' + host + '.helper';
-      const values = await git.getAllConfigRaw(key, scope);
-      if (!values.some(isGh)) continue;
-      found.push({ scope, key, values: ghEntries(values), removed: false });
-    }
+  const read = await Promise.all(SCOPES.map((scope) => git.configOrigins(HELPER_KEYS, scope)));
+  return SCOPES.flatMap((scope, index) => plannedIn(scope, read[index]!));
+}
+
+/** One outcome per (file, key) holding gh's value: gh writes its reset and value together. */
+function plannedIn(scope: ConfigScope, entries: readonly ConfigEntry[]): RemovalOutcome[] {
+  const byFileAndKey = new Map<string, ConfigEntry[]>();
+  for (const entry of entries) {
+    const id = entry.file + '\0' + entry.key;
+    byFileAndKey.set(id, [...(byFileAndKey.get(id) ?? []), entry]);
   }
-  return found;
+  return [...byFileAndKey.values()].flatMap((group) => {
+    const values = group.map((entry) => entry.value);
+    if (!values.some(isGh)) return [];
+    return [{ scope, file: group[0]!.file, key: group[0]!.key, values: ghEntries(values), removed: false }];
+  });
 }
 
 /** gh's value, or an empty reset sitting directly before one -- the pair gh writes. */
@@ -70,19 +85,28 @@ function ghEntries(values: readonly string[]): string[] {
 
 /**
  * git can remove a value by PATTERN, not by position -- and two empty resets are
- * the same pattern, only one of them gh's. So the key is rewritten: unset, then
- * every value that is not gh's added back, in its original order.
+ * the same pattern, only one of them gh's. So the key is rewritten in its file:
+ * unset, then every value that is not gh's added back, in its original order.
  */
 export async function repair(git: Git): Promise<RemovalOutcome[]> {
   const results: RemovalOutcome[] = [];
-  for (const entry of await planRepair(git)) {
-    const all = await git.getAllConfigRaw(entry.key, entry.scope);
-    const kept = all.filter((_, index) => !isGhEntry(all, index));
-    let removed = await git.unsetConfig(entry.key, entry.scope);
-    for (const value of kept) removed = await git.addConfig(entry.key, value, entry.scope) && removed;
-    results.push({ ...entry, removed });
-  }
+  for (const entry of await planRepair(git)) results.push({ ...entry, removed: await rewrite(git, entry) });
   return results;
+}
+
+/**
+ * That file's own values of the key, gh's left out. A local entry goes through `--local`:
+ * git prints its origin relative to the worktree (`.git/config`), which `--file=` would
+ * resolve against the cwd, and local reads don't follow includes. A global or system origin
+ * is absolute, and named outright, so its own includes are not read.
+ */
+async function rewrite(git: Git, entry: RemovalOutcome): Promise<boolean> {
+  const target: ConfigTarget = entry.scope === 'local' ? 'local' : { file: entry.file };
+  const all = await git.getAllConfigRaw(entry.key, target);
+  const kept = all.filter((_, index) => !isGhEntry(all, index));
+  let removed = await git.unsetConfig(entry.key, target);
+  for (const value of kept) removed = await git.addConfig(entry.key, value, target) && removed;
+  return removed;
 }
 
 /**

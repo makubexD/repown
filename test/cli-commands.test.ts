@@ -71,6 +71,20 @@ describe('repown status, doctor and fix: exit codes and what they change', () =>
     assert.equal(repown(['fix', '--yes'], { cwd: box.dir }).status, 0);
     assert.doesNotMatch(readFileSync(box.globalConfig, 'utf8'), /gh auth git-credential/);
   });
+
+  // Reported: doctor named ~/.gitconfig.local and said "fix: repown fix"; fix said
+  // "nothing to undo", run after run (ADR-030).
+  test('gh in a file the global config includes: doctor and fix agree, and fix removes it there', () => {
+    const included = join(box.dir, '..', 'gitconfig.local');
+    writeFileSync(included, GH_HELPER);
+    box.writeGlobalConfig('[include]\n\tpath = ' + included.replace(/\\/g, '/') + '\n');
+    assert.equal(repown(['doctor'], { cwd: box.dir }).status, 1, 'doctor sees gh as the helper');
+    const fixed = repown(['fix', '--yes'], { cwd: box.dir });
+    assert.equal(fixed.status, 0);
+    assert.doesNotMatch(fixed.stdout, /nothing to undo/);
+    assert.doesNotMatch(readFileSync(included, 'utf8'), /gh auth git-credential/);
+    assert.notEqual(repown(['doctor'], { cwd: box.dir }).status, 1, 'doctor no longer sees gh');
+  });
 });
 
 describe('repown scan', () => {

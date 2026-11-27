@@ -17,7 +17,7 @@ const SCOPES: readonly (ConfigScope | undefined)[] = [undefined, 'local', 'globa
 const KEYS = [
   'a.b', 'A.B', 'a.missing', 'a.flag', 'a.n', 'a.z', 'a.y', 'a.bad', 'a.e', 'a.ml', 'a.spaced',
   'sec.SubCase.key', 'Sec.SubCase.Key', 'sec.subcase.key', 'credential.https://github.com.username',
-  'x.inc', 'g.only', 's.only', 'over.ride', 'nodot',
+  'x.inc', 'repown.allowOwner', 'g.only', 's.only', 'over.ride', 'nodot',
 ];
 
 /** The four reads a caller can make, by name, so a mismatch names the read. */
@@ -45,6 +45,9 @@ describe('a config snapshot reads what git reads', () => {
     const extra = join(box.dir, '..', 'included.gitconfig');
     writeFileSync(extra, '[x]\n\tinc = 1\n');
     box.git('config', '--global', 'include.path', extra);
+    const tracked = join(box.dir, 'tracked.gitconfig');
+    writeFileSync(tracked, '[repown]\n\tallowOwner = octo-org\n');
+    box.git('config', '--local', 'include.path', '../tracked.gitconfig');
     box.git('config', '--global', 'g.only', 'global');
     box.git('config', '--global', 'over.ride', 'global');
     box.git('config', '--system', 's.only', 'system');
@@ -63,10 +66,18 @@ describe('a config snapshot reads what git reads', () => {
     }
   });
 
-  test('includes are followed only when no scope is given, as git does', async () => {
-    const snapshot = new ConfigSnapshot(box.dir);
-    assert.equal(await snapshot.getConfig('x.inc'), '1');
-    assert.equal(await snapshot.getConfig('x.inc', 'global'), null);
+  test('global includes are followed under global, as git applies them (ADR-030)', async () => {
+    for (const git of [new ConfigSnapshot(box.dir), new Git(box.dir)]) {
+      assert.equal(await git.getConfig('x.inc'), '1', git.constructor.name);
+      assert.equal(await git.getConfig('x.inc', 'global'), '1', git.constructor.name + ' global');
+      assert.equal(await git.getConfig('x.inc', 'local'), null, git.constructor.name + ' local');
+    }
+  });
+
+  test('a clone\'s own include is not read under local: a tracked file must not set the guard\'s keys', async () => {
+    for (const git of [new ConfigSnapshot(box.dir), new Git(box.dir)]) {
+      assert.equal(await git.getConfig('repown.allowOwner', 'local'), null, git.constructor.name);
+    }
   });
 
   test('a snapshot reads each scope once for its plain getters; a boolean still asks git', async () => {

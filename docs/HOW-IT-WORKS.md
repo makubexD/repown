@@ -136,6 +136,7 @@ flowchart TD
 | No terminal, or a script | `repown fix --yes` |
 | Undo `fix` | `gh auth setup-git` |
 | Setting in the system scope | re-run `repown fix` in an elevated shell |
+| Entries in a file your config includes (`include.path`, e.g. `~/.gitconfig.local`) | nothing extra: `repown fix` edits that file, and its preview names it under each key (`in <file>`) ([ADR-030](decisions/ADR-030-config-reads-follow-include-path.md)) |
 | `GCM` shows `not found` | install [Git Credential Manager](https://github.com/git-ecosystem/git-credential-manager/blob/main/docs/install.md) (Git for Windows includes it), then run `repown doctor` again |
 | `helper` shows `none configured` | `git credential-manager configure` makes GCM git's helper, then run `repown doctor` again |
 | `store  no accounts stored yet` | nothing: expected before the first push |

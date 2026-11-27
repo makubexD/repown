@@ -140,5 +140,5 @@ Everything, in one place. Nothing here is committed or pushed.
 | the clone's `.git/config` | `push.autoSetupRemote` | `repown setup`, when you say Yes, in this clone only (git 2.37+) |
 | the clone's own hooks folder: `pre-push` | the guard (`guard on` refuses if `core.hooksPath` points elsewhere: [card 10](HOW-IT-WORKS.md#10-other-hook-tools)) | `repown guard on`; removed by `repown guard off` |
 | your user config folder | `accounts.json`: each account's name, email and host | `repown accounts add` and `remove`; `use` or `setup` when they ask for a new account |
-| git config, whichever scope holds them | removes the credential-helper entries `gh auth setup-git` added | `repown fix`, after showing them; undo: `gh auth setup-git` |
+| git config, whichever scope holds them, or a file it includes (`include.path`) | removes the credential-helper entries `gh auth setup-git` added | `repown fix`, after showing them; undo: `gh auth setup-git` |
 | gh | its active account | `repown use --gh` (and `setup` when you say Yes) |

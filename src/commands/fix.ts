@@ -56,8 +56,10 @@ function preview(planned: readonly RemovalOutcome[]): void {
 
 /** What `fix` would remove, and the undo. `repown setup` shows the same lines in its review. */
 export function previewLines(planned: readonly RemovalOutcome[]): string[] {
+  // The file is named: it may be one the scope includes, not the file the user expects (ADR-030).
   const entries = planned.flatMap((entry) => [
     '    ' + entry.scope + ':  ' + entry.key,
+    '        in ' + entry.file,
     ...entry.values.map((value) => '        = ' + describeValue(value)),
   ]);
   return [
@@ -86,6 +88,7 @@ function reportRemovals(results: readonly RemovalOutcome[]): number {
   for (const entry of results) {
     if (entry.removed) { out.pass('fix', 'removed  ' + entry.scope + ': ' + entry.key); continue; }
     out.warn('fix', 'could NOT remove  ' + entry.scope + ': ' + entry.key);
+    out.detail('in ' + entry.file);
     if (entry.scope === 'system') out.detail('the system scope is machine-wide; re-run this in an ELEVATED shell.');
   }
   return results.filter((entry) => !entry.removed).length;

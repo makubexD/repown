@@ -40,6 +40,7 @@ name was free on npm, and is now this package.
 | [027](ADR-027-the-wizard-decorates-only-where-it-draws-colour.md) | The wizard decorates only where it draws colour; output without colour is unchanged |
 | [028](ADR-028-the-start-screen-returns-after-a-machine-action.md) | The start screen returns to its menu after a machine-level action, and asks a new account in its frame; an unknown login is named, never refused |
 | [029](ADR-029-read-only-commands-read-config-once-per-scope.md) | Read-only commands read git config once per scope |
+| [030](ADR-030-config-reads-follow-include-path.md) | Config reads follow include.path, and `repown fix` edits the file that holds gh's entries |
 
 **Adding one:** create the next number, using the same sections: Status, Context,
 Decision, Alternatives considered, Consequences. Cite it as `ADR-0NN`. Never delete or

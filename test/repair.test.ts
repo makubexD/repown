@@ -5,6 +5,8 @@
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { sandbox, type Sandbox } from './helpers.ts';
 import { Git } from '../src/core/git.ts';
 import { planRepair, repair } from '../src/core/credential/repair.ts';
@@ -58,6 +60,40 @@ describe('repown fix: what it plans and what it removes', () => {
     assert.deepEqual(planned[0]!.values, ['', GH]);
     await repair(git);
     assert.deepEqual(await remaining(), ['', '!/opt/corp/helper']);
+  });
+
+  describe('gh\'s pair in a file the global config includes (ADR-030)', () => {
+    let included: string;
+    const slashed = (path: string): string => path.replace(/\\/g, '/');
+    beforeEach(() => {
+      included = join(box.dir, '..', 'gitconfig.local');
+      writeFileSync(included, '[credential "https://github.com"]\n\thelper =\n\thelper = ' + GH + '\n');
+      box.writeGlobalConfig('[include]\n\tpath = ' + slashed(included) + '\n[credential]\n\thelper = manager\n');
+    });
+
+    test('is planned under global, naming the included file', async () => {
+      const planned = await planRepair(git);
+      assert.equal(planned.length, 1);
+      assert.equal(planned[0]!.scope, 'global');
+      assert.equal(slashed(planned[0]!.file), slashed(included));
+      assert.deepEqual(planned[0]!.values, ['', GH]);
+    });
+
+    test('is removed from that file only, and the helper underneath answers again', async () => {
+      const top = readFileSync(box.globalConfig, 'utf8');
+      const results = await repair(git);
+      assert.ok(results.length === 1 && results[0]!.removed);
+      assert.doesNotMatch(readFileSync(included, 'utf8'), /helper/);
+      assert.equal(readFileSync(box.globalConfig, 'utf8'), top, 'the including file is untouched');
+      assert.equal(await git.getUrlMatch('credential.helper', 'https://github.com'), 'manager');
+    });
+
+    test('gh in both the top file and the included one is two entries, both removed', async () => {
+      box.git('config', '--global', '--add', KEY, GH);
+      assert.equal((await planRepair(git)).length, 2);
+      await repair(git);
+      assert.equal(await git.getUrlMatch('credential.helper', 'https://github.com'), 'manager');
+    });
   });
 
   test('beside gh, another helper on the same key survives the repair', async () => {

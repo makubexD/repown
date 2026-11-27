@@ -1,6 +1,6 @@
 # Config read through include.path
 
-Status: task 2 done; next task 3.
+Status: task 3 done; next task 4.
 
 - [x] 1. Plan: SPEC.md and this file. Docs: none.
 - [x] 2. Scoped reads follow include.path (item 1)
@@ -8,7 +8,7 @@ Status: task 2 done; next task 3.
     getter and by a snapshot; the machine default identity sees an included `user.email`.
   - Where: `scoped` reads in `src/core/git.ts`, `listArgs`/`configRead` in `src/core/config-snapshot.ts`.
   - Docs: ADR-029 note, CLAUDE.md snapshot line.
-- [ ] 3. `fix` edits the file that holds gh's entries (item 2)
+- [x] 3. `fix` edits the file that holds gh's entries (item 2)
   - Accept: gh's pair in an included file is planned with its file, removed from that file
     only, and the preview names the file; top-file behaviour unchanged; doctor and fix agree.
   - Where: `src/core/credential/repair.ts`, a file-targeted read/write in `src/core/git.ts`,

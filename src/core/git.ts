@@ -273,10 +273,13 @@ export class Git {
     return output(await this.exec(['config', '--get-urlmatch', key, url]));
   }
 
-  /** Which FILE each matching key lives in, so a repair edits the scope that holds it. */
+  /**
+   * Which FILE each matching value lives in, so a repair edits the file that holds it: with a
+   * scope, an included file too, under the scope that includes it (ADR-030).
+   */
   async configOrigins(pattern: string, scope?: ConfigScope): Promise<ConfigEntry[]> {
-    const args = this.reading(scope, ['--show-origin', '--get-regexp', pattern]);
-    return lines(await this.exec(args)).flatMap(parseOriginLine);
+    const result = await this.exec(this.reading(scope, ['--show-origin', '-z', '--get-regexp', pattern]));
+    return succeeded(result) ? parseOrigins(result.stdout) : [];
   }
 
   // ---- history ------------------------------------------------------------
@@ -496,14 +499,22 @@ export class Git {
 }
 
 /**
- * `file:<path>\t<key> <value>`. The path is printed UNQUOTED and may hold
- * spaces (`C:/Program Files/Git/etc/gitconfig`), so it ends at the TAB, not at
- * the first space.
+ * `--show-origin -z --get-regexp`: `<origin>\0<key>\n<value>\0` per value, a key with no
+ * `=` written without the newline. NUL can't occur in a path, key or value, so a path with
+ * spaces or a value with a tab or newline comes back whole. Only a `file:` origin can be
+ * edited; a command-line or blob one is left out.
  */
-function parseOriginLine(line: string): ConfigEntry[] {
-  const match = /^file:([^\t]+)\t(\S+)(?: (.*))?$/.exec(line);
-  if (!match) return [];
-  return [{ file: match[1]!, key: match[2]!, value: match[3] ?? '' }];
+function parseOrigins(stdout: string): ConfigEntry[] {
+  const fields = stdout.split('\0');
+  const entries: ConfigEntry[] = [];
+  for (let index = 0; index + 1 < fields.length; index += 2) {
+    const origin = fields[index]!;
+    const pair = fields[index + 1]!;
+    if (!origin.startsWith('file:')) continue;
+    const newline = pair.indexOf('\n');
+    entries.push({ file: origin.slice('file:'.length), key: newline < 0 ? pair : pair.slice(0, newline), value: newline < 0 ? '' : pair.slice(newline + 1) });
+  }
+  return entries;
 }
 
 /**

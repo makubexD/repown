@@ -32,13 +32,14 @@ describe('output the wizard reuses stays byte for byte', () => {
   test('fix --dry-run prints exactly this preview on stdout', () => {
     box.writeGlobalConfig(GH_HELPER);
     const run = repown(['fix', '--dry-run'], box.dir);
+    const inFile = '        in ' + box.globalConfig + '\n';
     assert.equal(run.status, 0);
     assert.equal(run.stderr, '');
     assert.equal(run.stdout, '\n' +
       '  These entries make gh the credential helper, and will be removed:\n\n' +
-      '    global:  credential.https://github.com.helper\n' + RESET +
+      '    global:  credential.https://github.com.helper\n' + inFile + RESET +
       '        = !gh auth git-credential\n' +
-      '    global:  credential.https://gist.github.com.helper\n' + RESET +
+      '    global:  credential.https://gist.github.com.helper\n' + inFile + RESET +
       '        = !gh auth git-credential\n\n' +
       '  Nothing else in your config is touched.\n' +
       '  Undo at any time:  gh auth setup-git\n\n' +
@@ -193,12 +194,13 @@ const NO_CLACK = 'data:text/javascript,' + encodeURIComponent(
 describe('fix preview lines', () => {
   test('are the dry-run preview, one string per line, for the wizard to show on stderr', async () => {
     const { previewLines } = await import('../src/commands/fix.ts');
-    const lines = previewLines([{ scope: 'global', key: 'credential.https://github.com.helper', values: ['!gh auth git-credential'], removed: false }]);
+    const lines = previewLines([{ scope: 'global', file: '/home/octocat/.gitconfig.local', key: 'credential.https://github.com.helper', values: ['!gh auth git-credential'], removed: false }]);
     assert.deepEqual(lines, [
       '',
       '  These entries make gh the credential helper, and will be removed:',
       '',
       '    global:  credential.https://github.com.helper',
+      '        in /home/octocat/.gitconfig.local',
       '        = !gh auth git-credential',
       '',
       '  Nothing else in your config is touched.',

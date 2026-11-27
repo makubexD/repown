@@ -110,3 +110,8 @@ was bound by process starts: about 22,800 git spawns per run, 13,500 of them `gi
 - **2026-11-27, superseded: the "Includes" line.** A scoped read and each scope's list now pass
   `--includes`, so a value kept in a file the scope includes is read under that scope
   (ADR-030). The snapshot still matches a plain `Git` read for every key in every scope.
+- **2026-11-27, setup's budget 132 -> 135.** Setup's `planRepair` read each scope's gh helper
+  values through the snapshot (no process). It now reads them with `--show-origin`, which goes
+  to git, one read per scope, so `fix` can edit the file that holds them, an included one too
+  (ADR-030). For: doctor and fix agree wherever git reads the helper from. Against: three
+  processes in every setup; `fix` and the start screen make three reads where they made six.

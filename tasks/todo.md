@@ -1,6 +1,6 @@
 # An opt-in sign-in check
 
-Status: task 2 done; next task 3.
+Status: task 3 done; next task 4.
 
 - [x] 1. Plan: SPEC.md and this file. Docs: none.
 - [x] 2. Classify git's answer to a dry-run push (pure)
@@ -8,7 +8,7 @@ Status: task 2 done; next task 3.
     link is the `visit <url>` git printed; unknown text is a WARN with the cleaned reason.
   - Where: `src/core/signin-check.ts`.
   - Docs: none yet.
-- [ ] 3. `repown doctor --online`
+- [x] 3. `repown doctor --online`
   - Accept: the flag runs one dry-run push to origin (prompts off, hook skipped) and prints the
     verdict above doctor's closing line; exit 1 on FAIL; a local bare origin is OK; an unborn
     HEAD or no origin is a WARN; without the flag doctor's output is unchanged.

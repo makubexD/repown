@@ -213,7 +213,7 @@ then commit and push.
 
 | When | Command | What it does |
 | --- | --- | --- |
-| Once per machine | `repown doctor` | what serves credentials on this machine, and whether each account is signed in to git and gh |
+| Once per machine | `repown doctor [--online]` | what serves credentials on this machine, and whether each account is signed in to git and gh. 🌐 `--online` also asks origin, with a dry-run push that sends nothing, whether it accepts this clone's sign-in, and prints the fix when it doesn't |
 | | `repown fix [--dry-run] [--yes]` | undo `gh auth setup-git`, so each clone's pinned account is used; shows what it removes, and the undo, first |
 | Once per clone | `repown setup [<account>]` | guided setup of this clone. Questions, flags and the review: [Quick start](#quick-start). A clone that is already set up opens on that screen |
 | | `repown use <account> [--gh]` | what setup runs: pin this clone to an account. `--gh` switches gh's active account, or signs the account in to gh when needed (in a terminal). `--name` with `--email` skips the registry, the file where repown remembers accounts |
@@ -296,6 +296,7 @@ Every `setup` case: [Scripts and CI](docs/CONFIGURATION.md#scripts-and-ci).
 | `repown doctor` shows `helper` … `none configured` | `git credential-manager configure`, then `repown doctor` again |
 | A push asked for a password | `repown status` (this clone) or `repown doctor` (this machine): each names the cause (gh as the helper, or no helper) and the fix |
 | A push failed right after signing in (SSO) | [card 6](docs/HOW-IT-WORKS.md#6-commit-and-first-push) |
+| A pinned clone still can't push or pull ("Invalid username or token", "SAML SSO", 403, 404) | `repown doctor --online`: it says whether the token was rejected, needs SSO approval, or belongs to the wrong account, and prints the command or link that fixes it |
 | The guard refused a push | it says which commit and the fix. Most often a commit made before pinning: `git commit --amend --reset-author --no-edit` fixes the last one ([card 8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) for older ones, and every other refusal) |
 | `gh pr create` acts as the wrong account | `gh auth switch -u <account>` when gh lists it, otherwise `repown use <account> --gh` |
 | `git push` says the branch has no upstream | `repown setup --auto-upstream`, or once `git push -u origin <branch>` |

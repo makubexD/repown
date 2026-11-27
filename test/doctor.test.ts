@@ -366,6 +366,55 @@ describe('repown doctor output', () => {
     box.writeGlobalConfig('[credential]\n\thelper = manager\n[credential "' + url + '"]\n\thelper = store\n');
   }
 
+  describe('--online (ADR-031): a dry-run push to origin, here a local bare repository', () => {
+    let bare: string;
+    beforeEach(() => {
+      bare = join(box.dir, '..', 'origin.git');
+      box.git('init', '-q', '--bare', bare);
+      box.git('remote', 'set-url', 'origin', bare);
+    });
+    const commit = (): void => { box.git('-c', 'user.name=Octo Cat', '-c', 'user.email=octocat@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'x'); };
+
+    test('origin that accepts the push is a pass, sends nothing, and the closing line says so', () => {
+      commit();
+      const run = repown(['doctor', '--online'], box.dir, doctorEnv(bin));
+      assert.equal(run.status, 0, run.stderr);
+      assert.match(run.stdout, /This clone, asked online\n.*OK +sign-in +origin accepts octocat's sign-in for a push \(a dry run: nothing was sent\)/s);
+      assert.match(run.stderr, /· origin accepts the sign-in\n$/);
+      assert.equal(box.git('--git-dir', bare, 'for-each-ref'), '', 'the dry run created no ref');
+    });
+
+    test('with no commit yet there is nothing to push with: a warning, never a pass', () => {
+      const run = repown(['doctor', '--online'], box.dir, doctorEnv(bin));
+      assert.equal(run.status, 0, run.stderr);
+      assert.match(run.stderr, /WARN +sign-in +not checked: there is no commit to try a push with yet/);
+      assert.match(run.stderr, /· sign-in not checked online\n$/);
+    });
+
+    test('an origin that can\'t be reached is a warning with git\'s reason', () => {
+      commit();
+      box.git('remote', 'set-url', 'origin', join(box.dir, '..', 'missing.git'));
+      const run = repown(['doctor', '--online'], box.dir, doctorEnv(bin));
+      assert.equal(run.status, 0, run.stderr);
+      assert.match(run.stderr, /WARN +sign-in +couldn't check the sign-in: /);
+    });
+
+    test('the pre-push hook does not run for the dry run', () => {
+      commit();
+      const hooks = join(box.dir, '.git', 'hooks');
+      mkdirSync(hooks, { recursive: true });
+      writeFileSync(join(hooks, 'pre-push'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+      assert.equal(repown(['doctor', '--online'], box.dir, doctorEnv(bin)).status, 0);
+    });
+  });
+
+  test('the online closing line adds to the offline verdict', async () => {
+    const { closingWithOnline } = await import('../src/commands/doctor-online.ts');
+    assert.equal(closingWithOnline('ready: x', 0, 'fail'), '1 problem: origin refused the sign-in (above)');
+    assert.equal(closingWithOnline('1 problem: y', 1, 'fail'), '1 problem: y · and origin refused the sign-in');
+    assert.equal(closingWithOnline('ready: x', 0, 'pass'), 'ready: x · origin accepts the sign-in');
+  });
+
   test('machine, accounts, the short SSO reminder, then a ready verdict', () => {
     const run = repown(['doctor'], box.dir, doctorEnv(bin));
     assert.equal(run.status, 0, run.stderr);

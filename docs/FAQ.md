@@ -109,4 +109,6 @@ its public profile to suggest a name and noreply address, for a GitHub-shaped lo
 an organisation. Setup and the start screen read which accounts gh and Git Credential Manager are signed in as
 (gh's own account list, and GCM's store on this machine) to say when the login isn't one
 of them. `repown setup` may also ask GitHub whether origin's owner is a user or an
-organisation.
+organisation. `repown doctor --online`, and only with that flag, runs one
+`git push --dry-run` to origin, which signs in as a push would and sends nothing
+([ADR-031](decisions/ADR-031-doctor-online-asks-origin-with-a-dry-run-push.md)).

@@ -20,6 +20,7 @@ import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { run, succeeded, output, lines, type ExecResult } from './exec.ts';
 import { ok, err, type Result } from './result.ts';
+import { positional } from './shell.ts';
 
 export type ConfigScope = 'local' | 'global' | 'system';
 /** Where a config write (or a read of one file alone) goes: a scope, or a file named outright. */
@@ -343,6 +344,15 @@ export class Git {
   async fetchQuietly(remote: string): Promise<Result<void>> {
     const fetched = await this.execLong([...QUIET, 'fetch', '--quiet', '--no-recurse-submodules', '--', remote], await this.quietEnvHere(), NETWORK_MS);
     return succeeded(fetched) ? ok(undefined) : err(networkReason(fetched));
+  }
+
+  /**
+   * A dry-run push of HEAD to a branch nobody has (network, prompts off, no pre-push hook): it
+   * signs in as a push would and sends nothing. git's raw answer, for classifySignIn (ADR-031).
+   */
+  async signInProbe(remote: string): Promise<ExecResult> {
+    const push = ['push', '--dry-run', '--no-verify', '--porcelain', ...positional(remote), 'HEAD:refs/heads/repown-sign-in-check'];
+    return this.execLong([...QUIET, ...push], await this.quietEnvHere(), NETWORK_MS);
   }
 
   /** How many branches the remote lists (network, prompts off). */

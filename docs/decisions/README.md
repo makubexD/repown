@@ -41,6 +41,7 @@ name was free on npm, and is now this package.
 | [028](ADR-028-the-start-screen-returns-after-a-machine-action.md) | The start screen returns to its menu after a machine-level action, and asks a new account in its frame; an unknown login is named, never refused |
 | [029](ADR-029-read-only-commands-read-config-once-per-scope.md) | Read-only commands read git config once per scope |
 | [030](ADR-030-config-reads-follow-include-path.md) | Config reads follow include.path, and `repown fix` edits the file that holds gh's entries |
+| [031](ADR-031-doctor-online-asks-origin-with-a-dry-run-push.md) | `repown doctor --online` asks origin with a dry-run push, and prints the fix for what it answers |
 
 **Adding one:** create the next number, using the same sections: Status, Context,
 Decision, Alternatives considered, Consequences. Cite it as `ADR-0NN`. Never delete or

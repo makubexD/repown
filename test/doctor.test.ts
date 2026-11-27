@@ -4,7 +4,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
@@ -365,6 +365,79 @@ describe('repown doctor output', () => {
     box.git('config', '--local', '--unset', 'credential.https://github.com.username');
     box.writeGlobalConfig('[credential]\n\thelper = manager\n[credential "' + url + '"]\n\thelper = store\n');
   }
+
+  describe('--online (ADR-031): a dry-run push to origin, here a local bare repository', () => {
+    let bare: string;
+    beforeEach(() => {
+      bare = join(box.dir, '..', 'origin.git');
+      box.git('init', '-q', '--bare', bare);
+      box.git('remote', 'set-url', 'origin', bare);
+    });
+    const commit = (): void => { box.git('-c', 'user.name=Octo Cat', '-c', 'user.email=octocat@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'x'); };
+
+    test('origin that accepts the push is a pass, sends nothing, and the closing line says so', () => {
+      commit();
+      const run = repown(['doctor', '--online'], box.dir, doctorEnv(bin));
+      assert.equal(run.status, 0, run.stderr);
+      // A local path takes no sign-in, so no account is named (only HTTPS pins send one).
+      assert.match(run.stdout, /This clone, asked online\n.*OK +sign-in +origin accepts a push from this clone \(a dry run: nothing was sent\)/s);
+      assert.match(run.stderr, /· origin accepts the sign-in\n$/);
+      assert.equal(box.git('--git-dir', bare, 'for-each-ref'), '', 'the dry run created no ref');
+    });
+
+    test('with no commit yet there is nothing to push with: a warning, never a pass', () => {
+      const run = repown(['doctor', '--online'], box.dir, doctorEnv(bin));
+      assert.equal(run.status, 0, run.stderr);
+      assert.match(run.stderr, /WARN +sign-in +not checked: there is no commit to try a push with yet/);
+      assert.match(run.stderr, /· sign-in not checked online\n$/);
+    });
+
+    test('an origin that can\'t be reached is a warning with git\'s reason', () => {
+      commit();
+      box.git('remote', 'set-url', 'origin', join(box.dir, '..', 'missing.git'));
+      const run = repown(['doctor', '--online'], box.dir, doctorEnv(bin));
+      assert.equal(run.status, 0, run.stderr);
+      assert.match(run.stderr, /WARN +sign-in +couldn't check the sign-in: /);
+    });
+
+    test('push.recurseSubmodules=on-demand does not push a submodule, or run its hook', () => {
+      const subBare = join(box.dir, '..', 'sub.git');
+      const subWork = join(box.dir, '..', 'sub-work');
+      box.git('init', '-q', '--bare', subBare);
+      box.git('clone', '-q', subBare, subWork);
+      const inSub = (...args: string[]): string => box.git('-C', subWork, '-c', 'user.name=Octo Cat', '-c', 'user.email=octocat@example.invalid', ...args);
+      inSub('commit', '-q', '--allow-empty', '-m', 'one');
+      inSub('push', '-q', 'origin', 'HEAD');
+      box.git('-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', subBare, 's');
+      commit();
+      const marker = join(box.dir, '..', 'sub-hook-ran');
+      const subHooks = join(box.dir, '.git', 'modules', 's', 'hooks');
+      mkdirSync(subHooks, { recursive: true });
+      writeFileSync(join(subHooks, 'pre-push'), '#!/bin/sh\necho ran > "' + marker.replace(/\\/g, '/') + '"\n', { mode: 0o755 });
+      box.git('-C', join(box.dir, 's'), '-c', 'user.name=Octo Cat', '-c', 'user.email=octocat@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'unpushed');
+      box.git('add', 's');
+      commit();
+      box.git('config', 'push.recurseSubmodules', 'on-demand');
+      const run = repown(['doctor', '--online'], box.dir, doctorEnv(bin));
+      assert.match(run.stdout, /OK +sign-in/, run.stderr);
+      assert.equal(existsSync(marker), false, 'the submodule\'s hook ran');
+    });
+
+    test('the pre-push hook does not run for the dry run', () => {
+      commit();
+      const hooks = join(box.dir, '.git', 'hooks');
+      mkdirSync(hooks, { recursive: true });
+      writeFileSync(join(hooks, 'pre-push'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+      assert.equal(repown(['doctor', '--online'], box.dir, doctorEnv(bin)).status, 0);
+    });
+  });
+
+  test('the online closing line adds to the offline verdict', async () => {
+    const { closingWithOnline } = await import('../src/commands/doctor-online.ts');
+    assert.equal(closingWithOnline('ready: x', 0, 'fail'), '1 problem: origin refused the sign-in (above)');
+    assert.equal(closingWithOnline('1 problem: y', 1, 'fail'), '1 problem: y · and origin refused the sign-in');
+    assert.equal(closingWithOnline('ready: x', 0, 'pass'), 'ready: x · origin accepts the sign-in');
+  });
 
   test('machine, accounts, the short SSO reminder, then a ready verdict', () => {
     const run = repown(['doctor'], box.dir, doctorEnv(bin));

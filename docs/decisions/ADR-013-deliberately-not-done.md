@@ -1,6 +1,6 @@
 # ADR-013: Deliberately not done
 
-**Status:** Accepted. The row "Rewriting existing history" is superseded in part by [ADR-026](ADR-026-setup-says-what-blocks-the-next-push.md): `repown reauthor` rewrites unpushed commits by another address, only when asked, only what no remote has, behind a backup ref. Published history is still never rewritten.
+**Status:** Accepted. The row "Rewriting existing history" is superseded in part by [ADR-026](ADR-026-setup-says-what-blocks-the-next-push.md): `repown reauthor` rewrites unpushed commits by another address, only when asked, only what no remote has, behind a backup ref. Published history is still never rewritten. The row "Detecting SSO authorization in advance" is amended by [ADR-031](ADR-031-doctor-online-asks-origin-with-a-dry-run-push.md): still not in advance, but `repown doctor --online` checks it on request.
 
 ## Context
 

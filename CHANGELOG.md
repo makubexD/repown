@@ -7,6 +7,14 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+### Added
+- `repown doctor --online` checks the sign-in itself. It runs one dry-run push to origin
+  as the clone's account, which sends nothing and skips the pre-push hook. Then it says what
+  the host answered, and the fix: a token that was rejected (expired, revoked or wrong) gets the
+  Git Credential Manager command to sign in again; an organisation that enforces SAML SSO gets
+  the approval link GitHub sent; a sign-in as the wrong account, or an account that can't see
+  the repository, is named. Without the flag, doctor stays offline.
+
 ## [0.5.5] - 2026-11-27
 
 ### Fixed

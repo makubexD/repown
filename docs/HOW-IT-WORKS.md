@@ -141,7 +141,7 @@ flowchart TD
 | `helper` shows `none configured` | `git credential-manager configure` makes GCM git's helper, then run `repown doctor` again |
 | `store  no accounts stored yet` | nothing: expected before the first push |
 
-`doctor` exits 1 only when gh is the helper. The closing line is on stderr, after a blank line:
+`doctor` exits 1 only when gh is the helper (or, with `--online`, when origin refuses the sign-in). The closing line is on stderr, after a blank line:
 
 - Git Credential Manager, and the store holds an account: `ready: each clone signs in as its own account through Git Credential Manager`
 - Git Credential Manager, and the store was read and is empty: `ready · no accounts stored yet: the first push signs in once`
@@ -150,6 +150,29 @@ flowchart TD
 
 When the registry, the store or gh could not be read, its WARN is above and the verdict
 adds ` · 1 warning` (or `N warnings`), as status counts its warnings.
+
+🌐 **`repown doctor --online`** checks the sign-in itself. In a clone, it runs one
+`git push --dry-run --no-verify --no-recurse-submodules` of HEAD to origin, with every prompt
+off. That signs in exactly as a push would, as the clone's pinned account, and sends nothing;
+no hook runs, a submodule's included. A read wouldn't
+do: GitHub answers a read of a public repository without asking for the credential
+([ADR-031](decisions/ADR-031-doctor-online-asks-origin-with-a-dry-run-push.md)). The answer
+is printed under `This clone, asked online`, above the closing line:
+
+| origin said | Line | What to do (printed under it) |
+| --- | --- | --- |
+| accepted | `OK sign-in origin accepts <account>'s sign-in for a push (a dry run: nothing was sent)`; where git sends no username (SSH, a local path, a host repown doesn't pin), `origin accepts a push from this clone …` | nothing |
+| `SAML SSO` | `FAIL` … the organisation enforces SAML SSO, and this sign-in isn't authorised for it | `authorise it:` the link GitHub sent (only when it points at origin's host), then `repown doctor --online` |
+| `Invalid username or token`, `Authentication failed` | `FAIL` … the host rejected the sign-in: the token or password git holds was expired, revoked or wrong | on github.com through GCM: `git credential-manager github login --username <account> --browser --force` |
+| `Permission to … denied to <user>` | `FAIL` … git signed in as `<user>`, not `<account>` | `repown use <account>` (or ask for write access, when it is the same account) |
+| `Repository not found` | `FAIL` … that account can't see origin | `check the account (repown status), or ask for access` |
+| no sign-in stored | `FAIL` … a push would ask for one | the same GCM command as a rejected one |
+| no origin, no commit yet, or origin unreachable | `WARN sign-in` … not checked, and why | nothing: never reported as a pass |
+
+A `FAIL` makes doctor exit 1, and the closing line adds `· and origin refused the sign-in`
+(or is `1 problem: origin refused the sign-in (above)` when nothing else was wrong). A pass
+adds `· origin accepts the sign-in`, and a warning adds `· sign-in not checked online`.
+Without `--online`, doctor never touches the network.
 
 In a clone repown pins no credential for (an SSH remote, Azure DevOps, another host), the
 report opens with that clone: why origin gets no pin, read from its configured URL, and the

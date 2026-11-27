@@ -132,6 +132,10 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   `setup-flow.ts`) through the engine's `runFlow`, then runs `accounts add` with every
   answer as a flag; never a second copy of those questions. Once fix, doctor,
   `accounts add` or `accounts remove` has run, failed or not, the screen opens again and re-reads (ADR-028); setup, help and Quit end it.
+- `repown doctor --online` (`src/commands/doctor-online.ts`) is repown's only sign-in check over the network:
+  one `git push --dry-run --no-verify` to origin (`Git.signInProbe`), its whole stderr read by
+  `classifySignIn` (`src/core/signin-check.ts`). A read is no check: a public repository answers
+  `ls-remote` without the credential. Never call it from the push path or from status or setup (ADR-031).
 
 ## Tests
 

@@ -1,9 +1,9 @@
 # An opt-in sign-in check
 
-Status: plan written; next task 2.
+Status: task 2 done; next task 3.
 
 - [x] 1. Plan: SPEC.md and this file. Docs: none.
-- [ ] 2. Classify git's answer to a dry-run push (pure)
+- [x] 2. Classify git's answer to a dry-run push (pure)
   - Accept: each row of SPEC's table, from measured stderr, gives its verdict and fix; the SSO
     link is the `visit <url>` git printed; unknown text is a WARN with the cleaned reason.
   - Where: `src/core/signin-check.ts`.

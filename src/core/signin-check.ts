@@ -37,8 +37,13 @@ export function classifySignIn(result: ExecResult): SignInVerdict {
 }
 
 export interface SignInContext {
-  /** The pinned account, or null when the clone has none and git picks. */
+  /**
+   * The username git sends for origin (the pinned credential username), or null when nothing
+   * names one: an SSH or local origin, a host repown doesn't pin (ADR-009), or no pin yet.
+   */
   readonly account: string | null;
+  /** The clone's recorded account, for `repown use`; null outside a set-up clone. */
+  readonly pinned: string | null;
   /** Git Credential Manager serves origin's URL. */
   readonly gcm: boolean;
   /** origin is on github.com, where GCM's `github login` was measured (ADR-009). */
@@ -53,14 +58,14 @@ export interface SignInReport {
 }
 
 export function describeSignIn(verdict: SignInVerdict, ctx: SignInContext): SignInReport {
-  const who = ctx.account ?? 'the account git picks';
+  const whose = ctx.account ? ctx.account + '\'s sign-in' : 'this clone\'s sign-in';
   switch (verdict.kind) {
-    case 'ok': return { level: 'pass', message: 'origin accepts ' + who + '\'s sign-in for a push (a dry run: nothing was sent)', fix: [] };
-    case 'sso': return { level: 'fail', message: 'origin refused ' + who + '\'s sign-in: the organisation enforces SAML SSO, and this sign-in isn\'t authorised for it.', fix: ssoFix(verdict.link) };
-    case 'rejected': return { level: 'fail', message: 'the host rejected the sign-in git holds for ' + who + ': it has expired or been revoked.', fix: loginFix(ctx) };
+    case 'ok': return { level: 'pass', message: (ctx.account ? 'origin accepts ' + whose + ' for a push' : 'origin accepts a push from this clone') + ' (a dry run: nothing was sent)', fix: [] };
+    case 'sso': return { level: 'fail', message: 'origin refused ' + whose + ': the organisation enforces SAML SSO, and this sign-in isn\'t authorised for it.', fix: ssoFix(verdict.link) };
+    case 'rejected': return { level: 'fail', message: 'the host rejected ' + whose + ': the token or password git holds was expired, revoked or wrong.', fix: loginFix(ctx) };
     case 'denied': return denied(verdict.as, ctx);
-    case 'not-found': return { level: 'fail', message: 'origin was not found as ' + who + ': that account can\'t see it (the wrong account, or no access).', fix: [] };
-    case 'no-sign-in': return { level: 'fail', message: 'no sign-in is stored for ' + who + ', so a push would ask for one.', fix: loginFix(ctx) };
+    case 'not-found': return { level: 'fail', message: 'origin was not found with ' + whose + ': that account can\'t see it (the wrong account, or no access).', fix: ['check the account (repown status), or ask for access'] };
+    case 'no-sign-in': return { level: 'fail', message: 'no sign-in is stored' + (ctx.account ? ' for ' + ctx.account : '') + ', so a push would ask for one.', fix: loginFix(ctx) };
     case 'unchecked': return { level: 'warn', message: 'couldn\'t check the sign-in: ' + verdict.reason, fix: [] };
   }
 }
@@ -77,10 +82,12 @@ function loginFix(ctx: SignInContext): string[] {
   return command ? ['sign in again:  ' + command] : [];
 }
 
+/** Signed in as someone who can't push: the pinned account when it differs, else write access. */
 function denied(as: string, ctx: SignInContext): SignInReport {
-  if (!ctx.account || as.toLowerCase() === ctx.account.toLowerCase()) {
-    return { level: 'fail', message: 'origin refused the push: ' + (as || 'this account') + ' can\'t push here; ask for write access.', fix: [] };
+  const pinned = ctx.pinned;
+  if (!pinned || !as || as.toLowerCase() === pinned.toLowerCase()) {
+    return { level: 'fail', message: 'origin refused the push: ' + (as || 'this sign-in') + ' can\'t push here; ask for write access.', fix: [] };
   }
-  const command = copyableCommand(['repown', 'use', ctx.account]);
-  return { level: 'fail', message: 'origin refused the push: git signed in as ' + as + ', not ' + ctx.account + ', and ' + as + ' can\'t push here.', fix: command ? ['use the pinned account:  ' + command] : [] };
+  const command = copyableCommand(['repown', 'use', pinned]);
+  return { level: 'fail', message: 'origin refused the push: git signed in as ' + as + ', not ' + pinned + ', and ' + as + ' can\'t push here.', fix: command ? ['use the pinned account:  ' + command] : [] };
 }

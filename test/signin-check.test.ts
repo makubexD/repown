@@ -42,7 +42,7 @@ describe('classifySignIn', () => {
 });
 
 describe('describeSignIn', () => {
-  const gcm = { account: 'octo-work', gcm: true, github: true };
+  const gcm = { account: 'octo-work', pinned: 'octo-work', gcm: true, github: true };
 
   test('OK names the account and has no fix', () => {
     const said = describeSignIn({ kind: 'ok' }, gcm);
@@ -76,6 +76,22 @@ describe('describeSignIn', () => {
     const said = describeSignIn({ kind: 'denied', as: 'octocat' }, gcm);
     assert.match(said.message, /octocat/);
     assert.deepEqual(said.fix, ['use the pinned account:  repown use octo-work']);
+  });
+
+  test('where git sends no username (SSH, a local path, an unpinned host), no account is named', () => {
+    const said = describeSignIn({ kind: 'ok' }, { ...gcm, account: null });
+    assert.equal(said.message, 'origin accepts a push from this clone (a dry run: nothing was sent)');
+    assert.doesNotMatch(describeSignIn({ kind: 'rejected' }, { ...gcm, account: null }).message, /octo-work/);
+  });
+
+  test('a repository the account cannot see says what to check', () => {
+    assert.deepEqual(describeSignIn({ kind: 'not-found' }, gcm).fix, ['check the account (repown status), or ask for access']);
+  });
+
+  test('denied as the pinned account itself asks for write access, with no repown use', () => {
+    const said = describeSignIn({ kind: 'denied', as: 'octo-work' }, gcm);
+    assert.match(said.message, /octo-work can't push here; ask for write access/);
+    assert.deepEqual(said.fix, []);
   });
 
   test('a check that could not run is a warning, never a pass', () => {

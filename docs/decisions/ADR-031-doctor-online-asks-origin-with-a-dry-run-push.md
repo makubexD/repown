@@ -24,6 +24,15 @@ offline that can see SSO. The user had to diagnose git's errors with outside hel
   - `--dry-run` stops after the ref advertisement and sends no pack: no ref is created
     (tested against a bare repository, and measured on github.com).
   - `--no-verify` keeps repown's own guard (or any pre-push hook) out of it.
+  - `--no-recurse-submodules` overrides `push.recurseSubmodules`. With `on-demand`, a review
+    measured git running each submodule's own dry-run push, which contacts that remote and
+    runs that submodule's pre-push hook (`--no-verify` doesn't reach it); with `check`, an
+    unpushed submodule commit turned the answer into "the remote end hung up".
+  - **The account named is the username git sends**: the pinned
+    `credential.<url>.username`, only where repown pins one over HTTPS. Over SSH, to a local
+    path, or on a host repown doesn't pin (ADR-009), no account is named, since none signed
+    in by name. `repown.account` is used only for the `repown use` fix when git signed in
+    as someone else.
 - **The whole stderr is classified** (`classifySignIn`, `src/core/signin-check.ts`), first
   match wins, SSO first, because its 403 also reads as "unable to access":
 
@@ -44,7 +53,9 @@ offline that can see SSO. The user had to diagnose git's errors with outside hel
   the account. Elsewhere the verdict comes without a command (ADR-009).
 - **The SSO link is printed as GitHub sent it**, query included, because it is the fix. It
   goes to the user's own terminal (stderr); `networkReason`'s query masking is for reasons
-  that get pasted, not for this line.
+  that get pasted, not for this line. The text is the remote's, so the link is shown only
+  when its host is origin's own; otherwise the line says to authorise the sign-in in the
+  organisation's SSO settings.
 - **Exit code:** a FAIL makes doctor exit 1; a WARN keeps doctor's own code. No commit yet,
   no origin, or outside a clone is a WARN that says why.
 

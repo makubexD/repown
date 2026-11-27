@@ -4,7 +4,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
@@ -379,7 +379,8 @@ describe('repown doctor output', () => {
       commit();
       const run = repown(['doctor', '--online'], box.dir, doctorEnv(bin));
       assert.equal(run.status, 0, run.stderr);
-      assert.match(run.stdout, /This clone, asked online\n.*OK +sign-in +origin accepts octocat's sign-in for a push \(a dry run: nothing was sent\)/s);
+      // A local path takes no sign-in, so no account is named (only HTTPS pins send one).
+      assert.match(run.stdout, /This clone, asked online\n.*OK +sign-in +origin accepts a push from this clone \(a dry run: nothing was sent\)/s);
       assert.match(run.stderr, /· origin accepts the sign-in\n$/);
       assert.equal(box.git('--git-dir', bare, 'for-each-ref'), '', 'the dry run created no ref');
     });
@@ -397,6 +398,29 @@ describe('repown doctor output', () => {
       const run = repown(['doctor', '--online'], box.dir, doctorEnv(bin));
       assert.equal(run.status, 0, run.stderr);
       assert.match(run.stderr, /WARN +sign-in +couldn't check the sign-in: /);
+    });
+
+    test('push.recurseSubmodules=on-demand does not push a submodule, or run its hook', () => {
+      const subBare = join(box.dir, '..', 'sub.git');
+      const subWork = join(box.dir, '..', 'sub-work');
+      box.git('init', '-q', '--bare', subBare);
+      box.git('clone', '-q', subBare, subWork);
+      const inSub = (...args: string[]): string => box.git('-C', subWork, '-c', 'user.name=Octo Cat', '-c', 'user.email=octocat@example.invalid', ...args);
+      inSub('commit', '-q', '--allow-empty', '-m', 'one');
+      inSub('push', '-q', 'origin', 'HEAD');
+      box.git('-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', subBare, 's');
+      commit();
+      const marker = join(box.dir, '..', 'sub-hook-ran');
+      const subHooks = join(box.dir, '.git', 'modules', 's', 'hooks');
+      mkdirSync(subHooks, { recursive: true });
+      writeFileSync(join(subHooks, 'pre-push'), '#!/bin/sh\necho ran > "' + marker.replace(/\\/g, '/') + '"\n', { mode: 0o755 });
+      box.git('-C', join(box.dir, 's'), '-c', 'user.name=Octo Cat', '-c', 'user.email=octocat@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'unpushed');
+      box.git('add', 's');
+      commit();
+      box.git('config', 'push.recurseSubmodules', 'on-demand');
+      const run = repown(['doctor', '--online'], box.dir, doctorEnv(bin));
+      assert.match(run.stdout, /OK +sign-in/, run.stderr);
+      assert.equal(existsSync(marker), false, 'the submodule\'s hook ran');
     });
 
     test('the pre-push hook does not run for the dry run', () => {

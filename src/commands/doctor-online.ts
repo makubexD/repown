@@ -2,19 +2,36 @@
 // push (ADR-031). Opt-in, never in the push path (ADR-004): without the flag doctor stays
 // offline.
 
-import type { RepoState } from '../core/inspect.ts';
+import { pinsCredential, type RepoState } from '../core/inspect.ts';
 import { isGcm } from '../core/credential/gcm.ts';
-import { classifySignIn, describeSignIn, type SignInReport } from '../core/signin-check.ts';
-import { parseGitUrl } from '../core/url.ts';
+import { classifySignIn, describeSignIn, type SignInReport, type SignInVerdict } from '../core/signin-check.ts';
+import { parseGitUrl, type GitUrl } from '../core/url.ts';
 import * as out from '../ui/format.ts';
 
 /** Prints the verdict and returns its level; nothing to ask with is a warning, never a pass. */
-export async function checkOnline(repo: RepoState, account: string | null): Promise<SignInReport['level']> {
+export async function checkOnline(repo: RepoState, pinned: string | null): Promise<SignInReport['level']> {
   out.heading('This clone, asked online');
   const blocked = await nothingToAsk(repo);
   if (blocked) { out.warn('sign-in', blocked); return 'warn'; }
-  const verdict = classifySignIn(await repo.git.signInProbe('origin'));
-  return printed(describeSignIn(verdict, { account, gcm: isGcm(repo.helper), github: onGithubCom(repo) }));
+  const verdict = ownLink(classifySignIn(await repo.git.signInProbe('origin')), httpsUrl(repo));
+  return printed(describeSignIn(verdict, { account: sentAccount(repo), pinned, gcm: isGcm(repo.helper), github: onGithubCom(repo) }));
+}
+
+/** The username git sends: the pinned credential username, only where repown pins one over HTTPS. */
+function sentAccount(repo: RepoState): string | null {
+  return pinsCredential(repo) && httpsUrl(repo) ? repo.identity.account : null;
+}
+
+function httpsUrl(repo: RepoState): GitUrl | null {
+  const url = repo.credentialUrl ? parseGitUrl(repo.credentialUrl) : null;
+  return url?.scheme === 'https' ? url : null;
+}
+
+/** The SSO link comes from the remote: shown only when it points at origin's own host. */
+function ownLink(verdict: SignInVerdict, origin: GitUrl | null): SignInVerdict {
+  if (verdict.kind !== 'sso' || !verdict.link) return verdict;
+  const host = URL.canParse(verdict.link) ? new URL(verdict.link).hostname.toLowerCase() : null;
+  return host !== null && host === origin?.host.toLowerCase() ? verdict : { kind: 'sso', link: null };
 }
 
 /** Why there is no push to try, or null when there is one. */
@@ -26,8 +43,7 @@ async function nothingToAsk(repo: RepoState): Promise<string | null> {
 
 /** GCM's `github login` was measured on github.com only (ADR-009). */
 function onGithubCom(repo: RepoState): boolean {
-  const url = repo.credentialUrl ? parseGitUrl(repo.credentialUrl) : null;
-  return url?.scheme === 'https' && url.host.toLowerCase() === 'github.com';
+  return httpsUrl(repo)?.host.toLowerCase() === 'github.com';
 }
 
 function printed(report: SignInReport): SignInReport['level'] {

@@ -7,6 +7,8 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-11-27
+
 ### Fixed
 - `repown fix` said "nothing to undo -- gh is not installed as a credential helper" while
   `repown doctor` reported gh as the helper, when `gh auth setup-git`'s entries sat in a
@@ -342,7 +344,8 @@ and cmd. `status`, `doctor` and the pre-push guard are faster on Windows.
   contract for scripts.
 - Runs on Node 20+ on Windows, macOS and Linux, with zero runtime dependencies.
 
-[Unreleased]: https://github.com/makubexD/repown/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/makubexD/repown/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/makubexD/repown/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/makubexD/repown/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/makubexD/repown/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/makubexD/repown/compare/v0.5.1...v0.5.2

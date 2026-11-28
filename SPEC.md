@@ -24,7 +24,7 @@ This work does three things:
 | Case | Today | After |
 | --- | --- | --- |
 | origin's URL names a user (`https://octo-work@github.com/…`) other than the pinned account | status: "ready: pushes use octocat" | status, doctor and setup's check say git signs in as `octo-work` from the URL, and give the fix: set origin's URL without the user. Never "ready". |
-| Pinned over GCM, but GCM holds no sign-in for the account | status: "ready" | status says the next push opens a browser to sign in as the account (not a blocker, since git in a terminal handles it), and names `repown doctor --online` |
+| Pinned over GCM, but GCM holds no sign-in for the account | status: "ready" | **Dropped (2026-11-27):** not a failure, since the first push in a terminal opens GCM's browser sign-in. Setup's online check (D) offers that sign-in. And status's output would then depend on the GCM installed on the machine running it, including CI runners. |
 
 ### B. `repown doctor --online` (fixes to 0.6.0)
 - **The URL described is the one probed.** The account, helper, host and SSO link come from

@@ -15,7 +15,7 @@ export function renderTopHelp(entries: ReadonlyMap<string, Command | CommandGrou
     ...globalOptionsHelp(),
     ...environmentHelp(),
     '  Exit codes: 0 success, 1 failure or refusal, 2 usage error,',
-    '  130 cancelled (setup, the start screen).',
+    '  3 not checked (doctor --online), 130 cancelled (setup, the start screen).',
     '',
   ];
 }

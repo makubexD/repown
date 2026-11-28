@@ -45,6 +45,18 @@ export interface Divergence {
 export type Signin = { readonly key: string } | { readonly remote: string } | { readonly named: string };
 
 /**
+ * A bare username in an HTTPS URL the remote pushes to: git sends it, whatever
+ * `credential.<url>.username` says (ADR-032). `key` holds it as a configured value (null when a
+ * rewrite rule adds it); `clean` is that value without the user, only when the key holds one value.
+ */
+export interface UrlUser {
+  readonly remote: string;
+  readonly user: string;
+  readonly key: string | null;
+  readonly clean: string | null;
+}
+
+/**
  * The URLs a remote pushes to after its first: git runs the pre-push hook once per URL, so
  * the guard can refuse one while another takes the push. Owners only, never a URL.
  */
@@ -65,6 +77,7 @@ export interface PushFacts {
   readonly elsewhere: Result<readonly UnpushedCommit[]>;
   /** What carries its own sign-in on the push path (the value is never kept). */
   readonly signin: Signin | null;
+  readonly urlUser: UrlUser | null;
   readonly repoint: Repoint | null;
   readonly destination: PushDestination | null;
   readonly laterUrls: LaterUrls | null;
@@ -86,16 +99,17 @@ export async function readPushFacts(git: Git, unpushed: UnpushedFact, env: NodeJ
   const rewritable = await rewritableOf(git, target);
   // A remote target's push URLs, read once for the sign-in and later-URL checks.
   const pushed = target?.isRemote ? git.remoteUrls(target.name, true) : null;
-  const [configOverrides, signin, repoint, destination, laterUrls, divergence, elsewhere, upstream] = await Promise.all([
+  const [configOverrides, signin, urlUser, repoint, destination, laterUrls, divergence, elsewhere, upstream] = await Promise.all([
     overridesIn(git),
     signinOf(git, target, { rewritable: rewritable !== null, pushed }),
+    urlUserOf(git, target, pushed),
     repointOf(git, branch),
     rewritable ? null : destinationOf(git, target),
     laterUrlsOf(git, target, pushed),
     divergenceOf(git, target), elsewhereOf(git, target), upstreamOf(git, branch, target),
   ]);
   return {
-    unpushed, env: hostileSet(env), configOverrides, elsewhere, signin, repoint, destination, laterUrls, rewritable, divergence,
+    unpushed, env: hostileSet(env), configOverrides, elsewhere, signin, urlUser, repoint, destination, laterUrls, rewritable, divergence,
     detached: head?.kind === 'detached', upstream,
   };
 }
@@ -106,7 +120,7 @@ async function overridesIn(git: Git): Promise<string[]> {
 }
 
 /** A password or a token in the userinfo. A bare username (GCM's own advice) is not a secret. */
-function carriesSecret(raw: string | null): boolean {
+export function carriesSecret(raw: string | null): boolean {
   const user = raw ? parseGitUrl(raw)?.user : null;
   return !!user && (user.includes(':') || /^(gh[pousr]_|github_pat_)/i.test(user));
 }
@@ -156,6 +170,28 @@ async function configuredSignin(git: Git, remote: string): Promise<Signin | null
   const pushurls = await git.getAllConfig(pushurl);
   const [key, values] = pushurls.length > 0 ? [pushurl, pushurls] : ['remote.' + remote + '.url', await git.getAllConfig('remote.' + remote + '.url')];
   return values.some(carriesSecret) ? { key } : null;
+}
+
+async function urlUserOf(git: Git, target: PushTarget | null, pushed: Promise<Result<string[]>> | null): Promise<UrlUser | null> {
+  const urls = pushed && target ? await pushed : null;
+  const found = urls?.ok ? urls.value.find(namesUser) : undefined;
+  if (!found || !target) return null;
+  const user = parseGitUrl(found)!.user!;
+  for (const key of ['remote.' + target.name + '.pushurl', 'remote.' + target.name + '.url']) {
+    const values = await git.getAllConfig(key);
+    if (values.includes(found)) return { remote: target.name, user, key, clean: values.length === 1 ? withoutUser(found, user) : null };
+  }
+  return { remote: target.name, user, key: null, clean: null };
+}
+
+/** An HTTPS URL with a bare username: never one that carries a secret (that is `signin`). */
+function namesUser(raw: string): boolean {
+  const url = parseGitUrl(raw);
+  return url?.scheme === 'https' && !!url.user && !carriesSecret(raw);
+}
+
+function withoutUser(raw: string, user: string): string {
+  return raw.replace('//' + user + '@', '//');
 }
 
 async function repointOf(git: Git, branch: string | null): Promise<Repoint | null> {

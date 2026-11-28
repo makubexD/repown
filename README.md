@@ -284,6 +284,7 @@ note, not a warning. Every warning it can print:
 | `repown scan` | Whatever it finds (read its output or JSON) | | A missing folder or a bad `--depth` | |
 | `repown setup` | Done, or already set up | Decline, or it can't start | Flags that don't fit, or no terminal without `--no-input` | 130 when cancelled or interrupted; a failing step's own code |
 | `repown status` | Success. Warnings alone exit 0 | A problem | | |
+| `repown doctor --online` | Ready, and the remote accepts the sign-in | A problem, or the remote refused the sign-in | | 3 when the sign-in couldn't be checked (no network, no commit, no remote) |
 
 Every `setup` case: [Scripts and CI](docs/CONFIGURATION.md#scripts-and-ci).
 

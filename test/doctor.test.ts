@@ -385,9 +385,9 @@ describe('repown doctor output', () => {
       assert.equal(box.git('--git-dir', bare, 'for-each-ref'), '', 'the dry run created no ref');
     });
 
-    test('with no commit yet there is nothing to push with: a warning, never a pass', () => {
+    test('with no commit yet there is nothing to push with: a warning and exit 3, never a pass', () => {
       const run = repown(['doctor', '--online'], box.dir, doctorEnv(bin));
-      assert.equal(run.status, 0, run.stderr);
+      assert.equal(run.status, 3, run.stderr);
       assert.match(run.stderr, /WARN +sign-in +not checked: there is no commit to try a push with yet/);
       assert.match(run.stderr, /· sign-in not checked online\n$/);
     });
@@ -396,7 +396,7 @@ describe('repown doctor output', () => {
       commit();
       box.git('remote', 'set-url', 'origin', join(box.dir, '..', 'missing.git'));
       const run = repown(['doctor', '--online'], box.dir, doctorEnv(bin));
-      assert.equal(run.status, 0, run.stderr);
+      assert.equal(run.status, 3, run.stderr);
       assert.match(run.stderr, /WARN +sign-in +couldn't check the sign-in: /);
     });
 
@@ -421,6 +421,25 @@ describe('repown doctor output', () => {
       const run = repown(['doctor', '--online'], box.dir, doctorEnv(bin));
       assert.match(run.stdout, /OK +sign-in/, run.stderr);
       assert.equal(existsSync(marker), false, 'the submodule\'s hook ran');
+    });
+
+    test('the account named is the push URL\'s: an HTTPS fetch with a local push names none', () => {
+      commit();
+      box.git('remote', 'set-url', 'origin', 'https://github.com/octocat/project.git');
+      box.git('remote', 'set-url', '--push', 'origin', bare);
+      const run = repown(['doctor', '--online'], box.dir, doctorEnv(bin));
+      assert.match(run.stdout, /OK +sign-in +origin accepts a push from this clone \(a dry run/, run.stderr);
+      assert.doesNotMatch(run.stdout + run.stderr, /octocat's sign-in|credential-manager github login/);
+    });
+
+    test('the remote a plain push uses is the one asked, and is named', () => {
+      commit();
+      box.git('remote', 'set-url', 'origin', join(box.dir, '..', 'missing.git'));
+      box.git('remote', 'add', 'upstream', bare);
+      box.git('config', 'branch.' + box.git('symbolic-ref', '--short', 'HEAD').trim() + '.pushRemote', 'upstream');
+      const run = repown(['doctor', '--online'], box.dir, doctorEnv(bin));
+      assert.equal(run.status, 0, run.stderr);
+      assert.match(run.stdout, /OK +sign-in +upstream accepts a push from this clone/);
     });
 
     test('the pre-push hook does not run for the dry run', () => {

@@ -171,7 +171,9 @@ is printed under `This clone, asked online`, above the closing line:
 
 A `FAIL` makes doctor exit 1, and the closing line adds `· and origin refused the sign-in`
 (or is `1 problem: origin refused the sign-in (above)` when nothing else was wrong). A pass
-adds `· origin accepts the sign-in`, and a warning adds `· sign-in not checked online`.
+adds `· origin accepts the sign-in`, and a warning adds `· sign-in not checked online` and
+makes doctor exit 3 (unless the offline checks already exit 1), so a script never reads a
+skipped check as a pass.
 Without `--online`, doctor never touches the network.
 
 In a clone repown pins no credential for (an SSH remote, Azure DevOps, another host), the

@@ -1,9 +1,9 @@
 # repown leaves you signed in
 
-Status: task 1 done; next task 2.
+Status: task 2 done (points 3 and 4 wait for the user); next task 3.
 
 - [x] 1. Plan: SPEC.md and this file. Docs: none.
-- [ ] 2. Measure (SPEC "Measure first", points 1–4), no code
+- [x] 2. Measure (SPEC "Measure first", points 1–4), no code
   - Accept: each point answered with the command run and git/GCM's output (names replaced);
     anything unmeasured is listed as unclassified.
   - Docs: ADR-032 draft (measurements section).

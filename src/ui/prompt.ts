@@ -32,25 +32,31 @@ export async function ask(label: string, suggestion?: string): Promise<Result<st
   }
 }
 
-/** y or n; an empty answer is `fallback` (No unless the caller says the step is recommended). */
-export async function confirm(question: string, fallback = false): Promise<boolean> {
-  if (!interactive()) return false;
+/** One question; null when the user pressed Ctrl-C or the input ended, which every caller takes as a stop. */
+async function answerOf(question: string): Promise<string | null> {
   const rl = createInterface({ input: process.stdin, output: process.stderr });
+  const ended = new Promise<null>((resolve) => rl.once('close', () => resolve(null)));
   try {
-    const answer = (await rl.question('  ' + question + (fallback ? ' [Y/n] ' : ' [y/N] '))).trim().toLowerCase();
-    return answer === '' ? fallback : answer === 'y' || answer === 'yes';
+    return await Promise.race([rl.question(question), ended]);
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') return null;
+    throw new Error('the question could not be asked', { cause: error });
   } finally {
     rl.close();
   }
 }
 
-/** Waits for Enter; false when the user types q (or there is no terminal to wait in). */
+/** y or n; an empty answer is `fallback` (No unless the caller says the step is recommended). */
+export async function confirm(question: string, fallback = false): Promise<boolean> {
+  if (!interactive()) return false;
+  const answer = (await answerOf('  ' + question + (fallback ? ' [Y/n] ' : ' [y/N] ')))?.trim().toLowerCase();
+  if (answer === undefined) return false;
+  return answer === '' ? fallback : answer === 'y' || answer === 'yes';
+}
+
+/** Waits for Enter; false when the user types q or Ctrl-C (or there is no terminal to wait in). */
 export async function waitForEnter(message: string): Promise<boolean> {
   if (!interactive()) return false;
-  const rl = createInterface({ input: process.stdin, output: process.stderr });
-  try {
-    return (await rl.question('  ' + message + ' ')).trim().toLowerCase() !== 'q';
-  } finally {
-    rl.close();
-  }
+  const answer = await answerOf('  ' + message + ' ');
+  return answer !== null && answer.trim().toLowerCase() !== 'q';
 }

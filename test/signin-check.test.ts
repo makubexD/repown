@@ -25,6 +25,7 @@ describe('classifySignIn', () => {
     ['a rejected token', failed(BOGUS), { kind: 'rejected' }],
     ['authentication failed alone', failed(`fatal: Authentication failed for '${URL}/'\n`), { kind: 'rejected' }],
     ['signed in as someone who cannot push', failed('remote: Permission to octo-org/project.git denied to octo-work.\nfatal: unable to access: 403\n'), { kind: 'denied', as: 'octo-work' }],
+    ['a deploy key without write access, never read as an account named deploy', failed('ERROR: Permission to octo-org/project.git denied to deploy key\nfatal: Could not read from remote repository.\n'), { kind: 'deploy-key' }],
     ['a repository the account cannot see', failed(`remote: Repository not found.\nfatal: repository '${URL}/' not found\n`), { kind: 'not-found' }],
     ['no sign-in stored (git)', failed('fatal: unable to get password from user\n'), { kind: 'no-sign-in' }],
     ['no sign-in stored (GCM, prompts off)', failed('fatal: Cannot prompt because user interactivity has been disabled.\nfatal: could not read Username for \'https://github.com\': terminal prompts disabled\n'), { kind: 'no-sign-in' }],
@@ -98,9 +99,24 @@ describe('describeSignIn', () => {
   });
 
   test('denied names who is signed in, and how to pin the right account', () => {
-    const said = describeSignIn({ kind: 'denied', as: 'octocat' }, gcm);
+    const said = describeSignIn({ kind: 'denied', as: 'octocat' }, { ...gcm, account: 'octocat' });
     assert.match(said.message, /octocat/);
     assert.deepEqual(said.fix, ['use the pinned account:  repown use octo-work']);
+  });
+
+  test('denied as another account while git already sends the pinned one: the stored sign-in is the problem', () => {
+    const said = describeSignIn({ kind: 'denied', as: 'octocat' }, gcm);
+    assert.deepEqual(said.fix, ['the stored sign-in for octo-work is another account\'s', 'sign in again:  git credential-manager github login --username octo-work --browser --force']);
+  });
+
+  test('denied over SSH: the key decides, so the fix is the key, never repown use', () => {
+    const said = describeSignIn({ kind: 'denied', as: 'octocat' }, { ...gcm, account: null, helper: null });
+    assert.deepEqual(said.fix, ['the SSH key signs in as octocat; see which key:  ssh -T git@github.com']);
+  });
+
+  test('a deploy key is named as one', () => {
+    const said = describeSignIn({ kind: 'deploy-key' }, { ...gcm, account: null });
+    assert.match(said.message, /^origin refused the push: the SSH key is a deploy key/);
   });
 
   test('where git sends no username (SSH, a local path, an unpinned host), no account is named', () => {

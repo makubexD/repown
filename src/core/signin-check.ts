@@ -21,12 +21,14 @@ export type SignInVerdict =
   | { readonly kind: 'not-found' }
   | { readonly kind: 'no-sign-in' }
   | { readonly kind: 'ssh-key' }
+  | { readonly kind: 'deploy-key' }
   | { readonly kind: 'host-key' }
   | { readonly kind: 'unchecked'; readonly reason: string };
 
 /** First match wins: SSO's 403 also reads as "unable to access", so it goes first. */
 const PATTERNS: readonly [RegExp, (stderr: string) => SignInVerdict][] = [
   [/SAML SSO/, (stderr) => ({ kind: 'sso', link: /visit (https:\/\/\S+)/.exec(stderr)?.[1] ?? null })],
+  [/Permission to \S+ denied to deploy key/, () => ({ kind: 'deploy-key' })],
   [/Permission to \S+ denied to /, (stderr) => ({ kind: 'denied', as: /denied to ([^\s.]+)/.exec(stderr)?.[1] ?? '' })],
   [/Invalid username or token|Authentication failed/, () => ({ kind: 'rejected' })],
   [/Repository not found/, () => ({ kind: 'not-found' })],
@@ -83,6 +85,7 @@ export function describeSignIn(verdict: SignInVerdict, ctx: SignInContext): Sign
     case 'denied': return denied(verdict.as, ctx);
     case 'not-found': return fail(' was not found with ' + whose + ': that account can\'t see it (the wrong account, or no access).', ['check the account (repown status), or ask for access']);
     case 'no-sign-in': return fail(': no sign-in is stored' + (ctx.account ? ' for ' + ctx.account : '') + ', so a push would ask for one.', signInFix(ctx));
+    case 'deploy-key': return fail(' refused the push: the SSH key is a deploy key without write access here.', ['give that deploy key write access, or sign in with an account\'s own key']);
     case 'ssh-key': return fail(' refused this machine\'s SSH key: it isn\'t added to an account that can push here.', sshFix('see which account the key signs in as:  ', ctx));
     case 'host-key': return fail(': ssh doesn\'t trust ' + (ctx.host ?? 'the host') + '\'s host key yet, so it stopped before signing in.', sshFix('check and trust it once:  ', ctx));
     case 'unchecked': return { level: 'warn', message: 'couldn\'t check the sign-in: ' + verdict.reason, fix: [] };
@@ -108,6 +111,11 @@ export function gcmLogin(account: string): string | null {
   return copyableCommand(['git', 'credential-manager', 'github', 'login', '--username', account, '--browser', '--force']);
 }
 
+/** git sent the pinned username, but the helper answered with another account's token. */
+function storedFor(ctx: SignInContext): string[] {
+  return ['the stored sign-in for ' + ctx.account + ' is another account\'s', ...signInFix(ctx)];
+}
+
 function sshFix(label: string, ctx: SignInContext): string[] {
   const command = ctx.host ? copyableCommand(['ssh', '-T', 'git@' + ctx.host]) : null;
   return [command ? label + command : 'check this machine\'s SSH key and known_hosts for the remote'];
@@ -120,6 +128,8 @@ function denied(as: string, ctx: SignInContext): SignInReport {
     return { level: 'fail', message: ctx.remote + ' refused the push: ' + (as || 'this sign-in') + ' can\'t push here.', fix: ['ask the owner for write access'] };
   }
   const message = ctx.remote + ' refused the push: git signed in as ' + as + ', not ' + pinned + ', and ' + as + ' can\'t push here.';
+  if (!ctx.account) return { level: 'fail', message, fix: sshFix('the SSH key signs in as ' + as + '; see which key:  ', ctx) };
+  if (ctx.account.toLowerCase() === pinned.toLowerCase()) return { level: 'fail', message, fix: storedFor(ctx) };
   if (ctx.fromUrl) return { level: 'fail', message, fix: ['the push URL names ' + as + '; remove it (repown status prints the command)'] };
   const command = copyableCommand(['repown', 'use', pinned]);
   return { level: 'fail', message, fix: [command ? 'use the pinned account:  ' + command : 'pin ' + pinned + ' again with repown use'] };

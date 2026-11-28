@@ -90,8 +90,9 @@ export async function listAccounts(
 
 /**
  * GCM's own github.com sign-in, with the terminal handed to it (ADR-032): the browser opens,
- * the user signs in, and GCM stores the token. repown sees nothing GCM prints. Measured on
- * GCM 2.6.1; offered only for github.com with GCM as the helper.
+ * the user signs in, and GCM stores the token. repown sees nothing GCM prints. The command is
+ * GCM 2.6.1's; `--force` over an account GCM already holds is not yet measured (ADR-032).
+ * Offered only for github.com with GCM as the helper.
  */
 export async function gcmGithubLogin(account: string, runner: InheritFn = inherit): Promise<boolean> {
   const result = await runner('git', ['credential-manager', 'github', 'login', '--username', account, '--browser', '--force']);

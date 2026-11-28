@@ -111,7 +111,8 @@ function printed(report: SignInReport): SignInReport['level'] {
 }
 
 /** The closing line, with what the online check found added to the offline verdict. */
-export function closingWithOnline(verdict: string, code: number, level: SignInReport['level'], remote = 'origin'): string {
+export function closingWithOnline(verdict: string, code: number, level: SignInReport['level'], named = 'origin'): string {
+  const remote = out.printable(named);
   if (level === 'fail') return code === 0 ? '1 problem: ' + remote + ' refused the sign-in (above)' : verdict + ' · and ' + remote + ' refused the sign-in';
   if (level === 'warn') return verdict + ' · sign-in not checked online';
   return verdict + ' · ' + remote + ' accepts the sign-in';

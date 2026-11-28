@@ -53,14 +53,14 @@ export default {
     if (!flagBool(args, 'online')) { closeDoctor(scoped(repo, found) + warningTally(warned)); return found.code; }
     const online = await askOnline(args, repo, pinnedOf);
     // A repair changed the machine after the offline report: say so rather than repeat it.
-    if (online.repaired) { closeDoctor(closingWithOnline(REPAIRED, 0, online.level, online.remote)); return onlineCode(online.level, 0); }
+    if (online.repaired) { closeDoctor(closingWithOnline(REPAIRED, online.level === 'fail' ? 1 : 0, online.level, online.remote) + warningTally(warned)); return onlineCode(online.level, 0); }
     closeDoctor(closingWithOnline(scoped(repo, found), found.code, online.level, online.remote) + warningTally(warned));
     return onlineCode(online.level, found.code);
   },
 } satisfies Command;
 
 /** The closing line's start once a repair ran: the report above it was read before. */
-export const REPAIRED = 'repaired (the report above was read before the repair; repown doctor shows the state now)';
+export const REPAIRED = 'a repair ran (the report above was read before it; repown doctor shows the state now)';
 
 /** Exit code: a refusal is 1; a check that couldn't run is 3, never a pass's 0 (ADR-032). */
 export const NOT_CHECKED = 3;

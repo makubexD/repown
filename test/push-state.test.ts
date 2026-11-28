@@ -80,6 +80,10 @@ describe('readPushFacts', () => {
     assert.deepEqual((await read()).urlUser, { remote: 'origin', user: 'octo-work', key: 'remote.origin.url', clean: 'https://github.com/octocat/hello.git' });
     box.git('config', 'remote.origin.pushurl', 'https://octo-org@github.com/octocat/hello.git');
     assert.deepEqual((await read()).urlUser, { remote: 'origin', user: 'octo-org', key: 'remote.origin.pushurl', clean: 'https://github.com/octocat/hello.git' });
+    box.git('config', 'remote.origin.pushurl', 'https://' + '0123456789abcdef'.repeat(2) + '01234567@github.com/octocat/hello.git');
+    const hex = await read();
+    assert.equal(hex.urlUser, null, 'a legacy 40-hex token as the username is never a name to print');
+    assert.deepEqual(hex.signin, { key: 'remote.origin.pushurl' });
     box.git('config', 'remote.origin.pushurl', 'https://octocat:ghp_abc@github.com/octocat/hello.git');
     assert.equal((await read()).urlUser, null, 'a URL with a secret is the sign-in fact, never echoed');
   });

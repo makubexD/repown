@@ -119,10 +119,17 @@ async function overridesIn(git: Git): Promise<string[]> {
   return OVERRIDES.filter((_, index) => values[index]);
 }
 
+/**
+ * A bare username shaped like an account name: a login's characters, at most 39 of them
+ * (GitHub's limit), and not a legacy 40-hex token. Anything else in the userinfo may be a
+ * token used as the username, so it is never printed or passed on (ADR-032).
+ */
+const ACCOUNT_LIKE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,38}$/;
+
 /** A password or a token in the userinfo. A bare username (GCM's own advice) is not a secret. */
 export function carriesSecret(raw: string | null): boolean {
   const user = raw ? parseGitUrl(raw)?.user : null;
-  return !!user && (user.includes(':') || /^(gh[pousr]_|github_pat_)/i.test(user));
+  return !!user && (user.includes(':') || /^(gh[pousr]_|github_pat_)/i.test(user) || !ACCOUNT_LIKE.test(user));
 }
 
 /** `pushed`: a remote target's `get-url --push --all` (null for any other target), shared with laterUrlsOf. */

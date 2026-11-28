@@ -1,6 +1,6 @@
 # repown leaves you signed in
 
-Status: task 9 done; next task 10 (review).
+Status: task 10 done; next task 11 (docs sweep and close-out).
 
 - [x] 1. Plan: SPEC.md and this file. Docs: none.
 - [x] 2. Measure (SPEC "Measure first", points 1–4), no code
@@ -38,7 +38,7 @@ Status: task 9 done; next task 10 (review).
     spawn budget unchanged; new scenarios in `wizard-screens.test.ts`.
   - Where: `src/wizard/setup-run.ts`, `engine.ts`, `review-text.ts`.
   - Docs: none yet.
-- [ ] 10. Review: an independent pass (code-reviewer, security-auditor) on the branch.
+- [x] 10. Review: an independent pass (code-reviewer, security-auditor) on the branch.
 - [ ] 11. Docs sweep and close-out: ADR-032 (supersedes ADR-031's two rows), ADR index,
   README, HOW-IT-WORKS (doctor and setup cards), CONFIGURATION, FAQ, CONTRIBUTING map,
   SECURITY (what repown runs for you), CHANGELOG, CLAUDE.md; remove SPEC.md and this file.

@@ -334,7 +334,7 @@ describe('S18 after a setup run', () => {
       const { signIn, seen } = step(true);
       const run = await captureRun(RUN, undefined, signIn);
       assert.equal(seen.offered, 0);
-      assert.match(run.stderr, /done: this clone is set up for octocat$/m);
+      assert.match(run.stderr, /done: this clone is set up for octocat · sign-in not checked online \(no commit to try a push with yet\)$/m);
     });
 
     test('not asked while something else stops the next push', async () => {
@@ -369,7 +369,7 @@ describe('S18 after a setup run', () => {
     try {
       const code = await runSetup(
         { positional: [], flags: new Map([['cwd', at.box.dir]]) },
-        { prompter: prompter ?? scripted(script), interactive: true, ...(signIn === undefined ? {} : { signIn }) },
+        { prompter: prompter ?? scripted(script), interactive: true, signIn: signIn ?? null },
       );
       return { code, stderr, stdout };
     } finally {

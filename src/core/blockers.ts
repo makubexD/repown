@@ -91,7 +91,7 @@ function signinBlocker(facts: PushFacts, branch: string, account: string): Block
 /** A username in the push URL outranks the pinned credential username: git signs in as it. */
 function urlUserBlocker(found: UrlUser | null, branch: string, account: string): Blocker[] {
   if (!found || found.user.toLowerCase() === account.toLowerCase()) return [];
-  const holder = found.key ?? printable(found.remote) + "'s push URL, as git resolves it,";
+  const holder = found.key ? printable(found.key) : printable(found.remote) + "'s push URL, as git resolves it,";
   const user = printable(found.user);
   return [{
     kind: 'urluser',
@@ -103,10 +103,10 @@ function urlUserBlocker(found: UrlUser | null, branch: string, account: string):
 
 function urlUserFix(found: UrlUser): string {
   const rule = 'remove the user from the url.<base>.insteadOf or pushInsteadOf rule that adds it (' + (copyableCommand(['git', 'config', '--get-regexp', '^url[.]']) ?? 'git config --list') + ' lists them)';
-  if (!found.key || !found.clean) return found.key ? 'remove ' + printable(found.user) + '@ from ' + found.key : rule;
+  if (!found.key || !found.clean) return found.key ? 'remove ' + printable(found.user) + '@ from ' + printable(found.key) : rule;
   const push = found.key.endsWith('.pushurl') ? ['--push'] : [];
   const command = copyableCommand(['git', 'remote', 'set-url', ...push, ...positional(found.remote), found.clean]);
-  return command ? 'remove it: ' + command : 'remove ' + printable(found.user) + '@ from ' + found.key;
+  return command ? 'remove it: ' + command : 'remove ' + printable(found.user) + '@ from ' + printable(found.key);
 }
 
 /** Counted with the guard's own exclusion, so a fork's upstream commits are not missed. */

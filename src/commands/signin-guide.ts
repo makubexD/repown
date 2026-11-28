@@ -23,6 +23,8 @@ export interface GuideIo {
   confirm(question: string): Promise<boolean>;
   /** False when the user stops (q). */
   waitEnter(message: string): Promise<boolean>;
+  /** A line of information: what the loop concluded, when no check says it. */
+  say(line: string): void;
   /** True when the repair ran to the end (exit 0). */
   run(repair: Exclude<Repair, { kind: 'sso' }>): Promise<boolean>;
 }
@@ -31,13 +33,17 @@ export async function guideSignIn(check: () => Promise<GuidedCheck>, io: GuideIo
   const tried = new Set<string>();
   let repaired = false;
   let result = await check();
-  while (result.level === 'fail' && result.repair && offerable(result.repair, tried)) {
+  while (result.level === 'fail' && result.repair) {
+    if (!offerable(result.repair, tried)) { io.say(UNHELPED); break; }
     if (!await attempt(result.repair, io)) break;
     repaired ||= result.repair.kind !== 'sso';
     result = await check();
   }
   return repaired ? { ...result, repaired } : result;
 }
+
+/** Said when the same repair comes back after it ran: it is not offered again. */
+export const UNHELPED = 'that repair ran, and the remote still refuses the sign-in; repown won\'t offer it again. The advice above is what is left.';
 
 /** Records the repair as tried; false when it already was. */
 function offerable(repair: Repair, tried: Set<string>): boolean {
@@ -50,6 +56,7 @@ function offerable(repair: Repair, tried: Set<string>): boolean {
 
 async function attempt(repair: Repair, io: GuideIo): Promise<boolean> {
   if (repair.kind === 'sso') return io.waitEnter(SSO_WAIT);
-  if (!await io.confirm(repairQuestion(repair))) return false;
+  const question = repairQuestion(repair);
+  if (question !== null && !await io.confirm(question)) return false;
   return io.run(repair);
 }

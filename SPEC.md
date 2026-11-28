@@ -59,6 +59,20 @@ or there is no fix left to offer.
 | user in origin's URL (A) | "Remove `<user>@` from origin's URL?" | `git remote set-url` through `exec.ts` (local config only) |
 | anything else, or not checked | no offer; the verdict and its printed advice | — |
 
+**Changed in the review (2026-11-27):**
+- gh as the helper: no question of the loop's own. `repown fix` runs without `--yes`, so it
+  shows which entries it removes, and where, before its own question (default No).
+- SSO: **no browser opener.** The link is printed and repown waits for Enter. An opener per OS
+  is unmeasured, and a link from the remote's text is not something to hand to a launcher.
+- denied: `use` is offered only where it changes the username git sends (HTTPS, not the
+  URL's own). When git already sends the pinned one, the stored token is another account's,
+  so the GCM login is offered instead. Over SSH, and for a deploy key (its own verdict),
+  nothing is offered.
+- User in the URL: **no `set-url` repair.** It is a blocker, so the online check never runs
+  while it is there. Status and setup print the exact `git remote set-url` command.
+- A username from the URL is never passed to GCM's login.
+- Ctrl-C or the end of input at any of these questions counts as No (or q).
+
 Rules:
 - No credential passes through repown, and repown never reads one.
 - Every spawn goes through `exec.ts`, with `shell: false`; the browser opener never runs a shell.
@@ -71,7 +85,12 @@ Rules:
   with origin now? (recommended)". The default is Yes.
 - A settled clone's opening review (nothing to change, ADR-022) offers the same check. That is
   where the field report's clone was.
-- Yes runs B and then C inside setup's frame. Setup says "done" only when the check passes. If
+- The question as built: "Check the sign-in with the remote now? (one dry-run push: nothing
+  is sent)", since the remote asked is the one a plain push uses, which may not be origin.
+  It is asked after setup's frame closes, through the plain terminal prompts doctor uses, so
+  `wizard-screens.test.ts` has no scenario for it. `wizard-setup-report.test.ts` plays it
+  with a scripted step.
+- Yes runs B and then C once setup's frame has closed. Setup says "done" only when the check passes. If
   it fails or is skipped, the closing line says what is left (`sign-in not checked online`, or
   the verdict). As with every blocker (ADR-026), the exit code stays setup's own.
 - Not asked under `--no-input`, without a terminal, with no origin, or with no commit (it says

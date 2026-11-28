@@ -3,7 +3,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { repairFor, repairQuestion, triedOnce } from '../src/core/signin-repair.ts';
-import { guideSignIn, type GuideIo, type GuidedCheck } from '../src/commands/signin-guide.ts';
+import { guideSignIn, UNHELPED, type GuideIo, type GuidedCheck } from '../src/commands/signin-guide.ts';
 import type { SignInContext } from '../src/core/signin-check.ts';
 
 const CTX: SignInContext = { remote: 'origin', host: 'github.com', account: 'octo-work', fromUrl: false, pinned: 'octo-work', helper: 'manager', github: true };
@@ -19,6 +19,10 @@ describe('repairFor', () => {
     assert.deepEqual(repairFor({ kind: 'rejected' }, { ...CTX, helper: GH }), { kind: 'fix' });
   });
 
+  test('a username from the URL is never signed in as: that URL is the blocker to remove', () => {
+    assert.equal(repairFor({ kind: 'rejected' }, { ...CTX, fromUrl: true }), null);
+  });
+
   test('nothing measured to run: another helper, another host, no account named', () => {
     assert.equal(repairFor({ kind: 'rejected' }, { ...CTX, helper: 'store' }), null);
     assert.equal(repairFor({ kind: 'rejected' }, { ...CTX, github: false }), null);
@@ -30,9 +34,13 @@ describe('repairFor', () => {
     assert.deepEqual(repairFor({ kind: 'sso', link: null }, CTX), { kind: 'sso', link: null });
   });
 
-  test('denied as another account: pin the recorded one again, unless the URL names that user', () => {
-    assert.deepEqual(repairFor({ kind: 'denied', as: 'octocat' }, CTX), { kind: 'use', account: 'octo-work' });
-    assert.equal(repairFor({ kind: 'denied', as: 'octocat' }, { ...CTX, fromUrl: true }), null);
+  test('denied as another account: pin the recorded one again, only where that changes the username git sends', () => {
+    const sendsOther = { ...CTX, account: 'octocat' };
+    assert.deepEqual(repairFor({ kind: 'denied', as: 'octocat' }, sendsOther), { kind: 'use', account: 'octo-work' });
+    assert.equal(repairFor({ kind: 'denied', as: 'octocat' }, { ...sendsOther, fromUrl: true }), null);
+    assert.equal(repairFor({ kind: 'denied', as: 'octocat' }, { ...CTX, account: null, helper: null }), null, 'SSH: the key decides');
+    assert.deepEqual(repairFor({ kind: 'denied', as: 'octocat' }, CTX), { kind: 'login', account: 'octo-work' }, 'already sent: the stored token is someone else\'s');
+    assert.equal(repairFor({ kind: 'deploy-key' }, CTX), null);
     assert.equal(repairFor({ kind: 'denied', as: 'Octo-Work' }, CTX), null, 'the pinned account itself needs write access');
   });
 
@@ -42,8 +50,8 @@ describe('repairFor', () => {
   });
 
   test('each question names what runs', () => {
-    assert.match(repairQuestion({ kind: 'login', account: 'octo-work' }), /Sign in to GitHub as octo-work now\?/);
-    assert.match(repairQuestion({ kind: 'fix' }), /Undo gh's credential helper/);
+    assert.match(repairQuestion({ kind: 'login', account: 'octo-work' }) ?? '', /Sign in to GitHub as octo-work now\?/);
+    assert.equal(repairQuestion({ kind: 'fix' }), null, 'fix previews its entries, then asks its own question');
     assert.equal(triedOnce({ kind: 'sso', link: null }), null);
   });
 });
@@ -57,6 +65,7 @@ describe('guideSignIn', () => {
     const io: GuideIo = {
       confirm: async (question) => { log.push('ask: ' + question); return answers.confirm?.shift() ?? true; },
       waitEnter: async () => { log.push('wait'); return answers.enter?.shift() ?? true; },
+      say: (line) => { log.push('say: ' + line); },
       run: async (repair) => { log.push('run: ' + repair.kind); return answers.ran ?? true; },
     };
     return { check, io, log, calls: () => calls };
@@ -84,10 +93,11 @@ describe('guideSignIn', () => {
     assert.deepEqual(s.log, ['ask: ' + repairQuestion({ kind: 'login', account: 'octo-work' })]);
   });
 
-  test('the same repair is offered once: a second failure after it stops the loop', async () => {
+  test('the same repair is offered once: a second failure after it says so and stops the loop', async () => {
     const s = scripted([login, login]);
     assert.equal((await guideSignIn(s.check, s.io)).level, 'fail');
     assert.equal(s.log.filter((line) => line.startsWith('run')).length, 1);
+    assert.equal(s.log.at(-1), 'say: ' + UNHELPED);
   });
 
   test('a repair that did not run stops without checking again', async () => {
@@ -104,11 +114,11 @@ describe('guideSignIn', () => {
     assert.equal((await guideSignIn(done.check, done.io)).level, 'pass');
   });
 
-  test('one repair can lead to another: gh undone, then GCM\'s login', async () => {
+  test('one repair can lead to another: gh undone (fix asks its own question), then GCM\'s login', async () => {
     const fix: GuidedCheck = { level: 'fail', remote: 'origin', repair: { kind: 'fix' } };
     const s = scripted([fix, login, pass]);
     assert.equal((await guideSignIn(s.check, s.io)).level, 'pass');
-    assert.deepEqual(s.log.filter((line) => line.startsWith('run')), ['run: fix', 'run: login']);
+    assert.deepEqual(s.log, ['run: fix', 'ask: ' + repairQuestion({ kind: 'login', account: 'octo-work' }), 'run: login']);
   });
 
   test('the result says a repair ran, so the caller does not repeat what it read before', async () => {

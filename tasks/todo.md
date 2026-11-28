@@ -1,6 +1,6 @@
 # repown leaves you signed in
 
-Status: task 8 done; next task 9.
+Status: task 9 done; next task 10 (review).
 
 - [x] 1. Plan: SPEC.md and this file. Docs: none.
 - [x] 2. Measure (SPEC "Measure first", points 1–4), no code
@@ -32,7 +32,7 @@ Status: task 8 done; next task 9.
   - Where: a pure planner (`src/core/signin-repair.ts`), a runner shared by doctor and
     setup, the opener in `src/core/exec.ts` callers only.
   - Docs: none yet.
-- [ ] 9. Setup ends with the check (SPEC D)
+- [x] 9. Setup ends with the check (SPEC D)
   - Accept: after a run and from a settled opening review; default Yes; "done" only on a
     pass; not asked under `--no-input`, without a terminal, origin or commit; exit code and
     spawn budget unchanged; new scenarios in `wizard-screens.test.ts`.

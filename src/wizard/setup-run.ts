@@ -29,6 +29,8 @@ import { blockers, type Blocker } from '../core/blockers.ts';
 import { readPushFacts } from '../core/push-state.ts';
 import { guardStateAt, hookLocation } from '../core/guard/hook.ts';
 import { readUnpushed } from '../core/unpushed.ts';
+import { interactive } from '../ui/prompt.ts';
+import { signInAfterSetup, signInRefused, signInSuffix, terminalSignIn, type SignInOutcome, type SignInStep } from './setup-signin.ts';
 
 export interface SetupDeps {
   /** The prompter to ask with; the real one is chosen when absent. */
@@ -43,6 +45,8 @@ export interface SetupDeps {
   readonly preview?: AuthState;
   /** Drawn inside the frame, after the intro. Bare `repown` passes one; typed `repown setup` does not. */
   readonly lead?: string;
+  /** The last step's sign-in check (ADR-032). Tests pass a fake or null; production asks in a terminal. */
+  readonly signIn?: SignInStep | null;
 }
 
 const CANCELLED = 130;
@@ -63,6 +67,7 @@ export async function runSetup(args: Args, deps: SetupDeps): Promise<number> {
       args, git, given: given.value, prompter, accountKind: deps.accountKind, readAuth: deps.auth ?? inspectAuth,
       ...(deps.preview ? { preview: deps.preview } : {}),
       ...(deps.lead === undefined ? {} : { lead: deps.lead }),
+      signIn: unattended ? null : deps.signIn !== undefined ? deps.signIn : interactive() ? terminalSignIn(args) : null,
     });
   } finally {
     prompter?.close();
@@ -86,9 +91,10 @@ interface Setup {
   readonly preview?: AuthState;
   /** Bare `repown` passes the sentence; typed `repown setup` leaves it unset. */
   readonly lead?: string;
+  readonly signIn: SignInStep | null;
 }
 
-async function continueSetup({ args, git, given, prompter, accountKind, readAuth, preview, lead }: Setup): Promise<number> {
+async function continueSetup({ args, git, given, prompter, accountKind, readAuth, preview, lead, signIn }: Setup): Promise<number> {
   prompter?.intro?.('repown setup');
   drawLead(prompter, lead);
   prompter?.busy?.('Reading this clone and this machine');
@@ -97,7 +103,7 @@ async function continueSetup({ args, git, given, prompter, accountKind, readAuth
   const answers = checkAgainst(given, ctx.value, flagString(args, 'allow-owner'));
   if (!answers.ok) return answers.error;
   if (!prompter) return runUnattended(answers.value, ctx.value, git, readAuth);
-  return runGuided(answers.value, ctx.value, { git, prompter, readAuth });
+  return runGuided(answers.value, ctx.value, { git, prompter, readAuth, signIn });
 }
 
 /** The bare-repown sentence, inside the frame when the prompter can draw it. */
@@ -212,21 +218,37 @@ interface Guided {
   readonly git: Git;
   readonly prompter: Prompter;
   readonly readAuth: ReadAuth;
+  readonly signIn: SignInStep | null;
 }
 
 async function runGuided(given: Answers, ctx: SetupContext, guided: Guided): Promise<number> {
   const outcome = await wizard(setupFlow(ctx), ctx, given, guided.prompter);
-  if (outcome.status === 'done') { guided.prompter.outro?.('Nothing changed: this clone was already set up'); return 0; }
+  if (outcome.status === 'done') return settled(guided);
   if (outcome.status !== 'run') return stoppedBefore(outcome.status, guided.prompter);
   return runAccepted(outcome.answers, ctx, guided);
 }
 
-async function runAccepted(answers: Answers, ctx: SetupContext, { git, prompter, readAuth }: Guided): Promise<number> {
+/** Already set up: nothing to run, and the sign-in check is still offered (ADR-032). */
+async function settled({ git, prompter, signIn }: Guided): Promise<number> {
+  prompter.outro?.('Nothing changed: this clone was already set up');
+  if (!signIn) return 0;
+  prompter.close();
+  const online = await signInAfterSetup(signIn, git);
+  if (online) out.detail(signInLine(online));
+  return 0;
+}
+
+function signInLine(online: SignInOutcome): string {
+  const refused = signInRefused(online);
+  return refused ? out.marked('warn', process.stderr, refused) : out.marked('ok', process.stderr, 'set up' + signInSuffix(online));
+}
+
+async function runAccepted(answers: Answers, ctx: SetupContext, { git, prompter, readAuth, signIn }: Guided): Promise<number> {
   prompter.outro?.('Running the commands');
   const confirm = gateFor(prompter, answers, ctx);
   // Recommended hands the terminal over now. Step by step keeps it for each question.
   if (!confirm) prompter.close();
-  const state = { ...runState(git, readAuth, ctx), ...reported(answers, ctx, !ghNoted(answers, ctx)) };
+  const state = { ...runState(git, readAuth, ctx), ...reported(answers, ctx, !ghNoted(answers, ctx)), signIn, release: () => prompter.close() };
   const code = await execute(planCommands(answers, ctx), confirm ? { ...state, confirm } : state);
   if (confirm) prompter.close();
   return code;
@@ -283,6 +305,10 @@ interface RunState extends Report {
   readonly git: Git;
   readonly readAuth: ReadAuth;
   readonly confirm?: Confirm;
+  /** Asked once the steps ran with nothing in the way of the next push; null: not asked. */
+  readonly signIn?: SignInStep | null;
+  /** Hands the terminal back from the prompter before the sign-in question. */
+  readonly release?: () => void;
   /** Local keys the run report compares besides the identity: the credential pin, and a key setup may repoint. */
   readonly watchedKeys: readonly string[];
 }
@@ -306,7 +332,9 @@ function reported(answers: Answers, ctx: SetupContext, repeatGh: boolean): Repor
 async function execute(plan: readonly PlannedCommand[], state: RunState): Promise<number> {
   const before = await readCloneSnapshot(state.git, state.watchedKeys);
   const ran = await walk(plan, state.git, state.confirm);
-  await reportRun(before, ran, state);
+  const end = ran.code === null ? await endOf(ran.done, state) : null;
+  const online = end && !end.found.some((blocker) => blocker.blocks) ? await onlineAfter(state) : null;
+  await reportRun(before, ran, state, { end, online });
   return ran.code ?? 0;
 }
 
@@ -394,20 +422,42 @@ function halt(remaining: readonly PlannedCommand[], code: number, why?: string):
   return code;
 }
 
+/** The account the closing line names, and what stands in the way of its next push. */
+interface RunEnd {
+  readonly account: string;
+  readonly found: readonly Blocker[];
+}
+
+interface Closing {
+  readonly end: RunEnd | null;
+  readonly online: SignInOutcome | null;
+}
+
+async function endOf(done: readonly PlannedCommand[], state: RunState): Promise<RunEnd | null> {
+  const pinned = done.find((planned) => planned.argv[0] === 'use')?.argv.at(-1);
+  const account = pinned ?? (state.pinnedAlready ? state.account : null);
+  return account ? { account, found: await blockersNow(state.git, account) } : null;
+}
+
+/** The last step: the prompter gives the terminal back first, since the check may hand it on. */
+async function onlineAfter(state: RunState): Promise<SignInOutcome | null> {
+  if (!state.signIn) return null;
+  state.release?.();
+  return signInAfterSetup(state.signIn, state.git);
+}
+
 /** On stderr, like the step lines: stdout carries only what the commands themselves print. */
-async function reportRun(before: CloneSnapshot, ran: WalkResult, state: RunState): Promise<void> {
-  if (ran.code === null) await announce(ran.done, ran.skipped, state);
+async function reportRun(before: CloneSnapshot, ran: WalkResult, state: RunState, end: Closing): Promise<void> {
+  if (ran.code === null) announce(ran.skipped, end);
   await printClone(before, state);
   const auth = wantsAuth(ran, state) ? await state.readAuth(state.git) : null;
   printMachine(ran.done, auth);
   if (ran.code === null) closeRun(auth, state);
 }
 
-async function announce(done: readonly PlannedCommand[], skipped: readonly PlannedCommand[], state: RunState): Promise<void> {
+function announce(skipped: readonly PlannedCommand[], { end, online }: Closing): void {
   process.stderr.write('\n');
-  const pinned = done.find((planned) => planned.argv[0] === 'use')?.argv.at(-1);
-  const account = pinned ?? (state.pinnedAlready ? state.account : null);
-  if (account) closing(account, await blockersNow(state.git, account));
+  if (end) closing(end, online);
   for (const planned of skipped) out.detail('skipped: ' + printable(planned.what));
 }
 
@@ -415,12 +465,14 @@ async function announce(done: readonly PlannedCommand[], skipped: readonly Plann
  * `done` only with nothing left in the way of the next push; otherwise the first, then each one
  * (ADR-026). What blocks nothing (the guard is off) still gets its lines, under `done`.
  */
-function closing(account: string, found: readonly Blocker[]): void {
+function closing({ account, found }: RunEnd, online: SignInOutcome | null): void {
   const blocking = found.filter((blocker) => blocker.blocks);
   const more = blocking.length > 1 ? ' (and ' + (blocking.length - 1) + ' more below)' : '';
   const [first] = blocking;
-  out.detail(first ? out.marked('warn', process.stderr, 'set up for ' + printable(account) + '; the next push will fail: ' + printable(first.summary) + more)
-    : out.marked('ok', process.stderr, 'done: this clone is set up for ' + printable(account)));
+  const refused = signInRefused(online);
+  if (first) out.detail(out.marked('warn', process.stderr, 'set up for ' + printable(account) + '; the next push will fail: ' + printable(first.summary) + more));
+  else if (refused) out.detail(out.marked('warn', process.stderr, 'set up for ' + printable(account) + '; ' + printable(refused)));
+  else out.detail(out.marked('ok', process.stderr, 'done: this clone is set up for ' + printable(account) + signInSuffix(online)));
   // A mark pushes the closing words two columns right; the blockers stay two deeper still.
   const indent = useColour(process.stderr) ? '    ' : '  ';
   for (const line of found.flatMap((blocker) => blocker.lines)) out.detail(indent + printable(line));

@@ -7,6 +7,33 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+### Added
+- repown now guides the sign-in until the remote accepts it. In a terminal, when
+  `repown doctor --online` finds a refusal, it offers the matching fix, runs it on a yes,
+  and checks again: Git Credential Manager's github.com sign-in (your browser opens),
+  `repown fix` when gh is the helper (it shows what it removes and asks first), pinning the
+  account again, or, for SAML SSO, waiting while you approve the page. Without a terminal it
+  prints the verdict and the fix, as before.
+- `repown setup` ends by asking to check the sign-in online (one dry-run push, nothing sent),
+  with the same guided repair. Its closing line says `done` with `· origin accepts the
+  sign-in` only on a pass, and says what is left otherwise. Never asked under `--no-input`.
+- `doctor --online` names an SSH key the host refused, a host key ssh doesn't trust yet, and
+  a deploy key without write access, each with its fix.
+
+### Changed
+- `repown doctor --online` exits 3 when the check couldn't run (offline, no commit, no
+  remote), so a script never reads a skipped check as a pass.
+- `doctor --online` asks the remote a plain `git push` uses, and describes that remote's
+  push URL: its account, helper and SSO link.
+- A failed check always names a next step, by credential helper.
+
+### Fixed
+- A username in the push URL (`https://octo-work@github.com/…`) other than the pinned
+  account was reported as ready, though git signs in as that user. `repown status` and setup
+  now report it as blocking the next push, with the `git remote set-url` command that
+  removes it.
+- A remote that refused only the pushed ref, after signing in, read as a failed sign-in.
+
 ## [0.6.0] - 2026-11-27
 
 ### Added

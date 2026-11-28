@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { blockers, type PushFacts } from '../src/core/blockers.ts';
 import { ok, err } from '../src/core/result.ts';
 import { allowOwnerCommand } from '../src/core/guard/check.ts';
+import { copyableCommand } from '../src/core/shell.ts';
 
 const EMAIL = 'octocat@example.invalid';
 const CHOICE = { email: EMAIL, account: 'octocat', autoUpstream: false, guarded: true };
@@ -16,6 +17,7 @@ function facts(overrides: Partial<PushFacts> = {}): PushFacts {
     configOverrides: [],
     elsewhere: ok([]),
     signin: null,
+    urlUser: null,
     repoint: null,
     laterUrls: null,
     rewritable: null,
@@ -69,6 +71,31 @@ test('a branch remote with its own sign-in names the key, never the URL', () => 
   const fixable = blockers(facts({ signin: { key: 'branch.main.remote' }, repoint: { key: 'branch.main.remote', remote: 'origin', tracked: true } }), CHOICE);
   assert.equal(fixable[0]!.lines[0], 'branch.main.remote carries its own sign-in, so pushes from main use it, not octocat: ' +
     'point it back at origin with repown setup --repoint');
+});
+
+test('a username in the push URL that is the account is no blocker (GCM\'s own advice)', () => {
+  assert.deepEqual(blockers(facts({ urlUser: { remote: 'origin', user: 'OctoCat', key: 'remote.origin.url', clean: 'https://github.com/octocat/hello.git' } }), CHOICE), []);
+});
+
+test('another username in the push URL: git signs in as it, and the fix removes it', () => {
+  const [first] = blockers(facts({ urlUser: { remote: 'origin', user: 'octo-work', key: 'remote.origin.url', clean: 'https://github.com/octocat/hello.git' } }), CHOICE);
+  assert.equal(first!.kind, 'urluser');
+  assert.equal(first!.summary, 'the push URL signs in as octo-work');
+  assert.deepEqual(first!.lines, [
+    'remote.origin.url names the user octo-work, so git signs in as octo-work for pushes from main, not octocat',
+    'remove it: git remote set-url origin https://github.com/octocat/hello.git',
+  ]);
+  assert.equal(first!.blocks, true);
+  const pushurl = blockers(facts({ urlUser: { remote: 'origin', user: 'octo-work', key: 'remote.origin.pushurl', clean: 'https://github.com/octocat/hello.git' } }), CHOICE);
+  assert.equal(pushurl[0]!.lines[1], 'remove it: git remote set-url --push origin https://github.com/octocat/hello.git');
+});
+
+test('a username a rewrite rule adds names the remote and says where to look', () => {
+  const [first] = blockers(facts({ urlUser: { remote: 'origin', user: 'octo-work', key: null, clean: null } }), CHOICE);
+  assert.deepEqual(first!.lines, [
+    "origin's push URL, as git resolves it, names the user octo-work, so git signs in as octo-work for pushes from main, not octocat",
+    'remove the user from the url.<base>.insteadOf or pushInsteadOf rule that adds it (' + copyableCommand(['git', 'config', '--get-regexp', '^url[.]']) + ' lists them)',
+  ]);
 });
 
 test('commits another remote has but the destination lacks: the guard refuses them too', () => {

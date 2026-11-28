@@ -158,6 +158,14 @@ repown                 # in a terminal: starts the guided setup of this clone
    └
    ```
 
+   🌐 Once the steps have run and nothing blocks the next push, setup asks one more
+   question: **Check the sign-in with the remote now?** Yes (the default) runs one dry-run
+   push that sends nothing. If the remote refuses, setup says why and offers the fix: sign in
+   again through Git Credential Manager, undo gh's helper, approve the SSO page in your
+   browser (setup waits), or pin the account again. Then it checks again. Setup says
+   `done … · origin accepts the sign-in` only when it passes
+   ([card 13](docs/HOW-IT-WORKS.md#13-guided-setup)).
+
 4. **Push.** The first push from each account signs in once: GCM opens a browser, and you
    sign in as *that* clone's account, not whichever you used last. After that, pushes from
    that clone use it without asking. When setup set `push.autoSetupRemote`, the first
@@ -213,7 +221,7 @@ then commit and push.
 
 | When | Command | What it does |
 | --- | --- | --- |
-| Once per machine | `repown doctor [--online]` | what serves credentials on this machine, and whether each account is signed in to git and gh. 🌐 `--online` also asks origin, with a dry-run push that sends nothing, whether it accepts this clone's sign-in, and prints the fix when it doesn't |
+| Once per machine | `repown doctor [--online]` | what serves credentials on this machine, and whether each account is signed in to git and gh. 🌐 `--online` also asks origin, with a dry-run push that sends nothing, whether it accepts this clone's sign-in. When it doesn't, it says why and the fix; in a terminal it offers to run that fix (waiting while you approve an SSO page), then checks again |
 | | `repown fix [--dry-run] [--yes]` | undo `gh auth setup-git`, so each clone's pinned account is used; shows what it removes, and the undo, first |
 | Once per clone | `repown setup [<account>]` | guided setup of this clone. Questions, flags and the review: [Quick start](#quick-start). A clone that is already set up opens on that screen |
 | | `repown use <account> [--gh]` | what setup runs: pin this clone to an account. `--gh` switches gh's active account, or signs the account in to gh when needed (in a terminal). `--name` with `--email` skips the registry, the file where repown remembers accounts |
@@ -284,6 +292,7 @@ note, not a warning. Every warning it can print:
 | `repown scan` | Whatever it finds (read its output or JSON) | | A missing folder or a bad `--depth` | |
 | `repown setup` | Done, or already set up | Decline, or it can't start | Flags that don't fit, or no terminal without `--no-input` | 130 when cancelled or interrupted; a failing step's own code |
 | `repown status` | Success. Warnings alone exit 0 | A problem | | |
+| `repown doctor --online` | Ready, and the remote accepts the sign-in | A problem, or the remote refused the sign-in | | 3 when the sign-in couldn't be checked (no network, no commit, no remote) |
 
 Every `setup` case: [Scripts and CI](docs/CONFIGURATION.md#scripts-and-ci).
 
@@ -296,7 +305,7 @@ Every `setup` case: [Scripts and CI](docs/CONFIGURATION.md#scripts-and-ci).
 | `repown doctor` shows `helper` … `none configured` | `git credential-manager configure`, then `repown doctor` again |
 | A push asked for a password | `repown status` (this clone) or `repown doctor` (this machine): each names the cause (gh as the helper, or no helper) and the fix |
 | A push failed right after signing in (SSO) | [card 6](docs/HOW-IT-WORKS.md#6-commit-and-first-push) |
-| A pinned clone still can't push or pull ("Invalid username or token", "SAML SSO", 403, 404) | `repown doctor --online`: it says whether the token was rejected, needs SSO approval, or belongs to the wrong account, and prints the command or link that fixes it |
+| A pinned clone still can't push or pull ("Invalid username or token", "SAML SSO", 403, 404) | `repown doctor --online`: it says whether the token was rejected, needs SSO approval, or belongs to the wrong account, and the command or link that fixes it. In a terminal it offers to run the fix, then checks again |
 | The guard refused a push | it says which commit and the fix. Most often a commit made before pinning: `git commit --amend --reset-author --no-edit` fixes the last one ([card 8](docs/HOW-IT-WORKS.md#8-push-refused-and-the-fix) for older ones, and every other refusal) |
 | `gh pr create` acts as the wrong account | `gh auth switch -u <account>` when gh lists it, otherwise `repown use <account> --gh` |
 | `git push` says the branch has no upstream | `repown setup --auto-upstream`, or once `git push -u origin <branch>` |

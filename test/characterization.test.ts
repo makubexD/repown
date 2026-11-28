@@ -58,7 +58,7 @@ describe('output the wizard reuses stays byte for byte', () => {
 
   test('help lists the same exit codes, and 130 for a cancelled setup or start screen', () => {
     assert.match(repown(['--help'], box.dir).stdout, /^ {2}Exit codes: 0 success, 1 failure or refusal, 2 usage error,$/m);
-    assert.match(repown(['--help'], box.dir).stdout, /^ {2}130 cancelled \(setup, the start screen\)\.$/m);
+    assert.match(repown(['--help'], box.dir).stdout, /^ {2}3 not checked \(doctor --online\), 130 cancelled \(setup, the start screen\)\.$/m);
   });
 
   test('help names every accounts action, and that add looks the login up on GitHub', () => {

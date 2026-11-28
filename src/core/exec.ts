@@ -157,8 +157,9 @@ function once<T extends unknown[]>(act: (...args: T) => void): (...args: T) => v
 }
 
 /**
- * The terminal belongs to the child. Only `gh auth login` uses this, and only
- * from a terminal: repown cannot see what the child prints.
+ * The terminal belongs to the child. Only `gh auth login` and Git Credential
+ * Manager's `github login` use this, and only from a terminal: repown cannot
+ * see what the child prints.
  */
 export function inherit(
   file: string,

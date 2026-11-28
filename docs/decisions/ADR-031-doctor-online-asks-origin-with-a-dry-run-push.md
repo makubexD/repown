@@ -2,6 +2,8 @@
 
 **Status:** Accepted. Amends ADR-013's "Detecting SSO authorization in advance" row: it is
 still not done in advance, but it can now be checked on request.
+Two rows of its alternatives ("Run the sign-in for the user", and "Check online in status or
+setup" for setup) and its exit code for a check that couldn't run are superseded by ADR-032.
 
 ## Context
 

@@ -18,7 +18,8 @@ import { inspectRepo, inspectAuth, activeAccountLabel, pinsCredential, type Auth
 import { loadRegistry, type Account, type Registry } from '../core/registry.ts';
 import type { Result } from '../core/result.ts';
 import { flagBool, gitFor, type Args } from '../ui/args.ts';
-import { checkOnline, closingWithOnline } from './doctor-online.ts';
+import { askOnline, closingWithOnline } from './doctor-online.ts';
+import type { SignInReport } from '../core/signin-check.ts';
 import { snapshotOf } from '../core/config-snapshot.ts';
 import { parseGitUrl, type GitUrl } from '../core/url.ts';
 import type { Command } from '../ui/command.ts';
@@ -50,11 +51,25 @@ export default {
     const warned = printReport(repo, auth, await loadRegistry());
     const found = diagnose(auth, ssoHost(repo));
     if (!flagBool(args, 'online')) { closeDoctor(scoped(repo, found) + warningTally(warned)); return found.code; }
-    const level = await checkOnline(repo, pinnedOf(repo));
-    closeDoctor(closingWithOnline(scoped(repo, found), found.code, level) + warningTally(warned));
-    return level === 'fail' ? 1 : found.code;
+    const online = await askOnline(args, repo, pinnedOf);
+    // A repair changed the machine after the offline report: say so rather than repeat it.
+    if (online.repaired) { closeDoctor(closingWithOnline(REPAIRED, online.level === 'fail' ? 1 : 0, online.level, online.remote) + warningTally(warned)); return onlineCode(online.level, 0); }
+    closeDoctor(closingWithOnline(scoped(repo, found), found.code, online.level, online.remote) + warningTally(warned));
+    return onlineCode(online.level, found.code);
   },
 } satisfies Command;
+
+/** The closing line's start once a repair ran: the report above it was read before. */
+export const REPAIRED = 'a repair ran (the report above was read before it; repown doctor shows the state now)';
+
+/** Exit code: a refusal is 1; a check that couldn't run is 3, never a pass's 0 (ADR-032). */
+export const NOT_CHECKED = 3;
+
+function onlineCode(level: SignInReport['level'], offline: number): number {
+  if (level === 'fail') return 1;
+  if (offline !== 0) return offline;
+  return level === 'warn' ? NOT_CHECKED : 0;
+}
 
 export type DoctorAuth = Pick<AuthState, 'gcmPresent' | 'stored' | 'ghPresent' | 'gh' | 'helperIsGcm'>;
 

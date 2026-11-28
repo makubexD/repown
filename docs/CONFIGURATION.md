@@ -107,7 +107,10 @@ it first, or pass `--name` and `--email`), `repown fix` without `--yes` exits `1
 without `--yes` exits `1` when it has something to rewrite (and refuses when `commit.gpgsign`
 is on, since signing may need a terminal). For
 checks, `repown` exits `1` when something is wrong (a fresh CI clone is never pinned, so
-it always does there), and `repown doctor` when gh is the credential helper. More in [card 13](HOW-IT-WORKS.md#13-guided-setup).
+it always does there), and `repown doctor` when gh is the credential helper. `repown doctor --online` exits `1` when
+the remote refuses the sign-in and `3` when it couldn't ask (offline, a timeout, no commit, no
+remote); without a terminal it offers and waits for nothing. `repown setup --no-input`, or setup
+without a terminal, never runs the online check. More in [card 13](HOW-IT-WORKS.md#13-guided-setup).
 
 **JSON:** `repown scan --format json` and `repown accounts list --format json` print one
 JSON document on stdout (warnings still go to stderr; nothing found prints `[]`). Scripts

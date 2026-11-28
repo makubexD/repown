@@ -24,6 +24,15 @@ only reports follows one rule: refuse what can't be undone once pushed, report t
 | a clone with no commit email of its own, or commits or tags it can't read | a guard that is off, or a hook another tool owns |
 | `GH_TOKEN`, `GITHUB_TOKEN` or `GIT_*_EMAIL` set in the environment | submodules, which need their own pin and guard; an origin whose owner this clone doesn't push to |
 
+**What repown runs for you, and what it never sees.** `repown doctor --online`, and
+setup's last step when you answer Yes, run one `git push --dry-run` that sends nothing.
+After a refusal, in a terminal, repown asks before each repair: Git Credential Manager's
+github.com sign-in (the terminal is handed to GCM, which opens your browser), `repown fix`
+(which shows what it removes and asks again), or `repown use`. repown never reads, prints or
+stores a credential. A username in a URL that may be a token is never printed or passed on,
+and an SSO link is printed only when it points at the push URL's own host; repown never
+opens it ([ADR-032](docs/decisions/ADR-032-repown-guides-the-sign-in-until-origin-accepts.md)).
+
 **Known limits.** A hook is advisory: `git push --no-verify` skips it, and so does any
 tool that pushes through libgit2 instead of the `git` binary. The full list, with the
 reason for each, is under

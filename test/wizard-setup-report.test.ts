@@ -19,6 +19,7 @@ import { reviewLines, reviewDefault } from '../src/wizard/review-text.ts';
 import { gitSupportsAutoUpstream } from '../src/core/version.ts';
 import { SETUP_NOTE } from '../src/commands/start.ts';
 import { runSetup } from '../src/wizard/setup-run.ts';
+import type { SignInStep } from '../src/wizard/setup-signin.ts';
 import { cloneChangeLines, machineChangeLines, readCloneSnapshot, type CloneSnapshot } from '../src/wizard/setup-changes.ts';
 import { readContext } from '../src/wizard/setup-context.ts';
 import { Git } from '../src/core/git.ts';
@@ -288,7 +289,73 @@ describe('S18 after a setup run', () => {
     assert.doesNotMatch(seen.stderr, /is now gh's active account|changed on this machine|optional, only if you use gh/);
   });
 
-  async function captureRun(script: Entry[], prompter?: Prompter): Promise<{ code: number; stderr: string; stdout: string }> {
+  describe('the last step: the sign-in check (ADR-032)', () => {
+    beforeEach(() => {
+      at.box.git('remote', 'add', 'origin', 'https://github.com/octocat/project.git');
+      at.box.git('-c', 'user.name=Octo Cat', '-c', 'user.email=octocat@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'x');
+    });
+
+    /** A step that answers the question and the check as given, and counts what was asked. */
+    function step(answer: boolean, level: 'pass' | 'fail' | 'warn' = 'pass') {
+      const seen = { offered: 0, checked: 0 };
+      const signIn: SignInStep = {
+        offer: async () => { seen.offered += 1; return answer; },
+        check: async () => { seen.checked += 1; return { level, remote: 'origin', repair: null }; },
+      };
+      return { signIn, seen };
+    }
+    const RUN: Entry[] = [['mode', 'recommended'], ['account', 'octocat'], ['review', 'run']];
+
+    test('a pass joins the done line', async () => {
+      const { signIn, seen } = step(true, 'pass');
+      const run = await captureRun(RUN, undefined, signIn);
+      assert.equal(run.code, 0, run.stderr);
+      assert.deepEqual(seen, { offered: 1, checked: 1 });
+      assert.match(run.stderr, /done: this clone is set up for octocat · origin accepts the sign-in$/m);
+    });
+
+    test('a refusal is said instead of done, and the exit code stays setup\'s own (ADR-026)', async () => {
+      const run = await captureRun(RUN, undefined, step(true, 'fail').signIn);
+      assert.equal(run.code, 0, run.stderr);
+      assert.match(run.stderr, /set up for octocat; origin refused the sign-in \(above\)$/m);
+      assert.doesNotMatch(run.stderr, /done: this clone/);
+    });
+
+    test('a no, or a check that could not run, says the sign-in was not checked', async () => {
+      assert.match((await captureRun(RUN, undefined, step(false).signIn)).stderr, /done: this clone is set up for octocat · sign-in not checked online$/m);
+    });
+
+    test('a check that could not run is not a pass either', async () => {
+      assert.match((await captureRun(RUN, undefined, step(true, 'warn').signIn)).stderr, /done: this clone is set up for octocat · sign-in not checked online$/m);
+    });
+
+    test('not asked with no commit to push with', async () => {
+      at.box.git('update-ref', '-d', 'HEAD');
+      const { signIn, seen } = step(true);
+      const run = await captureRun(RUN, undefined, signIn);
+      assert.equal(seen.offered, 0);
+      assert.match(run.stderr, /done: this clone is set up for octocat · sign-in not checked online \(no commit to try a push with yet\)$/m);
+    });
+
+    test('not asked while something else stops the next push', async () => {
+      at.box.git('config', '--local', 'author.email', 'old@example.invalid');
+      const { signIn, seen } = step(true);
+      const run = await captureRun(RUN, undefined, signIn);
+      assert.equal(seen.offered, 0);
+      assert.match(run.stderr, /set up for octocat; the next push will fail/);
+    });
+
+    test('an already set-up clone is still offered the check after Done', async () => {
+      assert.equal((await captureRun(RUN, undefined, null)).code, 0);
+      const { signIn, seen } = step(true, 'pass');
+      const run = await captureRun([['review', 'done']], undefined, signIn);
+      assert.equal(run.code, 0, run.stderr);
+      assert.deepEqual(seen, { offered: 1, checked: 1 });
+      assert.match(run.stderr, /set up · origin accepts the sign-in$/m);
+    });
+  });
+
+  async function captureRun(script: Entry[], prompter?: Prompter, signIn?: SignInStep | null): Promise<{ code: number; stderr: string; stdout: string }> {
     let stderr = '';
     let stdout = '';
     const errWrite = process.stderr.write;
@@ -302,7 +369,7 @@ describe('S18 after a setup run', () => {
     try {
       const code = await runSetup(
         { positional: [], flags: new Map([['cwd', at.box.dir]]) },
-        { prompter: prompter ?? scripted(script), interactive: true },
+        { prompter: prompter ?? scripted(script), interactive: true, signIn: signIn ?? null },
       );
       return { code, stderr, stdout };
     } finally {

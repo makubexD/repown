@@ -152,26 +152,63 @@ When the registry, the store or gh could not be read, its WARN is above and the 
 adds ` · 1 warning` (or `N warnings`), as status counts its warnings.
 
 🌐 **`repown doctor --online`** checks the sign-in itself. In a clone, it runs one
-`git push --dry-run --no-verify --no-recurse-submodules` of HEAD to origin, with every prompt
-off. That signs in exactly as a push would, as the clone's pinned account, and sends nothing;
-no hook runs, a submodule's included. A read wouldn't
-do: GitHub answers a read of a public repository without asking for the credential
-([ADR-031](decisions/ADR-031-doctor-online-asks-origin-with-a-dry-run-push.md)). The answer
-is printed under `This clone, asked online`, above the closing line:
+`git push --dry-run --no-verify --no-recurse-submodules` of HEAD to the remote a plain
+`git push` uses (origin, unless the branch pushes elsewhere), with every prompt off. That
+signs in exactly as a push would and sends nothing; no hook runs, a submodule's included. A
+read wouldn't do: GitHub answers a read of a public repository without asking for the
+credential ([ADR-031](decisions/ADR-031-doctor-online-asks-origin-with-a-dry-run-push.md)).
+The account named is the username git sends to that remote's push URL: a username in the URL
+itself, else the pinned one ([ADR-032](decisions/ADR-032-repown-guides-the-sign-in-until-origin-accepts.md)).
+`asking origin with a dry-run push…` shows while it waits, and the answer is printed under
+`This clone, asked online`, above the closing line:
 
 | origin said | Line | What to do (printed under it) |
 | --- | --- | --- |
-| accepted | `OK sign-in origin accepts <account>'s sign-in for a push (a dry run: nothing was sent)`; where git sends no username (SSH, a local path, a host repown doesn't pin), `origin accepts a push from this clone …` | nothing |
-| `SAML SSO` | `FAIL` … the organisation enforces SAML SSO, and this sign-in isn't authorised for it | `authorise it:` the link GitHub sent (only when it points at origin's host), then `repown doctor --online` |
-| `Invalid username or token`, `Authentication failed` | `FAIL` … the host rejected the sign-in: the token or password git holds was expired, revoked or wrong | on github.com through GCM: `git credential-manager github login --username <account> --browser --force` |
-| `Permission to … denied to <user>` | `FAIL` … git signed in as `<user>`, not `<account>` | `repown use <account>` (or ask for write access, when it is the same account) |
-| `Repository not found` | `FAIL` … that account can't see origin | `check the account (repown status), or ask for access` |
-| no sign-in stored | `FAIL` … a push would ask for one | the same GCM command as a rejected one |
-| no origin, no commit yet, or origin unreachable | `WARN sign-in` … not checked, and why | nothing: never reported as a pass |
+| accepted, or refused only the ref after signing in | `OK sign-in origin accepts <account>'s sign-in for a push (a dry run: nothing was sent)`; where git sends no username (SSH, a local path, a host repown doesn't pin), `origin accepts a push from this clone …` | nothing |
+| `SAML SSO` | `FAIL` … the organisation enforces SAML SSO, and this sign-in isn't authorised for it | `authorise it:` the link GitHub sent (only when it points at the push URL's host), then `repown doctor --online` |
+| `Invalid username or token`, `Authentication failed` | `FAIL` … the token or password git held was expired, revoked or wrong, and git has asked the helper to forget it | by helper: under gh, `repown fix`; through GCM on github.com, `git credential-manager github login --username <account> --browser --force`; another helper, its own sign-in; none, install GCM |
+| no sign-in stored | `FAIL` … a push would ask for one | the same as a rejected one (a second run after a rejection lands here: git erased the token) |
+| `Permission to … denied to <user>` | `FAIL` … git signed in as `<user>`, not `<account>` | `repown use <account>` where git sends another username; where it already sends the pinned one, the stored sign-in is another account's (sign in again); over SSH, `ssh -T git@<host>` to see the key's account; the same account, ask for write access |
+| `… denied to deploy key` | `FAIL` … the SSH key is a deploy key without write access here | give it write access, or use an account's own key |
+| `Repository not found` | `FAIL` … that account can't see it | `check the account (repown status), or ask for access` |
+| `Permission denied (publickey)` | `FAIL` … refused this machine's SSH key | `ssh -T git@<host>` shows which account the key signs in as |
+| `Host key verification failed` | `FAIL` … ssh doesn't trust the host's key yet | `ssh -T git@<host>` once, to check and trust it |
+| no remote, no commit yet, or the remote unreachable | `WARN sign-in` … not checked, and why | nothing: never reported as a pass |
+
+🛠️ **In a terminal, repown offers the repair and checks again** (ADR-032). After a `FAIL` it
+asks before running the one fix that matches, then asks the remote again, until it accepts,
+you say no (or q, or Ctrl-C), or nothing is left to offer:
+
+```mermaid
+flowchart LR
+  C[dry-run push] -->|accepted| P[OK]
+  C -->|FAIL| O{a repair?}
+  O -->|none| S[advice printed, stop]
+  O -->|gh helper| F[repown fix: preview, asks]
+  O -->|GCM, github.com| L["Sign in to GitHub now?"]
+  O -->|denied, another username| U["Pin the account again now?"]
+  O -->|SSO| W[open the link yourself, press Enter]
+  F --> C
+  L --> C
+  U --> C
+  W --> C
+```
+
+- The GCM sign-in hands the terminal to Git Credential Manager, which opens your browser;
+  repown sees nothing it prints and never reads a credential.
+- `repown fix` and `repown use` run as their own commands. fix shows which entries it
+  removes, and from which file, then asks (default No).
+- The SSO wait repeats as often as you press Enter. Every other repair runs once: if the
+  same failure comes back, repown says the repair didn't help and stops.
+- Without a terminal nothing is offered or awaited: the verdict and its advice are printed.
 
 A `FAIL` makes doctor exit 1, and the closing line adds `· and origin refused the sign-in`
 (or is `1 problem: origin refused the sign-in (above)` when nothing else was wrong). A pass
-adds `· origin accepts the sign-in`, and a warning adds `· sign-in not checked online`.
+adds `· origin accepts the sign-in`, and a warning adds `· sign-in not checked online` and
+makes doctor exit 3 (unless the offline checks already exit 1), so a script never reads a
+skipped check as a pass. Once a repair has run, the closing line starts `a repair ran (the
+report above was read before it; repown doctor shows the state now)`, since the report above
+it is from before.
 Without `--online`, doctor never touches the network.
 
 In a clone repown pins no credential for (an SSH remote, Azure DevOps, another host), the
@@ -374,7 +411,7 @@ ready: commits and pushes use octocat · gh: optional (see the note above)
 | 🔴 `gh is the git credential helper` | only gh's active account can push | `repown fix` |
 | 🟡 `no credential helper is set` / `cannot tell whether it honours` | a GitHub https clone, and the helper isn't Git Credential Manager | `repown doctor` ([card 1](#1-set-up-the-machine)) |
 | NOTE `gh active as "…"` | the gh CLI would act as another account; git pushes are unaffected. Printed after the identity line, and not counted as a warning | `gh auth switch -u <account>` when that account is signed in to gh; `repown use <account> --gh` when it is not |
-| 🟡 `push …` (first among the warnings) | something will stop the next push: commits by another address the guard will refuse (no remote has them, or another remote has them but the destination lacks them), a sign-in in the push URL, an identity or token variable in this shell, `author.email` in config, a destination owner (said once, by the `origin` row when that fires for the same owner; a `pushRemote` owned by someone else is said here too), a later push URL owned by someone else (git pushes to every URL and the guard checks each, so the push would land on one and be refused on the other; with the guard off it goes to both), a branch that pushes straight to a URL a `pushInsteadOf` rule may rewrite, or whose rules can't be read (repown can't tell where it lands; said, never blocking, since the guard checks it at push time), a diverged branch, a detached HEAD. Read only when status finds no problem; a missing upstream stays in the `upstream` field. With the guard off, what only the guard would refuse (commits by another address, an owner, `GH_TOKEN`) says `the guard is off, so …`, counts as a warning, and the clone is still `ready` | the line under it: the `git rebase` advice (or `repown reauthor`), `git config --unset …`, unset the variable, `git pull --rebase`; a sign-in in the push URL: `repown setup --repoint` ([card 8](#8-push-refused-and-the-fix)), or, when a rewrite rule added it, that rule (`git config --show-origin --get-regexp '^url\.'` lists them); a later push URL: the `git config --local --add repown.allowOwner …` it prints |
+| 🟡 `push …` (first among the warnings) | something will stop the next push: commits by another address the guard will refuse (no remote has them, or another remote has them but the destination lacks them), a sign-in in the push URL, a username in the push URL (git signs in as that user, not the pinned account), an identity or token variable in this shell, `author.email` in config, a destination owner (said once, by the `origin` row when that fires for the same owner; a `pushRemote` owned by someone else is said here too), a later push URL owned by someone else (git pushes to every URL and the guard checks each, so the push would land on one and be refused on the other; with the guard off it goes to both), a branch that pushes straight to a URL a `pushInsteadOf` rule may rewrite, or whose rules can't be read (repown can't tell where it lands; said, never blocking, since the guard checks it at push time), a diverged branch, a detached HEAD. Read only when status finds no problem; a missing upstream stays in the `upstream` field. With the guard off, what only the guard would refuse (commits by another address, an owner, `GH_TOKEN`) says `the guard is off, so …`, counts as a warning, and the clone is still `ready` | the line under it: the `git rebase` advice (or `repown reauthor`), `git config --unset …`, unset the variable, `git pull --rebase`; a sign-in in the push URL: `repown setup --repoint` ([card 8](#8-push-refused-and-the-fix)), or, when a rewrite rule added it, that rule (`git config --show-origin --get-regexp '^url\.'` lists them); a username in the push URL: the `git remote set-url` command it prints that sets the URL without it; a later push URL: the `git config --local --add repown.allowOwner …` it prints |
 | 🟡 `gh could not be queried` | who `gh pr create` acts as is unknown | `gh auth status` |
 | 🟡 `origin belongs to "octo-org"` | an organisation repository | `git config --local --add repown.allowOwner octo-org` |
 | 🟡 `guard off` | pushes are not checked | `repown guard on` |
@@ -438,8 +475,10 @@ sequenceDiagram
 
 **Push failed just after signing in?** Your organisation may use SSO, and the new
 credential isn't authorized for it yet. Authorize it in the organisation's SSO settings on
-GitHub, then push again. repown can't detect this in advance; when Git Credential
-Manager is the helper, `repown doctor` reminds you of this on every run.
+GitHub, then push again. repown can't detect this offline; when Git Credential
+Manager is the helper, `repown doctor` reminds you of this on every run. `repown doctor
+--online` asks: it prints GitHub's authorisation link and, in a terminal, waits while you
+approve it, then asks again ([card 1](#1-set-up-the-machine)).
 </details>
 
 ### 7. Push: what the guard checks
@@ -988,7 +1027,18 @@ OK    upstream   branches without an upstream push without -u in this clone
 
 The last line is only when gh still acts as someone else and the review did not already say so. The fix is the one `repown status` prints: `gh auth switch -u <account>` when gh already lists it, otherwise `repown use <account> --gh   (signs <account> in to gh)`. The review says the same thing (`gh still acts as <active>, so gh pr create here would act as that account (git pushes are unaffected). If you use gh here: gh auth switch -u <account>.` when gh already lists it, otherwise `If you use gh here: repown use <account> --gh (signs <account> in to gh).`), and that run does not print it again. With `--no-input` there is no review, so the line after the run is the one place it appears. The first push's sign-in is said by `use` when `use` runs. When the pin is left out and Git Credential Manager's store was read and does not list the account, the review says `No stored credential for <account> yet: the first push signs in once (your browser opens).`
 
-`changed in this clone:` is what this run wrote in the clone, read before the first step and again after it (also after Stop, or after a step fails). A key that was unset is `(added)`; one that is gone is `old -> (removed)`. A key that did not change is left out. `repown.allowOwner` lists the values added or removed. The guard is `push guard: off -> on`. Only these config values are shown, never what a credential helper prints. When nothing in the clone changed, that block is the one line `nothing changed in this clone`. A settled clone whose pin was left out still says `done: this clone is set up for <account>`. `done` needs nothing left in the way of the next push, read again after the run: otherwise the line is `set up for <account>; the next push will fail: <first blocker> (and N more below)`, followed by each blocker's lines, and the exit code is unchanged ([ADR-026](decisions/ADR-026-setup-says-what-blocks-the-next-push.md)). Where stderr has colour, `done` leads with a green ✔ and the blocked line with a yellow ▲ (`+` and `!` where Unicode can't be drawn), each blocker sits two columns deeper, and the commands (in the review, on `$ ` lines and under `not run:`) are cyan. Without colour none of that is added ([ADR-027](decisions/ADR-027-the-wizard-decorates-only-where-it-draws-colour.md)). The blockers: commits by another address the guard will refuse (also those another remote has but the push destination lacks), a sign-in carried by the push path (named by config key, never shown), `GIT_AUTHOR_EMAIL` / `GIT_COMMITTER_EMAIL` / `GH_TOKEN` / `GITHUB_TOKEN` set, `author.email` / `committer.email` in config, a destination owner the guard refuses, a branch diverged from its tracked ref on the destination, no upstream where a plain `git push` needs one, and a detached HEAD. The review lists them first among its notes.
+`changed in this clone:` is what this run wrote in the clone, read before the first step and again after it (also after Stop, or after a step fails). A key that was unset is `(added)`; one that is gone is `old -> (removed)`. A key that did not change is left out. `repown.allowOwner` lists the values added or removed. The guard is `push guard: off -> on`. Only these config values are shown, never what a credential helper prints. When nothing in the clone changed, that block is the one line `nothing changed in this clone`. A settled clone whose pin was left out still says `done: this clone is set up for <account>`. `done` needs nothing left in the way of the next push, read again after the run: otherwise the line is `set up for <account>; the next push will fail: <first blocker> (and N more below)`, followed by each blocker's lines, and the exit code is unchanged ([ADR-026](decisions/ADR-026-setup-says-what-blocks-the-next-push.md)). Where stderr has colour, `done` leads with a green ✔ and the blocked line with a yellow ▲ (`+` and `!` where Unicode can't be drawn), each blocker sits two columns deeper, and the commands (in the review, on `$ ` lines and under `not run:`) are cyan. Without colour none of that is added ([ADR-027](decisions/ADR-027-the-wizard-decorates-only-where-it-draws-colour.md)). The blockers: commits by another address the guard will refuse (also those another remote has but the push destination lacks), a sign-in carried by the push path (named by config key, never shown), a username in the push URL other than the pinned account, `GIT_AUTHOR_EMAIL` / `GIT_COMMITTER_EMAIL` / `GH_TOKEN` / `GITHUB_TOKEN` set, `author.email` / `committer.email` in config, a destination owner the guard refuses, a branch diverged from its tracked ref on the destination, no upstream where a plain `git push` needs one, and a detached HEAD. The review lists them first among its notes.
+
+🌐 **The last step: the sign-in, asked online** ([ADR-032](decisions/ADR-032-repown-guides-the-sign-in-until-origin-accepts.md)). In a terminal, once nothing blocks the next push (after Run, Step by step, or Done on a settled clone), setup asks `Check the sign-in with the remote now? (one dry-run push: nothing is sent)`, default Yes. Yes runs `repown doctor --online`'s check and its guided repair ([card 1](#1-set-up-the-machine)): the same lines, the same offers. The closing line then says what you have:
+
+```
+       ✔ done: this clone is set up for octocat · origin accepts the sign-in
+       ▲ set up for octocat; origin refused the sign-in (above)
+       ✔ done: this clone is set up for octocat · sign-in not checked online
+       ✔ done: this clone is set up for octocat · sign-in not checked online (no commit to try a push with yet)
+```
+
+A no, or a check that couldn't run, is the third; no commit or no remote yet is the fourth (`no remote to ask yet`). A settled clone's Done says `set up` in place of `done: this clone is set up for <account>`. The exit code stays setup's own ([ADR-026](decisions/ADR-026-setup-says-what-blocks-the-next-push.md)). Under `--no-input`, or without a terminal, setup asks nothing and adds nothing, and makes no network call.
 
 Recording an account is not in the clone. That run adds a separate section:
 

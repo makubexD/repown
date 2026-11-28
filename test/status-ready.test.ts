@@ -199,6 +199,17 @@ describe('repown status: what will stop the next push', () => {
     assert.match(closing(run.stderr), /^the next push will fail: the push goes to "octo-org"/);
   });
 
+  test('a username in origin\'s URL is never ready: git signs in as it, whatever the pin says', () => {
+    pinGithub(box);
+    guardOn(box);
+    const url = box.git('remote', 'get-url', 'origin').trim();
+    box.git('remote', 'set-url', 'origin', url.replace('https://', 'https://octo-work@'));
+    const run = repown(['status'], box.dir, quietEnv());
+    assert.match(run.stderr, /remote\.origin\.url names the user octo-work, so git signs in as octo-work/, run.stderr);
+    assert.ok(run.stderr.includes('remove it: git remote set-url origin ' + url), run.stderr);
+    assert.match(closing(run.stderr), /^the next push will fail: the push URL signs in as octo-work/);
+  });
+
   test('a push to another owner than origin\'s is said too, beside the origin warning', () => {
     pinGithub(box);
     guardOn(box);

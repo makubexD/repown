@@ -49,7 +49,8 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   console, and a non-zero exit resolves rather than rejects (`git config --get` exits 1
   for "not set"). Always `shell: false`. `run` returns the child's output and never shows
   it (credential helpers print live passwords). `inherit` hands the terminal to the child
-  (`stdio: 'inherit'`) and is used only for `gh auth login`, only in a terminal: repown
+  (`stdio: 'inherit'`) and is used only for `gh auth login` and GCM's `github login`
+  (the guided sign-in repair, ADR-032), only in a terminal: repown
   never sees what the child prints, so no credential passes through repown. A spawn error
   such as ENOENT resolves as not installed, for both. At a timeout `run` ends the child (on
   Windows its whole tree, `taskkill /T /F`) and resolves 3 s later even if something the child
@@ -133,9 +134,16 @@ Windows and macOS, so watch path separators, `.exe`, `process.platform` and line
   answer as a flag; never a second copy of those questions. Once fix, doctor,
   `accounts add` or `accounts remove` has run, failed or not, the screen opens again and re-reads (ADR-028); setup, help and Quit end it.
 - `repown doctor --online` (`src/commands/doctor-online.ts`) is repown's only sign-in check over the network:
-  one `git push --dry-run --no-verify` to origin (`Git.signInProbe`), its whole stderr read by
-  `classifySignIn` (`src/core/signin-check.ts`). A read is no check: a public repository answers
-  `ls-remote` without the credential. Never call it from the push path or from status or setup (ADR-031).
+  one `git push --dry-run --no-verify` to the remote a plain push uses (`Git.signInProbe`), its
+  whole stderr read by `classifySignIn` (`src/core/signin-check.ts`), and described from that
+  remote's push URL. A read is no check: a public repository answers `ls-remote` without the
+  credential. Never call it from the push path or from status (ADR-031). Setup calls it only as
+  its asked last step, in a terminal, never under `--no-input` (`src/wizard/setup-signin.ts`).
+  In a terminal a FAIL goes through the guided repair (ADR-032): `repairFor`
+  (`src/core/signin-repair.ts`, pure) picks the one offer, `guideSignIn`
+  (`src/commands/signin-guide.ts`) loops through a `GuideIo`, and `signin-terminal.ts` runs
+  each repair through its own command's `run()` (`repown fix` without `--yes`, so it previews
+  and asks), or `gcmGithubLogin`. Every repair but the SSO wait is tried once.
 
 ## Tests
 

@@ -14,7 +14,7 @@
 
 import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
-import { run, succeeded, lines, notInstalled } from '../exec.ts';
+import { run, inherit, succeeded, lines, notInstalled, type InheritFn } from '../exec.ts';
 import { ok, err, type Result } from '../result.ts';
 
 const NAMES = ['git-credential-manager', 'git-credential-manager-core'];
@@ -86,4 +86,14 @@ export async function listAccounts(
     return err(`\`${namespace} list\` failed: ${result.stderr.trim() || `exit ${result.code}`}`);
   }
   return ok(lines(result));
+}
+
+/**
+ * GCM's own github.com sign-in, with the terminal handed to it (ADR-032): the browser opens,
+ * the user signs in, and GCM stores the token. repown sees nothing GCM prints. Measured on
+ * GCM 2.6.1; offered only for github.com with GCM as the helper.
+ */
+export async function gcmGithubLogin(account: string, runner: InheritFn = inherit): Promise<boolean> {
+  const result = await runner('git', ['credential-manager', 'github', 'login', '--username', account, '--browser', '--force']);
+  return result.code === 0 && !result.spawnError;
 }

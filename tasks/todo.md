@@ -1,6 +1,6 @@
 # repown leaves you signed in
 
-Status: tasks 3-7 done; next task 8.
+Status: task 8 done; next task 9.
 
 - [x] 1. Plan: SPEC.md and this file. Docs: none.
 - [x] 2. Measure (SPEC "Measure first", points 1–4), no code
@@ -26,7 +26,7 @@ Status: tasks 3-7 done; next task 8.
   - Where: `src/core/push-state.ts`, `src/commands/status.ts`, `src/wizard/setup-flow.ts`.
   - Docs: none yet.
 - [x] 7. ~~No stored GCM sign-in is said in status~~ dropped: see SPEC A, row 2.
-- [ ] 8. The guided repair loop (SPEC C)
+- [x] 8. The guided repair loop (SPEC C)
   - Accept: each offer row, with a scripted prompter; each offer at most once; quit stops it;
     no terminal means no offers; the browser opener never runs a shell.
   - Where: a pure planner (`src/core/signin-repair.ts`), a runner shared by doctor and

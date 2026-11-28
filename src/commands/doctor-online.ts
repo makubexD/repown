@@ -6,14 +6,18 @@
 // probe really pushes to (`remote get-url --push`, after insteadOf and pushInsteadOf), never
 // the fetch URL: an HTTPS fetch with an SSH push signs in with a key, not a token.
 
-import type { RepoState } from '../core/inspect.ts';
-import { keysOf } from '../core/inspect.ts';
+import { inspectRepo, keysOf, type RepoState } from '../core/inspect.ts';
 import { carriesSecret } from '../core/push-state.ts';
 import { pushTarget } from '../core/push-destination.ts';
 import { classifySignIn, describeSignIn, type SignInReport, type SignInVerdict } from '../core/signin-check.ts';
 import { parseGitUrl, type GitUrl } from '../core/url.ts';
 import type { Git } from '../core/git.ts';
 import * as out from '../ui/format.ts';
+import { gitFor, type Args } from '../ui/args.ts';
+import { interactive } from '../ui/prompt.ts';
+import { repairFor } from '../core/signin-repair.ts';
+import { guideSignIn, type GuidedCheck } from './signin-guide.ts';
+import { terminalIo } from './signin-terminal.ts';
 
 /** The remote asked and what its push URL says about the sign-in. */
 interface Target {
@@ -29,23 +33,34 @@ interface Target {
   readonly helper: string | null;
 }
 
-export interface OnlineCheck {
-  readonly level: SignInReport['level'];
-  /** The remote asked, for the closing line. */
-  readonly remote: string;
+/** The check's answer; on a terminal, after the guided repair (ADR-032). */
+export type OnlineCheck = GuidedCheck;
+
+/**
+ * Asks once; in a terminal, offers each repair and asks again after it. Each round reads the
+ * clone afresh, since a repair (fix, use) changes the config the next check depends on.
+ */
+export async function askOnline(args: Args, repo: RepoState, pinnedOf: (repo: RepoState) => string | null): Promise<OnlineCheck> {
+  if (!interactive()) return checkOnline(repo, pinnedOf(repo));
+  let round = 0;
+  const check = async (): Promise<OnlineCheck> => {
+    const fresh = round === 0 ? repo : await inspectRepo(gitFor(args));
+    return checkOnline(fresh, pinnedOf(fresh), round++ === 0);
+  };
+  return guideSignIn(check, terminalIo(args));
 }
 
-/** Prints the verdict and returns its level; nothing to ask with is a warning, never a pass. */
-export async function checkOnline(repo: RepoState, pinned: string | null): Promise<OnlineCheck> {
-  out.heading('This clone, asked online');
+/** Prints the verdict and returns it with its repair; nothing to ask with is a warning, never a pass. */
+export async function checkOnline(repo: RepoState, pinned: string | null, heading = true): Promise<OnlineCheck> {
+  if (heading) out.heading('This clone, asked online');
   const target = repo.isRepo ? await targetOf(repo) : null;
   const blocked = await nothingToAsk(repo, target);
-  if (blocked || !target) { out.warn('sign-in', blocked ?? 'not checked'); return { level: 'warn', remote: target?.remote ?? 'origin' }; }
+  if (blocked || !target) { out.warn('sign-in', blocked ?? 'not checked'); return { level: 'warn', remote: target?.remote ?? 'origin', repair: null }; }
   out.detail('asking ' + target.remote + ' with a dry-run push…');
   const verdict = ownLink(classifySignIn(await repo.git.signInProbe(target.remote)), target.https);
-  const github = target.https?.host.toLowerCase() === 'github.com';
-  const level = printed(describeSignIn(verdict, { ...target, pinned, github }));
-  return { level, remote: target.remote };
+  const ctx = { ...target, pinned, github: target.https?.host.toLowerCase() === 'github.com' };
+  const level = printed(describeSignIn(verdict, ctx));
+  return { level, remote: target.remote, repair: level === 'fail' ? repairFor(verdict, ctx) : null };
 }
 
 async function targetOf(repo: RepoState): Promise<Target> {

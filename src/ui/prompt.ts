@@ -32,12 +32,24 @@ export async function ask(label: string, suggestion?: string): Promise<Result<st
   }
 }
 
-export async function confirm(question: string): Promise<boolean> {
+/** y or n; an empty answer is `fallback` (No unless the caller says the step is recommended). */
+export async function confirm(question: string, fallback = false): Promise<boolean> {
   if (!interactive()) return false;
   const rl = createInterface({ input: process.stdin, output: process.stderr });
   try {
-    const answer = (await rl.question('  ' + question + ' [y/N] ')).trim().toLowerCase();
-    return answer === 'y' || answer === 'yes';
+    const answer = (await rl.question('  ' + question + (fallback ? ' [Y/n] ' : ' [y/N] '))).trim().toLowerCase();
+    return answer === '' ? fallback : answer === 'y' || answer === 'yes';
+  } finally {
+    rl.close();
+  }
+}
+
+/** Waits for Enter; false when the user types q (or there is no terminal to wait in). */
+export async function waitForEnter(message: string): Promise<boolean> {
+  if (!interactive()) return false;
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    return (await rl.question('  ' + message + ' ')).trim().toLowerCase() !== 'q';
   } finally {
     rl.close();
   }

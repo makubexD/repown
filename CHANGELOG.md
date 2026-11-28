@@ -7,6 +7,8 @@ commands. How a release is cut: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-28
+
 ### Added
 - repown now guides the sign-in until the remote accepts it. In a terminal, when
   `repown doctor --online` finds a refusal, it offers the matching fix, runs it on a yes,
@@ -381,7 +383,8 @@ and cmd. `status`, `doctor` and the pre-push guard are faster on Windows.
   contract for scripts.
 - Runs on Node 20+ on Windows, macOS and Linux, with zero runtime dependencies.
 
-[Unreleased]: https://github.com/makubexD/repown/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/makubexD/repown/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/makubexD/repown/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/makubexD/repown/compare/v0.5.5...v0.6.0
 [0.5.5]: https://github.com/makubexD/repown/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/makubexD/repown/compare/v0.5.3...v0.5.4
